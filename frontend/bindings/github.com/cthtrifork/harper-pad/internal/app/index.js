@@ -6,3 +6,8 @@ import * as PadService from "./padservice.js";
 export {
     PadService
 };
+
+export {
+    UpdateInfo,
+    UpdateStatus
+} from "./models.js";

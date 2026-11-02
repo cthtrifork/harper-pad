@@ -1,0 +1,57 @@
+# nfpm does not expand ${...} in contents paths, so package-linux.sh stages the binary at bin/harper-pad.
+
+name: harper-pad
+arch: amd64
+platform: linux
+version: ${PKG_VERSION}
+release: "1"
+section: utils
+priority: optional
+maintainer: Harper Pad maintainers <noreply@users.noreply.github.com>
+description: |-
+  Grammar-checked writing editor with a scratch pad drawer.
+  Harper runs on-device as WebAssembly; nothing leaves the machine.
+vendor: cthtrifork
+homepage: https://github.com/cthtrifork/harper-pad
+license: MIT
+
+contents:
+  - src: ./bin/harper-pad
+    dst: /usr/bin/harper-pad
+    file_info:
+      mode: 0755
+  - src: ./build/linux/io.github.cthtrifork.harper-pad.desktop
+    dst: /usr/share/applications/io.github.cthtrifork.harper-pad.desktop
+  - src: ./build/appicon.png
+    dst: /usr/share/icons/hicolor/256x256/apps/harper-pad.png
+  - src: ./frontend/public/favicon.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/harper-pad.svg
+  - src: ./LICENSE
+    dst: /usr/share/doc/harper-pad/copyright
+  - src: ./README.md
+    dst: /usr/share/doc/harper-pad/README.md
+
+# GTK4 + WebKitGTK 6 stack, the baseline the release binary is built against (Ubuntu 24.04).
+depends:
+  - libgtk-4-1
+  - libwebkitgtk-6.0-4
+
+overrides:
+  rpm:
+    depends:
+      - gtk4
+      - webkitgtk6.0
+
+scripts:
+  postinstall: ./build/linux/nfpm/postinstall.sh
+  postremove: ./build/linux/nfpm/postremove.sh
+
+# Signing is on when PKG_SIGNING_KEY_FILE names an armored private key (the passphrase, if any, is
+# NFPM_PASSPHRASE). Unset, the packages are built unsigned, which is what a dry run does.
+deb:
+  signature:
+    key_file: ${PKG_SIGNING_KEY_FILE}
+    type: origin
+rpm:
+  signature:
+    key_file: ${PKG_SIGNING_KEY_FILE}

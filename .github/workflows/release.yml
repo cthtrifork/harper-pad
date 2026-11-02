@@ -1,0 +1,361 @@
+name: Release
+
+# Publishes a GitHub release with a Linux amd64 binary, a tarball, a .deb and an .rpm (PGP-signed,
+# with the public key published alongside), SHA256SUMS, a CycloneDX SBOM and signed attestations
+# (build provenance for the binary, tarball, packages and SBOM; the SBOM bound to the binary). The
+# in-app updater installs the raw binary and verifies it against SHA256SUMS, so those names are an interface. Three ways to run it:
+#   - the "Tag and release" workflow calls this one (workflow_call) with a new version and the commit
+#     to release. This is the normal route. The tag does not exist yet: the release is published with
+#     that commit as its target, and GitHub creates the tag then.
+#   - pushing a tag like v1.2.3 (or v1.2.3-rc.1 for a pre-release) from a machine, which triggers it
+#   - running it by hand (workflow_dispatch) on a branch for a dry run that builds but does not
+#     publish. Dispatched on a tag ref it publishes, which also retries a release that failed.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: The version to release (v1.2.3 or v1.2.3-rc.1); created at sha when the release is published
+        required: true
+        type: string
+      sha:
+        description: The commit to build and tag. Empty means the tag must already exist and is built as it is.
+        required: false
+        type: string
+    secrets:
+      RELEASE_GPG_PRIVATE_KEY:
+        description: Armored PGP private key that signs the .deb and .rpm (gpg --export-secret-keys --armor)
+        required: false
+      RELEASE_GPG_PASSPHRASE:
+        description: Passphrase of that key; leave unset for a key without one
+        required: false
+
+permissions:
+  contents: read
+
+# Two runs for the same tag must not publish at once; a started release is never cancelled.
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  GOTOOLCHAIN: local
+  APP: harper-pad
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
+
+jobs:
+  # The version and the "is this a real release" decision, on their own so the checks and the binary
+  # build can start at once instead of queueing behind one job.
+  meta:
+    name: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      publish: ${{ steps.meta.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # When called with a commit, build exactly that; with only a tag, that tag; otherwise the ref that triggered the run.
+          ref: ${{ inputs.sha || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || '' }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Work out the version
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          # publish=true when there is a tag to release, false for a dry run on a branch.
+          if [ -n "$INPUT_TAG" ]; then
+            version="$INPUT_TAG"; publish=true
+          elif [ "$REF_TYPE" = "tag" ]; then
+            version="$REF_NAME"; publish=true
+          else
+            version="v0.0.0-dryrun.$(git rev-parse --short HEAD)"; publish=false
+          fi
+          if [ "$publish" = true ] && ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag '$version' is not a semantic version like v1.2.3 or v1.2.3-rc.1"; exit 1
+          fi
+          case "$version" in *-*) pre=true ;; *) pre=false ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$pre" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Releases must come from main
+        if: steps.meta.outputs.publish == 'true'
+        run: |
+          git fetch --no-tags origin main
+          # HEAD is the commit being released (checked out above), whichever way this run started.
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Released commit is not on main"; exit 1
+          fi
+
+  # Never ship something CI would have rejected. Runs beside the build; the release
+  # both wait for it.
+  checks:
+    name: vet, test, govulncheck
+    needs: meta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # When called with a commit, build exactly that; with only a tag, that tag; otherwise the ref that triggered the run.
+          ref: ${{ inputs.sha || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || '' }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/linux-build-deps
+        with:
+          packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
+        timeout-minutes: 10
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: ${{ needs.meta.outputs.publish != 'true' }} # off when publishing: a restored cache could poison the release; on for dry runs # zizmor: ignore[cache-poisoning]
+          cache-dependency-path: go.sum
+
+      - name: Vet and test
+        run: make vet test
+
+      - name: govulncheck
+        env:
+          # renovate: datasource=go depName=golang.org/x/vuln
+          GOVULNCHECK_VERSION: v1.9.0
+        run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+
+  build:
+    name: build linux/amd64
+    needs: meta
+    # Pinned rather than "latest": the binary links dynamically against glibc,
+    # so the runner image decides which distributions can run it.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # When called with a commit, build exactly that; with only a tag, that tag; otherwise the ref that triggered the run.
+          ref: ${{ inputs.sha || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || '' }}
+          persist-credentials: false
+
+      # The README promises a binary built on Ubuntu 24.04 (that fixes the glibc and WebKitGTK
+      # baseline). Like wails-build-action's distro discovery, fail loudly if the runner is
+      # anything else instead of silently shipping a different baseline.
+      - name: Check the build distribution
+        run: |
+          . /etc/os-release
+          if [ "$ID" != "ubuntu" ] || [ "$VERSION_ID" != "24.04" ]; then
+            echo "::error::Expected Ubuntu 24.04 but this runner is $PRETTY_NAME"; exit 1
+          fi
+          echo "Building on $PRETTY_NAME"
+
+      - uses: ./.github/actions/linux-build-deps
+        with:
+          packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
+        timeout-minutes: 10
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: ${{ needs.meta.outputs.publish != 'true' }} # off when publishing: a restored cache could poison the release; on for dry runs # zizmor: ignore[cache-poisoning]
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      - name: Toolchain versions
+        run: |
+          go version
+          pkg-config --modversion gtk4 webkitgtk-6.0 libsoup-3.0
+
+      # The wails3 CLI (for the packages below) compiles alongside the binary rather than after it.
+      - name: Build
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          CGO_ENABLED: '1'
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          built="$RUNNER_TEMP/build/${APP}"
+          mkdir -p "$(dirname "$built")"
+          GOBIN="$RUNNER_TEMP/bin" CGO_ENABLED=0 make wails3-install &
+          tools=$!
+          make build OUT="$built"
+          wait "$tools"
+          chmod +x "$built"
+          # The MCP server and the pprof endpoint are development tools without authentication (docs/mcp.md, docs/pprof.md).
+          if grep -aqF "MCP server started" "$built" || grep -aqF "pprof endpoint started" "$built"; then
+            echo "::error::a development endpoint (MCP or pprof) is present in the release binary"; exit 1
+          fi
+          # Raw binary (what the in-app updater installs), tarball (for people) and SHA256SUMS.
+          # The layout matters: see docs/self-update.md and internal/selfupdate. SHA256SUMS is
+          # written after the SBOM is added (below).
+          mkdir -p dist
+          cp "$built" "dist/${APP}_linux_amd64"
+          tar -czf "dist/${APP}_${VERSION}_linux_amd64.tar.gz" -C "$(dirname "$built")" "$APP" -C "$PWD" README.md LICENSE
+
+      # The .deb and .rpm come from the same binary, via `wails3 tool package` (nfpm) and
+      # build/linux/nfpm/nfpm.yaml, which also installs the .desktop file and icons. A release is
+      # signed with the PGP key in the RELEASE_GPG_* secrets and fails without it; a dry run on a
+      # branch builds unsigned packages. The key only lives in RUNNER_TEMP for this step.
+      - name: Build and sign the .deb and .rpm
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          PUBLISH: ${{ needs.meta.outputs.publish }}
+          GPG_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+          NFPM_PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+        run: |
+          export PATH="$RUNNER_TEMP/bin:$PATH"
+          unset PKG_SIGNING_KEY_FILE
+          if [ -n "$GPG_KEY" ]; then
+            keydir="$(mktemp -d)"
+            trap 'rm -rf "$keydir"' EXIT
+            printf '%s\n' "$GPG_KEY" > "$keydir/private.asc"
+            export PKG_SIGNING_KEY_FILE="$keydir/private.asc"
+            # Publish the matching public key and show its fingerprint, so the key can be checked.
+            gpg --batch --import "$keydir/private.asc"
+            fpr="$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr:/{print $10; exit}')"
+            gpg --batch --armor --export "$fpr" > "dist/${APP}-release-key.asc"
+            echo "Signing packages with PGP key $fpr"
+          elif [ "$PUBLISH" = true ]; then
+            echo "::error::RELEASE_GPG_PRIVATE_KEY is not set, so the .deb and .rpm cannot be signed (see docs/releasing.md)"; exit 1
+          else
+            echo "::warning::RELEASE_GPG_PRIVATE_KEY is not set: the packages in this dry run are unsigned"
+          fi
+          scripts/package-linux.sh "$RUNNER_TEMP/build/${APP}" "$VERSION" dist
+
+      # CycloneDX SBOM from the lockfiles (go.mod/go.sum and frontend/package-lock.json), i.e. the Go
+      # modules and the npm packages bundled into the binary. Named without os/arch so the in-app
+      # updater's asset matcher cannot mistake it for the binary. No vulnerability scanner runs here;
+      # security.yml already does that.
+      - name: Generate SBOM with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: cyclonedx
+          scanners: license
+          version: ${{ env.TRIVY_VERSION }}
+          output: ${{ runner.temp }}/sbom.cdx.json
+          skip-dirs: frontend/node_modules,dist
+
+      - name: Add SBOM to the release files
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          cp "$RUNNER_TEMP/sbom.cdx.json" "dist/${APP}_${VERSION}.sbom.cdx.json"
+          # SHA256SUMS lists every asset, so regenerate it with the SBOM included.
+          (cd dist && sha256sum "${APP}_linux_amd64" "${APP}_${VERSION}_linux_amd64.tar.gz" \
+            "${APP}_${VERSION}_amd64.deb" "${APP}_${VERSION}_x86_64.rpm" \
+            "${APP}_${VERSION}.sbom.cdx.json" $(ls "${APP}-release-key.asc" 2>/dev/null) > SHA256SUMS)
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-files
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: publish release
+    needs: [meta, checks, build]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # update the draft release, upload assets and publish it
+      pull-requests: read # Release Drafter reads the merged PRs
+      id-token: write # sign the provenance attestation
+      attestations: write # store the attestations
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: dist
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*_linux_amd64
+            dist/*.sbom.cdx.json
+
+      # Unlike subject-path, sbom-path takes one literal path (no glob), so resolve it first.
+      - name: Locate SBOM
+        id: sbom
+        run: echo "path=$(ls dist/*.sbom.cdx.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/*_linux_amd64
+          sbom-path: ${{ steps.sbom.outputs.path }}
+
+      # Fail the release if what was just signed does not verify against this workflow.
+      - name: Verify attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for f in dist/*_linux_amd64 dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.cdx.json; do
+            gh attestation verify "$f" --repo "$REPO" \
+              --signer-workflow "$REPO/.github/workflows/release.yml"
+          done
+          gh attestation verify dist/*_linux_amd64 --repo "$REPO" \
+            --predicate-type https://cyclonedx.org/bom
+
+      # The notes come from Release Drafter (.github/release-drafter.yml). Aimed at the built commit, it
+      # writes the draft for exactly this tag, from the PRs merged since the last published release up to
+      # that commit, so a retried release gets the notes of the commit that was built.
+      - name: Draft the release notes
+        id: notes
+        uses: release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7.10.0
+        with:
+          tag: ${{ needs.meta.outputs.version }}
+          name: ${{ needs.meta.outputs.version }}
+          commitish: ${{ needs.meta.outputs.sha }}
+          prerelease: ${{ needs.meta.outputs.prerelease }}
+
+      # Assets go onto the draft and the draft is then published, so the release appears complete (and, with
+      # immutable releases on, is locked with its assets in place). `gh` finds a draft by its pending tag name,
+      # so if release-drafter.yml retargets the draft to another version meanwhile, these calls fail to find it
+      # and nothing is published, instead of publishing the wrong tag.
+      - name: Attach the build and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.meta.outputs.version }}
+          TARGET: ${{ needs.meta.outputs.sha }}
+          PRERELEASE: ${{ needs.meta.outputs.prerelease }}
+          NOTES: ${{ steps.notes.outputs.body }}
+        run: |
+          set -euo pipefail
+          # A retry finds the assets of an earlier, failed attempt on the draft; their names carry the
+          # version, so --clobber replaces them.
+          gh release upload "$TAG" dist/* --clobber
+
+          latest=true
+          [ "$PRERELEASE" = true ] && latest=false
+          # Publishing creates the tag when it does not exist yet, at the draft's target. --target sets that
+          # to the built commit in the same call, because release-drafter.yml may have moved the draft to
+          # the head of main since the notes step. A tag that already exists is used as it is (the target is
+          # then ignored). The notes are set again from this run's own output.
+          printf '%s' "$NOTES" | gh release edit "$TAG" --target "$TARGET" --draft=false \
+            --prerelease="$PRERELEASE" --latest="$latest" --title "$TAG" --notes-file -
+          echo "Published $TAG"

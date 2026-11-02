@@ -11,13 +11,56 @@
 // @ts-ignore: Unused imports
 import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
 /**
- * Echo returns its argument; the spike uses it to prove the Go bridge works next to harper.js.
+ * CheckForUpdates asks GitHub Releases whether a newer release exists. It only looks:
+ * nothing is downloaded until InstallUpdate is called.
+ * @returns {$CancellablePromise<$models.UpdateStatus>}
+ */
+export function CheckForUpdates() {
+    return $Call.ByID(3772457396).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
+ * Echo returns its argument trimmed; the spike uses it to prove the Go bridge works next to harper.js.
  * @param {string} text
  * @returns {$CancellablePromise<string>}
  */
 export function Echo(text) {
     return $Call.ByID(3034314080, text);
+}
+
+/**
+ * InstallUpdate downloads the release CheckForUpdates found, verifies its SHA-256 and
+ * stages it beside the running binary. It blocks until staged or failed, so it must be
+ * called from a binding (its own goroutine), never the UI thread.
+ * @returns {$CancellablePromise<void>}
+ */
+export function InstallUpdate() {
+    return $Call.ByID(808803861);
+}
+
+/**
+ * RestartToUpdate swaps the staged binary in and relaunches the app.
+ * @returns {$CancellablePromise<void>}
+ */
+export function RestartToUpdate() {
+    return $Call.ByID(1495192800);
+}
+
+/**
+ * UpdateInfo reports the running version and whether it can update itself.
+ * @returns {$CancellablePromise<$models.UpdateInfo>}
+ */
+export function UpdateInfo() {
+    return $Call.ByID(4196675356).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType1($result);
+    }));
 }
 
 /**
@@ -27,3 +70,7 @@ export function Echo(text) {
 export function Version() {
     return $Call.ByID(336791947);
 }
+
+// Private type creation functions
+const $$createType0 = $models.UpdateStatus.createFrom;
+const $$createType1 = $models.UpdateInfo.createFrom;

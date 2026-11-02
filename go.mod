@@ -2,7 +2,10 @@ module github.com/cthtrifork/harper-pad
 
 go 1.26.0
 
-require github.com/wailsapp/wails/v3 v3.1.0
+require (
+	github.com/wailsapp/wails/v3 v3.1.0
+	golang.org/x/mod v0.41.0
+)
 
 require (
 	github.com/coder/websocket v1.8.14 // indirect

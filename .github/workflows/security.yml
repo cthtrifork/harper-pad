@@ -1,0 +1,116 @@
+name: Security
+
+# Vulnerability checks run when Go code or dependencies change, and weekly,
+# because new advisories appear without any change to this repository.
+# They use a paths filter, so do not mark them as required checks.
+on:
+  pull_request:
+    paths:
+      - '**.go'
+      - go.mod
+      - .tool-versions
+      - go.sum
+      - frontend/package.json
+      - frontend/package-lock.json
+      - .github/workflows/**
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - go.mod
+      - .tool-versions
+      - go.sum
+      - frontend/package.json
+      - frontend/package-lock.json
+  schedule:
+    - cron: '23 5 * * 1' # Mondays 05:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
+  # The DB comes from the cache that trivy-cache.yml refreshes daily.
+  TRIVY_SKIP_DB_UPDATE: 'true'
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # govulncheck type-checks the cgo GUI package, so it needs the same headers as the build.
+      - uses: ./.github/actions/linux-build-deps
+        with:
+          packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
+        timeout-minutes: 10
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run govulncheck
+        env:
+          # renovate: datasource=go depName=golang.org/x/vuln
+          GOVULNCHECK_VERSION: v1.9.0
+        run: |
+          go version
+          go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+
+  trivy-fs:
+    name: trivy (filesystem)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Complements govulncheck: it reports every vulnerable module in go.mod/go.sum
+      # (not only reachable code) and looks for committed secrets.
+      - name: Scan repository with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-dirs: frontend/node_modules
+          exit-code: '1'
+          version: ${{ env.TRIVY_VERSION }}
+
+  npm-audit:
+    name: npm audit (frontend runtime dependencies)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      # --omit=dev: only what ships in the app (vue, harper.js, @wailsio/runtime). Vite and the Vue plugin are
+      # build tooling, and an advisory there should not fail the weekly run; Renovate and the
+      # Trivy scan above still report it. HIGH and above fails, lower severities are left to Renovate.
+      - name: Audit production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high

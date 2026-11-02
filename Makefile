@@ -10,7 +10,7 @@ OUT       ?= harper-pad
 MODULE    := github.com/cthtrifork/harper-pad
 
 .DEFAULT_GOAL := help
-.PHONY: help test check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run
+.PHONY: help test check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-17s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -65,7 +65,7 @@ bindings: ## Regenerate frontend/bindings from the Go services (needs the wails3
 	CGO_ENABLED=0 wails3 generate bindings -silent
 
 dev: ## Hot reload via `wails3 dev` in server mode: Vite HMR + rebuild-on-save Go (http://localhost:8080)
-	wails3 dev -config ./build/config.yml -port 9245
+	scripts/dev.sh
 
 dev-frontend: ## Vite dev server with hot reload; then run: FRONTEND_DEVSERVER_URL=http://127.0.0.1:9245 go run .
 	cd frontend && npm run dev
@@ -78,3 +78,12 @@ build-server: frontend ## Headless server build, no GTK needed
 
 run: frontend ## Run the desktop app
 	go run .
+
+run-mcp: frontend ## Desktop app with Wails' MCP server on 127.0.0.1:9099 (dev only; see docs/mcp.md)
+	go run -tags mcp .
+
+run-mcp-server: frontend ## Headless app with the MCP server; only app_info, windows_list, emit_event work (no webview)
+	CGO_ENABLED=0 go run -tags server,mcp .
+
+run-pprof-server: frontend ## Headless app with a pprof endpoint on 127.0.0.1:6060 (dev only; see docs/pprof.md)
+	CGO_ENABLED=0 go run -tags server,pprof .

@@ -18,17 +18,22 @@ func main() {
 		log.Fatal(err)
 	}
 
+	svc := app.NewPadService()
 	wails := application.New(application.Options{
 		Name:        "Harper Pad",
 		Icon:        app.WindowIcon,
 		Description: "Grammar-checked editor with a scratch pad drawer (" + app.Version() + ")",
-		Services:    []application.Service{application.NewService(app.NewPadService())},
+		Services:    []application.Service{application.NewService(svc)},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(frontend)},
 		// Linux: GTK4 reports the application id as the window's Wayland app_id and X11 class, and
 		// KDE/GNOME match it to the .desktop file of the same name (the launcher icon and grouping).
 		// Keep it equal to the desktop file name and its StartupWMClass in build/linux.
 		Linux: application.LinuxOptions{ApplicationID: "io.github.cthtrifork.harper-pad", ProgramName: "io.github.cthtrifork.harper-pad"},
 	})
+
+	// After New (an update restart re-launches this binary and New diverts it into the swap
+	// helper) and before Run, as the Wails self-update tutorial prescribes.
+	app.InitUpdater(svc, wails)
 
 	window := wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "Harper Pad",

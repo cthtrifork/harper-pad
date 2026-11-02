@@ -1,0 +1,95 @@
+name: Tag and release
+
+# Releases the head of main under a new version. Run it from the Actions tab ("Run workflow") or with
+#   gh workflow run tag-release.yml                    (next version from the merged PR titles)
+#   gh workflow run tag-release.yml -f tag=v1.0.0      (an exact tag)
+#
+# No tag is pushed from here. release.yml builds the commit and publishes the release with the
+# release's target set to that commit, and GitHub creates the tag at that moment. So a failed build
+# leaves no tag behind, and nothing is left to retry or clean up.
+run-name: Tag and release ${{ inputs.tag != '' && inputs.tag || '(next version)' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The exact new tag, such as v1.4.0 or v1.4.0-rc.1. Leave empty to use the version Release Drafter works out from the merged PR titles.
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+# Two releases at once could pick the same next version.
+concurrency:
+  group: tag-and-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: work out the version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # Release Drafter updates the draft release
+      pull-requests: read # Release Drafter reads the merged PRs
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      # Releases come from main. Say so, rather than skipping the job and leaving a green run.
+      - name: Releases must be started from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this workflow on main, not on ${GITHUB_REF_NAME}."
+          exit 1
+
+      # No tag given: the version is what Release Drafter works out from the PRs merged since the last release
+      # (breaking change = major, feat = minor, anything else = patch; .github/release-drafter.yml).
+      - name: Work out the next version
+        id: draft
+        if: inputs.tag == ''
+        uses: release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7.10.0
+        with:
+          # The commit this run will release, not whatever main has become since.
+          commitish: ${{ github.sha }}
+
+      # An explicit tag wins, then the version Release Drafter resolved. release.yml checks that it is a
+      # semantic version. This is a new version only: a tag that exists, whether or not its release was
+      # published, is retried through release.yml (see docs/releasing.md). A failed lookup must not be
+      # mistaken for "no such tag", so only a 404 counts as free.
+      - name: Check the version is unused
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag || steps.draft.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          [ -n "$TAG" ] || { echo "::error::No version to release: Release Drafter found none."; exit 1; }
+          if out=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" 2>&1); then
+            echo "::error::Tag $TAG already exists. Pick a new version, or retry that release through release.yml (see docs/releasing.md)."
+            exit 1
+          elif ! grep -q 'Not Found' <<<"$out"; then
+            echo "::error::Could not check whether tag $TAG exists: $out"
+            exit 1
+          fi
+          echo "Releasing $TAG at $GITHUB_SHA"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: release ${{ needs.tag.outputs.tag }}
+    needs: tag
+    # What release.yml's publish job needs; a called workflow cannot have more than its caller grants.
+    permissions:
+      contents: write # update the draft release, upload assets and publish it
+      pull-requests: read # Release Drafter reads the merged PRs
+      id-token: write # sign the provenance attestation
+      attestations: write # store the attestations
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+      sha: ${{ github.sha }}
+    # The PGP key that signs the .deb and .rpm (RELEASE_GPG_*).
+    secrets:
+      RELEASE_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+      RELEASE_GPG_PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}

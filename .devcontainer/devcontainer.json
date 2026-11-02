@@ -1,0 +1,46 @@
+{
+  "name": "Harper Pad",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "containerEnv": {
+    // Headless only: no GTK/WebKit in this container, so every go command builds server mode.
+    "CGO_ENABLED": "0",
+    "GOFLAGS": "-tags=server",
+    "VET_TAGS": "server,production",
+    "RACE": "",
+    // Listen on all interfaces: editors forward the port to the container's network address,
+    // not its loopback, so a 127.0.0.1 bind gives "connection was reset". Only the editor's
+    // forward exposes it on the host.
+    "WAILS_SERVER_HOST": "0.0.0.0",
+    "WAILS_SERVER_PORT": "8080",
+    "WAILS_VITE_PORT": "9245"
+  },
+  // Installs the frontend deps and the wails3 CLI (`make dev`, `make bindings`).
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": { "label": "Harper Pad (make dev)", "onAutoForward": "openBrowser" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go", "biomejs.biome", "Vue.volar"],
+      "settings": {
+        "go.toolsEnvVars": { "CGO_ENABLED": "0", "GOFLAGS": "-tags=server" },
+        "go.useLanguageServer": true,
+        "go.lintTool": "golangci-lint",
+        "go.lintFlags": ["--config=${workspaceFolder}/.github/linters/golangci.yml"],
+        "go.lintOnSave": "workspace",
+        "editor.formatOnSave": true,
+        "go.formatTool": "goimports",
+        "[go]": { "editor.defaultFormatter": "golang.go" },
+        "[javascript]": { "editor.defaultFormatter": "biomejs.biome" },
+        "[vue]": { "editor.defaultFormatter": "biomejs.biome" },
+        "[css]": { "editor.defaultFormatter": "biomejs.biome" },
+        "[html]": { "editor.defaultFormatter": "biomejs.biome" },
+        "[json]": { "editor.defaultFormatter": "biomejs.biome" },
+        "[markdown]": { "editor.formatOnSave": false }
+      }
+    }
+  }
+}

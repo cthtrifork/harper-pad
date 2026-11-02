@@ -13,6 +13,7 @@ make format       # gofmt plus Biome
 make test         # go test -race -count=1 ./...
 make vet          # go vet, with and without -tags production
 make build-server # headless build (CGO_ENABLED=0, -tags server,production), no GTK
+make run-mcp      # desktop app with Wails MCP server on 127.0.0.1:9099 (dev only, docs/mcp.md)
 make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wails3-install)
 ```
 
@@ -35,8 +36,13 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 | Path | What |
 |---|---|
 | `main.go` | Thin entry point: Wails app and window, embeds `frontend/dist` |
-| `internal/app` | `PadService` (the binding the frontend calls), tray, icons, version stamp |
+| `internal/app` | `PadService` (the binding the frontend calls), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
+| `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
 | `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; generated bindings are committed |
-| `Taskfile.yml`, `build/config.yml` | `wails3 dev` config (server mode) |
-| `build/linux` | Desktop file; its name equals the application id set in `main.go` |
-| `.github` | Workflows (`ci`, `actions-lint`, `pr-title`, `release-drafter`, `renovate`, `update-branches`), linters, Renovate |
+| `Taskfile.yml`, `build/config.yml`, `.devcontainer/`, `scripts/dev.sh` | `wails3 dev` config (server mode), dev container and the `make dev` loop, see `docs/devcontainer.md` |
+| `build/linux` | Desktop file and nfpm packaging (`scripts/package-linux.sh`); the desktop file name equals the application id in `main.go` |
+| `.github` | Workflows (`ci`, `security`, `release`, `tag-release`, `actions-lint`, `pr-title`, `release-drafter`, `renovate`, `update-branches`, `trivy-cache`), linters, Renovate |
+
+- Wails' MCP server (`-tags mcp`) and the pprof endpoint (`-tags pprof`) are development only: `mcp_guard.go` and `pprof_guard.go` reject them with `production`, and CI greps the release binary. See `docs/mcp.md`, `docs/pprof.md`.
+- `application.New` must be called before `InitUpdater`, which runs before `Run` (self-update tutorial order); see `docs/self-update.md`, `docs/releasing.md`.
+- Open work is tracked in `TODO.md`.

@@ -201,6 +201,20 @@ jobs:
           chmod +x dist/harper-pad
           ls -l dist
 
+      # The Wails MCP server drives the UI and calls PadService without authentication by default.
+      - name: Production build contains no MCP server
+        run: |
+          if grep -aqF "MCP server started" dist/harper-pad; then
+            echo "::error::the MCP server is present in a -tags production binary"; exit 1
+          fi
+
+      # The pprof endpoint exposes stacks and heap contents without authentication.
+      - name: Production build contains no pprof endpoint
+        run: |
+          if grep -aqF "pprof endpoint started" dist/harper-pad; then
+            echo "::error::the pprof endpoint is present in a -tags production binary"; exit 1
+          fi
+
       # One named artifact per platform, like the action's "Wails Build <os> <name>". Unsigned CI build, for testing only.
       - name: Keep the binary for reviewers
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
