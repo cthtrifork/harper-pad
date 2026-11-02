@@ -118,7 +118,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/linux-build-deps
+      - uses: $/.github/actions/linux-build-deps
         with:
           packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
         timeout-minutes: 10
@@ -152,7 +152,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/linux-build-deps
+      - uses: $/.github/actions/linux-build-deps
         with:
           packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
         timeout-minutes: 10
