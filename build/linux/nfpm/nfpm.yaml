@@ -13,7 +13,7 @@ description: |-
   Harper runs on-device as WebAssembly; nothing leaves the machine.
 vendor: cthtrifork
 homepage: https://github.com/cthtrifork/harper-pad
-license: MIT
+license: Apache-2.0
 
 contents:
   - src: ./bin/harper-pad
