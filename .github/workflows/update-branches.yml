@@ -1,0 +1,72 @@
+name: Update branches
+
+# Keeps the repository owner's open pull requests current with main: after every push to main, each
+# open PR by the owner (cthtrifork; this is a personal account) whose branch is behind main gets main
+# merged into it (GitHub's "Update branch" button, through the API), so CI runs again on the result
+# and the PR stays mergeable under "Require branches to be up to date". Personal accounts have no
+# merge queue, and GitHub has no setting that does this.
+#   - Skipped: PRs by anyone else (Renovate and the other bots included), PRs from forks, drafts, PRs
+#     with merge conflicts (the update fails and is listed in the job summary), and branches named
+#     renovate/* or bot/*, which Renovate and Renovate owns and rewrite themselves.
+#   - The update is pushed as the Renovate GitHub App (the token needs Contents and Pull requests
+#     write), not as GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no workflows, so CI would not
+#     run on the updated branch.
+#   - Each push to main re-runs CI on every behind PR. That is the price of "always up to date".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+# A later push to main makes this run's list stale, so queue instead of cancelling mid-update.
+concurrency:
+  group: update-branches
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: update branches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {} # everything below uses the App token
+    steps:
+      - name: Get a GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          permission-contents: write # merge main into the PR branch
+          permission-pull-requests: write # the update-branch endpoint
+
+      - name: Update PR branches that are behind main
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.repository.default_branch }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          echo "### Update branches" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          # Tab-separated, so a branch name cannot split a field. Fork PRs and drafts are filtered out.
+          gh pr list --repo "$REPO" --base "$BASE" --state open --author "$OWNER" --limit 100 \
+            --json number,headRefName,headRefOid,isDraft,isCrossRepository \
+            --jq '.[] | select(.isDraft == false and .isCrossRepository == false) | [.number, .headRefName, .headRefOid] | @tsv' |
+          while IFS=$'\t' read -r number ref sha; do
+            case "$ref" in
+              renovate/* | bot/*) continue ;;
+            esac
+            behind=$(gh api "repos/$REPO/compare/$BASE...$ref" --jq .behind_by)
+            if [ "$behind" -eq 0 ]; then
+              continue
+            fi
+            # expected_head_sha makes GitHub refuse the update if the branch moved since the list.
+            if out=$(gh api --method PUT "repos/$REPO/pulls/$number/update-branch" -f expected_head_sha="$sha" 2>&1); then
+              echo "- #$number \`$ref\`: updated ($behind commits behind)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- #$number \`$ref\`: **not updated** ($behind commits behind): $(printf '%s' "$out" | tr '\n' ' ')" >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning::PR #$number ($ref) was not updated"
+            fi
+          done

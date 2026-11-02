@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Harper Pad">
+  <path d="M32 4 8 12v18c0 15 10 26 24 30 14-4 24-15 24-30V12z" fill="#1904da"/>
+  <path d="M32 9 13 15v15c0 12 8 21 19 25 11-4 19-13 19-25V15z" fill="#0f766e"/>
+  <circle cx="29" cy="29" r="9" fill="none" stroke="#fff" stroke-width="4"/>
+  <path d="m36 36 9 9" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,120 @@
+// Renovate config. Renovate runs self-hosted from .github/workflows/renovate.yml, which loads this
+// file as its global config, so a pull request that changes it is checked by a dry run (see docs/ci.md).
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+    // Actions stay pinned to a commit SHA with a `# vX.Y.Z` comment.
+    "helpers:pinGitHubActionDigests",
+  ],
+  labels: ["dependencies"],
+
+  // PR titles follow the repository convention `type: summary` (.github/workflows/pr-title.yml), so a Renovate PR
+  // reads `deps: update dependency knip to v6.44.0` and passes the PR title check. The title type also
+  // picks the label (.github/release-drafter.yml), so vulnerability fixes are titled `security:`.
+  semanticCommits: "enabled",
+  semanticCommitType: "deps",
+  semanticCommitScope: null,
+
+  // New releases wait 2 days. "strict" means no branch or PR exists until the wait is over, so a
+  // PR (and an automerge) never races a release that gets yanked or fixed within the first days.
+  minimumReleaseAge: "2 days",
+  internalChecksFilter: "strict",
+  postUpdateOptions: ["gomodTidy"],
+  // Commits go through GitHub's API as the GitHub App, so they are verified (signed) without a key.
+  platformCommit: "enabled",
+
+  // The dependency dashboard issue (needs issues: write, which the real run has).
+  dependencyDashboard: true,
+  dependencyDashboardTitle: "Dependency Dashboard",
+  dependencyDashboardLabels: ["dependencies"],
+
+  // Security advisories from OSV.dev as well as GitHub's own alerts (the GitHub App's Dependabot
+  // alerts permission; without it Renovate logs "Cannot access vulnerability alerts").
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    labels: ["dependencies", "security"],
+    semanticCommitType: "security",
+  },
+
+  // Rules apply in order and a later rule wins, so the general ones come first.
+  packageRules: [
+    {
+      // Patch and digest updates merge by themselves once CI is green. Only meaningful when CI runs
+      // on Renovate's PRs, which the GitHub App token makes happen (see renovate.yml), and with branch
+      // protection requiring the CI checks: without them nothing stands between a PR and the merge.
+      matchUpdateTypes: ["patch", "digest"],
+      automerge: true,
+      minimumReleaseAge: "2 days",
+    },
+    {
+      // Patches stay out of these groups on purpose: a group is merged as a whole, so a minor in the
+      // same branch would hold the patches back. Patches get their own PR and automerge.
+      matchManagers: ["github-actions"],
+      matchUpdateTypes: ["minor"],
+      groupName: "actions",
+    },
+    {
+      matchManagers: ["gomod"],
+      matchUpdateTypes: ["minor"],
+      groupName: "go-minor",
+    },
+    {
+      matchManagers: ["npm"],
+      matchUpdateTypes: ["minor"],
+      groupName: "frontend-minor",
+    },
+    {
+      // The Go dev tools (Makefile) and the gh-pin-actions and zizmor pins (actions-lint.yml).
+      matchManagers: ["custom.regex"],
+      matchUpdateTypes: ["minor", "major"],
+      groupName: "dev tools",
+    },
+    {
+      // golangci-lint: its version (the Makefile pin and the `version:` of the action in ci.yml are one
+      // dependency, golangci/golangci-lint) and golangci-lint-action itself move in one PR. Later than
+      // "dev tools", so it wins for the pin.
+      matchPackageNames: ["golangci/golangci-lint", "golangci/golangci-lint-action"],
+      groupName: "golangci-lint",
+    },
+    {
+      // One Go version everywhere: golang in .tool-versions (found by the asdf manager, which setup-go reads),
+      // go in go.mod, and the golang images of the Dockerfiles, in one PR. Reviewed by hand, never automerged:
+      // a new toolchain can change build output.
+      matchDepNames: ["go", "golang", "docker.io/library/golang", "mirror.gcr.io/library/golang"],
+      groupName: "go toolchain",
+      automerge: false,
+    },
+    {
+      // Node: nodejs in .tool-versions (asdf manager; setup-node reads it) and the node images of the
+      // Dockerfiles, in one PR. Reviewed by hand: a new Node major can change the build.
+      matchDepNames: ["nodejs", "node", "docker.io/library/node", "mirror.gcr.io/library/node"],
+      groupName: "node",
+      automerge: false,
+    },
+    {
+      // The wails3 CLI follows the Go module, and the npm runtime must be the same version: one PR.
+      matchPackageNames: ["github.com/wailsapp/wails/v3", "@wailsio/runtime"],
+      groupName: "wails",
+    },
+    {
+      // The runner image is pinned on purpose: it fixes the glibc and WebKitGTK baseline of the
+      // release binary. Moving to a new Ubuntu is a decision, not an update.
+      matchDatasources: ["github-runners"],
+      enabled: false,
+    },
+  ],
+
+  customManagers: [
+    {
+      // Versions with no manager of their own: a `# renovate: datasource=<ds> depName=<name>` comment on
+      // the line above a `KEY := value`, `KEY=value` or `KEY: value` line. Used for the Go dev tools in
+      // the Makefile, and zizmor and the gh-pin-actions extension in actions-lint.yml.
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)Makefile$/", "/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+(?:ARG\\s+)?\\S+\\s*(?::=|=|:)\\s*['\"]?(?<currentValue>[^\\s'\"]+)",
+      ],
+    },
+  ],
+}

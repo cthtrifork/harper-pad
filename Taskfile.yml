@@ -1,0 +1,27 @@
+version: '3'
+
+# Wails v3 project tasks (the layout `wails3 init -t vue` generates, trimmed to what this app uses).
+# The desktop GUI build needs GTK4/WebKitGTK, so development and CI use server mode (-tags server).
+vars:
+  APP_NAME: harper-pad
+  BIN_DIR: bin
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+
+tasks:
+  dev:
+    summary: Hot reload in server mode (Vite HMR + rebuild-on-save Go), http://localhost:8080
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  dev:frontend:
+    summary: Vite dev server on the port wails3 dev proxies to
+    dir: frontend
+    cmds:
+      - npm run dev -- --port {{.VITE_PORT}} --strictPort
+
+  build:server:
+    summary: Headless dev build (-tags server, CGO off); no GTK needed
+    env:
+      CGO_ENABLED: 0
+    cmds:
+      - go build -tags server -buildvcs=false -gcflags=all="-l" -o {{.BIN_DIR}}/{{.APP_NAME}}-server .

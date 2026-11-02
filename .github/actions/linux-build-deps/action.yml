@@ -1,0 +1,45 @@
+name: Linux build dependencies
+description: >-
+  Installs the apt packages passed in `packages` (e.g. the GTK4 + WebKitGTK 6 build headers Wails v3
+  needs, from the Wails CI). The .deb files are cached per runner image, so a
+  warm run installs them with dpkg and never touches the Ubuntu mirror.
+
+inputs:
+  packages:
+    description: Space-separated apt packages to install.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: image
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        echo "version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+        echo "packages=$(echo "$PACKAGES" | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+    - id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/apt-debs
+        key: apt-debs-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ steps.image.outputs.packages }}
+
+    # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt.
+    - name: Install
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          if [ '${{ steps.cache.outputs.cache-hit }}' = true ] && sudo dpkg -i ~/apt-debs/*.deb; then
+            exit 0
+          fi
+          sudo apt-get -o Acquire::Languages=none update -qq
+          sudo apt-get install -y --no-install-recommends $PACKAGES
+          # The debs apt just downloaded are exactly what this image lacks; keep them for the cache.
+          mkdir -p ~/apt-debs
+          cp /var/cache/apt/archives/*.deb ~/apt-debs/ || true # nothing downloaded if the image already has them

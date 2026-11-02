@@ -1,0 +1,13 @@
+# Normalise text to LF in the repo and in the working tree: the scripts run in a Linux container
+# and a Makefile with CRLF breaks.
+* text=auto eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+
+# Binary
+*.png binary
+*.ico binary
+
+# Generated, collapsed in diffs and ignored by language stats
+frontend/bindings/** linguist-generated=true
+frontend/package-lock.json linguist-generated=true -diff

@@ -1,0 +1,62 @@
+name: PR title
+
+# Enforces the PR title convention (Conventional Commits: `type(scope)!: summary`) and labels the PR
+# from it. Squash merges use the title as the commit subject and the release notes (.github/release-drafter.yml)
+# group PRs by title type, so a good title is what makes the notes readable.
+#   - check title: amannn/action-semantic-pull-request validates the title. Runs for every PR.
+#   - label: release-drafter's autolabeler adds the label from the title (rules and the type -> label
+#     table in .github/release-drafter.yml) and, with sync-labels, drops a stale one when the title is
+#     edited. Labelling needs write access, so it is skipped for fork PRs.
+#   - Skipped: bot/* branches.
+#   - Make "check title" a required status check in the branch rules to enforce it on merge.
+# synchronize matters: a required status check is attached to the head commit, and update-branches.yml
+# pushes a merge commit to open PRs, so every new head needs its own run or the check stays "Expected".
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: check title
+    if: ${{ !startsWith(github.head_ref, 'bot/') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read # read the PR title
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          # Keep in step with .github/release-drafter.yml and docs/releasing.md.
+          types: |
+            feat
+            fix
+            security
+            perf
+            refactor
+            docs
+            test
+            chore
+            revert
+            ci
+            build
+            deps
+
+  label:
+    name: label PR
+    if: ${{ !startsWith(github.head_ref, 'bot/') && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read # the autolabeler reads .github/release-drafter.yml
+      pull-requests: write # add and remove labels
+    steps:
+      - uses: release-drafter/release-drafter/autolabeler@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7.10.0

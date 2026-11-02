@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": ["**", "!dist", "!bindings", "!package-lock.json"]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 140 },
+  "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always", "trailingCommas": "all" } },
+  "html": { "experimentalFullSupportEnabled": true },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "style": "off",
+      "complexity": { "noImportantStyles": "off" },
+      "suspicious": { "noAssignInExpressions": "off", "useIterableCallbackReturn": "off" }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.vue"],
+      "linter": { "rules": { "correctness": { "noUnusedVariables": "off" } } }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+# Read by `wails3 dev -config ./build/config.yml` (see Taskfile.yml, docs/devcontainer.md).
+version: '3'
+
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - bin
+      - tmp
+      - docs
+      - scripts
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+    git_ignore: true
+  executes:
+    # Server mode: the GUI build needs GTK, which the dev container does not have.
+    - cmd: wails3 task build:server
+      type: blocking
+    - cmd: wails3 task dev:frontend
+      type: background
+    - cmd: ./bin/harper-pad-server
+      type: primary
+      exit_policy: shutdown

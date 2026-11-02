@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Harper Pad
+GenericName=Writing Editor
+Comment=Grammar-checked editor with a scratch pad drawer
+Exec=/usr/bin/harper-pad
+Icon=harper-pad
+Terminal=false
+Categories=Office;TextEditor;Utility;
+Keywords=harper;grammar;spelling;writing;notes;scratch;
+StartupNotify=true
+# Matches the GTK application id the app sets (main.go), which is the Wayland app_id; the file name must be the same id.
+StartupWMClass=io.github.cthtrifork.harper-pad

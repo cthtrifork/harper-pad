@@ -1,0 +1,21 @@
+extends: default
+
+# Workflows and configs carry long explanatory comments and URLs, so line length is not enforced.
+# Blank lines are limited to one in a row, and none at the start or end of a file.
+rules:
+  line-length: disable
+  document-start: disable
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  truthy:
+    allowed-values: ['true', 'false']
+    check-keys: false # `on:` in workflows
+  empty-lines:
+    max: 1
+    max-start: 0
+    max-end: 0
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 0

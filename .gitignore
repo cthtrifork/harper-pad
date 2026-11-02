@@ -1,0 +1,97 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+!coverage.go
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Editor/IDE (see "Editors and OS" below)
+
+# ---------------------------------------------------------------------------
+# Project: build output
+# ---------------------------------------------------------------------------
+# `go build .` names the binary after the module, so it lands in the repo root.
+/harper-pad
+# Release workflow output and Wails build directories
+/bin/
+/dist/
+/build/bin/
+# Race/profile/trace output from `go test`
+*.prof
+*.pprof
+*.trace
+*.exe
+*.syso
+
+# Frontend (Vue + Vite). dist/ is build output embedded by main.go; only the placeholder is
+# tracked so `go vet` and `go test` work before the frontend has been built.
+node_modules/
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# Browser/UI test output (Playwright etc.)
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# ---------------------------------------------------------------------------
+# Project: local state and secrets
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.kubeconfig
+.docker/
+auth.json
+
+# Logs
+*.log
+
+# ---------------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------------
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# AI assistant local settings (project-shared files like CLAUDE.md are not ignored)
+.claude/settings.local.json
+.claude/scratch/
+
+
+# Go hot reload output (air)
