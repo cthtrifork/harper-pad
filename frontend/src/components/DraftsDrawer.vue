@@ -17,6 +17,58 @@ watch(
   (v) => (q.value = v),
 );
 
+// Swipe a draft to the left to delete it (touch only; the delete button and the keyboard still work). It is deleted at once and the
+// toast offers Undo, like the button (design cheat sheet: no "Are you sure?"). A vertical move is left to the list's scrolling.
+const SWIPE_START = 10; // px before a move counts as a swipe
+const SWIPE_DELETE = 96; // px of travel that deletes on release
+const dragId = ref("");
+const dragX = ref(0);
+const settling = ref(false); // after release: the card glides to its end position
+let start = null;
+let swiped = false; // the click that follows a swipe is not a tap
+
+function swipeDown(e, id) {
+  if (e.pointerType !== "touch") return;
+  start = { id, x: e.clientX, y: e.clientY, locked: false };
+  swiped = false;
+}
+
+function swipeMove(e) {
+  if (!start) return;
+  const dx = e.clientX - start.x;
+  if (!start.locked) {
+    if (Math.abs(e.clientY - start.y) > SWIPE_START && Math.abs(e.clientY - start.y) > Math.abs(dx)) return void (start = null);
+    if (Math.abs(dx) < SWIPE_START) return;
+    start.locked = true;
+    settling.value = false;
+    dragId.value = start.id;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+  dragX.value = Math.min(0, dx);
+}
+
+function swipeEnd(e) {
+  if (!start) return;
+  const { id, locked } = start;
+  start = null;
+  if (!locked) return;
+  swiped = true;
+  settling.value = true;
+  const deleting = e.type !== "pointercancel" && dragX.value <= -SWIPE_DELETE;
+  dragX.value = deleting ? -e.currentTarget.offsetWidth : 0; // out of the way, or back where it was
+  setTimeout(() => {
+    if (deleting) emit("remove", id);
+    dragId.value = "";
+    dragX.value = 0;
+    settling.value = false;
+  }, 150);
+}
+
+function open(id) {
+  if (!swiped) emit("open", id);
+  swiped = false;
+}
+
 const iso = (ms) => new Date(ms).toISOString();
 const baseName = (path) => path.split(/[\\/]/).pop();
 </script>
@@ -39,9 +91,20 @@ const baseName = (path) => path.split(/[\\/]/).pop();
     </div>
     <h3 class="label">{{ query.trim() ? "Results" : "Recent" }}</h3>
 
-    <ul v-if="drafts.length" class="drafts">
-      <li v-for="d in drafts" :key="d.id" class="item" :class="{ active: d.id === currentId }">
-        <button type="button" class="card" :aria-current="d.id === currentId ? 'true' : undefined" @click="emit('open', d.id)">
+    <TransitionGroup v-if="drafts.length" name="draft" tag="ul" class="drafts">
+      <li
+        v-for="d in drafts"
+        :key="d.id"
+        class="item"
+        :class="{ active: d.id === currentId, dragging: d.id === dragId, settling: d.id === dragId && settling }"
+        :style="d.id === dragId ? { '--dx': `${dragX}px` } : undefined"
+        @pointerdown="swipeDown($event, d.id)"
+        @pointermove="swipeMove"
+        @pointerup="swipeEnd"
+        @pointercancel="swipeEnd"
+      >
+        <span class="swipe-bg" aria-hidden="true">Delete</span>
+        <button type="button" class="card" :aria-current="d.id === currentId ? 'true' : undefined" @click="open(d.id)">
           <span class="top">
             <span class="title">{{ d.title }}</span>
             <time :datetime="iso(d.updatedAt)">{{ whenLabel(d.updatedAt) }}</time>
@@ -68,7 +131,7 @@ const baseName = (path) => path.split(/[\\/]/).pop();
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 3.5h7M4.5 3.5V2.5h3v1M3.5 3.5l.4 6h4.2l.4-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
         </button>
       </li>
-    </ul>
+    </TransitionGroup>
     <p v-else class="empty">{{ query.trim() ? `No drafts match "${query.trim()}".` : "No drafts yet. Start typing and it is saved here." }}</p>
 
     <footer>
@@ -76,9 +139,11 @@ const baseName = (path) => path.split(/[\\/]/).pop();
       <button v-if="total > drafts.length" type="button" class="link" @click="emit('more')">Show more</button>
     </footer>
 
-    <div v-if="toast" class="toast" role="status">
-      <span>{{ toast.message }}</span>
-      <button v-if="toast.undo" type="button" class="link strong" @click="emit('undo')">Undo</button>
-    </div>
+    <Transition name="toast">
+      <div v-if="toast" class="toast" role="status">
+        <span>{{ toast.message }}</span>
+        <button v-if="toast.undo" type="button" class="link strong" @click="emit('undo')">Undo</button>
+      </div>
+    </Transition>
   </aside>
 </template>
