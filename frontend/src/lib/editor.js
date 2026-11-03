@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { forceLinting, forEachDiagnostic, linter } from "@codemirror/lint";
-import { EditorState } from "@codemirror/state";
+import { forEachDiagnostic, linter } from "@codemirror/lint";
+import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { lintText } from "./harper.js";
 
@@ -25,6 +25,9 @@ function toAction(fix) {
   };
 }
 
+// Dispatched to make the linter run again without a text change, for example when Harper has just finished loading.
+const relintEffect = StateEffect.define();
+
 // The lint source: runs Harper on the whole document (debounced by the linter extension) and maps the findings.
 // onResult gets the finding count and how long Harper took, for the status line.
 function harperSource(getHarper, onResult) {
@@ -44,7 +47,7 @@ function harperSource(getHarper, onResult) {
         actions: f.fixes.map(toAction),
       }));
     },
-    { delay: 300 },
+    { delay: 300, needsRefresh: (update) => update.transactions.some((tr) => tr.effects.some((e) => e.is(relintEffect))) },
   );
 }
 
@@ -117,9 +120,10 @@ export function collectProblems(view) {
   return out.sort((a, b) => a.from - b.from);
 }
 
-// Run the lint source again now, e.g. when Harper has just finished loading.
+// Run the lint source again now, e.g. when Harper has just finished loading. CodeMirror's forceLinting does not start
+// a new run (it only brings a scheduled one forward), so the editor asks the linter to refresh with an effect instead.
 export function relint(view) {
-  forceLinting(view);
+  view.dispatch({ effects: relintEffect.of(null) });
 }
 
 // Select the range of a finding and bring it into view.
