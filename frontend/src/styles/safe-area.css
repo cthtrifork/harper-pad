@@ -27,3 +27,29 @@
     padding-right: max(12px, env(safe-area-inset-right));
   }
 }
+
+/* Home Screen app hygiene (Apple's web app guidance): the page never scrolls or bounces as a whole (the panes scroll), the root paints
+   the app colour so nothing white shows during a rubber-band or a rotation, the chrome is not selectable or long-press-callout text,
+   and text fields are 16 px so iOS does not zoom the page when one is focused. */
+html {
+  background: var(--bg);
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bar,
+.status {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
