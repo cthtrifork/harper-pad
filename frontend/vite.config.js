@@ -69,6 +69,9 @@ const webApp = () => {
       { tag: "meta", attrs: { name: "mobile-web-app-capable", content: "yes" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "apple-mobile-web-app-capable", content: "yes" }, injectTo: "head" }, // older iOS only knows this one
       { tag: "meta", attrs: { name: "apple-mobile-web-app-title", content: "Harper Pad" }, injectTo: "head" },
+      // `default` keeps the status bar a strip of its own (readable in light and dark); black-translucent would draw the page under it
+      // with white text, unreadable on the light header. The page still pads by the safe-area insets (styles/safe-area.css).
+      { tag: "meta", attrs: { name: "apple-mobile-web-app-status-bar-style", content: "default" }, injectTo: "head" },
       { tag: "link", attrs: { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }, injectTo: "head" },
       { tag: "link", attrs: { rel: "manifest", href: `${base}manifest.webmanifest` }, injectTo: "head" },
     ],
