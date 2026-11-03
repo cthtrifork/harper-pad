@@ -52,9 +52,10 @@ Test locally: `cd frontend && npm run build:web && npx vite preview --mode web`,
 
 Open the site in **Safari**, tap Share, then Add to Home Screen. Use that icon from then on.
 
-The Home Screen app is built the way Apple documents full-screen web apps: `viewport-fit=cover` with
-`apple-mobile-web-app-status-bar-style: black-translucent`, so the page draws under the status bar and pads itself with
-`env(safe-area-inset-*)` (`styles/safe-area.css`); `100dvh` for the height; `theme-color` for light and dark; no page overscroll;
+The Home Screen app uses `apple-mobile-web-app-capable` with `apple-mobile-web-app-status-bar-style: default` (the status bar is a
+strip of its own and its text follows light and dark; `black-translucent` would draw the page under it, but reports say its text is
+always white, which the light header cannot show), and `viewport-fit=cover` with `env(safe-area-inset-*)` padding
+(`styles/safe-area.css`) for the notch, the home indicator and landscape; `100dvh` for the height; `theme-color` for light and dark; no page overscroll;
 16 px text fields so iOS does not zoom on focus. iOS reads the `<head>` tags when the icon is **added**, so after a change to them,
 delete the icon and add it again.
 
