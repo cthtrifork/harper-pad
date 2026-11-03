@@ -20,16 +20,8 @@ Only open items are listed here; finished work is in the git history.
 - [ ] Write `docs/architecture.md` once the editor exists; link it from `AGENTS.md`.
 - [ ] Optional later: a progress bar and a Cancel while downloading (needs Wails update events).
 
-## 3. Checks only a real desktop can do
+## 3. Checks on real devices
 
-Everything below was tested in headless Chromium (the server build) and not in the real windows.
-
-- [ ] The GTK window on Fedora: layout, fonts, HiDPI, Ctrl+J, the drafts drawer, the Problems panel, the update button.
-- [ ] The Content-Security-Policy in WebKitGTK and WebView2 (`docs/security.md`): Harper (Web Worker and WebAssembly) must
-      start. If it does not, the console names the violated directive; relaxing `'wasm-unsafe-eval'` is the only fix.
-- [ ] A close right after typing keeps the last keystrokes (drafts save 500 ms after typing and on blur, hide and page hide).
-- [ ] The update control (`components/UpdateButton.vue`) against a real release: needs a build with a release version, and on
-      Windows an exe in a writable folder.
 - [ ] The web build in Safari and on a phone: IndexedDB drafts, "Add to Home Screen", offline use (`docs/pages.md`).
 
 ## 4. Editor (CodeMirror 6 + harper.js)
