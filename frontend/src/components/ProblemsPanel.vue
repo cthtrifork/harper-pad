@@ -10,20 +10,22 @@ const props = defineProps({
 defineEmits(["jump", "fix", "remove-word", "remove-ignored"]);
 
 const tone = { error: "spelling", warning: "grammar", info: "style" };
+// The chips follow the design: the two kinds people meet most, then everything else.
 const chips = [
   { id: "all", label: "All" },
-  { id: "spelling", label: "Spelling" },
-  { id: "grammar", label: "Grammar" },
-  { id: "style", label: "Style" },
+  { id: "Spelling", label: "Spelling" },
+  { id: "Repetition", label: "Repetition" },
+  { id: "other", label: "Other" },
 ];
+const chipOf = (p) => (p.kind === "Spelling" || p.kind === "Repetition" ? p.kind : "other");
 const filter = ref("all");
 const manage = ref(""); // "", "words" or "ignored": the list of dictionary words or ignored findings shown instead of the problems
 const counts = computed(() => {
-  const c = { all: props.problems.length, spelling: 0, grammar: 0, style: 0 };
-  for (const p of props.problems) c[tone[p.severity] ?? "style"]++;
+  const c = { all: props.problems.length, Spelling: 0, Repetition: 0, other: 0 };
+  for (const p of props.problems) c[chipOf(p)]++;
   return c;
 });
-const shown = computed(() => (filter.value === "all" ? props.problems : props.problems.filter((p) => tone[p.severity] === filter.value)));
+const shown = computed(() => (filter.value === "all" ? props.problems : props.problems.filter((p) => chipOf(p) === filter.value)));
 </script>
 
 <template>
@@ -54,7 +56,7 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
     </header>
     <div class="chips">
       <button v-for="c in chips" :key="c.id" type="button" class="chip" :class="{ on: filter === c.id }" :aria-pressed="filter === c.id" @click="filter = c.id">
-        <span v-if="c.id !== 'all'" class="dot" :class="c.id"></span>{{ c.label }} <span class="n">{{ counts[c.id] }}</span>
+        {{ c.label }} {{ counts[c.id] }}
       </button>
     </div>
     <ul v-if="shown.length">
@@ -194,25 +196,19 @@ code {
   padding: 0 16px 12px;
 }
 .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  height: 26px;
+  padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--raised);
+  border-radius: 13px;
+  background: transparent;
   color: var(--text);
   font-size: 12px;
+  cursor: pointer;
 }
 .chip.on {
   border-color: var(--accent);
-}
-.chip .dot {
-  width: 7px;
-  height: 7px;
-}
-.chip .n {
-  color: var(--mute);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
 }
 .link {
   padding: 0;

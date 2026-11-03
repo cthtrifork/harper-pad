@@ -208,15 +208,16 @@ onBeforeUnmount(() => {
       </template>
       <span v-else id="file-badge" class="badge">Draft, not on disk</span>
       <span class="spacer"></span>
+      <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
+        Problems <span class="count">{{ problems.length }}</span>
+      </button>
       <label class="dialect">
         <span class="sr">Language</span>
         <select :value="personal.dialect" :disabled="state !== 'ready'" @change="pickDialect($event.target.value)">
           <option v-for="d in DIALECTS" :key="d.id" :value="d.id">{{ d.label }}</option>
         </select>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
       </label>
-      <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
-        Problems <span class="count">{{ problems.length }}</span>
-      </button>
       <component :is="UpdateButton" v-if="UpdateButton" />
     </header>
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
@@ -255,14 +256,14 @@ onBeforeUnmount(() => {
     <footer class="status">
       <span :class="['state', state]">{{ state === "loading" ? "Starting Harper, you can already type..." : `Harper ${state}` }}</span>
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
-      <span id="cursor-pos">Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
-      <span v-if="cursor.selected" id="selection">Selection: {{ cursor.selected }} {{ cursor.selected === 1 ? "character" : "characters" }}</span>
       <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span>
       <span v-if="state === 'ready'" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
       <span v-if="saveError" class="state failed clip" :title="saveError">{{ saveError }}</span>
       <span v-if="drafts.status.value" id="draft-status" :class="['state', 'clip', drafts.state.value === 'error' ? 'failed' : 'mute']" :title="drafts.status.value">{{ drafts.status.value }}</span>
       <button v-if="drafts.canStartFresh.value" id="start-fresh" type="button" class="link" title="Moves the unreadable database aside (it is kept, not deleted) and starts a new one" @click="drafts.startFresh">Start fresh</button>
       <span class="spacer"></span>
+      <span id="cursor-pos">Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
+      <span v-if="cursor.selected" id="selection">Selection: {{ cursor.selected }} {{ cursor.selected === 1 ? "character" : "characters" }}</span>
       <span class="mute">Version {{ goVersion || "..." }}</span>
     </footer>
   </div>
@@ -391,17 +392,31 @@ onBeforeUnmount(() => {
   color: var(--mute);
   font-size: 12px;
 }
+.dialect {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
 .dialect select {
   height: 32px;
-  padding: 0 8px;
+  padding: 0 28px 0 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--raised);
   color: var(--text);
   font: inherit;
+  font-size: 13px;
+  appearance: none;
+  cursor: pointer;
 }
 .dialect select:disabled {
   color: var(--mute);
+  cursor: not-allowed;
+}
+.dialect svg {
+  position: absolute;
+  right: 11px;
+  pointer-events: none;
 }
 .sr {
   position: absolute;
