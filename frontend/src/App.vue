@@ -66,7 +66,7 @@ onMounted(async () => {
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
       <span v-if="state === 'ready'" class="mute">setup {{ setupMs }} ms, last check {{ lintMs }} ms</span>
       <span class="spacer"></span>
-      <span class="mute">Go bridge {{ goVersion || "..." }}</span>
+      <span class="mute">Version {{ goVersion || "..." }}</span>
     </footer>
   </div>
 </template>
