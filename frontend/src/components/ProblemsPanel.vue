@@ -62,16 +62,18 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
       <span class="mute">{{ problems.length }} in this document</span>
     </header>
     <section class="auto" :class="{ on: autocorrect.on }" aria-label="Autocorrect">
+      <!-- Collapsed it is one row: the name (which opens the choices) and the switch. -->
       <div class="auto-head">
-        <div class="auto-text">
+        <button type="button" class="auto-toggle" :aria-expanded="choices" aria-controls="auto-choices" @click="choices = !choices">
+          <svg class="chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2l3 3-3 3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
           <strong>Autocorrect</strong>
-          <span class="mute">{{ autocorrect.on ? "Fixing obvious mistakes as you type." : "Off. Turn on to fix obvious mistakes as you type." }}</span>
-        </div>
+          <span class="mute">{{ autocorrect.on ? "On" : "Off" }}</span>
+        </button>
         <button type="button" class="switch" role="switch" aria-label="Autocorrect" :aria-checked="autocorrect.on" @click="setAuto({ on: !autocorrect.on })"></button>
       </div>
-      <button type="button" class="link" :aria-expanded="choices" @click="choices = !choices">{{ choices ? "Hide choices" : "Choose what to fix" }}</button>
-      <fieldset v-if="choices" class="auto-choices">
+      <fieldset v-if="choices" id="auto-choices" class="auto-choices">
         <legend class="sr-only">What autocorrect may fix</legend>
+        <p class="mute">Fixes obvious mistakes as you type, once the word is finished.</p>
         <label v-for="c in CATEGORIES" :key="c.id">
           <input type="checkbox" :checked="autocorrect[c.id]" @change="setAuto({ [c.id]: $event.target.checked })" />
           <span>{{ c.label }}</span>

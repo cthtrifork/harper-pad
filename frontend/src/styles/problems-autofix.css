@@ -72,10 +72,11 @@
   text-underline-offset: 2px;
 }
 
-/* The Autocorrect card at the top of the panel: a switch with a one-line status, and a list of what may be fixed. */
+/* The Autocorrect card at the top of the panel. Collapsed it is a single row (name, state, switch); the name opens the list of what
+   may be fixed. */
 .panel .auto {
-  margin: 0 16px 12px;
-  padding: 10px 12px;
+  margin: 0 16px 10px;
+  padding: 4px 8px 4px 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--raised);
@@ -89,15 +90,35 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
 }
 
-.panel .auto-text {
+.panel .auto-toggle {
   flex: 1;
+  min-width: 0;
+  height: 28px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  line-height: 1.4;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.panel .auto-toggle:hover {
+  background: var(--sunken);
+}
+
+.panel .auto-toggle .chevron {
+  flex: none;
+  color: var(--mute);
+  transition: transform 0.15s var(--ease);
+}
+
+.panel .auto-toggle[aria-expanded="true"] .chevron {
+  transform: rotate(90deg);
 }
 
 .panel .switch {
@@ -134,8 +155,8 @@
 }
 
 .panel .auto-choices {
-  margin: 6px 0 0;
-  padding: 6px 0 0;
+  margin: 4px 0 0;
+  padding: 6px 6px 6px;
   border: 0;
   border-top: 1px solid var(--line);
   min-width: 0;
@@ -162,8 +183,12 @@
 }
 
 .panel .auto-choices p {
-  margin: 6px 0 0;
+  margin: 0 0 4px;
   line-height: 1.5;
+}
+
+.panel .auto-choices p:last-child {
+  margin: 6px 0 0;
 }
 
 .panel .sr-only {
