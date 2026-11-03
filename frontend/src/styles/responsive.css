@@ -1,6 +1,7 @@
 /* Phones and narrow windows (design cheat sheet: touch targets are in touch.css). Below 720 px there is room for one pane, so:
-   the header wraps into rows, the scratch pad and the problems become sheets over the page instead of columns beside it, Split
-   stacks the source above the preview, and the status bar keeps only what fits. Loaded last so it can override the desktop rules. */
+   the header is one row of icons, the scratch pad and the problems become sheets over the page instead of columns beside it, the
+   Split view is not offered (App.vue shows Edit instead if a window is narrowed while in Split), and the status bar keeps only what
+   fits. Loaded last so it can override the desktop rules. */
 @media (max-width: 720px) {
   .app {
     height: 100dvh;
@@ -11,7 +12,9 @@
     flex-direction: column;
   }
 
-  /* Header: row 1 brand, scratch pad, problems; row 2 save and the file; row 3 the views, as one full-width segmented control. */
+  /* Header: one row of icon buttons, 44 px each (touch.css): scratch pad, the views (Edit and Preview: Split would stack two panes in
+     a phone's height), save, problems. The labels, brand, shortcut hints and file name are hidden; the buttons keep their accessible
+     names (aria-label), and the count shows as a badge on the Problems icon. The row wraps only if the update button is also shown. */
   .bar {
     height: auto;
     flex-wrap: wrap;
@@ -21,19 +24,36 @@
 
   .bar .sep,
   .bar .kbd,
-  .bar .folder {
+  .bar .folder,
+  .bar .brand,
+  .bar .file-name,
+  .bar .badge,
+  .bar .label {
     display: none;
   }
 
-  .bar .brand {
+  .bar .save-icon {
+    display: block;
+  }
+
+  .bar .drawer-btn {
     order: 1;
+  }
+
+  .bar .views {
+    order: 2;
+    flex: 999 1 0;
+    min-width: 0;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .bar .spacer {
     order: 2;
+    flex: 1 1 0;
   }
 
-  .bar .drawer-btn {
+  .bar .split,
+  .bar > .tool {
     order: 3;
   }
 
@@ -41,32 +61,59 @@
     order: 4;
   }
 
-  .bar .split,
-  .bar > .tool {
+  /* The update button (desktop builds) goes last, as on a wide window. */
+  .bar .wrap {
     order: 5;
   }
 
-  .bar .file-name,
-  .bar .badge {
-    order: 6;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .bar .drawer-btn,
+  .bar .toggle,
+  .bar > .tool,
+  .bar .split .main {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
   }
 
-  .bar .views {
-    order: 7;
-    flex-basis: 100%;
-    grid-template-columns: repeat(3, 1fr);
+  .bar .view[data-view="split"] {
+    display: none;
   }
 
   .bar .thumb {
-    width: calc((100% - 4px) / 3);
+    width: calc((100% - 4px) / 2);
+  }
+
+  /* With Split gone, Preview is the second segment (the desktop rule counts three). */
+  .bar .views[data-mode="preview"] .thumb {
+    transform: translateX(100%);
   }
 
   .bar .view {
     min-height: 36px;
+  }
+
+  .bar .toggle {
+    position: relative;
+  }
+
+  /* The problem count rides on the corner of the icon. */
+  .bar .toggle .count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    box-sizing: content-box;
+    border: 2px solid var(--panel);
+  }
+
+  /* The autocorrect check would sit on the same corner as the count, so it goes to the opposite one. */
+  .bar .toggle .mark {
+    top: auto;
+    bottom: -7px;
+  }
+
+  .bar .split .menu {
+    left: auto;
+    right: 0;
   }
 
   /* The update popup and the menus never run off the screen. */
@@ -133,7 +180,7 @@
     min-height: 40vh;
   }
 
-  /* Status bar: wraps to a second line instead of running off the screen; the timings, the cursor position and the selection are not worth the room. */
+  /* Status bar: wraps to a second line instead of running off the screen; the timings, the cursor position, the selection and the autocorrect switch (the header shows when it is on) are not worth the room. */
   .status {
     flex-wrap: wrap;
     gap: 4px 12px;
@@ -143,6 +190,7 @@
   .status .spacer,
   .status > .mute:not(#draft-status):not(#markdown-hint),
   #cursor-pos,
+  #autocorrect-state,
   #selection {
     display: none;
   }

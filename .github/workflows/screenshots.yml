@@ -187,12 +187,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload 10-mobile-markdown-split
+      - name: Upload 10-mobile-markdown-preview
         if: github.event_name == 'pull_request'
-        id: shot-10-mobile-markdown-split
+        id: shot-10-mobile-markdown-preview
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: docs/screenshots/10-mobile-markdown-split.png
+          path: docs/screenshots/10-mobile-markdown-preview.png
           archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14

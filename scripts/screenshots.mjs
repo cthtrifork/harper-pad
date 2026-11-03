@@ -225,12 +225,14 @@ await phone.click(".toggle");
 await phone.waitForSelector(".panel li");
 await phoneShot("09-mobile-problems");
 
-// Split with Problems closed: the source above the preview.
+// A phone's header is one row of icons, and Split is not offered there (it would stack two panes): Edit and Preview only.
 await phone.click(".toggle");
 await phone.waitForSelector(".panel", { state: "detached" });
-await phone.getByRole("button", { name: "Split" }).click();
+expect((await phone.locator("header.bar").boundingBox()).height < 80, "the phone header should be one row");
+expect((await phone.getByRole("button", { name: "Split" }).count()) === 0 || !(await phone.getByRole("button", { name: "Split" }).isVisible()), "Split should not be offered on a phone");
+await phone.getByRole("button", { name: "Preview" }).click();
 await phone.waitForSelector(".md");
-await phoneShot("10-mobile-markdown-split");
+await phoneShot("10-mobile-markdown-preview");
 
 await browser.close();
 if (problems.length) {
