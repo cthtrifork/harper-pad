@@ -96,6 +96,19 @@ export function useDrafts(editor, drawerOpen) {
     timer = setTimeout(flush, SAVE_DELAY_MS);
   }
 
+  // Switch the open draft between "markdown" and "text". It is saved with the draft (the text is unchanged, so this counts as an
+  // edit only for the autosave: the file, if any, is not stale because of it).
+  function setFormat(format) {
+    if (format === current.value.format) return;
+    current.value = { ...current.value, format };
+    if (!available.value || !current.value.id) return; // an unsaved draft carries it into its first save
+    dirty = true;
+    edits++;
+    if (state.value !== "saving") state.value = "dirty";
+    clearTimeout(timer);
+    timer = setTimeout(flush, SAVE_DELAY_MS);
+  }
+
   async function saveNow() {
     if (!dirty || !available.value) return;
     const text = editor.value?.getText() ?? "";
@@ -282,7 +295,7 @@ export function useDrafts(editor, drawerOpen) {
     try {
       const d = await getDraft(id);
       setCurrent(d);
-      editor.value?.load(d.content);
+      editor.value?.load(d.content, d.format);
     } catch (err) {
       showToast(`Could not open the draft: ${message(err)}`);
       refreshList();
@@ -296,7 +309,7 @@ export function useDrafts(editor, drawerOpen) {
       return;
     }
     setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
-    editor.value?.load("");
+    editor.value?.load("", "markdown");
   }
 
   // Delete a draft, with an undo that puts it back exactly as it was (same id, text and creation time).
@@ -328,7 +341,7 @@ export function useDrafts(editor, drawerOpen) {
       if (next) await open(next.id);
       else {
         setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
-        editor.value?.load("");
+        editor.value?.load("", "markdown");
       }
     }
     showToast("Draft deleted", async () => {
@@ -383,6 +396,7 @@ export function useDrafts(editor, drawerOpen) {
     startFresh,
     init,
     edited,
+    setFormat,
     flush,
     saveFile,
     refreshList,

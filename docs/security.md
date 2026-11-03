@@ -19,6 +19,9 @@ specific `PadService` methods.
 ## Cross-site scripting and the Content-Security-Policy
 
 - Vue and CodeMirror put text into the page as text. The frontend has no `v-html`, `innerHTML`, `eval` or `new Function`.
+- The markdown preview (`components/Preview.vue`) uses `marked` only to parse into tokens, and turns the tokens into Vue elements, so no
+  HTML string is ever built. Raw HTML in a draft is shown as text, images as their alt text, and only `http(s):` and `mailto:` links
+  are links; they carry no `href`, so a click cannot navigate the window away.
 - **We do not HTML-escape text before saving it**, which Wails' security guide suggests for web-style comments. Escaping on save would
   corrupt drafts (`<` stored as `&lt;`) and still not be the right place to defend. The defence is at the point of rendering, where the
   framework escapes.
