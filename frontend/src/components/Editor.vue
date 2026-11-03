@@ -7,7 +7,7 @@ const props = defineProps({
   doc: { type: String, default: "" },
   persist: { type: Function, default: async () => {} },
 });
-const emit = defineEmits(["result", "problems"]);
+const emit = defineEmits(["result", "problems", "stats"]);
 const host = ref(null);
 let view = null;
 
@@ -18,6 +18,7 @@ onMounted(() => {
     onResult: (r) => emit("result", r),
     onProblems: (list) => emit("problems", list),
     persist: () => props.persist(),
+    onStats: (counts) => emit("stats", counts),
   });
   view.focus();
 });
