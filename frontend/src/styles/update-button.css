@@ -89,3 +89,7 @@
   justify-content: space-between;
   gap: 12px;
 }
+
+.wrap .foot .link {
+  margin-left: auto; /* stays at the right when there is no action beside it */
+}

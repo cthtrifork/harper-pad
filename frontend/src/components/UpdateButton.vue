@@ -133,8 +133,8 @@ onBeforeUnmount(() => {
         <p>{{ error }}</p>
       </template>
       <div class="foot">
-        <button type="button" class="link" @click="whatsNew">What is new</button>
         <button v-if="action" type="button" class="primary" @click="action.run">{{ action.label }}</button>
+        <button type="button" class="link" @click="whatsNew">What is new</button>
       </div>
     </div>
   </div>
