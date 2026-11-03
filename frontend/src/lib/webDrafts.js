@@ -1,4 +1,4 @@
-// The drafts in the browser (the web build, which has no Go side): the same operations as PadService's drafts methods, kept in
+// The drafts in the browser (the web build, which has no Go side): the same operations as DraftService's methods, kept in
 // IndexedDB. A draft's text and its summary are two records in one transaction, so listing reads only the small summaries and
 // never the text, as the desktop database does. IDs, limits and messages match internal/store.
 import { summarize } from "./summarize.js";

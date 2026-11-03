@@ -8,7 +8,7 @@ import (
 )
 
 func TestDraftsThroughTheService(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Drafts
 	d, err := s.SaveDraft(store.Draft{Content: "# Plan\n- [ ] one\n- [x] two"})
 	if err != nil {
 		t.Fatal(err)
@@ -35,12 +35,12 @@ func TestDraftsThroughTheService(t *testing.T) {
 }
 
 func TestDraftsSurviveARestart(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Drafts
 	d, _ := s.SaveDraft(store.Draft{Content: "still here"})
 	if err := s.ServiceShutdown(); err != nil {
 		t.Fatal(err)
 	}
-	again := &PadService{dataDir: s.dataDir}
+	again := &DraftService{db: newDatabase(s.db.dir)}
 	t.Cleanup(func() { _ = again.ServiceShutdown() })
 	if got, err := again.GetDraft(d.ID); err != nil || got.Content != "still here" {
 		t.Errorf("after restart: %+v, %v", got, err)
@@ -48,7 +48,7 @@ func TestDraftsSurviveARestart(t *testing.T) {
 }
 
 func TestDraftsWithoutDataFolder(t *testing.T) {
-	s := &PadService{}
+	s := &DraftService{db: newDatabase("")}
 	if _, err := s.ListDrafts(10, 0); err == nil {
 		t.Error("ListDrafts succeeded without a folder")
 	}

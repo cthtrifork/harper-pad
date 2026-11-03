@@ -70,8 +70,8 @@ func pickSavePath(suggested, dir string) (string, error) {
 //
 // When the file was changed by something else since this app last wrote it, nothing is written and Conflict is true, unless
 // overwrite is set (the page sets it when the user saves again after being told). A file that is gone is simply written again.
-func (s *PadService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (FileSave, error) {
-	st, err := s.openStore()
+func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (FileSave, error) {
+	st, err := s.db.open()
 	if err != nil {
 		return FileSave{}, err
 	}

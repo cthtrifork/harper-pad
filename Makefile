@@ -10,7 +10,7 @@ OUT       ?= harper-pad
 MODULE    := github.com/cthtrifork/harper-pad
 
 .DEFAULT_GOAL := help
-.PHONY: help test check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server screenshots lighthouse
+.PHONY: help test test-frontend check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server screenshots lighthouse
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-17s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -19,6 +19,9 @@ help: ## List the targets
 
 test: ## Run the Go tests as CI does
 	go test $(RACE) -count=1 ./...
+
+test-frontend: ## Run the frontend's unit tests (Node's test runner; no npm install needed)
+	cd frontend && npm test
 
 fmt: ## Format the Go code
 	gofmt -w .
@@ -53,7 +56,7 @@ vet: ## go vet, with and without the production tag
 check: ## Everything CI checks that runs without GTK: gofmt, tidy, vet, tests, headless build
 	@unformatted="$$(gofmt -l .)"; if [ -n "$$unformatted" ]; then echo "These files need gofmt:"; echo "$$unformatted"; exit 1; fi
 	go mod tidy -diff
-	$(MAKE) vet test build-server
+	$(MAKE) vet test test-frontend build-server
 
 frontend: ## Build the Vue app into frontend/dist (embedded by the Go binary)
 	cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build

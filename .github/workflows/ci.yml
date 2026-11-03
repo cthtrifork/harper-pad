@@ -192,10 +192,19 @@ jobs:
           go version
           pkg-config --modversion gtk4 webkitgtk-6.0 libsoup-3.0
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
       # No frontend build: frontend/dist/.gitkeep satisfies go:embed, and nothing here reads the bundle.
       # `go test` runs its own vet subset; the full `make vet` runs in the build job, which has compiled the same packages.
       - name: Test
         run: make test
+
+      # The frontend's unit tests use Node's own runner, so no `npm ci` is needed.
+      - name: Test the frontend
+        run: make test-frontend
 
   build:
     name: build
@@ -246,7 +255,7 @@ jobs:
       - name: Vet
         run: make vet
 
-      # The Wails MCP server drives the UI and calls PadService without authentication by default.
+      # The Wails MCP server drives the UI and calls the services without authentication by default.
       - name: Production build contains no MCP server
         run: |
           if grep -aqF "MCP server started" dist/harper-pad; then

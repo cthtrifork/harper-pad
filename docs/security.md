@@ -6,7 +6,7 @@ protected and how, and what is not.
 ## Where the trust boundaries are
 
 - The **webview** (the page) is our own code, loaded from files embedded in the exe. It talks to the Go side only through the Wails
-  bindings of `PadService`.
+  bindings of the services in `internal/app`.
 - The **Go side** validates everything the page sends (it never trusts the frontend, as Wails' own binding guidance says) and is the only
   code that touches the database or the update download.
 - Text the user types or pastes is **data**. It is never run, never used to build SQL, and never put into the page as HTML.
@@ -14,7 +14,7 @@ protected and how, and what is not.
 ## SQL injection
 
 Covered; see [storage](storage.md#rules). Every value is a `?` parameter, all SQL lives in `internal/store`, and the frontend can only call
-specific `PadService` methods.
+specific service methods.
 
 ## Cross-site scripting and the Content-Security-Policy
 
@@ -60,6 +60,6 @@ specific `PadService` methods.
 ## What Wails' own documentation says
 
 Wails (`guides/security`, `features/bindings/best-practices`) recommends validating all input on the Go side, paginating large results,
-descriptive errors, and keeping services focused. We follow the first three. The last is a fair point against `PadService`, which
-holds the updater, drafts and settings; splitting it into separate services is possible but not needed yet. The guides do not mention a
+descriptive errors, and keeping services focused. We follow all four: `internal/app` has a service each for the drafts (`DraftService`), the settings (`SettingsService`) and the updater
+(`UpdateService`), and a small `PadService` for startup and the version. The guides do not mention a
 Content-Security-Policy, and Wails does not set one itself, so the policy above is ours.

@@ -2,7 +2,7 @@
 import "../styles/update-button.css"; // loaded with this component, so the web build never carries it
 import { Browser } from "@wailsio/runtime";
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import { PadService } from "../../bindings/github.com/cthtrifork/harper-pad/internal/app";
+import { UpdateService } from "../../bindings/github.com/cthtrifork/harper-pad/internal/app";
 
 const RELEASES = "https://github.com/cthtrifork/harper-pad/releases/tag/";
 
@@ -29,20 +29,20 @@ async function run(next, work) {
 
 const check = () =>
   run("checking", async () => {
-    const status = await PadService.CheckForUpdates();
+    const status = await UpdateService.CheckForUpdates();
     found.value = status.version;
     state.value = status.available ? "available" : "current";
   });
 
 const download = () =>
   run("downloading", async () => {
-    await PadService.InstallUpdate();
+    await UpdateService.InstallUpdate();
     state.value = "ready";
   });
 
 const restart = () =>
   run("ready", async () => {
-    await PadService.RestartToUpdate();
+    await UpdateService.RestartToUpdate();
   });
 
 const whatsNew = () => Browser.OpenURL(RELEASES + encodeURIComponent(/^v/.test(found.value) ? found.value : `v${found.value}`)).catch(() => {});
@@ -58,7 +58,7 @@ onMounted(async () => {
   document.addEventListener("mousedown", outside);
   document.addEventListener("keydown", onKey);
   try {
-    info.value = await PadService.UpdateInfo();
+    info.value = await UpdateService.UpdateInfo();
   } catch (err) {
     info.value = { version: "", enabled: false, reason: String(err?.message || err) };
   }

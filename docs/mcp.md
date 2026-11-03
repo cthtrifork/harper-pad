@@ -45,7 +45,7 @@ Checked against `v3.0.0-beta.34` with `-tags server,mcp`: the server starts and 
 
 ## Security
 
-Anyone who can reach the port can read the DOM, run JavaScript in the app and call `PadService`.
+Anyone who can reach the port can read the DOM, run JavaScript in the app and call the services (`PadService`, `DraftService`, `SettingsService`, `UpdateService`).
 
 - Binds to `127.0.0.1`; browser origins must be loopback. Without a token every local process is trusted, so on a shared machine set `WAILS_MCP_TOKEN` (and put the same token in the client's `Authorization` header).
 - Do not set `WAILS_MCP_HOST=0.0.0.0`. If you ever must, use a token and an encrypted tunnel.

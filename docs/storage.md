@@ -14,14 +14,14 @@ It holds two things:
 - **Drafts:** notes, task lists and half-written text that live inside the app.
 - **Settings:** the personal dictionary and the ignored findings (so far).
 
-`internal/store` is the package; `internal/app` (`PadService`) is its only user. The driver is the pure-Go `modernc.org/sqlite`, so there is
+`internal/store` is the package; `internal/app` (`DraftService` and `SettingsService`, which share one connection) is its only user. The driver is the pure-Go `modernc.org/sqlite`, so there is
 no cgo and the Windows build is unchanged. It adds about 4 MB to the exe (v1.61.1, SQLite 3.54.1).
 
 ## Rules
 
 1. **All SQL lives in Go functions in `internal/store`.** Queries are constants with `?` parameters; user text is never put into SQL
    text (search escapes `%`, `_` and `\` and passes the pattern as a parameter).
-2. **The frontend reaches the data only through `PadService` methods** (`ListDrafts`, `SaveDraft`, `LoadSettings`, ...), through the
+2. **The frontend reaches the data only through `DraftService` and `SettingsService` methods** (`ListDrafts`, `SaveDraft`, `LoadSettings`, ...), through the
    generated Wails bindings. Each method is one specific operation with typed input and output. The app registers no generic data
    service, so nothing can send SQL from JavaScript.
 
@@ -70,12 +70,12 @@ settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wail
   Opening a draft (`Get`) is what reads its text. Search is the one query that looks into the text: it runs inside SQLite
   (`json_extract(data, '$.content') LIKE ...`), so the text is scanned there and not copied into Go. If searching gets slow with a
   very large collection, an FTS5 index can be added alongside the table.
-- **A draft saved to a file stays a draft.** Ctrl+Shift+S asks for a file once (`PadService.SaveDraftToFile`): the text is written there
+- **A draft saved to a file stays a draft.** Ctrl+Shift+S asks for a file once (`DraftService.SaveDraftToFile`): the text is written there
   (a temporary file beside it, then a rename) and `file_path` records it. After that Ctrl+S overwrites the file; before it, Ctrl+S only
   saves the draft. The autosave never writes the file. If the file was changed by something else since our last write (its mtime differs from `file_mtime`), Ctrl+S saves the draft but not the file and says so; the next Ctrl+S replaces it. A file that was deleted is written again. The path is set only by `SetFilePath` after the save dialog, never taken from
   the page: `Save` ignores `Draft.FilePath`, and `SaveDraftToFile` reads the stored path, so the page cannot make Go write to a path it
   chose. Deleting a draft does not touch its file, and undoing the delete restores the text without the link.
-- Settings are text values; `PadService` decides what they hold. `SetSettings` saves several in one transaction.
+- Settings are text values; `SettingsService` decides what they hold. `SetSettings` saves several in one transaction.
 
 ## Durability and safety
 
@@ -92,7 +92,7 @@ settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wail
 
 ## Drafts
 
-`PadService.ListDrafts`, `SearchDrafts`, `GetDraft`, `SaveDraft` and `DeleteDraft`. Each list entry has a title, an excerpt and a preview
+`DraftService.ListDrafts`, `SearchDrafts`, `GetDraft`, `SaveDraft` and `DeleteDraft`. Each list entry has a title, an excerpt and a preview
 of the first three markdown task lines (`- [ ]`, `- [x]`) with done and total counts. Saving a draft whose id is no longer stored brings
 it back with its creation time, which is how "undo delete" works.
 
@@ -102,7 +102,7 @@ searching many drafts ever gets slow, an FTS5 index can be added alongside the t
 ## Settings: the dictionary and ignored findings
 
 Harper (`harper.js`) is the source of truth during a run. At start `lib/personal.js` loads the saved words and the ignore list into it
-(`PadService.LoadSettings`), before the first check, so nothing the user already handled flashes up. After every change (**Add to
+(`SettingsService.LoadSettings`), before the first check, so nothing the user already handled flashes up. After every change (**Add to
 dictionary** or **Ignore this one** in the suggestion popover) it exports both lists and saves them (`SaveSettings`). The ignore list is
 Harper's own export: hashes of the finding in its context, not the text.
 

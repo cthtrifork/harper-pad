@@ -11,6 +11,7 @@ desktop app: a Harper-checked editor plus a scratch pad drawer. It is early: the
 make frontend     # Vue app -> frontend/dist; required before any go build/run, not before vet/test
 make format       # gofmt plus Biome
 make test         # go test -race -count=1 ./...
+make test-frontend # the frontend unit tests (node --test, no npm install); shares fixtures with the Go tests
 make vet          # go vet, with and without -tags production
 make build-server # headless build (CGO_ENABLED=0, -tags server,production), no GTK
 make run-mcp      # desktop app with Wails MCP server on 127.0.0.1:9099 (dev only, docs/mcp.md)
@@ -21,10 +22,10 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 
 - **Never try to build or run the GTK GUI** in a sandbox: no GTK4/WebKitGTK there. Use `CGO_ENABLED=0` with
   `-tags server` and exercise the UI over HTTP. Say in the PR that the GUI path was not tested.
-- After changing an exported `PadService` method or a type it exchanges, run `make bindings` and commit
+- After changing an exported method of a service in `internal/app` (`PadService`, `DraftService`, `SettingsService`, `UpdateService`) or a type it exchanges, run `make bindings` and commit
   `frontend/bindings`; never hand-edit it. `frontend/dist` is untracked build output except `.gitkeep`.
 - Run `make format-frontend lint-frontend` before pushing frontend changes; CI's `lint` job fails on unformatted code.
-- **SQL only in Go.** All SQL lives in `internal/store`; the frontend calls specific `PadService` methods through the generated bindings and never sends SQL. See `docs/storage.md`.
+- **SQL only in Go.** All SQL lives in `internal/store`; the frontend calls specific service methods through the generated bindings and never sends SQL. See `docs/storage.md`.
 - Security model, the page's Content-Security-Policy and the OWASP mapping are in `docs/security.md`. Do not loosen the policy in `frontend/vite.config.js`; never use `v-html` or `innerHTML` with text from drafts, Harper or the network.
 - **Always open a PR** from a new branch off `main`; do not push to `main`.
 - **PR titles are `type(scope)!: summary`** (`feat`, `fix`, `security`, `perf`, `refactor`, `docs`, `test`,
@@ -38,7 +39,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 | Path | What |
 |---|---|
 | `main.go` | Thin entry point: Wails app and window, embeds `frontend/dist` |
-| `internal/app` | `PadService` (the binding the frontend calls), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
+| `internal/app` | The Wails services the frontend calls (`PadService` for startup and the version, `DraftService`, `SettingsService`, `UpdateService`; `service.go` creates them, `database.go` is the one SQLite file the first two share), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
 | `internal/store` | The app's database: one SQLite file (pure Go) with the drafts and the settings, see `docs/storage.md` |
 | `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
 | `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; `lib/backend.js` is the only place that talks to Go (desktop) or IndexedDB (web build for GitHub Pages, `docs/pages.md`); `lib/editor/` is the CodeMirror editor (`lint`, `theme`, `mode`, `stats`, `problems`); generated bindings are committed |

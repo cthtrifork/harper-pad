@@ -1,6 +1,6 @@
 // What the drafts list shows for a draft: its title, an excerpt, and a preview of its markdown task lines. This is the same
 // work as `summarize` in internal/store/drafts.go (the desktop build does it in Go when a draft is saved); the web build, which has
-// no Go side, does it here. Keep the two the same: the Go tests in internal/store/drafts_test.go (TestSummaries) are the reference.
+// no Go side, does it here. Keep the two the same: both run the cases in internal/store/testdata/summarize.json (`npm test` here, TestSummarizeFixtures there), so add a case to that file when you change either.
 
 const TASK = /^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$/;
 const HEAD = /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?)/;

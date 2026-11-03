@@ -7,22 +7,22 @@ import (
 )
 
 func TestStartupFirstRun(t *testing.T) {
-	st := newTestService(t).Startup()
+	st := newTestServices(t).Pad.Startup()
 	if st.Error != "" || st.Open != nil || st.Total != 0 {
 		t.Errorf("first run: %+v", st)
 	}
 }
 
 func TestStartupOpensTheMostRecentDraft(t *testing.T) {
-	s := newTestService(t)
-	if _, err := s.SaveDraft(store.Draft{Content: "older"}); err != nil {
+	s := newTestServices(t)
+	if _, err := s.Drafts.SaveDraft(store.Draft{Content: "older"}); err != nil {
 		t.Fatal(err)
 	}
-	newest, err := s.SaveDraft(store.Draft{Content: "newest draft\nwith two lines"})
+	newest, err := s.Drafts.SaveDraft(store.Draft{Content: "newest draft\nwith two lines"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := s.Startup()
+	st := s.Pad.Startup()
 	if st.Error != "" || st.Open == nil || st.Open.ID != newest.ID || st.Open.Content != newest.Content {
 		t.Fatalf("Open = %+v, error %q", st.Open, st.Error)
 	}
@@ -32,7 +32,7 @@ func TestStartupOpensTheMostRecentDraft(t *testing.T) {
 }
 
 func TestStartupWithoutADataFolderStillAnswers(t *testing.T) {
-	st := (&PadService{}).Startup()
+	st := newServices(newDatabase("")).Pad.Startup()
 	if st.Error == "" || st.Open != nil {
 		t.Errorf("no data folder: %+v", st)
 	}
