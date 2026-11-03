@@ -1,5 +1,5 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { linter } from "@codemirror/lint";
+import { forEachDiagnostic, linter } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { lintText } from "./harper.js";
@@ -46,32 +46,90 @@ function harperSource(harper, onResult) {
   );
 }
 
+const underline = (color) => ({
+  backgroundImage: "none",
+  textDecoration: `underline wavy ${color}`,
+  textDecorationThickness: "1.5px",
+  textUnderlineOffset: "5px",
+});
+
 const theme = EditorView.theme({
-  "&": { color: "var(--text)", backgroundColor: "transparent", fontSize: "17px" },
+  "&": { color: "var(--text)", backgroundColor: "transparent", fontSize: "19px" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "inherit", lineHeight: "1.75" },
-  ".cm-content": { caretColor: "var(--text)", padding: "0" },
+  ".cm-scroller": { fontFamily: "var(--font-doc)", lineHeight: "1.75" },
+  ".cm-content": { caretColor: "var(--accent)", padding: "0" },
   ".cm-line": { padding: "0" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-    backgroundColor: "color-mix(in srgb, var(--accent) 30%, transparent)",
+    backgroundColor: "color-mix(in srgb, var(--accent) 28%, transparent)",
   },
-  ".cm-tooltip": { backgroundColor: "var(--panel)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: "8px" },
-  ".cm-tooltip-lint": { padding: "4px" },
-  ".cm-diagnostic": { padding: "8px 10px", borderLeft: "0", fontSize: "13px", lineHeight: "1.45" },
-  ".cm-diagnosticSource": { color: "var(--mute)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.06em" },
+  ".cm-lintRange-error": underline("var(--c-spelling)"),
+  ".cm-lintRange-warning": underline("var(--c-grammar)"),
+  ".cm-lintRange-info": underline("var(--c-style)"),
+  ".cm-lintRange-active": { backgroundColor: "color-mix(in srgb, var(--accent) 22%, transparent)", borderRadius: "3px" },
+  ".cm-tooltip": {
+    backgroundColor: "var(--raised)",
+    color: "var(--text)",
+    border: "1px solid var(--line)",
+    borderRadius: "10px",
+    boxShadow: "0 12px 32px rgba(0, 0, 0, 0.35)",
+    fontFamily: "var(--font-ui)",
+  },
+  ".cm-tooltip-lint": { maxWidth: "340px", padding: "4px" },
+  ".cm-diagnostic": { padding: "10px 12px", borderLeft: "0", fontSize: "13px", lineHeight: "1.45" },
+  ".cm-diagnosticText": { display: "block", marginBottom: "10px" },
+  ".cm-diagnosticSource": {
+    display: "block",
+    marginTop: "8px",
+    color: "var(--mute)",
+    fontSize: "11px",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
   ".cm-diagnosticAction": {
     backgroundColor: "var(--accent)",
-    color: "var(--bg)",
-    borderRadius: "5px",
-    padding: "2px 10px",
-    margin: "6px 6px 0 0",
+    color: "var(--on-accent)",
+    border: "0",
+    borderRadius: "6px",
+    padding: "4px 12px",
+    margin: "0 6px 0 0",
     font: "inherit",
     fontWeight: "600",
+    cursor: "pointer",
   },
 });
 
-// Create the editor in `parent`. `harper` is a WorkerLinter; `onResult` hears about every lint run.
-export function createEditor(parent, { doc, harper, onResult }) {
+// Every current finding with its position mapped through later edits, as plain objects for the Problems panel.
+export function collectProblems(view) {
+  const out = [];
+  forEachDiagnostic(view.state, (d, from, to) => {
+    out.push({
+      kind: d.source,
+      severity: d.severity,
+      message: d.message,
+      problem: view.state.sliceDoc(from, to),
+      from,
+      to,
+      fixes: (d.actions ?? []).map((a) => a.name),
+    });
+  });
+  return out.sort((a, b) => a.from - b.from);
+}
+
+// Select the range of a finding and bring it into view.
+export function jumpTo(view, from, to) {
+  view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+  view.focus();
+}
+
+// Apply the i-th fix of the finding currently at from..to.
+export function applyFix(view, from, to, i) {
+  forEachDiagnostic(view.state, (d, f, t) => {
+    if (f === from && t === to) d.actions?.[i]?.apply(view, f, t);
+  });
+}
+
+// Create the editor in `parent`. `harper` is a WorkerLinter; `onResult` hears about every lint run and `onProblems` gets the current findings after every update.
+export function createEditor(parent, { doc, harper, onResult, onProblems }) {
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -82,6 +140,7 @@ export function createEditor(parent, { doc, harper, onResult }) {
         EditorView.lineWrapping,
         harperSource(harper, onResult),
         theme,
+        EditorView.updateListener.of((u) => onProblems?.(collectProblems(u.view))),
       ],
     }),
   });
