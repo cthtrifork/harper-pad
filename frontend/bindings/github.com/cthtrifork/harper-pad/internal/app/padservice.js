@@ -13,6 +13,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as drafts$0 from "../drafts/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 /**
@@ -27,12 +31,32 @@ export function CheckForUpdates() {
 }
 
 /**
+ * DeleteDraft removes a draft. Deleting one that is not there is not an error.
+ * @param {string} id
+ * @returns {$CancellablePromise<void>}
+ */
+export function DeleteDraft(id) {
+    return $Call.ByID(194989237, id);
+}
+
+/**
  * Echo returns its argument trimmed; the spike uses it to prove the Go bridge works next to harper.js.
  * @param {string} text
  * @returns {$CancellablePromise<string>}
  */
 export function Echo(text) {
     return $Call.ByID(3034314080, text);
+}
+
+/**
+ * GetDraft returns one draft with its full content.
+ * @param {string} id
+ * @returns {$CancellablePromise<drafts$0.Draft>}
+ */
+export function GetDraft(id) {
+    return $Call.ByID(2153540478, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType1($result);
+    }));
 }
 
 /**
@@ -46,13 +70,25 @@ export function InstallUpdate() {
 }
 
 /**
+ * ListDrafts returns a page of drafts, newest first, with a title, an excerpt and a task preview for each.
+ * @param {number} limit
+ * @param {number} offset
+ * @returns {$CancellablePromise<drafts$0.List>}
+ */
+export function ListDrafts(limit, offset) {
+    return $Call.ByID(818091701, limit, offset).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType2($result);
+    }));
+}
+
+/**
  * LoadSettings returns the saved settings, or empty ones when there are none yet. A damaged file is moved aside
  * (settings.json.bad) and empty settings are returned, so the app still starts.
  * @returns {$CancellablePromise<$models.Settings>}
  */
 export function LoadSettings() {
     return $Call.ByID(161342464).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType3($result);
     }));
 }
 
@@ -65,6 +101,18 @@ export function RestartToUpdate() {
 }
 
 /**
+ * SaveDraft creates a draft (empty id) or updates one, and returns it as stored. Saving a draft whose id is no longer
+ * stored brings it back, which is how deleting is undone.
+ * @param {drafts$0.Draft} d
+ * @returns {$CancellablePromise<drafts$0.Draft>}
+ */
+export function SaveDraft(d) {
+    return $Call.ByID(4206951671, d).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType1($result);
+    }));
+}
+
+/**
  * SaveSettings validates and saves the settings. The frontend sends the whole set after every change.
  * @param {$models.Settings} $in
  * @returns {$CancellablePromise<void>}
@@ -74,12 +122,24 @@ export function SaveSettings($in) {
 }
 
 /**
+ * SearchDrafts returns the drafts whose text contains query, newest first.
+ * @param {string} query
+ * @param {number} limit
+ * @returns {$CancellablePromise<drafts$0.List>}
+ */
+export function SearchDrafts(query, limit) {
+    return $Call.ByID(3792538085, query, limit).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType2($result);
+    }));
+}
+
+/**
  * UpdateInfo reports the running version and whether it can update itself.
  * @returns {$CancellablePromise<$models.UpdateInfo>}
  */
 export function UpdateInfo() {
     return $Call.ByID(4196675356).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType2($result);
+        return $$createType4($result);
     }));
 }
 
@@ -93,5 +153,7 @@ export function Version() {
 
 // Private type creation functions
 const $$createType0 = $models.UpdateStatus.createFrom;
-const $$createType1 = $models.Settings.createFrom;
-const $$createType2 = $models.UpdateInfo.createFrom;
+const $$createType1 = drafts$0.Draft.createFrom;
+const $$createType2 = drafts$0.List.createFrom;
+const $$createType3 = $models.Settings.createFrom;
+const $$createType4 = $models.UpdateInfo.createFrom;

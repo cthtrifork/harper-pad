@@ -67,10 +67,9 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 
 - [ ] Drawer on the left, toggled by Ctrl+J and the first toolbar button (model on trivy's `VexDrawer.vue`). While it is
       open only the Edit view is available (Split and Preview are disabled with a hint).
-- [ ] Drafts are stored by the app, not as files: JSON under the user config dir, atomic write, autosave as you type,
-      tests. Nothing reaches the file system until "Save as file". A draft is `id` (UUID or ULID, not a timestamp: two
-      drafts in one second would collide), `title`, `content`, `format`, `createdAt`, `updatedAt`, all lowercase JSON
-      tags so the frontend can read them.
+- [x] Drafts are stored by the app, not as files: one SQLite file with id, timestamps and a JSON blob per draft, atomic,
+      with a `format` and ids that sort by creation (`internal/drafts`, `docs/storage.md`). Nothing reaches the file system
+      until "Save as file".
 - [ ] Debounced save to Go (about 500 ms after the last keystroke, separate from the 300 ms lint), plus a save on blur
       and on window close so the last keystrokes are never lost. Show "Saved" and the last updated time in the status bar.
 - [ ] Recent drafts list: title, last touched, and a preview. Markdown task lines (`- [ ]`, `- [x]`) show as up to
