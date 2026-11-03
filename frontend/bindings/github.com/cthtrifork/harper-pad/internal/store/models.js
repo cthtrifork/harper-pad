@@ -53,7 +53,7 @@ export class Draft {
         if (!("filePath" in $$source)) {
             /**
              * FilePath is the file the draft was saved to ("" when it never was). The draft stays here too; Save ignores this field
-             * and only SetFilePath changes it, so the path always comes from the save dialog and never from the page.
+             * and only SetFile changes it, so the path always comes from the save dialog and never from the page.
              * @member
              * @type {string}
              */

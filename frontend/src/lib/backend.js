@@ -115,14 +115,17 @@ export async function saveDraft(draft) {
 // Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. With `saveAs`, or when the draft was
 // never saved to a file, the user picks the file (`cancelled` is true when they close the dialog); otherwise the file it was
 // saved to before is overwritten. The returned draft carries `filePath`. On desktop the path never comes from the page.
-export async function saveDraftToFile(draft, saveAs) {
-  if (!isWeb) return (await bindings()).SaveDraftToFile(draft, saveAs);
+// When the file was changed by something else since it was last written, nothing is written and `conflict` is true, unless
+// `overwrite` is set.
+export async function saveDraftToFile(draft, saveAs, overwrite = false) {
+  if (!isWeb) return (await bindings()).SaveDraftToFile(draft, saveAs, overwrite);
   return saveWebFile(
     web,
     (id) => idbGet(`file:${id}`),
     (id, handle) => idbPut(`file:${id}`, handle),
     draft,
     saveAs,
+    overwrite,
   );
 }
 

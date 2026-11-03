@@ -117,7 +117,7 @@ func (s *Store) prepare() error {
 	return nil
 }
 
-// migrate brings an older database up to schemaVersion. Version 2 added file_path, the file a draft was saved to.
+// migrate brings an older database up to schemaVersion. Version 2 added file_path, the file a draft was saved to, and file_mtime.
 func (s *Store) migrate(from int) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -125,8 +125,10 @@ func (s *Store) migrate(from int) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	if from < 2 {
-		if _, err := tx.Exec(`ALTER TABLE drafts ADD COLUMN file_path TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
+		for _, col := range []string{`file_path TEXT NOT NULL DEFAULT ''`, `file_mtime INTEGER NOT NULL DEFAULT 0`} {
+			if _, err := tx.Exec(`ALTER TABLE drafts ADD COLUMN ` + col); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion)); err != nil {
@@ -144,7 +146,8 @@ const draftColumns = `
 	tasks       TEXT    NOT NULL DEFAULT '[]',
 	tasks_total INTEGER NOT NULL DEFAULT 0,
 	tasks_done  INTEGER NOT NULL DEFAULT 0,
-		file_path   TEXT    NOT NULL DEFAULT ''`
+		file_path   TEXT    NOT NULL DEFAULT '',
+		file_mtime  INTEGER NOT NULL DEFAULT 0`
 
 // create makes the schema in a new database.
 func (s *Store) create() error {

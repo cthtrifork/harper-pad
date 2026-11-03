@@ -40,6 +40,7 @@ export function useDrafts(editor, drawerOpen) {
 
   const fileState = ref("none"); // none | unknown (linked, not written in this session) | synced | stale (edited since the file was written)
 
+  let overwriteOk = false; // set after a save was refused because the file changed outside the app: the next save replaces it
   let dirty = false;
   let edits = 0;
   let timer = null;
@@ -76,6 +77,7 @@ export function useDrafts(editor, drawerOpen) {
   function setCurrent(d) {
     current.value = asCurrent(d);
     fileState.value = current.value.filePath ? "unknown" : "none";
+    overwriteOk = false;
     dirty = false;
     state.value = d.id ? "saved" : "idle";
   }
@@ -155,7 +157,19 @@ export function useDrafts(editor, drawerOpen) {
           filePath: current.value.filePath,
         },
         saveAs,
+        overwriteOk && !saveAs,
       );
+      overwriteOk = false;
+      if (r.conflict) {
+        // The draft is saved, the file is not: say so, and let the next Ctrl+S replace the file.
+        current.value = asCurrent(r.draft);
+        fileState.value = "stale";
+        overwriteOk = true;
+        error.value = `${fileName.value} was changed outside Harper Pad. Ctrl+S again replaces it, Ctrl+Shift+S saves elsewhere.`;
+        if (edits === mine) dirty = false;
+        state.value = "error";
+        return;
+      }
       if (r.cancelled) {
         state.value = before === "saving" ? "saved" : before;
         return;

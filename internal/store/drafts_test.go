@@ -362,11 +362,11 @@ func TestSetFilePathAndMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetFilePath(d.ID, "/tmp/a.md"); err != nil {
+	if err := s.SetFile(d.ID, "/tmp/a.md", 42); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.Get(d.ID); got.FilePath != "/tmp/a.md" {
-		t.Errorf("Get path = %q", got.FilePath)
+	if got, _ := s.Get(d.ID); got.FilePath != "/tmp/a.md" || got.FileMTime != 42 {
+		t.Errorf("Get path = %q, mtime %d", got.FilePath, got.FileMTime)
 	}
 	if l, _ := s.List(10, 0); l.Drafts[0].FilePath != "/tmp/a.md" {
 		t.Errorf("List path = %q", l.Drafts[0].FilePath)
@@ -377,8 +377,8 @@ func TestSetFilePathAndMigration(t *testing.T) {
 	if got, _ := s.Save(d); got.FilePath != "/tmp/a.md" {
 		t.Errorf("Save changed the path to %q", got.FilePath)
 	}
-	if err := s.SetFilePath("00000000000000000000000000000000", "x"); !errors.Is(err, ErrNotFound) {
-		t.Errorf("SetFilePath on a missing draft = %v", err)
+	if err := s.SetFile("00000000000000000000000000000000", "x", 1); !errors.Is(err, ErrNotFound) {
+		t.Errorf("SetFile on a missing draft = %v", err)
 	}
 
 	// A version 1 database (no file_path column) is upgraded and keeps its drafts.

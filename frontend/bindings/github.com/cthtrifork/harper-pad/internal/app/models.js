@@ -35,6 +35,15 @@ export class FileSave {
              */
             this["cancelled"] = false;
         }
+        if (!("conflict" in $$source)) {
+            /**
+             * Conflict is true when the file was changed by something else since it was last written here. Nothing was written; the draft
+             * itself was saved. Saving again with overwrite replaces the file.
+             * @member
+             * @type {boolean}
+             */
+            this["conflict"] = false;
+        }
 
         Object.assign(this, $$source);
     }

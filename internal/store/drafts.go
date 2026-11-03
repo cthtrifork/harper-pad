@@ -46,8 +46,11 @@ type Draft struct {
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
 	// FilePath is the file the draft was saved to ("" when it never was). The draft stays here too; Save ignores this field
-	// and only SetFilePath changes it, so the path always comes from the save dialog and never from the page.
+	// and only SetFile changes it, so the path always comes from the save dialog and never from the page.
 	FilePath string `json:"filePath"`
+	// FileMTime is the file's modification time (Unix nanoseconds) right after it was last written here, to notice when something
+	// else changes it. Not sent to the page.
+	FileMTime int64 `json:"-"`
 }
 
 // Task is one markdown task line, as shown in a draft's preview.
@@ -141,8 +144,8 @@ func (s *Store) Save(d Draft) (Draft, error) {
 func (s *Store) Get(id string) (Draft, error) {
 	var d Draft
 	var data string
-	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data, file_path FROM drafts WHERE id = ?`, id).
-		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data, &d.FilePath)
+	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data, file_path, file_mtime FROM drafts WHERE id = ?`, id).
+		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data, &d.FilePath, &d.FileMTime)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Draft{}, ErrNotFound
 	}
@@ -157,9 +160,10 @@ func (s *Store) Get(id string) (Draft, error) {
 	return d, nil
 }
 
-// SetFilePath records the file a draft was saved to, or clears it with "". ErrNotFound when there is no such draft.
-func (s *Store) SetFilePath(id, path string) error {
-	res, err := s.db.Exec(`UPDATE drafts SET file_path = ? WHERE id = ?`, path, id)
+// SetFile records the file a draft was saved to and its modification time after the write, or clears both with "" and 0.
+// ErrNotFound when there is no such draft.
+func (s *Store) SetFile(id, path string, mtime int64) error {
+	res, err := s.db.Exec(`UPDATE drafts SET file_path = ?, file_mtime = ? WHERE id = ?`, path, mtime, id)
 	if err != nil {
 		return err
 	}

@@ -59,7 +59,7 @@ drafts   (id TEXT PRIMARY KEY, created_at INTEGER, updated_at INTEGER,
           data TEXT,                                          -- the draft: {"v":1,"format":"markdown","content":"..."}
           format TEXT, title TEXT, excerpt TEXT,              -- its summary, written on every save
           tasks TEXT, tasks_total INTEGER, tasks_done INTEGER,
-          file_path TEXT)                                     -- the file it was saved to ('' if never; added in version 2)
+          file_path TEXT, file_mtime INTEGER)                 -- the file it was saved to ('' if never) and its mtime after our write (version 2)
 settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wails", ...]; "ignored": Harper's export
 ```
 
@@ -72,7 +72,7 @@ settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wail
   very large collection, an FTS5 index can be added alongside the table.
 - **A draft saved to a file stays a draft.** Ctrl+Shift+S asks for a file once (`PadService.SaveDraftToFile`): the text is written there
   (a temporary file beside it, then a rename) and `file_path` records it. After that Ctrl+S overwrites the file; before it, Ctrl+S only
-  saves the draft. The autosave never writes the file. The path is set only by `SetFilePath` after the save dialog, never taken from
+  saves the draft. The autosave never writes the file. If the file was changed by something else since our last write (its mtime differs from `file_mtime`), Ctrl+S saves the draft but not the file and says so; the next Ctrl+S replaces it. A file that was deleted is written again. The path is set only by `SetFilePath` after the save dialog, never taken from
   the page: `Save` ignores `Draft.FilePath`, and `SaveDraftToFile` reads the stored path, so the page cannot make Go write to a path it
   chose. Deleting a draft does not touch its file, and undoing the delete restores the text without the link.
 - Settings are text values; `PadService` decides what they hold. `SetSettings` saves several in one transaction.
