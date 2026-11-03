@@ -12,6 +12,35 @@ const keepPlaceholder = () => ({
   },
 });
 
+// The Content-Security-Policy of the production page. It lets the page load only its own files and nothing else:
+//   - script-src: our scripts; 'wasm-unsafe-eval' only so Harper's WebAssembly can be compiled (no 'unsafe-eval', no inline scripts);
+//   - style-src: 'unsafe-inline' is needed because CodeMirror and Vue write style attributes and <style> elements at run time;
+//   - worker-src: Harper runs in a Web Worker, which may be a blob: URL;
+//   - connect-src: calls to the Go side (same origin) and nothing on the internet;
+//   - object-src, base-uri, form-action: off.
+// A <meta> tag is the one form every webview (WebKitGTK, WebView2) applies to the document. It is added to production builds
+// only, so the dev server's hot reload (inline scripts, a websocket) keeps working. See docs/security.md.
+const POLICY = [
+  "default-src 'none'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join("; ");
+
+const contentSecurityPolicy = () => ({
+  name: "content-security-policy",
+  apply: "build",
+  transformIndexHtml: () => [
+    { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: POLICY }, injectTo: "head-prepend" },
+  ],
+});
+
 export default defineConfig({
   server: {
     host: "127.0.0.1",
@@ -20,5 +49,5 @@ export default defineConfig({
   },
   // The harper.js worker is an ES module; the default "iife" worker format cannot code-split it.
   worker: { format: "es" },
-  plugins: [vue(), wails("./bindings"), keepPlaceholder()],
+  plugins: [vue(), wails("./bindings"), contentSecurityPolicy(), keepPlaceholder()],
 });
