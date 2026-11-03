@@ -1,6 +1,6 @@
 import { linter } from "@codemirror/lint";
 import { StateEffect } from "@codemirror/state";
-import { isSafe, isSpacing } from "../autocorrect.js";
+import { isMarkdownSpacing, isSafe, isSpacing } from "../autocorrect.js";
 import { lintText } from "../harper.js";
 import { applyFixes, dueFixes } from "./autocorrect.js";
 
@@ -79,7 +79,10 @@ export function harperSource(getHarper, onResult, persist, auto) {
       const doc = view.state.doc;
       const text = doc.toString();
       const prefs = auto?.prefs();
-      const found = (await lintText(harper, text)).map((f) => ({ ...f, safe: prefs ? isSafe(f, prefs) : false }));
+      const found = (await lintText(harper, text)).map((f) => ({
+        ...f,
+        safe: prefs ? isSafe(f, prefs) && !(isSpacing(f.fixes[0]) && isMarkdownSpacing(text, f.from, f.to)) : false,
+      }));
       onResult?.({ count: found.length, ms: Math.round(performance.now() - t0) });
       // With autocorrect on, fix what is due. Only if the text is the text that was checked: CodeMirror drops a result for older text
       // anyway, and the fixes' positions would be wrong. The edit makes the linter run again, which reports what is left.

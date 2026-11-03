@@ -35,6 +35,12 @@ export function categoryOf(finding) {
 // A fix that only puts spaces where there were more of them (or none), such as "  " -> " ".
 export const isSpacing = (fix) => fix.kind === "replace" && fix.text !== "" && fix.text.trim() === "";
 
+// Spaces that mean something in Markdown: indentation at the start of a line (nested lists, code blocks) and two or more spaces at the
+// end of a line (a hard line break). Autocorrect leaves these alone, even though Harper calls them extra spaces.
+export function isMarkdownSpacing(text, from, to) {
+  return from === 0 || text[from - 1] === "\n" || text[to] === "\n" || text[to] === "\r";
+}
+
 export function isSafe(finding, prefs) {
   const cat = categoryOf(finding);
   return cat !== null && prefs[cat] === true;

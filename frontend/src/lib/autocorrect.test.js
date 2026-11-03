@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addRange, categoryOf, DEFAULT_PREFS, isFinished, isSafe, loadPrefs, nonOverlapping, savePrefs, touches } from "./autocorrect.js";
+import {
+  addRange,
+  categoryOf,
+  DEFAULT_PREFS,
+  isFinished,
+  isMarkdownSpacing,
+  isSafe,
+  loadPrefs,
+  nonOverlapping,
+  savePrefs,
+  touches,
+} from "./autocorrect.js";
 
 const finding = (kind, fixes) => ({ kind, fixes: fixes.map((text) => ({ kind: "replace", text })) });
 
@@ -80,4 +91,12 @@ test("the choices survive a round trip, and bad or missing storage gives the def
   };
   assert.deepEqual(loadPrefs(broken), DEFAULT_PREFS);
   assert.doesNotThrow(() => savePrefs(DEFAULT_PREFS, broken));
+});
+
+test("spaces that are Markdown (line indent, hard line break) are not extra", () => {
+  const text = "one  two\n  indented\nbreak  \nnext";
+  assert.equal(isMarkdownSpacing(text, 3, 5), false); // between words
+  assert.equal(isMarkdownSpacing(text, 9, 11), true); // start of a line
+  assert.equal(isMarkdownSpacing(text, 0, 2), true); // start of the text
+  assert.equal(isMarkdownSpacing(text, 25, 27), true); // end of a line: hard break
 });
