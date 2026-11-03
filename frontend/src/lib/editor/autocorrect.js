@@ -1,7 +1,7 @@
 import { isolateHistory } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
-import { Annotation, StateField } from "@codemirror/state";
 import { forEachDiagnostic } from "@codemirror/lint";
+import { Annotation, StateField } from "@codemirror/state";
 import { addRange, isFinished, isSpacing, nonOverlapping, touches } from "../autocorrect.js";
 
 // Autocorrect in the editor. Three things are remembered in the editor state, so that opening another draft (which starts a fresh
