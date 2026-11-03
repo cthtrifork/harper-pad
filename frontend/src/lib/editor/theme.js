@@ -28,7 +28,9 @@ export const theme = EditorView.theme({
     boxShadow: "var(--shadow-pop)",
     fontFamily: "var(--font-ui)",
   },
-  ".cm-tooltip-lint": { maxWidth: "340px", padding: "4px" },
+  // max-content: with the absolute positioning CodeMirror uses on iOS, a shrink-to-fit width depends on `left`, so each measure
+  // narrowed the popup, re-wrapped it and moved it again until it settled. A width that ignores `left` is stable at once.
+  ".cm-tooltip-lint": { width: "max-content", maxWidth: "min(340px, calc(100vw - 16px))", padding: "4px" },
   ".cm-diagnostic": { padding: "10px 12px", borderLeft: "0", fontSize: "13px", lineHeight: "1.45" },
   ".cm-diagnosticText": { display: "block", marginBottom: "10px" },
   ".cm-diagnosticSource": {
