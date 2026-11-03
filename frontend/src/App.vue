@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
       @view="setView"
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
-    <div class="body">
+    <div class="body" :class="{ 'has-panel': showProblems && mode !== 'preview' }">
       <Transition name="slide-left">
       <DraftsDrawer
         v-if="showDrawer"

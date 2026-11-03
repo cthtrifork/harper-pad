@@ -8,6 +8,7 @@
 
   .body {
     position: relative;
+    flex-direction: column;
   }
 
   /* Header: row 1 brand, scratch pad, problems; row 2 save and the file; row 3 the views, as one full-width segmented control. */
@@ -73,9 +74,8 @@
     max-width: calc(100vw - 24px);
   }
 
-  /* Scratch pad and problems: full-width sheets over the page. The page stays under them, so closing one returns to the text. */
-  .drawer,
-  .panel {
+  /* Scratch pad: a full-width sheet over the page; you pick a draft and leave, and closing it returns to the text. */
+  .drawer {
     position: absolute;
     inset: 0;
     z-index: 5;
@@ -83,9 +83,27 @@
     border: 0;
   }
 
+  /* Problems: the lower part of the screen, so the text stays in view and a tapped problem can be seen. In Split it takes the
+     preview's place (the preview comes back when it is closed). */
+  .panel {
+    width: auto;
+    height: 45%;
+    flex: none;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .body.has-panel .page.split .side {
+    display: none;
+  }
+
   /* The page itself: a smaller gutter; Split stacks. */
   .pane {
     padding: 16px 16px 24px;
+  }
+
+  .page {
+    min-height: 0;
   }
 
   .page.split {
