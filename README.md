@@ -24,10 +24,7 @@ Markdown documents and drafts can also be shown side by side with a rendered pre
 
 The window has a CodeMirror editor checked by `harper.js` (WebAssembly in a Web Worker), a Problems panel with fixes,
 the scratch pad drawer of drafts with autosave and search, and in-app updates. The same frontend runs in the browser
-as an installable offline web app ([`docs/pages.md`](docs/pages.md)). Markdown shows side by side with a preview. `TODO.md`
-has the plan.
-
-![The scratch pad drawer listing drafts](https://raw.githubusercontent.com/cthtrifork/harper-pad/bot/update-screenshots/docs/screenshots/04-drafts-drawer.png)
+as an installable offline web app ([`docs/pages.md`](docs/pages.md)). Markdown shows side by side with a preview.
 
 ## Develop
 
