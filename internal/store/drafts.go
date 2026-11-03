@@ -158,7 +158,7 @@ func (s *Store) Delete(id string) error {
 
 // List returns drafts newest first. limit defaults to 50 and is capped at 500.
 func (s *Store) List(limit, offset int) (List, error) {
-	return s.query("", "", limit, offset)
+	return s.query(nil, limit, offset)
 }
 
 // Search returns the drafts whose text contains query, newest first. The match ignores case for ASCII letters only
@@ -169,18 +169,26 @@ func (s *Store) Search(query string, limit int) (List, error) {
 		return s.List(limit, 0)
 	}
 	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
-	return s.query(` WHERE json_extract(data, '$.content') LIKE ? ESCAPE '\'`, "%"+esc+"%", limit, 0)
+	pattern := "%" + esc + "%"
+	return s.query(&pattern, limit, 0)
 }
 
-func (s *Store) query(where, arg string, limit, offset int) (List, error) {
+// whereMatches is the only fragment ever added to the list query, and it is a constant: the caller's text reaches SQLite
+// only as the value of its ? parameter, never as SQL.
+const whereMatches = ` WHERE json_extract(data, '$.content') LIKE ? ESCAPE '\'`
+
+// query lists drafts newest first. pattern is a LIKE pattern for the content, or nil for no filter.
+func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	if limit <= 0 {
 		limit = defaultLimit
 	}
 	limit = min(limit, maxLimit)
 	offset = max(offset, 0)
 	var args []any
-	if where != "" {
-		args = append(args, arg)
+	where := ""
+	if pattern != nil {
+		where = whereMatches
+		args = append(args, *pattern)
 	}
 	out := List{Drafts: []Summary{}}
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM drafts`+where, args...).Scan(&out.Total); err != nil {
