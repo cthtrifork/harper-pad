@@ -30,13 +30,7 @@ const METRICS = [
   ["cumulative-layout-shift", "CLS"],
   ["speed-index", "Speed Index"],
 ];
-// "provided" measures what the page really does on the runner instead of Lighthouse's simulated slow network and CPU. The
-// default simulation prices every byte of the 20 MB harper wasm at mobile speeds (a 103 s LCP) although the app ships it inside
-// the binary and the page paints in about 200 ms; the observed numbers are the ones that describe the app.
-const MODES = {
-  mobile: ["--throttling-method=provided"],
-  desktop: ["--preset=desktop", "--throttling-method=provided"],
-};
+const MODES = { mobile: [], desktop: ["--preset=desktop"] };
 
 const pkg = `lighthouse@${version}`;
 mkdirSync(out, { recursive: true });
@@ -93,7 +87,7 @@ for (const [mode, { median }] of Object.entries(results)) {
 }
 lines.push("", "</details>", "");
 lines.push(
-  `Median of ${runs} runs on \`${version}\` against the headless build, with observed timings (no simulated throttling). Minimum scores: ` +
+  `Median of ${runs} runs on \`${version}\` against the headless build. Minimum scores: ` +
     CATEGORIES.map(([id, name]) => `${name} ${THRESHOLDS[id]}`).join(", ") +
     ". The full HTML reports are in the run's artifacts.",
 );
