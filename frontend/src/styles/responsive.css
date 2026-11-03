@@ -2,7 +2,7 @@
    the header is one row of icons, the scratch pad and the problems become sheets over the page instead of columns beside it, the
    Split view is not offered (App.vue shows Edit instead if a window is narrowed while in Split), and the status bar keeps only what
    fits. Loaded last so it can override the desktop rules. */
-/* The same condition is in App.vue (narrow) and safe-area.css; keep the three in step. */
+/* The same condition is in App.vue (narrow) and twice in safe-area.css; keep them in step. */
 @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .app {
     height: 100dvh;
@@ -17,7 +17,6 @@
      a phone's height), save, problems. The labels, brand, shortcut hints and file name are hidden; the buttons keep their accessible
      names (aria-label), and the count shows as a badge on the Problems icon. The row wraps only if the update button is also shown. */
   .bar {
-    height: auto;
     flex-wrap: wrap;
     gap: 8px;
     padding: 8px 12px;

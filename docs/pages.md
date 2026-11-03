@@ -52,15 +52,14 @@ Test locally: `cd frontend && npm run build:web && npx vite preview --mode web`,
 
 Open the site in **Safari**, tap Share, then Add to Home Screen. Use that icon from then on.
 
-The Home Screen app uses `apple-mobile-web-app-capable` with `apple-mobile-web-app-status-bar-style: black` (Apple: a black status bar
-with the page below it; `black-translucent` would draw the page under it, but reports say its text is always white, which the light
-header cannot show), and `viewport-fit=cover` with `env(safe-area-inset-*)` padding (`styles/safe-area.css`) for the notch, the home
+The Home Screen app uses `apple-mobile-web-app-capable` with `apple-mobile-web-app-status-bar-style: default` (a status bar of its own, with
+text that follows light and dark, and the page below it; `black-translucent` would draw the page under it, but reports say its text
+is always white, which the light header cannot show), and `viewport-fit=cover` with `env(safe-area-inset-*)` padding (`styles/safe-area.css`) for the notch, the home
 indicator and landscape; `100dvh` for the height; `theme-color` for light and dark; no page overscroll; 16 px text fields so iOS does
 not zoom on focus. iOS reads the `<head>` tags when the icon is **added**, so after a change to them, delete the icon and add it again.
 
-`default` was tried first and, on an iPhone with a Dynamic Island, still drew the page under the status bar with a blur over the top of
-the header. To see what a device really gives the page, tap the status bar five times: a readout shows the display mode, the safe-area
-insets, the sizes and the header position (`src/lib/diagnostics.js`); tap it to hide it.
+On an iPhone with a Dynamic Island the installed app starts the page below the status bar, but iOS fades the first stretch of the page, about 24 pt, so header buttons that start right at the top look blurry; the header is padded
+by that much in the installed app (`--edge-fade` in `styles/safe-area.css`).
 
 ## Keeping the data
 
