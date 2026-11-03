@@ -25,6 +25,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
   `frontend/bindings`; never hand-edit it. `frontend/dist` is untracked build output except `.gitkeep`.
 - Run `make format-frontend lint-frontend` before pushing frontend changes; CI's `lint` job fails on unformatted code.
 - **SQL only in Go.** All SQL lives in `internal/store`; the frontend calls specific `PadService` methods through the generated bindings and never sends SQL. `internal/store/boundary_test.go` enforces it; see `docs/storage.md`.
+- Security model, the page's Content-Security-Policy and the OWASP mapping are in `docs/security.md`. Do not loosen the policy in `frontend/vite.config.js` (CI checks it); never use `v-html` or `innerHTML` with text from drafts, Harper or the network.
 - **Always open a PR** from a new branch off `main`; do not push to `main`.
 - **PR titles are `type(scope)!: summary`** (`feat`, `fix`, `security`, `perf`, `refactor`, `docs`, `test`,
   `chore`, `ci`, `build`, `deps`; `!` for breaking). `pr-title.yml` checks it and Release Drafter builds the notes
