@@ -108,7 +108,7 @@ The repository can turn on *immutable releases* (Settings, General; it only appl
 - **A published release cannot be fixed in place.** Cut a new version with the fix. Do not try to move the tag or replace an asset.
 - **A tag name is used up for good.** Even after the release is deleted the tag name cannot be reused. A failed run leaves no tag, only a draft, which is fine to retry or delete (see *Retrying*).
 - The release also gets GitHub's own release attestation, next to the build-provenance and SBOM attestations this workflow signs (below).
-- **Not yet run against an immutable release.** The docs do not say that uploading to a draft works through its upload URL, or that publishing a draft whose tag is created at that moment is accepted; the first release after enabling it is the test.
+- **Checked.** Immutable releases are on in the repository settings, and v0.6.0 was published this way (uploading to the draft and publishing it with the tag created at that moment both work; `gh release view v0.6.0 --json isImmutable` says `true`).
 
 ## Why the release is called, not triggered
 
