@@ -22,18 +22,32 @@ const personal = ref({ words: 0, ignored: 0 });
 const saveError = ref("");
 const editor = ref(null);
 
-// Start loading Harper now, before the first render, and let the editor appear straight away: you can type while the wasm loads,
-// and the first check runs as soon as it is ready.
+// Show the editor first, then load Harper: you can type while the wasm loads, and the first check runs as soon as it is ready.
+// Harper's 20 MB wasm is fetched after the first paint and not before it, so it never competes with the page for the first
+// frame (Lighthouse counts every request in flight before the largest contentful paint against it). The wait is one frame; the
+// timer is a fallback for a window that is hidden at start, where the browser does not run animation frames.
+const afterFirstPaint = () =>
+  new Promise((resolve) => {
+    const timer = setTimeout(resolve, 300);
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        clearTimeout(timer);
+        resolve();
+      }),
+    );
+  });
 const t0 = performance.now();
-const loading = createLinter().then(async (linter) => {
-  // Load the saved dictionary and ignore list into Harper before its first check, so findings already dealt with never show up.
-  try {
-    personal.value = await loadPersonal(linter);
-  } catch (err) {
-    saveError.value = `Could not load settings: ${err?.message || err}`;
-  }
-  return linter;
-});
+const loading = afterFirstPaint()
+  .then(() => createLinter())
+  .then(async (linter) => {
+    // Load the saved dictionary and ignore list into Harper before its first check, so findings already dealt with never show up.
+    try {
+      personal.value = await loadPersonal(linter);
+    } catch (err) {
+      saveError.value = `Could not load settings: ${err?.message || err}`;
+    }
+    return linter;
+  });
 
 // 850 ms -> "850 ms", 1234 ms -> "1.2 s".
 function fmt(ms) {
