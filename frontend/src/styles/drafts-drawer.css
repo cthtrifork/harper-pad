@@ -138,7 +138,6 @@
   justify-content: space-between;
   gap: 8px;
   min-height: 24px;
-  padding-right: 32px; /* room for the delete button */
 }
 
 .drawer .title {
@@ -252,6 +251,18 @@
 .drawer .item:hover .del,
 .drawer .item:focus-within .del {
   opacity: 1;
+}
+
+/* The delete button sits over the time, in the same slot: the time fades out as the button fades in, so they never overlap. */
+.drawer .top time {
+  min-width: 84px; /* the slot the button covers; the time stays right-aligned in it */
+  text-align: right;
+  transition: opacity 0.15s var(--ease);
+}
+
+.drawer .item:hover .top time,
+.drawer .item:focus-within .top time {
+  opacity: 0;
 }
 
 .drawer .del:hover {
