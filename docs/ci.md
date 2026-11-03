@@ -67,6 +67,14 @@ All actions are SHA-pinned like the rest and use the workflow's own token. Detai
 
 `actions-lint.yml` runs on changes under `.github/`, on `main` and weekly: zizmor (pedantic persona, installed from PyPI at the version pinned in the workflow) audits workflows and composite actions, and `gh pin-actions workflows --latest` re-pins every `uses:` in the workflows a PR adds or changes (that job runs on pull requests only: on `main` an action can have a release Renovate has not bumped yet). The check fails on an unpinned action or one with a newer release. The tool pins immutable releases to the tag instead of the SHA; that is the same version, so it is not a failure.
 
+## Pull request reports
+
+Three workflows report on pull requests, copied from trivy-dashboard-wail3 and adapted. Each has a paths filter, so none of them is a required check, and each posts one sticky comment (marocchino/sticky-pull-request-comment, one `header` per workflow) that is updated on every push. Fork PRs have a read-only token, so they get the run's job summary or artifacts only.
+
+- `dependency-scan.yml`: when `go.mod`, `go.sum` or the npm manifest or lockfile changes, Trivy scans the PR and its base and the comment lists the HIGH and CRITICAL vulnerabilities the PR adds and removes (`.github/trivy/dependency-scan.tpl`). The scan job has a read-only token; a separate job writes the comment. The blocking scan stays `trivy (filesystem)` in `security.yml`. Unlike the source repo there is no container image to scan.
+- `screenshots.yml`: `scripts/screenshots.sh` builds the headless server, drives it with Playwright in Chrome and renders `docs/screenshots/*.png` (`make screenshots`). Each image is uploaded as its own unzipped artifact and embedded in the comment. Add a shot to `scripts/screenshots.mjs` and a matching `Upload` step to the workflow; the comment step fails when the two disagree. Screenshots are gitignored, and the `no-screenshots` job in `ci.yml` fails a PR that adds any. The source repo's draft "preview" PR on `main` was left out.
+- `lighthouse.yml`: `scripts/lighthouse.sh` audits the headless build (mobile and desktop, median of 3 runs) and fails below the minimum scores in `scripts/lighthouse.mjs`. The HTML and JSON reports are artifacts.
+
 ## Trivy DB cache
 
 `trivy-cache.yml` refreshes the Trivy vulnerability DB cache daily on the default branch (the trivy-action README's recommendation). `security.yml` restores it through trivy-action's built-in cache and set `TRIVY_SKIP_DB_UPDATE=true`, so they do not download the DB and avoid registry rate limits. If the cache is missing (never run, or evicted), the scans fail until the workflow runs once: trigger it with *Run workflow*.

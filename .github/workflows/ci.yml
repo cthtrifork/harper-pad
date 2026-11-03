@@ -109,6 +109,29 @@ jobs:
           version: v2.15.0
           args: --config .github/linters/golangci.yml --build-tags server ./...
 
+  # Screenshots are rendered in CI and never committed (docs/ci.md, Pull request reports).
+  no-screenshots:
+    name: no-screenshots
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fail when the PR adds screenshots
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Added, modified or renamed only: a PR that deletes screenshots is fine.
+          files="$(git diff --name-only --diff-filter=AMR "$BASE_SHA...HEAD" -- docs/screenshots)"
+          if [ -n "$files" ]; then
+            echo "::error::Screenshots are not committed to this repository (docs/ci.md, Pull request reports). Remove docs/screenshots from this PR."
+            echo "$files"
+            exit 1
+          fi
+
   test:
     name: test
     runs-on: ubuntu-24.04

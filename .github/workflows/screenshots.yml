@@ -1,0 +1,135 @@
+name: Screenshots
+
+# Renders the UI in Chrome against the headless server build (scripts/screenshots.sh) and shows the
+# images in one sticky PR comment that is updated on every push. Screenshots are never committed:
+# docs/screenshots is gitignored. Each image is uploaded as its own unzipped artifact
+# (`archive: false`) so it can be embedded in the comment. Fork PRs (read-only token) get the
+# artifacts on the run page but no comment. It has a paths filter, so do not mark it as a required check.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - frontend/**
+      - main.go
+      - scripts/screenshots.*
+      - scripts/lib/**
+      - .tool-versions
+      - .github/workflows/screenshots.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenshots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  screenshots:
+    name: screenshots
+    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # the sticky comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      # Playwright drives the runner's Google Chrome; only the pinned playwright-core package is installed.
+      - name: Generate screenshots
+        env:
+          SCREENSHOT_BROWSER_CHANNEL: chrome
+          # renovate: datasource=npm depName=playwright-core
+          PLAYWRIGHT_VERSION: 1.59.1
+        run: make screenshots
+
+      - name: Upload 01-editor-with-problems
+        id: shot-01-editor-with-problems
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: docs/screenshots/01-editor-with-problems.png
+          archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload 02-fix-applied
+        id: shot-02-fix-applied
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: docs/screenshots/02-fix-applied.png
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload 03-problems-hidden
+        id: shot-03-problems-hidden
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: docs/screenshots/03-problems-hidden.png
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build the screenshots comment
+        id: comment-body
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          # Every PNG rendered here needs an `Upload` step above; fail loudly when a screenshot was added.
+          want="$(ls docs/screenshots/*.png | wc -l)"
+          have="$(jq '[to_entries[] | select(.key | startswith("shot-"))] | length' <<<"$STEPS")"
+          if [ "$want" != "$have" ]; then
+            echo "::error::docs/screenshots has $want images but screenshots.yml uploads $have: add or remove an 'Upload <name>' step."
+            exit 1
+          fi
+
+          body="$(mktemp)"
+          {
+            echo "### Screenshots"
+            echo
+            echo "Rendered from the headless build at ${HEAD_SHA::7}. Not committed to the repository. Images are run artifacts: you must be logged in to see them, and they expire after 14 days."
+            echo
+            jq -r 'to_entries[] | select(.key | startswith("shot-")) | "\(.key[5:])\t\(.value.outputs["artifact-url"])"' <<<"$STEPS" |
+              while IFS=$'\t' read -r name url; do
+                # A heading, then the bare artifact URL as its own paragraph, which GitHub renders inline.
+                echo "#### ${name}"
+                echo
+                echo "${url}"
+                echo
+              done
+          } > "$body"
+
+          echo "path=$body" >> "$GITHUB_OUTPUT"
+          echo "Screenshots are in the PR comment and in the run's artifacts." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show screenshots in a PR comment
+        if: steps.comment-body.outcome == 'success'
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: screenshots-preview
+          path: ${{ steps.comment-body.outputs.path }}
+
+      - name: Summarise (fork pull request)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "Rendered \`docs/screenshots\`. This is a fork PR (read-only token), so there is no PR comment: the images are in this run's artifacts." >> "$GITHUB_STEP_SUMMARY"

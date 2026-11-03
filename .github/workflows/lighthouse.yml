@@ -1,0 +1,107 @@
+name: Lighthouse
+
+# Scores the UI (performance, accessibility, best practices, SEO; mobile and desktop) with Lighthouse
+# and fails when a median score drops below the thresholds in scripts/lighthouse.mjs. The audited app
+# is the headless server build (scripts/lighthouse.sh), so it needs no GTK or window.
+#
+# On pull requests it posts the scores as one sticky PR comment (marker `<!-- lighthouse-score -->`,
+# updated on every push) and as the job summary. Fork PRs have a read-only token, so
+# they get the job summary only.
+# It has a paths filter, so do not mark it as a required check.
+on:
+  pull_request:
+    paths:
+      - frontend/**
+      - main.go
+      - scripts/lighthouse.*
+      - Makefile
+      - .tool-versions
+      - .github/workflows/lighthouse.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lighthouse-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  lighthouse:
+    name: lighthouse
+    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # the sticky comment (PRs)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      # Lighthouse comes from `npx lighthouse@<version>` (pinned in this workflow), not from a
+      # third-party action; the runner's Google Chrome is the browser.
+      - name: Lighthouse
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          # renovate: datasource=npm depName=lighthouse
+          LIGHTHOUSE_VERSION: 13.6.0
+        run: |
+          google-chrome --version
+          scripts/lighthouse.sh
+
+      - name: Keep the full reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lighthouse-reports
+          path: |
+            lighthouse/lighthouse-*.html
+            lighthouse/lighthouse-*.json
+            lighthouse/summary.md
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        run: |
+          [ -f lighthouse/summary.md ] && cat lighthouse/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the scores comment
+        id: comment-body
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -f lighthouse/summary.md ] || exit 0
+          body="$(mktemp)"
+          {
+            cat lighthouse/summary.md
+            echo
+            echo "<sub>${HEAD_SHA::7} · [run](${RUN_URL})</sub>"
+          } > "$body"
+          echo "path=$body" >> "$GITHUB_OUTPUT"
+
+      - name: Show the scores in a PR comment
+        if: steps.comment-body.outcome == 'success' && hashFiles('lighthouse/summary.md') != ''
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: lighthouse-score
+          path: ${{ steps.comment-body.outputs.path }}
