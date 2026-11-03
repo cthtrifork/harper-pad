@@ -10,7 +10,6 @@ import StatusBar from "./components/StatusBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData } from "./lib/backend.js";
 import { createLinter } from "./lib/harper.js";
-import { looksLikeMarkdown } from "./lib/markdown.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
 import { useDrafts } from "./lib/useDrafts.js";
 
@@ -67,14 +66,15 @@ const view = ref("edit");
 const source = ref(props.start.open?.content ?? (demo.value ? sample : ""));
 const paneScroll = ref(0); // how far the source is scrolled, 0 to 1, for the preview to follow
 const pane = ref(null);
-const hintDismissed = ref(false);
 
 // "Harper ready" and the start-up and check timings are for the first moments, to show Harper has loaded and how long it took. They go
 // once the first edit has been saved, and stay away. Where nothing is saved (the database is unavailable) the first edit is the signal.
 const startup = ref(true);
+const typedRef = ref(false); // nothing is reported as saved until the first edit: a draft that has just opened was saved long ago
 let typed = false;
 function onEdited() {
   typed = true;
+  typedRef.value = true;
   drafts.edited();
   if (!drafts.available.value) startup.value = false;
 }
@@ -92,7 +92,6 @@ const mode = computed(() => {
   if (!isMarkdown.value || showDrawer.value) return "edit";
   return view.value === "split" && isNarrow.value ? "edit" : view.value;
 });
-const suggestMarkdown = computed(() => format.value === "text" && !hintDismissed.value && looksLikeMarkdown(source.value));
 
 function setView(id) {
   if (showDrawer.value && id !== "edit") return;
@@ -239,7 +238,6 @@ watch(
 watch(
   () => drafts.current.value.id,
   () => {
-    hintDismissed.value = false;
     fixed.value = []; // another draft: nothing autocorrect did applies to it
     toast.value = null;
   },
@@ -335,18 +333,16 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="drafts.status.value"
+      :draft-status="typedRef || drafts.state.value === 'error' ? drafts.status.value : ''"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"
       :mode="mode"
       :is-markdown="isMarkdown"
-      :suggest-markdown="suggestMarkdown"
       :startup="startup"
       :autocorrect="autocorrect.on"
       @toggle-autocorrect="setAutocorrect({ ...autocorrect, on: !autocorrect.on })"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
-      @dismiss-hint="hintDismissed = true"
     />
   </div>
 </template>
