@@ -103,6 +103,7 @@
 
 .drawer .item {
   position: relative;
+  touch-action: pan-y; /* horizontal moves reach the swipe handlers, vertical ones scroll the list */
   border-radius: 8px;
   border: 1px solid transparent;
   transition:
@@ -347,4 +348,41 @@
 .drawer .toast-leave-to {
   opacity: 0;
   transform: translateY(8px);
+}
+
+/* Swipe to delete: the card follows the finger over a "Delete" backdrop; past the threshold the release deletes. */
+.drawer .swipe-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 16px;
+  border-radius: 8px;
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+}
+
+.drawer .item.dragging .swipe-bg {
+  opacity: 1;
+}
+
+.drawer .item.dragging {
+  overflow: hidden;
+}
+
+.drawer .item.dragging .card {
+  position: relative;
+  background: var(--raised);
+  transform: translateX(var(--dx, 0));
+}
+
+.drawer .item.dragging .card {
+  transition: none; /* it follows the finger */
+}
+
+.drawer .item.dragging.settling .card {
+  transition: transform 0.15s var(--ease);
 }
