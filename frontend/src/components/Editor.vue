@@ -1,8 +1,8 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from "vue";
-import { applyFix, createEditor, jumpTo } from "../lib/editor.js";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { applyFix, createEditor, jumpTo, relint } from "../lib/editor.js";
 
-const props = defineProps({ harper: { type: Object, required: true }, doc: { type: String, default: "" } });
+const props = defineProps({ harper: { type: Object, default: null }, doc: { type: String, default: "" } });
 const emit = defineEmits(["result", "problems"]);
 const host = ref(null);
 let view = null;
@@ -10,12 +10,17 @@ let view = null;
 onMounted(() => {
   view = createEditor(host.value, {
     doc: props.doc,
-    harper: props.harper,
+    getHarper: () => props.harper,
     onResult: (r) => emit("result", r),
     onProblems: (list) => emit("problems", list),
   });
   view.focus();
 });
+// Harper arrives after the editor: run the first check as soon as it does.
+watch(
+  () => props.harper,
+  () => view && relint(view),
+);
 onBeforeUnmount(() => view?.destroy());
 
 // A click on the empty part of the page (below the last line, or beside the column) is not inside CodeMirror's content, so
