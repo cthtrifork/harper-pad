@@ -1,10 +1,22 @@
 # Harper Pad
 
-A small desktop writing app: a grammar-checked editor ([Harper](https://writewithharper.com), running on-device
-as WebAssembly) and a scratch pad drawer. Go + [Wails v3](https://v3alpha.wails.io/) with a Vue 3 frontend.
+A small desktop writing app for Linux. Go + [Wails v3](https://v3alpha.wails.io/) with a Vue 3 frontend.
 
-Status: **spike**. The window lints a textarea with `harper.js` in a Web Worker to prove the stack works in
-WebKitGTK (it does). The editor and the drawer are not built yet.
+## What it solves
+
+1. **Grammar and spelling checks that stay on your machine.** [Harper](https://writewithharper.com) runs as
+   WebAssembly inside the app, so your text is never sent to a cloud service. A first check takes about half a second
+   and later ones under 50 ms (measured in a release build on Fedora).
+2. **A place for quick text that is not a file yet.** The scratch pad is a drawer of drafts. Notes, to-do lists and
+   half-written paragraphs are kept by the app and saved as you type, so there is no file name to invent and no folder
+   to pick. A draft becomes a file only when you choose "Save as file".
+
+Markdown documents and drafts can also be shown side by side with a rendered preview.
+
+## Status
+
+**Spike.** The window lints a textarea with `harper.js` in a Web Worker, which proves the stack works in WebKitGTK.
+The editor, the drafts drawer and the markdown preview are not built yet; `TODO.md` has the plan.
 
 The project scaffolding (CI, linters, Renovate, release drafting, dev tooling) is borrowed from
 [trivy-dashboard-wail3](https://github.com/cthtrifork/trivy-dashboard-wail3).
