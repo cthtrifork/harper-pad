@@ -180,7 +180,7 @@ input {
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  padding: 12px;
+  padding: 12px 7px; /* 8px list inset + 1px border + 7px = the 16px edge of the header and search */
   border: 0;
   background: none;
   color: inherit;
@@ -188,10 +188,11 @@ input {
 }
 .top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-right: 22px; /* room for the delete button */
+  min-height: 24px;
+  padding-right: 26px; /* room for the delete button */
 }
 .title {
   font-size: 14px;
@@ -257,8 +258,8 @@ time {
 }
 .del {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 7px;
+  right: 7px;
   width: 24px;
   height: 24px;
   display: flex;
