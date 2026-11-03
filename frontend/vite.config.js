@@ -66,7 +66,8 @@ const webApp = () => {
     },
     transformIndexHtml: () => [
       { tag: "meta", attrs: { name: "theme-color", content: "#1f2937" }, injectTo: "head" },
-      { tag: "meta", attrs: { name: "apple-mobile-web-app-capable", content: "yes" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "mobile-web-app-capable", content: "yes" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "apple-mobile-web-app-capable", content: "yes" }, injectTo: "head" }, // older iOS only knows this one
       { tag: "meta", attrs: { name: "apple-mobile-web-app-title", content: "Harper Pad" }, injectTo: "head" },
       { tag: "link", attrs: { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }, injectTo: "head" },
       { tag: "link", attrs: { rel: "manifest", href: `${base}manifest.webmanifest` }, injectTo: "head" },
@@ -77,7 +78,8 @@ const webApp = () => {
 export default defineConfig(({ mode }) => {
   const web = mode === "web";
   return {
-    // Pages serves the site from /<repo>/; BASE_PATH overrides it (a custom domain would use "/").
+    // On <owner>.github.io Pages serves the site from /<repo>/ (the default here); on a custom domain it is at "/". CI sets BASE_PATH
+    // from the Pages settings (pages.yml), so the deployed site is always right. Set it by hand for a local build under another path.
     base: web ? process.env.BASE_PATH || "/harper-pad/" : "/",
     // The web build goes to its own folder so it never empties frontend/dist, which the Go side embeds.
     build: web ? { outDir: "dist-web" } : undefined,

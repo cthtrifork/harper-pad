@@ -2,7 +2,8 @@ name: Pages
 
 # Builds the web version of the frontend (`vite build --mode web`, see docs/pages.md) and deploys it to GitHub Pages
 # on every push to main. Pull requests only build it, so a broken web build is caught before merge. The site is
-# https://<owner>.github.io/harper-pad/.
+# https://<owner>.github.io/harper-pad/, or the repository's custom domain (Settings > Pages) at its root; the build reads
+# which one from the Pages settings (configure-pages), so nothing here names a domain.
 #
 # One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions.
 on:
@@ -29,6 +30,8 @@ jobs:
     name: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      pages: read # configure-pages reads the Pages settings (custom domain or not) to work out the site's base path
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,8 +42,14 @@ jobs:
           node-version-file: .tool-versions
           package-manager-cache: false
 
+      # base_path is empty on a custom domain (the site is at the root) and "/harper-pad" on <owner>.github.io.
+      - id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
       - name: Build the web version
         working-directory: frontend
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build:web
