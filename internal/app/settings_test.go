@@ -59,6 +59,8 @@ func TestSettingsRejectBadInput(t *testing.T) {
 		"too long":       {Words: []string{strings.Repeat("a", maxWordRunes+1)}},
 		"too many words": {Words: many},
 		"bad json":       {Ignored: "{not json"},
+		"bad dialect":    {Dialect: "klingon"},
+		"bad label hash": {IgnoredLabels: map[string]string{"12x": "a"}},
 		"huge ignore":    {Ignored: `"` + strings.Repeat("a", maxIgnoredBytes) + `"`},
 	} {
 		if err := s.SaveSettings(in); err == nil {
@@ -111,5 +113,24 @@ func TestSettingsDamagedDatabaseStartsEmpty(t *testing.T) {
 	}
 	if err := s.SaveSettings(Settings{Words: []string{"fresh"}}); err != nil {
 		t.Errorf("saving after recovery: %v", err)
+	}
+}
+
+func TestSettingsDialectAndIgnoredLabels(t *testing.T) {
+	s := newTestService(t)
+	long := strings.Repeat("é", maxLabelRunes+20)
+	in := Settings{Dialect: "british", IgnoredLabels: map[string]string{"18446744073709551615": "teh (Spelling)", "7": long}}
+	if err := s.SaveSettings(in); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Dialect != "british" || got.IgnoredLabels["18446744073709551615"] != "teh (Spelling)" {
+		t.Errorf("LoadSettings = %+v", got)
+	}
+	if n := len([]rune(got.IgnoredLabels["7"])); n != maxLabelRunes {
+		t.Errorf("a long label was kept at %d characters, want %d", n, maxLabelRunes)
 	}
 }

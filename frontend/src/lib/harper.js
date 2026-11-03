@@ -1,8 +1,9 @@
 // Load harper.js in a Web Worker and lint text. The wasm is a separate hashed asset fetched at runtime (needs
 // application/wasm from the asset server); it works in WebKitGTK.
-export async function createLinter() {
+// `dialect` is harper.js's Dialect enum value (see DIALECTS in personal.js); left out, Harper uses American English.
+export async function createLinter(dialect) {
   const [{ WorkerLinter }, { slimBinary }] = await Promise.all([import("harper.js"), import("harper.js/slimBinary")]);
-  const linter = new WorkerLinter({ binary: slimBinary });
+  const linter = new WorkerLinter({ binary: slimBinary, dialect });
   await linter.setup();
   return linter;
 }

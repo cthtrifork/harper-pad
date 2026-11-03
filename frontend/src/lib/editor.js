@@ -30,13 +30,13 @@ function toAction(fix) {
 const relintEffect = StateEffect.define();
 
 // Actions that change what Harper remembers: add the word to the dictionary (spelling only), or ignore this one
-// finding in its context. persist() saves the new state; the editor then lints again so the underline goes away.
+// finding in its context (persist gets its hash and a label, so the list of ignored findings can say what it was). persist() saves the new state; the editor then lints again so the underline goes away.
 // markClass styles them as quieter than the fixes, and keeps them out of the Problems panel's fix list.
 function personalActions(harper, f, persist) {
-  const run = (work) => async (view) => {
+  const run = (work, note) => async (view) => {
     try {
       await work();
-      await persist();
+      await persist(note);
     } finally {
       relint(view);
     }
@@ -46,7 +46,11 @@ function personalActions(harper, f, persist) {
     actions.push({ name: "Add to dictionary", markClass: "cm-action-quiet", apply: run(() => harper.importWords([f.problem])) });
   }
   if (f.hash !== undefined) {
-    actions.push({ name: "Ignore this one", markClass: "cm-action-quiet", apply: run(() => harper.ignoreLintHash(f.hash)) });
+    actions.push({
+      name: "Ignore this one",
+      markClass: "cm-action-quiet",
+      apply: run(() => harper.ignoreLintHash(f.hash), { ignoredHash: f.hash, label: `${f.problem.slice(0, 40)} (${f.kind})` }),
+    });
   }
   return actions;
 }
@@ -174,12 +178,24 @@ export function countText(text) {
   return { words: (text.match(/\S+/g) ?? []).length, chars: [...text].length };
 }
 
+// Where the caret is, for the status bar: 1-based line and column (in characters), and how many characters are selected.
+export function cursorOf(state) {
+  const { head, from, to } = state.selection.main;
+  const line = state.doc.lineAt(head);
+  return {
+    line: line.number,
+    col: [...line.text.slice(0, head - line.from)].length + 1,
+    selected: from === to ? 0 : [...state.sliceDoc(from, to)].length,
+  };
+}
+
 // The extensions each editor was created with, so loadDocument can build a fresh state with the same behaviour.
 const extensionsOf = new WeakMap();
 
-// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update, and `onStats` the word and character counts at the start and after every edit. `onEdit` is called after every change the user makes to the text (not when a document is loaded). `persist` saves the dictionary and ignore list after a change.
-export function createEditor(parent, { doc, getHarper, onResult, onProblems, onStats, onEdit, persist }) {
+// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update, and `onStats` the word and character counts at the start and after every edit, and `onCursor` the caret position and selection size at the start and whenever they change. `onEdit` is called after every change the user makes to the text (not when a document is loaded). `persist` saves the dictionary and ignore list after a change.
+export function createEditor(parent, { doc, getHarper, onResult, onProblems, onStats, onCursor, onEdit, persist }) {
   onStats?.(countText(doc));
+  onCursor?.(cursorOf(EditorState.create({ doc })));
   const extensions = [
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -193,6 +209,7 @@ export function createEditor(parent, { doc, getHarper, onResult, onProblems, onS
         onStats?.(countText(u.state.doc.toString()));
         onEdit?.();
       }
+      if (u.docChanged || u.selectionSet) onCursor?.(cursorOf(u.state));
       onProblems?.(collectProblems(u.view));
     }),
   ];
@@ -202,9 +219,10 @@ export function createEditor(parent, { doc, getHarper, onResult, onProblems, onS
 }
 
 // Replace the whole document, as when another draft is opened. It starts a fresh state, so undo cannot cross into the previous
-// document, and it does not count as an edit. `onStats` gets the new counts, because no update is reported for it.
-export function loadDocument(view, text, onStats) {
+// document, and it does not count as an edit. `onStats` and `onCursor` get the new values, because no update is reported for it.
+export function loadDocument(view, text, onStats, onCursor) {
   view.setState(EditorState.create({ doc: text, extensions: extensionsOf.get(view) }));
   onStats?.(countText(text));
+  onCursor?.(cursorOf(view.state));
   view.focus();
 }

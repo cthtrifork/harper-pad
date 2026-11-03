@@ -1,23 +1,64 @@
 <script setup>
-defineProps({
+import { computed, ref } from "vue";
+
+const props = defineProps({
   problems: { type: Array, required: true },
   active: { type: Number, default: -1 },
-  words: { type: Number, default: 0 },
-  ignored: { type: Number, default: 0 },
+  words: { type: Array, default: () => [] }, // the personal dictionary
+  ignored: { type: Array, default: () => [] }, // ignored findings: {hash, label}
 });
-defineEmits(["jump", "fix"]);
+defineEmits(["jump", "fix", "remove-word", "remove-ignored"]);
 
 const tone = { error: "spelling", warning: "grammar", info: "style" };
+const chips = [
+  { id: "all", label: "All" },
+  { id: "spelling", label: "Spelling" },
+  { id: "grammar", label: "Grammar" },
+  { id: "style", label: "Style" },
+];
+const filter = ref("all");
+const manage = ref(""); // "", "words" or "ignored": the list of dictionary words or ignored findings shown instead of the problems
+const counts = computed(() => {
+  const c = { all: props.problems.length, spelling: 0, grammar: 0, style: 0 };
+  for (const p of props.problems) c[tone[p.severity] ?? "style"]++;
+  return c;
+});
+const shown = computed(() => (filter.value === "all" ? props.problems : props.problems.filter((p) => tone[p.severity] === filter.value)));
 </script>
 
 <template>
   <aside class="panel" aria-label="Problems">
+    <template v-if="manage">
+      <header>
+        <h2>{{ manage === "words" ? "Dictionary" : "Ignored findings" }}</h2>
+        <button type="button" class="link" @click="manage = ''">Back to problems</button>
+      </header>
+      <ul v-if="manage === 'words' && words.length" class="entries">
+        <li v-for="w in words" :key="w">
+          <code>{{ w }}</code>
+          <button type="button" class="remove" :aria-label="`Remove ${w} from the dictionary`" @click="$emit('remove-word', w)">Remove</button>
+        </li>
+      </ul>
+      <ul v-else-if="manage === 'ignored' && ignored.length" class="entries">
+        <li v-for="g in ignored" :key="g.hash">
+          <span class="label">{{ g.label }}</span>
+          <button type="button" class="remove" :aria-label="`Stop ignoring ${g.label}`" @click="$emit('remove-ignored', g.hash)">Stop ignoring</button>
+        </li>
+      </ul>
+      <p v-else class="empty mute">{{ manage === "words" ? "No words added yet." : "No findings ignored." }}</p>
+    </template>
+    <template v-else>
     <header>
       <h2>Problems</h2>
       <span class="mute">{{ problems.length }} in this document</span>
     </header>
-    <ul v-if="problems.length">
-      <li v-for="(p, i) in problems" :key="`${p.from}-${p.to}-${p.kind}`">
+    <div class="chips">
+      <button v-for="c in chips" :key="c.id" type="button" class="chip" :class="{ on: filter === c.id }" :aria-pressed="filter === c.id" @click="filter = c.id">
+        <span v-if="c.id !== 'all'" class="dot" :class="c.id"></span>{{ c.label }} <span class="n">{{ counts[c.id] }}</span>
+      </button>
+    </div>
+    <ul v-if="shown.length">
+      <li v-for="(p, i) in shown" :key="`${p.from}-${p.to}-${p.kind}`">
         <button type="button" class="item" @click="$emit('jump', p)">
           <span class="head">
             <span class="dot" :class="tone[p.severity]"></span>
@@ -32,10 +73,13 @@ const tone = { error: "spelling", warning: "grammar", info: "style" };
         </div>
       </li>
     </ul>
-    <p v-else class="empty mute">No problems found.</p>
+    <p v-else class="empty mute">{{ problems.length ? "No problems of this kind." : "No problems found." }}</p>
+    </template>
     <footer class="foot mute">
-      <span>Dictionary: {{ words }} {{ words === 1 ? "word" : "words" }}</span>
-      <span>Ignored: {{ ignored }}</span>
+      <button type="button" class="link" :aria-pressed="manage === 'words'" @click="manage = manage === 'words' ? '' : 'words'">
+        Dictionary: {{ words.length }} {{ words.length === 1 ? "word" : "words" }}
+      </button>
+      <button type="button" class="link" :aria-pressed="manage === 'ignored'" @click="manage = manage === 'ignored' ? '' : 'ignored'">Ignored: {{ ignored.length }}</button>
     </footer>
   </aside>
 </template>
@@ -142,6 +186,72 @@ code {
 .mute {
   color: var(--mute);
   font-size: 12px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 12px;
+}
+.chip.on {
+  border-color: var(--accent);
+}
+.chip .dot {
+  width: 7px;
+  height: 7px;
+}
+.chip .n {
+  color: var(--mute);
+}
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.foot .link {
+  color: var(--mute);
+}
+.foot .link[aria-pressed="true"] {
+  color: var(--text);
+}
+.entries li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.entries .label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.remove {
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 12px;
+}
+.remove:hover {
+  border-color: var(--bad);
 }
 .empty {
   padding: 0 16px;
