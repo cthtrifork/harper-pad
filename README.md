@@ -26,6 +26,13 @@ The window has a CodeMirror editor checked by `harper.js` (WebAssembly in a Web 
 the scratch pad drawer of drafts with autosave and search, and in-app updates. The same frontend runs in the browser
 as an installable offline web app ([`docs/pages.md`](docs/pages.md)). Markdown shows side by side with a preview.
 
+## Web app
+
+The web version is hosted on GitHub Pages at <https://harper.portableinfo.cloud/>. It runs entirely in the browser,
+keeps its data in IndexedDB, works offline after the first load, and can be added to a phone's Home Screen. It is
+redeployed from `main` by the [Pages workflow](.github/workflows/pages.yml). See [`docs/pages.md`](docs/pages.md) for how
+the two builds differ and how to deploy.
+
 ## Develop
 
 ```sh
