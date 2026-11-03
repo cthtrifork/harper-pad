@@ -49,4 +49,5 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 
 - Wails' MCP server (`-tags mcp`) and the pprof endpoint (`-tags pprof`) are development only: `mcp_guard.go` and `pprof_guard.go` reject them with `production`, and CI greps the release binary. See `docs/mcp.md`, `docs/pprof.md`.
 - `application.New` must be called before `InitUpdater`, which runs before `Run` (self-update tutorial order); see `docs/self-update.md`, `docs/releasing.md`.
+- UI conventions (button types, tokens, motion, UX rules) are in `docs/design-cheatsheet.html`; open it in a browser and follow it for new UI.
 - Open work is tracked in `TODO.md`.

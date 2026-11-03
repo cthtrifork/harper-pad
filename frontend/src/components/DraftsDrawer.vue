@@ -123,9 +123,14 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
+  color: var(--mute);
+}
+.close:hover {
+  border-color: var(--line);
+  background: var(--raised);
   color: var(--text);
 }
 .hint {

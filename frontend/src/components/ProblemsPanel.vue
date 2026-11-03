@@ -175,10 +175,11 @@ code {
   font-size: 12px;
 }
 .fix {
-  padding: 3px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--raised);
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--accent-tint);
   color: var(--text);
   font-size: 12px;
 }

@@ -1,0 +1,442 @@
+<title>Harper Pad Design Cheat Sheet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column, each section = a rule on the left + specimens on the right. Tokens are Harper Pad's own (frontend/src/styles/index.css). */
+:root{
+  --bg:#f6f7f9; --panel:#eceff3; --raised:#fff; --selected:#dde4ec; --sunken:#eef1f5; --line:#d3d9e0;
+  --text:#1a2028; --mute:#566170; --accent:#b36b00; --on-accent:#fff; --ok:#166534; --bad:#b91c1c;
+  --c-spelling:#d63a32; --c-grammar:#7a4fd6; --c-style:#1f6fd1;
+  --accent-tint:#f6e7cf;
+  --ease:cubic-bezier(.2,0,0,1);
+  --font-ui:system-ui,sans-serif; --font-doc:"Literata",Georgia,serif; --font-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --panel:#181d23; --raised:#1f252d; --selected:#2c3745; --sunken:#151a20; --line:#2b333d;
+  --text:#e8ebef; --mute:#9aa5b1; --accent:#f5a524; --on-accent:#1a1203; --ok:#4cc38a; --bad:#ff7b72;
+  --c-spelling:#ff7b72; --c-grammar:#c4a1ff; --c-style:#79b8ff; --accent-tint:#3a2a0e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --panel:#181d23; --raised:#1f252d; --selected:#2c3745; --sunken:#151a20; --line:#2b333d;
+  --text:#e8ebef; --mute:#9aa5b1; --accent:#f5a524; --on-accent:#1a1203; --ok:#4cc38a; --bad:#ff7b72;
+  --c-spelling:#ff7b72; --c-grammar:#c4a1ff; --c-style:#79b8ff; --accent-tint:#3a2a0e; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font:14px/1.5 var(--font-ui);padding-block:32px 64px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:48px}
+h1,h2{font-family:var(--font-doc);text-wrap:balance;margin:0}
+h1{font-size:34px;line-height:1.15}
+h2{font-size:22px}
+h3{margin:0;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+p{margin:0}
+code,.mono{font-family:var(--font-mono);font-size:12px}
+code{background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.mute{color:var(--mute)}
+a{color:var(--c-style)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-start}
+header .lede{max-width:60ch;margin-top:8px;color:var(--mute)}
+.sec{display:grid;grid-template-columns:200px minmax(0,1fr);gap:24px;padding-top:24px;border-top:1px solid var(--line)}
+.sec>div{min-width:0}
+.sec-head{display:flex;flex-direction:column;gap:8px}
+.sec-head p{color:var(--mute);font-size:13px}
+.body{display:flex;flex-direction:column;gap:20px}
+@media(max-width:700px){.sec{grid-template-columns:1fr;gap:16px}}
+
+/* ---------- real Harper Pad components, as a spec ---------- */
+.hp{font:inherit;cursor:pointer;height:32px;display:inline-flex;align-items:center;gap:8px;padding:0 12px;border-radius:6px;
+  border:1px solid transparent;background:transparent;color:var(--text);white-space:nowrap;
+  transition:background-color .15s var(--ease),border-color .15s var(--ease),color .15s var(--ease)}
+.hp svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* primary */
+.hp.primary{background:var(--accent);color:var(--on-accent);font-weight:600}
+.hp.primary:hover,.hp.primary.is-hover{filter:brightness(1.08)}
+.hp.primary:active,.hp.primary.is-active{filter:brightness(.92)}
+/* secondary */
+.hp.secondary{background:var(--raised);border-color:var(--line)}
+.hp.secondary:hover,.hp.secondary.is-hover{border-color:var(--mute)}
+.hp.secondary:active,.hp.secondary.is-active{background:var(--sunken)}
+/* quiet */
+.hp.quiet{color:var(--mute)}
+.hp.quiet:hover,.hp.quiet.is-hover{background:var(--raised);border-color:var(--line);color:var(--text)}
+.hp.icon{width:32px;padding:0;justify-content:center}
+/* toggle */
+.hp.toggle{background:var(--raised);border-color:var(--line)}
+.hp.toggle[aria-pressed="true"]{background:var(--selected);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.hp.toggle:hover{border-color:var(--mute)}
+.hp.toggle[aria-pressed="true"]:hover{border-color:var(--accent)}
+/* destructive */
+.hp.danger{color:var(--bad);background:transparent;border-color:var(--line)}
+.hp.danger:hover,.hp.danger.is-hover{border-color:var(--bad);background:var(--raised)}
+/* chip */
+.hp.chip{height:24px;padding:0 10px;font-size:12px;border-radius:12px;background:var(--accent-tint);color:var(--text);border-color:transparent}
+.hp.chip:hover,.hp.chip.is-hover{border-color:var(--accent)}
+/* link */
+.hp.link{height:auto;padding:0;border-radius:2px;color:var(--c-style);text-decoration:underline;text-underline-offset:2px}
+.hp.link.strong{color:var(--accent);font-weight:600}
+.hp:disabled{color:var(--mute);cursor:not-allowed;opacity:.6;filter:none}
+.hp.primary:disabled{background:var(--selected);color:var(--mute);opacity:1}
+.hp.is-focus{outline:2px solid var(--accent);outline-offset:2px}
+.hp.busy{pointer-events:none}
+.spin{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.seg{display:inline-flex;background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px}
+.seg button{font:inherit;cursor:pointer;height:26px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:var(--mute);transition:background-color .15s var(--ease),color .15s var(--ease)}
+.seg button:hover{color:var(--text)}
+.seg button[aria-pressed="true"]{background:var(--raised);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgb(0 0 0/.12)}
+.menu{display:inline-flex;flex-direction:column;min-width:220px;padding:4px;background:var(--raised);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgb(0 0 0/.18)}
+.menu button{font:inherit;cursor:pointer;display:flex;justify-content:space-between;gap:16px;align-items:center;height:30px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:var(--text);text-align:left}
+.menu button:hover,.menu button.is-hover{background:var(--selected)}
+.menu .kbd{color:var(--mute);font-size:12px}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.kbd{color:var(--mute);font-size:12px}
+.tag{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:1px 6px}
+.tag.today{background:var(--sunken);color:var(--mute);border:1px solid var(--line)}
+.tag.new{background:var(--accent-tint);color:var(--text);border:1px solid var(--accent)}
+
+/* ---------- cheat-sheet furniture ---------- */
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.btype{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.btype .top{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+.btype b{font-size:15px}
+.btype .spec{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:16px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.btype ul{margin:0;padding-left:18px;color:var(--mute);font-size:13px}
+.states{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;font-size:11px;color:var(--mute)}
+.states>div{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.sw>div{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--raised);font-size:12px}
+.sw i{display:block;height:36px;border-bottom:1px solid var(--line)}
+.sw span{display:block;padding:6px 8px}
+.sw .mono{display:block;color:var(--mute)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.scroll{overflow-x:auto}
+.dd{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.dd>div{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;background:var(--raised)}
+.dd .do{border-top:3px solid var(--ok)}
+.dd .dont{border-top:3px solid var(--bad)}
+.dd b{font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.dd .do b{color:var(--ok)} .dd .dont b{color:var(--bad)}
+.before-after{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.before-after .card{display:flex;flex-direction:column;gap:12px}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.motion{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.pulse{width:44px;height:44px;border-radius:8px;background:var(--accent);animation:slide 1.8s var(--ease) infinite alternate}
+@keyframes slide{from{transform:translateX(0)}to{transform:translateX(60px)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+.themebtn{align-self:flex-start}
+</style>
+
+<div class="wrap">
+<header>
+  <div>
+    <h3>Harper Pad · UI and UX</h3>
+    <h1>Design cheat sheet</h1>
+    <p class="lede">One page to check against before adding or changing UI. Tokens and values come from <code>frontend/src/styles/index.css</code> and the Vue components. Specimens below are live, so hover, press and tab through them.</p>
+  </div>
+  <button class="hp secondary themebtn" id="themebtn" type="button">Toggle theme</button>
+</header>
+
+<!-- 0. The problem -->
+<section class="sec" id="problem">
+  <div class="sec-head"><h2>What was wrong</h2><p>Found by reading the styles in the editor, drawer, updates and problems panel.</p></div>
+  <div class="body">
+    <p>Five different roles shared one look: 32px high, 1px <code>--line</code> border, <code>--raised</code> fill, 6px radius. A toolbar action, a panel toggle, a drawer opener, a fix suggestion and a close button cannot be told apart, and "on" is only a border colour change.</p>
+    <div class="scroll"><table>
+      <tr><th>Class</th><th>Role it plays</th><th>Looks like</th></tr>
+      <tr><td><code>.tool</code></td><td>Action (Save)</td><td rowspan="5">Bordered, raised, 6px</td></tr>
+      <tr><td><code>.drawer-btn</code></td><td>Toggle (Drafts)</td></tr>
+      <tr><td><code>.toggle</code></td><td>Toggle (Problems)</td></tr>
+      <tr><td><code>.fix</code></td><td>Suggestion (Fix)</td></tr>
+      <tr><td><code>.close</code></td><td>Icon (Close)</td></tr>
+    </table></div>
+    <div class="before-after">
+      <div class="card"><h3>Before</h3>
+        <div class="bar">
+          <button class="hp secondary" type="button">Save</button>
+          <button class="hp secondary" type="button">Drafts</button>
+          <button class="hp secondary" type="button">Problems 3</button>
+          <button class="hp secondary" type="button" aria-label="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <p class="mute">All four read as the same kind of control. The proposed row is what the app now does.</p></div>
+      <div class="card"><h3>Now</h3>
+        <div class="bar">
+          <button class="hp secondary" type="button">Save</button>
+          <button class="hp toggle" type="button" aria-pressed="false">Drafts</button>
+          <button class="hp toggle" type="button" aria-pressed="true">Problems 3</button>
+          <button class="hp quiet icon" type="button" aria-label="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <p class="mute">Action, toggle off, toggle on and icon each have their own look.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 1. Buttons -->
+<section class="sec" id="buttons">
+  <div class="sec-head"><h2>Button types</h2><p>Pick by what the control does, then take the look from the row. Every button is a real <code>&lt;button type="button"&gt;</code>.</p></div>
+  <div class="body">
+
+    <div class="card btype">
+      <div class="top"><b>Primary</b><span class="tag new">Proposed</span></div>
+      <div class="spec">
+        <button class="hp primary" type="button">New draft</button>
+        <button class="hp primary" type="button">Restart to update</button>
+        <button class="hp primary" type="button"><svg viewBox="0 0 16 16"><path d="M8 3v7M5 7l3 3 3-3M3 13h10"/></svg>Download 1.4.0</button>
+      </div>
+      <ul><li>The one thing this surface is for. At most one per view or popover.</li><li>Accent fill, <code>--on-accent</code> text, weight 600, no border. 32px in toolbars, 30px in drawers and popovers.</li><li>Label is a verb: "New draft", "Restart to update".</li></ul>
+    </div>
+
+    <div class="card btype">
+      <div class="top"><b>Secondary</b><span class="tag today">In the app</span></div>
+      <div class="spec">
+        <button class="hp secondary" type="button"><svg viewBox="0 0 16 16"><path d="M3 2h8l2 2v10H3zM5 2v4h5V2M5 14v-4h6v4"/></svg>Save</button>
+        <button class="hp secondary" type="button">Save as file…</button>
+      </div>
+      <ul><li>A normal action that runs once and is not the main one.</li><li>Raised fill, 1px <code>--line</code> border, text colour. Keep this look for actions only.</li><li>A split button (Save + caret) shares one border; the caret opens a menu.</li></ul>
+    </div>
+
+    <div class="card btype">
+      <div class="top"><b>Toggle</b><span class="tag today">In the app</span></div>
+      <div class="spec">
+        <button class="hp toggle" type="button" aria-pressed="false" id="t1">Drafts</button>
+        <button class="hp toggle" type="button" aria-pressed="true" id="t2">Problems <span class="mono" style="background:var(--c-style);color:#fff;border-radius:9px;padding:0 6px;font-size:11px">3</span></button>
+      </div>
+      <ul><li>Shows or hides a panel and stays that way. Set <code>aria-pressed</code> or <code>aria-expanded</code>.</li><li>On: <code>--selected</code> fill plus an accent border, so state shows by fill and not by border colour alone.</li><li>Counts are a small pill inside the button.</li></ul>
+    </div>
+
+    <div class="card btype">
+      <div class="top"><b>Segmented</b><span class="tag new">Proposed</span></div>
+      <div class="spec">
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" aria-pressed="false">Edit</button>
+          <button type="button" aria-pressed="true">Split</button>
+          <button type="button" aria-pressed="false">Preview</button>
+        </div>
+      </div>
+      <ul><li>Pick exactly one of 2 to 4 views. Edit, Split, Preview is the example.</li><li>Sunken track, the chosen segment is raised with weight 600. Never combine with Toggle styling.</li></ul>
+    </div>
+
+    <div class="card btype">
+      <div class="top"><b>Quiet and icon</b><span class="tag today">In the app</span></div>
+      <div class="spec">
+        <button class="hp quiet" type="button">Updates</button>
+        <button class="hp quiet icon" type="button" aria-label="Close the drafts list"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        <button class="hp quiet icon" type="button" aria-label="More options"><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg></button>
+      </div>
+      <ul><li>Chrome that should not compete with the document: close, more, the idle Updates button.</li><li>Transparent and muted at rest; border and fill appear on hover. Icon-only buttons are 32 × 32 (30 in drawers) and need an <code>aria-label</code>.</li></ul>
+    </div>
+
+    <div class="card btype">
+      <div class="top"><b>Destructive</b><span class="tag new">Proposed</span></div>
+      <div class="spec">
+        <button class="hp danger" type="button">Delete draft</button>
+        <button class="hp quiet icon" type="button" aria-label="Delete Meeting notes" style="color:var(--bad)"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"/></svg></button>
+      </div>
+      <ul><li>Removes something. <code>--bad</code> text; border turns <code>--bad</code> on hover. Never filled red at rest.</li><li>Do not ask "Are you sure?". Delete at once and show a toast with <b>Undo</b>, as the drafts list does. Drafts are kept, so say so.</li></ul>
+    </div>
+
+    <div class="card btype">
+      <div class="top"><b>Suggestion chip</b><span class="tag today">In the app</span></div>
+      <div class="spec">
+        <div class="row" style="gap:8px"><span class="dot" style="background:var(--c-spelling)"></span><span class="mute">teh →</span>
+        <button class="hp chip" type="button">the</button><button class="hp chip" type="button">tea</button></div>
+      </div>
+      <ul><li>Applies a Harper fix to the text. 24px, pill shape, soft accent tint, so it reads as a suggestion and not a command.</li><li>Shows the replacement text as the label, not "Fix".</li></ul>
+    </div>
+
+    <div class="card btype">
+      <div class="top"><b>Text link</b><span class="tag today">In the app</span></div>
+      <div class="spec">
+        <button class="hp link" type="button">Show more</button>
+        <button class="hp link strong" type="button">Undo</button>
+        <button class="hp link" type="button">Later</button>
+      </div>
+      <ul><li>Secondary or dismissing actions inside a sentence, toast or popover: Show more, Later, What is new.</li><li><code>.strong</code> (accent, 600) for the one action in a toast, such as Undo.</li></ul>
+    </div>
+
+    <div>
+      <h3>States every button needs</h3>
+      <div class="card" style="margin-top:8px"><div class="states">
+        <div>Rest<button class="hp secondary" type="button">Save</button></div>
+        <div>Hover<button class="hp secondary is-hover" type="button">Save</button></div>
+        <div>Pressed<button class="hp secondary is-active" type="button">Save</button></div>
+        <div>Focus<button class="hp secondary is-focus" type="button">Save</button></div>
+        <div>Disabled<button class="hp secondary" type="button" disabled>Save</button></div>
+        <div>Busy<button class="hp secondary busy" type="button"><span class="spin"></span>Saving</button></div>
+      </div></div>
+      <p class="mute" style="margin-top:8px">Focus: 2px <code>--accent</code> outline, 2px offset, on <code>:focus-visible</code>. Disabled keeps the label and uses <code>cursor: not-allowed</code>. A busy button keeps its width and swaps the icon for a spinner.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Menus -->
+<section class="sec" id="menus">
+  <div class="sec-head"><h2>Menus and popovers</h2><p>Menus open from a button with a caret. Popovers carry a short message and one primary action.</p></div>
+  <div class="body">
+    <div class="grid">
+      <div class="card"><h3>Menu</h3>
+        <div style="margin-top:12px" class="menu" role="menu">
+          <button type="button" role="menuitem">Save <span class="kbd">Ctrl+S</span></button>
+          <button type="button" role="menuitem" class="is-hover">Save as file… <span class="kbd">Ctrl+Shift+S</span></button>
+          <hr>
+          <button type="button" role="menuitemradio" aria-checked="true">Markdown <span>✓</span></button>
+          <button type="button" role="menuitemradio" aria-checked="false">Plain text <span></span></button>
+        </div></div>
+      <div class="card"><h3>Rules</h3>
+        <ul class="mute" style="margin:12px 0 0;padding-left:18px;font-size:13px;display:flex;flex-direction:column;gap:6px">
+          <li><code>role="menu"</code>, <code>aria-haspopup</code>, <code>aria-expanded</code> on the trigger.</li>
+          <li>Item 30px, 8px radius on the panel, 5px on items, hover uses <code>--selected</code>.</li>
+          <li>Shortcut right-aligned in <code>--mute</code>, 12px.</li>
+          <li>Opens downward; the footer format menu opens upward (<code>.menu.up</code>).</li>
+          <li>Closes on Esc, outside click and after choosing.</li>
+          <li>Enter: fade and 4px slide, 0.12s.</li>
+        </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Foundations -->
+<section class="sec" id="foundations">
+  <div class="sec-head"><h2>Foundations</h2><p>All colour comes from tokens. Dark values are listed second.</p></div>
+  <div class="body">
+    <div>
+      <h3>Colour tokens</h3>
+      <div class="sw" style="margin-top:8px">
+        <div><i style="background:var(--bg)"></i><span>--bg<code class="mono">#f6f7f9 / #12161b</code></span></div>
+        <div><i style="background:var(--panel)"></i><span>--panel<code class="mono">#eceff3 / #181d23</code></span></div>
+        <div><i style="background:var(--raised)"></i><span>--raised<code class="mono">#ffffff / #1f252d</code></span></div>
+        <div><i style="background:var(--selected)"></i><span>--selected<code class="mono">#dde4ec / #2c3745</code></span></div>
+        <div><i style="background:var(--sunken)"></i><span>--sunken<code class="mono">#eef1f5 / #151a20</code></span></div>
+        <div><i style="background:var(--line)"></i><span>--line<code class="mono">#d3d9e0 / #2b333d</code></span></div>
+        <div><i style="background:var(--text)"></i><span>--text<code class="mono">#1a2028 / #e8ebef</code></span></div>
+        <div><i style="background:var(--mute)"></i><span>--mute<code class="mono">#566170 / #9aa5b1</code></span></div>
+        <div><i style="background:var(--accent)"></i><span>--accent<code class="mono">#b36b00 / #f5a524</code></span></div>
+        <div><i style="background:var(--ok)"></i><span>--ok<code class="mono">#166534 / #4cc38a</code></span></div>
+        <div><i style="background:var(--bad)"></i><span>--bad<code class="mono">#b91c1c / #ff7b72</code></span></div>
+        <div><i style="background:var(--accent-tint)"></i><span>--accent-tint <span class="tag new">proposed</span><code class="mono">#f6e7cf / #3a2a0e</code></span></div>
+      </div>
+    </div>
+    <div class="scroll"><table>
+      <tr><th>Use</th><th>Token</th><th>Not for</th></tr>
+      <tr><td>Amber accent</td><td><code>--accent</code></td><td>Primary fill, selected border, focus ring, active tab. Not for errors or links.</td></tr>
+      <tr><td>Links</td><td><code>--c-style</code></td><td>Inline text links only.</td></tr>
+      <tr><td>Success / error</td><td><code>--ok</code> <code>--bad</code></td><td>Pair with an icon or word; never colour alone.</td></tr>
+    </table></div>
+    <div>
+      <h3>Problem kinds</h3>
+      <div class="row" style="margin-top:8px;gap:20px">
+        <span class="row" style="gap:8px"><span class="dot" style="background:var(--c-spelling)"></span>Spelling</span>
+        <span class="row" style="gap:8px"><span class="dot" style="background:var(--c-grammar)"></span>Grammar</span>
+        <span class="row" style="gap:8px"><span class="dot" style="background:var(--c-style)"></span>Style</span>
+      </div>
+      <p class="mute" style="margin-top:8px">Dot, underline and the kind label (uppercase, 11px, 0.08em) all use the same colour. Colour distinguishes kind; the label says it in words.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card"><h3>Type</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+          <div><div style="font-family:var(--font-doc);font-size:20px">Literata — the document</div><span class="mono mute">--font-doc · editor and preview text</span></div>
+          <div><div>System UI — the interface</div><span class="mono mute">--font-ui · 14px / 1.5, labels 13px, captions 12px</span></div>
+          <div><div class="mono" style="font-size:14px">JetBrains Mono — code</div><span class="mono mute">--font-mono · code, shortcuts in docs</span></div>
+          <div class="mute" style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase">Kind label · 11px · 600 · 0.08em</div>
+        </div></div>
+      <div class="card"><h3>Size, radius, space</h3>
+        <div class="scroll"><table style="margin-top:6px">
+          <tr><td>Control height</td><td class="mono">32 · 30 in drawers · 24 chips</td></tr>
+          <tr><td>Radius</td><td class="mono">6 buttons · 8 menus, cards · 12 chips</td></tr>
+          <tr><td>Gap in a row</td><td class="mono">8 (controls) · 12 (groups)</td></tr>
+          <tr><td>Panel padding</td><td class="mono">16</td></tr>
+          <tr><td>Border</td><td class="mono">1px --line</td></tr>
+          <tr><td>Touch target</td><td class="mono">44 on touch devices</td></tr>
+        </table></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Motion -->
+<section class="sec" id="motion">
+  <div class="sec-head"><h2>Motion</h2><p>Short, eased, and off for people who ask for less motion.</p></div>
+  <div class="body">
+    <div class="motion">
+      <div class="card"><h3>Easing</h3><div style="height:56px;margin-top:10px"><div class="pulse"></div></div><code>--ease: cubic-bezier(0.2, 0, 0, 1)</code></div>
+      <div class="card"><h3>Durations</h3><table style="margin-top:6px">
+        <tr><td>Hover, colour</td><td class="mono">0.15s</td></tr>
+        <tr><td>Menu, popover</td><td class="mono">0.12s</td></tr>
+        <tr><td>Drawer, panel slide</td><td class="mono">0.2–0.25s</td></tr>
+        <tr><td>View change</td><td class="mono">0.2s</td></tr>
+        <tr><td>Task tick</td><td class="mono">0.15s</td></tr></table></div>
+      <div class="card"><h3>Rules</h3><ul class="mute" style="margin:8px 0 0;padding-left:18px;font-size:13px;display:flex;flex-direction:column;gap:6px">
+        <li>Animate opacity, transform, colour. Not width or height.</li><li>Nothing loops except a busy spinner.</li><li>The <code>prefers-reduced-motion</code> rule in <code>index.css</code> turns all of it off.</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. UX -->
+<section class="sec" id="ux">
+  <div class="sec-head"><h2>UX rules</h2><p>How Harper Pad behaves, so new features feel the same.</p></div>
+  <div class="body">
+    <div class="dd">
+      <div class="do"><b>Do</b><span>Keep the document centre stage. Chrome is muted until hovered.</span></div>
+      <div class="do"><b>Do</b><span>Save drafts automatically and say what happened in a toast: "Saved to file".</span></div>
+      <div class="do"><b>Do</b><span>Offer Undo after a delete or a fix instead of a confirm dialog.</span></div>
+      <div class="do"><b>Do</b><span>Show keyboard shortcuts in menus: Ctrl+S, Ctrl+Shift+S.</span></div>
+      <div class="do"><b>Do</b><span>Write errors as what happened and what to do: "The database could not be read. Start fresh keeps the old one."</span></div>
+      <div class="do"><b>Do</b><span>Show an empty state that says what appears here and how to add the first item.</span></div>
+      <div class="dont"><b>Don't</b><span>Use two primary buttons in one view.</span></div>
+      <div class="dont"><b>Don't</b><span>Show state by border colour alone, or by colour alone.</span></div>
+      <div class="dont"><b>Don't</b><span>Make a toolbar of identical bordered buttons. Group by role and separate groups with a 1px divider.</span></div>
+      <div class="dont"><b>Don't</b><span>Interrupt writing with modals. Problems, updates and drafts live in panels and popovers.</span></div>
+      <div class="dont"><b>Don't</b><span>Use <code>div</code> or <code>span</code> with click handlers. Tab skips them.</span></div>
+      <div class="dont"><b>Don't</b><span>Use "Click here", "OK" or "Submit". Name the action.</span></div>
+    </div>
+    <div>
+      <h3>Toolbar order</h3>
+      <div class="bar" style="margin-top:8px">
+        <button class="hp toggle" type="button" aria-pressed="false">Drafts</button>
+        <span style="width:1px;height:20px;background:var(--line)"></span>
+        <button class="hp secondary" type="button">Save</button>
+        <span style="width:1px;height:20px;background:var(--line)"></span>
+        <div class="seg"><button type="button" aria-pressed="false">Edit</button><button type="button" aria-pressed="true">Split</button><button type="button" aria-pressed="false">Preview</button></div>
+        <span style="flex:1"></span>
+        <button class="hp toggle" type="button" aria-pressed="true">Problems 3</button>
+        <button class="hp quiet" type="button">Updates</button>
+      </div>
+      <p class="mute" style="margin-top:8px">Left to right: where I am (drafts), what I do (save), how I see it (view), what is wrong (problems), the app (updates). A divider separates each group.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Checklist -->
+<section class="sec" id="checklist">
+  <div class="sec-head"><h2>Before you ship UI</h2></div>
+  <div class="body"><div class="card"><ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
+    <li>Which button type is it? The look matches the table above.</li>
+    <li>Colours come from tokens and read in both light and dark.</li>
+    <li>Hover, pressed, focus-visible, disabled and busy are all handled.</li>
+    <li>Icon-only buttons have an <code>aria-label</code>; toggles set <code>aria-pressed</code> or <code>aria-expanded</code>.</li>
+    <li>Everything works from the keyboard, and Esc closes menus and popovers.</li>
+    <li>Menus, drawers and panels animate in 0.12–0.25s with <code>--ease</code>, and stop under reduced motion.</li>
+    <li>Compared with the "Harper Pad UI" design canvas boards: Edit, Split, Preview, Scratch pad, Updates.</li>
+  </ul></div></div>
+</section>
+</div>
+
+<script>
+document.getElementById('themebtn').addEventListener('click',function(){
+  var r=document.documentElement,d=r.getAttribute('data-theme');
+  var dark=d?d==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
+  r.setAttribute('data-theme',dark?'light':'dark');
+});
+document.querySelectorAll('.hp.toggle').forEach(function(b){
+  b.addEventListener('click',function(){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')});
+});
+document.querySelectorAll('.seg').forEach(function(s){
+  s.addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;
+    s.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',b===t?'true':'false')})});
+});
+</script>
