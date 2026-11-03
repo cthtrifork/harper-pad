@@ -1,9 +1,9 @@
 <script setup>
-import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DraftsDrawer from "./components/DraftsDrawer.vue";
 import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
-import { keepData, version } from "./lib/backend.js";
+import { isWeb, keepData, version } from "./lib/backend.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, savePersonal } from "./lib/personal.js";
 import { useDrafts } from "./lib/useDrafts.js";
@@ -22,6 +22,12 @@ const lintMs = ref(0);
 const problems = ref([]);
 const showProblems = ref(true);
 const goVersion = ref("");
+// A release build reports its version number; the web build has none (the footer shows nothing), and a development build (demo mode too) reports "dev".
+const versionLabel = computed(() => {
+  if (isWeb) return "";
+  if (!goVersion.value) return "...";
+  return goVersion.value === "dev" ? "Development build" : `Version ${goVersion.value}`;
+});
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
@@ -231,7 +237,7 @@ onBeforeUnmount(() => {
       <span v-if="drafts.status.value" id="draft-status" :class="['state', 'clip', drafts.state.value === 'error' ? 'failed' : 'mute']" :title="drafts.status.value">{{ drafts.status.value }}</span>
       <button v-if="drafts.canStartFresh.value" id="start-fresh" type="button" class="link" title="Moves the unreadable database aside (it is kept, not deleted) and starts a new one" @click="drafts.startFresh">Start fresh</button>
       <span class="spacer"></span>
-      <span class="mute">Version {{ goVersion || "..." }}</span>
+      <span v-if="versionLabel" class="mute">{{ versionLabel }}</span>
     </footer>
   </div>
 </template>
