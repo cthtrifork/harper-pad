@@ -29,10 +29,10 @@
 }
 
 /* Home Screen app hygiene (Apple's web app guidance): the page never scrolls or bounces as a whole (the panes scroll), the root paints
-   the app colour so nothing white shows during a rubber-band or a rotation, the chrome is not selectable or long-press-callout text,
-   and text fields are 16 px so iOS does not zoom the page when one is focused. */
+   the panel colour (the header's and the status bar's) so nothing white shows during a rubber-band or a rotation, the chrome is not
+   selectable or long-press-callout text, and text fields are 16 px so iOS does not zoom the page when one is focused. */
 html {
-  background: var(--bg);
+  background: var(--panel);
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
