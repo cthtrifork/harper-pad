@@ -28,7 +28,13 @@ function loadPlaywright() {
 const { chromium } = loadPlaywright();
 
 mkdirSync(outDir, { recursive: true });
-const browser = await chromium.launch({ channel: process.env.SCREENSHOT_BROWSER_CHANNEL || undefined });
+// SCREENSHOT_BROWSER_PATH runs a browser binary you already have (for example a distribution's chromium) instead of Playwright's own.
+const browserPath = process.env.SCREENSHOT_BROWSER_PATH;
+const browser = await chromium.launch({
+  channel: process.env.SCREENSHOT_BROWSER_CHANNEL || undefined,
+  executablePath: browserPath || undefined,
+  args: browserPath ? ["--no-sandbox"] : [],
+});
 const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 2 }); // the desktop window's size, sharp
 // --font-ui is system-ui, which is whatever sans font the machine has: pin it to Inter (CI installs
 // fonts-inter) so the images are the same on a laptop and in CI. The document font is bundled.
