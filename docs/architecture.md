@@ -1,0 +1,52 @@
+# Architecture
+
+How the pieces fit. Details live in the other docs: [storage](storage.md), [security](security.md), [pages](pages.md),
+[self-update](self-update.md), [windows](windows.md).
+
+## One frontend, two hosts
+
+The same Vue 3 + Vite frontend runs in two builds:
+
+| Build | Host | Data |
+|---|---|---|
+| Desktop (`vite build`) | A Wails v3 window (GTK4 + WebKitGTK on Linux, WebView2 on Windows) | SQLite, through the Go service |
+| Web (`vite build --mode web`) | The browser, published to GitHub Pages | IndexedDB |
+
+`frontend/src/lib/backend.js` is the only file that knows which build it is in. Everything else calls it for drafts,
+settings, saving files and the version; the desktop bindings are imported on demand, so the web bundle has no Wails code.
+`make build-server` produces a headless build that serves the same frontend over HTTP, used by CI, the screenshots and
+Lighthouse.
+
+## Go side
+
+- `main.go` embeds `frontend/dist`, creates the Wails app with one service (`PadService`), starts the updater and opens the
+  window and tray.
+- `internal/app` holds `PadService`, the only binding the frontend calls: drafts (`ListDrafts`, `SearchDrafts`, `GetDraft`,
+  `SaveDraft`, `DeleteDraft`), `SaveDraftToFile`, settings (the personal dictionary and ignored findings), `Startup`,
+  `StartFresh`, and the updater methods. Bindings in `frontend/bindings` are generated (`make bindings`) and committed.
+- `internal/store` is the database: one pure Go SQLite file. All SQL lives here; the frontend never sends SQL.
+- `internal/selfupdate` is the GitHub-release provider for the in-app updater (release builds only).
+
+Build tags change what is compiled in: `server` (headless, no GTK), `production` (release), and the development-only `mcp`
+and `pprof`, which `production` rejects.
+
+## Frontend
+
+- `App.vue` composes the header, the editor, the Problems panel, the status bar and the drafts drawer.
+- `lib/harper.js` loads `harper.js` in a Web Worker (WebAssembly) after the first paint and turns its lints into plain
+  objects, so no wasm-backed value is held by Vue or CodeMirror.
+- `lib/editor/` is the CodeMirror 6 editor: the lint source (`lint.js`, debounced), theme, markdown or plain text mode,
+  status bar statistics and the problems list.
+- `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
+  on disk, and the list the drawer shows.
+- `Preview.vue` renders markdown for the Split and Preview views (`lib/markdown.js`); text from drafts or Harper never goes
+  through `v-html` or `innerHTML`.
+- Styles are plain CSS, one file per component, in `frontend/src/styles`.
+
+## Data flow
+
+1. Typing updates the CodeMirror document; the lint source debounces and asks the Harper worker for lints.
+2. Lints become diagnostics in the editor and rows in the Problems panel. Applying a fix is a normal edit.
+3. The same edit schedules a draft save through `backend.js`: `PadService.SaveDraft` on desktop, IndexedDB on the web.
+4. "Save as file" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
+   on the web) and keeps the path on the draft.

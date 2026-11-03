@@ -20,7 +20,7 @@ The workflow then:
 1. refuses to run anywhere but `main`;
 2. works out the version (the `tag` input, otherwise Release Drafter's) and stops if a git tag of that name already exists (see *Retrying* for an existing tag);
 3. calls `release.yml` with that version and the commit it started on (the head of `main`). That commit is built, and **no tag exists yet**: `release.yml` re-runs vet, tests and `govulncheck` (in a `checks` job beside the binary build, not before it), builds the Linux binary and, on a Windows runner, the Windows exe (see [windows](windows.md)), and publishes the
-   release (the draft Release Drafter wrote for that version, with the assets attached; publishing sets the release's target to the built commit and GitHub creates the tag there) (Linux binary, tarball, signed `.deb` and `.rpm`, public key, Windows exe, CycloneDX SBOM, `SHA256SUMS`) and signed attestations. See [self-update](self-update.md) for why those assets
+   release: the draft Release Drafter wrote for that version, with the assets attached (Linux binary, tarball, signed `.deb` and `.rpm`, public key, Windows exe, CycloneDX SBOM, `SHA256SUMS`) and signed attestations. Publishing sets the release's target to the built commit and GitHub creates the tag there. See [self-update](self-update.md) for why those assets
    have the names they do.
 
 ## Release notes
@@ -76,7 +76,7 @@ is a good place). Rotating the key means updating the secrets; users import the 
 `scripts/package-linux.sh` runs `wails3 tool package` (nfpm) with `build/linux/nfpm/nfpm.yaml`. They install the
 binary to `/usr/bin/harper-pad`, the launcher `build/linux/io.github.cthtrifork.harper-pad.desktop` (category Office, startup
 notification, `StartupWMClass=io.github.cthtrifork.harper-pad`, matching `ApplicationID` in `main.go`) and the icon in hicolor (256px PNG
-and scalable SVG). Dependencies are `libgtk-4-1` and `libwebkitgtk-6.0-4` (`gtk4`, `webkitgtk6.0` for the rpm), and
+and scalable SVG). Dependencies are `libgtk-4-1` and `libwebkitgtk-6.0-4` (`gtk4`, `webkitgtk6.0` for the rpm).
 The packages are built from the Ubuntu 24.04 binary, so the Fedora package needs a Fedora with
 WebKitGTK 6 and a glibc that new. Try it locally with a built binary: `make wails3-install` then
 `scripts/package-linux.sh <binary> v1.2.3 dist` (set `PKG_SIGNING_KEY_FILE` and `NFPM_PASSPHRASE` to sign).
@@ -108,7 +108,7 @@ The repository can turn on *immutable releases* (Settings, General; it only appl
 - **A published release cannot be fixed in place.** Cut a new version with the fix. Do not try to move the tag or replace an asset.
 - **A tag name is used up for good.** Even after the release is deleted the tag name cannot be reused. A failed run leaves no tag, only a draft, which is fine to retry or delete (see *Retrying*).
 - The release also gets GitHub's own release attestation, next to the build-provenance and SBOM attestations this workflow signs (below).
-- **Not yet run against an immutable release.** The docs do not say that uploading to a draft works through its upload URL, or that publishing a draft whose tag is created at that moment is accepted; the first release after enabling it is the test.
+- **Checked.** Immutable releases are on in the repository settings, and v0.6.0 was published this way (uploading to the draft and publishing it with the tag created at that moment both work; `gh release view v0.6.0 --json isImmutable` says `true`).
 
 ## Why the release is called, not triggered
 
@@ -120,12 +120,10 @@ each other that way. The alternative is a personal access token or a GitHub App,
 ## Notes
 
 - Only one *Tag and release* run happens at a time, so two runs cannot pick the same next version.
-- The release is built from the **tag**, not from whatever `main` has become by then, and `release.yml` still checks the
-  tagged commit is on `main`.
+- The release is built from the commit *Tag and release* started on (a tag ref when `release.yml` is dispatched on one), not
+  from whatever `main` has become by then, and `release.yml` still checks that commit is on `main`.
 - Running `release.yml` by hand on a branch is still a dry run that builds but does not publish. Dispatched on a tag it
   publishes, which is another way to retry.
-- **Not run on GitHub yet.** The scripts and the workflow steps' shell are tested here (see `internal/release`), and
-  `actionlint` validates the reusable-workflow wiring, but the first real run is the first end-to-end.
 
 ## Verifying a release
 

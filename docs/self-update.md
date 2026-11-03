@@ -27,8 +27,7 @@ The button is disabled, with the reason as its tooltip, when:
 
 Clicking it also refuses, before downloading anything, when the directory holding the executable is not writable.
 The new binary is staged beside the old one, so a copy installed by a package manager (`/usr/bin`) should be updated
-by that package manager instead. Inside an AppImage the updater replaces the `.AppImage` file itself.
-
+by that package manager instead.
 ## The release contract
 
 The updater picks assets by name, so the names are an interface. `release.yml` builds and publishes them:
