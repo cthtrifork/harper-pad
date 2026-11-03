@@ -18,9 +18,15 @@ Verified (headless server build, Chromium via Playwright, `-tags server`):
 - The Go bridge (`PadService.Version`) works from the same page.
 - Setup took 3.6 to 8 s in this sandbox (software Chromium); a lint of the sample took 0.2 to 0.4 s.
 
-**Not verified**: WebKitGTK, the real target. There is no GTK in the sandbox. Run `make run` on the homeserver and check
-that the state reads `ready` for both binaries. Things that can differ there: Web Worker module support, wasm
-compile time, and the native asset scheme versus plain HTTP.
+Verified on the real target (release build, Fedora, WebKitGTK; UA `AppleWebKit/605.1.15 ... Version/60.5`):
+
+| Binary | Setup | Lint of the sample |
+|---|---|---|
+| `slimBinary` (`.wasm` asset) | 589 ms | 48 ms |
+| `slimBinaryInlined` (base64) | 778 ms | 55 ms |
+
+Both reach `ready` and report the same 4 findings. So Web Worker, wasm compile and the native asset scheme all work;
+the `url` flavour is faster and avoids the 27 MB JS chunk, so the inlined variant can go. Memory use was not measured.
 
 ## Findings so far
 

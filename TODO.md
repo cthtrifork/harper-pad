@@ -1,15 +1,17 @@
 # TODO
 
-Status: spike done on Chromium; scaffolding (CI, release, security, packaging, devcontainer, updater, MCP, pprof) ported
+Status: spike done on Chromium and WebKitGTK (Fedora release build); scaffolding (CI, release, security, packaging, devcontainer, updater, MCP, pprof) ported
 from trivy-dashboard-wail3 and not yet exercised on GitHub.
 
 ## 1. Spike: finish the open question (blocking everything else)
 
-- [ ] On the homeserver: `make frontend && make run`; confirm both binaries (`inlined`, `url`) reach "ready" in WebKitGTK
-      and record setup time and memory in `docs/spike.md`.
-- [ ] If the `url` flavour fails, check the worker/wasm loading over the native asset scheme; if it works, drop the
-      inlined variant (27 MB JS chunk).
-- [ ] Decide: lazy-load harper.js after first paint (setup takes seconds) and show a "checking ready" state.
+- [x] Run a release build on Fedora (WebKitGTK 2.x, UA `Version/60.5 Safari/605.1.15`): both binaries reach "ready"
+      and find the 4 expected issues. Recorded in `docs/spike.md` (`url`: setup 589 ms, lint 48 ms; `inlined`:
+      setup 778 ms, lint 55 ms). Memory was not measured.
+- [x] The `url` flavour works over the native asset scheme (worker and wasm both load).
+- [ ] Drop the `inlined` variant and the flavour selector: use `harper.js/slimBinary` only (avoids the 27 MB JS chunk).
+- [x] Lazy-load harper.js after first paint: not needed for the spike, setup is under 1 s. Revisit when the editor
+      exists (still show a "checking" state until the worker is ready).
 
 ## 2. Repo and CI bring-up (first PR on GitHub)
 
