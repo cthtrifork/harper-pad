@@ -6,6 +6,10 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as store$0 from "../store/models.js";
+
 /**
  * Settings is what the app remembers between runs: the personal dictionary and the findings the user chose to ignore.
  * They are kept in the database (internal/store) as two settings, "words" (a JSON list) and "ignored".
@@ -55,6 +59,69 @@ export class Settings {
             $$parsedSource["words"] = $$createField1_0($$parsedSource["words"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
+    }
+}
+
+/**
+ * StartupState is what the page needs before it can show the editor, in one answer. Each call from the page to the Go side is a
+ * round trip (Lighthouse prices each at about a second on its simulated slow network), so the page asks once. It reads one draft
+ * and counts the rest: the list itself is fetched when the drawer opens, because listing reads every draft it shows.
+ */
+export class StartupState {
+    /**
+     * Creates a new StartupState instance.
+     * @param {Partial<StartupState>} [$$source = {}] - The source object to create the StartupState.
+     */
+    constructor($$source = {}) {
+        if (!("demo" in $$source)) {
+            /**
+             * Demo is the banner text in demo mode (development builds only), and empty otherwise; see DemoMode.
+             * @member
+             * @type {string}
+             */
+            this["demo"] = "";
+        }
+        if (!("open" in $$source)) {
+            /**
+             * Open is the most recent draft, with its text, or nil when there are no drafts.
+             * @member
+             * @type {store$0.Draft | null}
+             */
+            this["open"] = null;
+        }
+        if (!("total" in $$source)) {
+            /**
+             * Total is how many drafts there are.
+             * @member
+             * @type {number}
+             */
+            this["total"] = 0;
+        }
+        if (!("error" in $$source)) {
+            /**
+             * Error says why the drafts could not be read (for example a database from a newer version), and is empty otherwise. The
+             * page still starts, with nothing saved.
+             * @member
+             * @type {string}
+             */
+            this["error"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new StartupState instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {StartupState}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType2;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("open" in $$parsedSource) {
+            $$parsedSource["open"] = $$createField1_0($$parsedSource["open"]);
+        }
+        return new StartupState(/** @type {Partial<StartupState>} */($$parsedSource));
     }
 }
 
@@ -151,3 +218,5 @@ export class UpdateStatus {
 
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = store$0.Draft.createFrom;
+const $$createType2 = $Create.Nullable($$createType1);

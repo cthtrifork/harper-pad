@@ -1,7 +1,7 @@
 # TODO
 
-Status: the editor (CodeMirror 6 + harper.js), Problems panel, updater and Windows release flow work. The drafts drawer,
-markdown preview and file open/save are next. Only open items are listed here; finished work is in the git history.
+Status: the editor (CodeMirror 6 + harper.js), Problems panel, updater and Windows release flow work. The drafts drawer works (autosave, search,
+delete with undo); markdown preview and file open/save are next. Only open items are listed here; finished work is in the git history.
 
 ## 1. Repo and CI
 
@@ -42,15 +42,10 @@ vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
 Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, split, preview, scratch pad drawer).
 
-- [ ] Drawer on the left, toggled by Ctrl+J and the first toolbar button. While it is
-      open only the Edit view is available (Split and Preview are disabled with a hint).
-- [ ] Debounced save to Go (about 500 ms after the last keystroke, separate from the 300 ms lint), plus a save on blur
-      and on window close so the last keystrokes are never lost. Show "Saved" and the last updated time in the status bar.
-- [ ] Recent drafts list: title, last touched, and a preview. Markdown task lines (`- [ ]`, `- [x]`) show as up to
-      three checkbox lines with "N of M tasks done"; drafts without tasks show a two-line excerpt.
-- [ ] New draft (focus the editor straight away), search, "Older drafts", delete with an undo toast (the webview has no
-      working `confirm()`), and "Save as file" to promote a draft. Title comes from the first line, with "Untitled" and a
-      "No drafts yet" empty state.
+- [ ] When the Edit / Split / Preview views exist: while the drawer is open only Edit is available (Split and Preview are
+      disabled with a hint).
+- [ ] "Save as file" on a draft promotes it to a file (see below); the drawer's hint should then say so ("Nothing is written to
+      your files until you choose Save as file").
 - [ ] "Save as file" and "Open file" through the Go service: `application.Get().Dialog.SaveFile()` / `OpenFile()` with a
       filename and filters (`.md` or `.txt` from the draft's format). Report results inline, not with info dialogs.
 - [ ] Export and import all drafts as one JSON file, as a manual backup.

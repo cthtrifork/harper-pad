@@ -80,6 +80,17 @@ await page.click(".toggle");
 await page.waitForSelector(".panel", { state: "detached" });
 await shot("03-problems-hidden");
 
+// Open the scratch pad. Typing saves the sample as the first draft, which then shows in the list.
+await page.click(".drawer-btn");
+await page.waitForSelector("#drafts-drawer");
+await page.locator(".cm-content").click();
+await page.keyboard.press("Control+End");
+await page.keyboard.type(" It is saved as you type.");
+await page.waitForSelector("#drafts-drawer .item", { timeout: 15000 });
+await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
+expect((await page.locator("#drafts-drawer .item").count()) === 1, "the drafts list should hold the one draft that was typed");
+await shot("04-drafts-drawer");
+
 await browser.close();
 if (problems.length) {
   console.error(problems.join("\n"));

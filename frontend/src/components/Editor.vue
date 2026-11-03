@@ -1,13 +1,13 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { applyFix, createEditor, jumpTo, relint } from "../lib/editor.js";
+import { applyFix, createEditor, jumpTo, loadDocument, relint } from "../lib/editor.js";
 
 const props = defineProps({
   harper: { type: Object, default: null },
   doc: { type: String, default: "" },
   persist: { type: Function, default: async () => {} },
 });
-const emit = defineEmits(["result", "problems", "stats"]);
+const emit = defineEmits(["result", "problems", "stats", "edited"]);
 const host = ref(null);
 let view = null;
 
@@ -19,6 +19,7 @@ onMounted(() => {
     onProblems: (list) => emit("problems", list),
     persist: () => props.persist(),
     onStats: (counts) => emit("stats", counts),
+    onEdit: () => emit("edited"),
   });
   view.focus();
 });
@@ -39,6 +40,9 @@ function focusEnd() {
 
 defineExpose({
   focusEnd,
+  focus: () => view?.focus(),
+  getText: () => view?.state.doc.toString() ?? "",
+  load: (text) => view && loadDocument(view, text, (counts) => emit("stats", counts)),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
 });
