@@ -45,7 +45,7 @@ const restart = () =>
     await PadService.RestartToUpdate();
   });
 
-const whatsNew = () => Browser.OpenURL(RELEASES + encodeURIComponent(found.value)).catch(() => {});
+const whatsNew = () => Browser.OpenURL(RELEASES + encodeURIComponent(/^v/.test(found.value) ? found.value : `v${found.value}`)).catch(() => {});
 
 function outside(e) {
   if (open.value && root.value && !root.value.contains(e.target)) open.value = false;
