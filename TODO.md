@@ -33,8 +33,9 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
       and remove references to files that do not exist here (`principles.md`, `architecture.md`, `headless.md`,
       `agent-runbook.md`, `decisions.md`).
 - [ ] Write `docs/architecture.md` once the editor exists; link it from `AGENTS.md`.
-- [ ] Decide whether the frontend gets an update banner (`PadService.UpdateInfo`, `CheckForUpdates`, `InstallUpdate`,
-      `RestartToUpdate` exist and are bound; nothing calls them yet).
+- [x] Update control in the top bar (`components/UpdateButton.vue`): check, download, restart, all on click. Not tried
+      against a real release yet (needs a build with a release version, and on Windows an exe in a writable folder).
+- [ ] Optional later: a progress bar and a Cancel while downloading (needs Wails update events).
 
 ## 4. Editor (CodeMirror 6 + harper.js)
 
