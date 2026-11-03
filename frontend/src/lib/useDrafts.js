@@ -1,5 +1,14 @@
 import { computed, ref } from "vue";
-import { deleteDraft, getDraft, isWeb, listDrafts, startFresh as moveDatabaseAside, saveDraft, saveDraftToFile, searchDrafts } from "./backend.js";
+import {
+  deleteDraft,
+  getDraft,
+  isWeb,
+  listDrafts,
+  startFresh as moveDatabaseAside,
+  saveDraft,
+  saveDraftToFile,
+  searchDrafts,
+} from "./backend.js";
 
 // How long after the last keystroke the draft is saved (the 300 ms lint is separate). Kept short: a reload before the save has
 // started loses the text, because the flush on pagehide cannot finish writing to IndexedDB while the page is going away.
