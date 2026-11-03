@@ -1,6 +1,13 @@
 # Harper Pad
 
-A small desktop writing app for Linux and Windows. Go + [Wails v3](https://v3alpha.wails.io/) with a Vue 3 frontend.
+[![CI](https://github.com/cthtrifork/harper-pad/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cthtrifork/harper-pad/actions/workflows/ci.yml)
+[![Security](https://github.com/cthtrifork/harper-pad/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/cthtrifork/harper-pad/actions/workflows/security.yml)
+[![Pages](https://github.com/cthtrifork/harper-pad/actions/workflows/pages.yml/badge.svg?branch=main)](https://github.com/cthtrifork/harper-pad/actions/workflows/pages.yml)
+[![Release](https://img.shields.io/github/v/release/cthtrifork/harper-pad)](https://github.com/cthtrifork/harper-pad/releases)
+
+A small desktop writing app for Linux and Windows, also available as a [web app](https://harper.portableinfo.cloud/) on GitHub Pages. Go + [Wails v3](https://v3alpha.wails.io/) with a Vue 3 frontend.
+
+![The editor with grammar and spelling problems listed in the Problems panel](https://raw.githubusercontent.com/cthtrifork/harper-pad/bot/update-screenshots/docs/screenshots/01-editor-with-problems.png)
 
 ## What it solves
 
@@ -16,7 +23,11 @@ Markdown documents and drafts can also be shown side by side with a rendered pre
 ## Status
 
 The window has a CodeMirror editor checked by `harper.js` (WebAssembly in a Web Worker), a Problems panel with fixes,
-and in-app updates. The drafts drawer and the markdown preview are not built yet; `TODO.md` has the plan.
+the scratch pad drawer of drafts with autosave and search, and in-app updates. The same frontend runs in the browser
+as an installable offline web app ([`docs/pages.md`](docs/pages.md)). The markdown preview is not built yet; `TODO.md`
+has the plan.
+
+![The scratch pad drawer listing drafts](https://raw.githubusercontent.com/cthtrifork/harper-pad/bot/update-screenshots/docs/screenshots/04-drafts-drawer.png)
 
 ## Develop
 
