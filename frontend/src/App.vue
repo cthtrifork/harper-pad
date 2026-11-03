@@ -5,7 +5,6 @@ import { createLinter, lintText } from "./lib/harper.js";
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
 const text = ref(sample);
-const flavour = ref("inlined");
 const state = ref("idle");
 const error = ref("");
 const setupMs = ref(0);
@@ -21,7 +20,7 @@ async function start() {
   lints.value = [];
   try {
     const t0 = performance.now();
-    linter = await createLinter(flavour.value);
+    linter = await createLinter();
     setupMs.value = Math.round(performance.now() - t0);
     state.value = "ready";
     await run();
@@ -54,13 +53,6 @@ onMounted(async () => {
     <p class="mute">Does harper.js (WebAssembly in a Web Worker) run in this webview? Go bridge: <code>{{ goVersion || "..." }}</code></p>
 
     <div class="row">
-      <label>
-        Binary
-        <select v-model="flavour" @change="start">
-          <option value="inlined">slim, inlined (base64 in the JS)</option>
-          <option value="url">slim, loaded as a .wasm asset</option>
-        </select>
-      </label>
       <span :class="['state', state]">{{ state }}</span>
       <span v-if="state === 'ready'" class="mute">setup {{ setupMs }} ms, last lint {{ lintMs }} ms</span>
     </div>
