@@ -1,0 +1,89 @@
+// Where the app keeps its data and asks its host for things. There are two builds of the same frontend:
+//   - desktop (`vite build`): the Go side, through the Wails bindings. The database lives in the user's data folder.
+//   - web (`vite build --mode web`, deployed to GitHub Pages): no Go side. The same data is kept in the browser's IndexedDB.
+// Everything else in the frontend goes through this file, so nothing else needs to know which build it is in.
+//
+// The bindings are imported on demand and only in the desktop build, so the web bundle carries no Wails code.
+
+export const isWeb = import.meta.env.MODE === "web";
+
+const bindings = isWeb ? undefined : async () => (await import("../../bindings/github.com/cthtrifork/harper-pad/internal/app")).PadService;
+
+const emptySettings = () => ({ version: 1, words: [], ignored: "" });
+
+// --- Browser storage (web build) ---------------------------------------------------------------------------------------------
+
+const DB_NAME = "harper-pad";
+const STORE = "kv";
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGet(key) {
+  const db = await openDb();
+  try {
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function idbPut(key, value) {
+  const db = await openDb();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+// --- What the frontend uses --------------------------------------------------------------------------------------------------
+
+// The saved dictionary and ignore list: {version, words, ignored}. Empty settings on a first run.
+export async function loadSettings() {
+  if (!isWeb) return (await bindings()).LoadSettings();
+  const saved = await idbGet("settings");
+  return { ...emptySettings(), ...saved };
+}
+
+export async function saveSettings(settings) {
+  if (!isWeb) return (await bindings()).SaveSettings(settings);
+  return idbPut("settings", settings);
+}
+
+// The text for the status bar: the build version on desktop, "web" in the browser.
+export async function version() {
+  return isWeb ? "web" : (await bindings()).Version();
+}
+
+// Banner text in a desktop development build's demo mode; empty otherwise.
+export async function demoMode() {
+  return isWeb ? "" : (await bindings()).DemoMode();
+}
+
+// Ask the browser not to evict this site's data when storage runs low. Safari grants it to an installed (Add to Home Screen) app.
+// Does nothing on desktop, where the data is a file.
+export async function keepData() {
+  if (!isWeb) return false;
+  try {
+    return (await navigator.storage?.persist?.()) ?? false;
+  } catch {
+    return false;
+  }
+}

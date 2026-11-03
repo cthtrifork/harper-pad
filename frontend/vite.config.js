@@ -33,21 +33,35 @@ const POLICY = [
   "form-action 'none'",
 ].join("; ");
 
-const contentSecurityPolicy = () => ({
+// The web build (GitHub Pages, `vite build --mode web`) gets the same policy plus one directive: the page loads its own web app
+// manifest, which `default-src 'none'` would otherwise block. The desktop policy is unchanged.
+const WEB_POLICY = `${POLICY}; manifest-src 'self'`;
+
+const contentSecurityPolicy = (policy) => ({
   name: "content-security-policy",
   apply: "build",
   transformIndexHtml: () => [
-    { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: POLICY }, injectTo: "head-prepend" },
+    { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: policy }, injectTo: "head-prepend" },
   ],
 });
 
-export default defineConfig({
-  server: {
-    host: "127.0.0.1",
-    port: Number(process.env.WAILS_VITE_PORT) || 9245,
-    strictPort: true,
-  },
-  // The harper.js worker is an ES module; the default "iife" worker format cannot code-split it.
-  worker: { format: "es" },
-  plugins: [vue(), wails("./bindings"), contentSecurityPolicy(), keepPlaceholder()],
+export default defineConfig(({ mode }) => {
+  const web = mode === "web";
+  return {
+    // Pages serves the site from /<repo>/; BASE_PATH overrides it (a custom domain would use "/").
+    base: web ? process.env.BASE_PATH || "/harper-pad/" : "/",
+    // The web build goes to its own folder so it never empties frontend/dist, which the Go side embeds.
+    build: web ? { outDir: "dist-web" } : undefined,
+    server: {
+      host: "127.0.0.1",
+      port: Number(process.env.WAILS_VITE_PORT) || 9245,
+      strictPort: true,
+    },
+    // The harper.js worker is an ES module; the default "iife" worker format cannot code-split it.
+    worker: { format: "es" },
+    // The web build has no Go side: no Wails plugin, and no dist/ placeholder to keep.
+    plugins: web
+      ? [vue(), contentSecurityPolicy(WEB_POLICY)]
+      : [vue(), wails("./bindings"), contentSecurityPolicy(POLICY), keepPlaceholder()],
+  };
 });

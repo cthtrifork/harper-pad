@@ -1,11 +1,13 @@
 <script setup>
-import { onMounted, ref } from "vue";
-import { PadService } from "../bindings/github.com/cthtrifork/harper-pad/internal/app";
+import { defineAsyncComponent, onMounted, ref } from "vue";
 import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
-import UpdateButton from "./components/UpdateButton.vue";
+import { demoMode, keepData, version } from "./lib/backend.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, savePersonal } from "./lib/personal.js";
+
+// The in-app updater only exists in the desktop build; the web build loads the latest deploy and carries none of its code.
+const UpdateButton = import.meta.env.MODE === "web" ? null : defineAsyncComponent(() => import("./components/UpdateButton.vue"));
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
 const state = ref("loading");
@@ -78,14 +80,15 @@ async function persist() {
 }
 
 onMounted(async () => {
-  PadService.DemoMode().then(
+  demoMode().then(
     (text) => (demo.value = text),
     () => {},
   );
-  PadService.Version().then(
+  version().then(
     (v) => (goVersion.value = v),
     (err) => (goVersion.value = `unavailable: ${err}`),
   );
+  keepData();
   try {
     harper.value = await loading;
     setupMs.value = Math.round(performance.now() - t0);
@@ -105,7 +108,7 @@ onMounted(async () => {
       <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
         Problems <span class="count">{{ problems.length }}</span>
       </button>
-      <UpdateButton />
+      <component :is="UpdateButton" v-if="UpdateButton" />
     </header>
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
     <div class="body">

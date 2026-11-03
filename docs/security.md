@@ -34,6 +34,7 @@ specific `PadService` methods.
   | `connect-src` | `'self'` | calls to the Go side, and nothing on the internet |
   | `worker-src` | `'self' blob:` | Harper runs in a Web Worker |
   | `object-src`, `base-uri`, `form-action` | `'none'` | |
+  | `manifest-src` | `'self'`, **web build only** | the GitHub Pages build loads its own web app manifest ([`pages.md`](pages.md)); the desktop policy does not have it |
 
 - Limits: a `<meta>` policy cannot set `frame-ancestors` or report violations, and the Web Worker script is a same-origin file, so it
   is covered only if it is created from a `blob:` URL (it is). If a webview ever refuses `'wasm-unsafe-eval'`, Harper will not start
