@@ -23,6 +23,14 @@ import (
 
 const schemaVersion = 1
 
+// dsnOptions are applied to every connection the driver opens:
+//   - busy_timeout: wait up to 5 s for a lock (another instance of the app) instead of failing at once;
+//   - foreign_keys: enforce foreign keys if the schema ever gets any (SQLite leaves them off by default);
+//   - trusted_schema off: SQL functions in views and triggers stored in the file cannot run unless they are safe;
+//   - _txlock=immediate: a transaction takes the write lock when it begins, so it cannot fail halfway with SQLITE_BUSY
+//     when it tries to upgrade from a read to a write.
+const dsnOptions = "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=trusted_schema(0)&_txlock=immediate"
+
 var (
 	// ErrNewer is returned by Open when the database was written by a newer version of the app. It is left untouched.
 	ErrNewer = errors.New("the database was created by a newer version of Harper Pad")
@@ -60,7 +68,7 @@ func Open(path string) (*Store, error) {
 }
 
 func openAt(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", filepath.ToSlash(path)+"?_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", filepath.ToSlash(path)+dsnOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -91,17 +99,18 @@ func (s *Store) prepare() error {
 		}
 		defer tx.Rollback()
 		for _, stmt := range []string{
+			// STRICT makes SQLite enforce the column types (a text in an INTEGER column is an error, not stored).
 			`CREATE TABLE IF NOT EXISTS drafts (
 				id         TEXT PRIMARY KEY,
 				created_at INTEGER NOT NULL,
 				updated_at INTEGER NOT NULL,
 				data       TEXT NOT NULL
-			)`,
+			) STRICT`,
 			`CREATE INDEX IF NOT EXISTS drafts_by_updated ON drafts (updated_at DESC, id DESC)`,
 			`CREATE TABLE IF NOT EXISTS settings (
 				key   TEXT PRIMARY KEY,
 				value TEXT NOT NULL
-			)`,
+			) STRICT, WITHOUT ROWID`,
 			fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion),
 		} {
 			if _, err := tx.Exec(stmt); err != nil {
@@ -136,5 +145,9 @@ func isDamaged(err error) bool {
 	return false
 }
 
-// Close closes the database.
-func (s *Store) Close() error { return s.db.Close() }
+// Close lets SQLite refresh its query statistics (PRAGMA optimize, as its documentation recommends before closing a
+// connection) and closes the database.
+func (s *Store) Close() error {
+	_, _ = s.db.Exec(`PRAGMA optimize`)
+	return s.db.Close()
+}

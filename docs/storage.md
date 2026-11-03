@@ -15,7 +15,45 @@ It holds two things:
 - **Settings:** the personal dictionary and the ignored findings (so far).
 
 `internal/store` is the package; `internal/app` (`PadService`) is its only user. The driver is the pure-Go `modernc.org/sqlite`, so there is
-no cgo and the Windows build is unchanged. It adds about 3.5 MB to the exe.
+no cgo and the Windows build is unchanged. It adds about 4 MB to the exe (v1.61.1, SQLite 3.54.1).
+
+## Rules
+
+1. **All SQL lives in Go functions in `internal/store`.** Queries are constants with `?` parameters; user text is never put into SQL
+   text (search escapes `%`, `_` and `\` and passes the pattern as a parameter).
+2. **The frontend reaches the data only through `PadService` methods** (`ListDrafts`, `SaveDraft`, `LoadSettings`, ...), through the
+   generated Wails bindings. Each method is one specific operation with typed input and output. The app registers no generic data
+   service, so nothing can send SQL from JavaScript.
+3. These rules are tests, not just words: `internal/store/boundary_test.go` fails if SQL or a database driver import shows up outside
+   `internal/store`, if `main.go` registers anything but `PadService`, if the frontend contains SQL, or if a binding looks like a
+   generic query (`Exec`, `Query`, `Raw`, ...).
+
+## Which SQLite package
+
+`modernc.org/sqlite` (kept current: Renovate bumps it), used through `database/sql`.
+
+| Package | cgo | Notes |
+|---|---|---|
+| `modernc.org/sqlite` | no | Transpiled SQLite in pure Go; the most used cgo-free driver. Wails' own `sqlite` service uses it too. Canonical repo is on GitLab, so GitHub stars undercount it. |
+| `github.com/mattn/go-sqlite3` | **yes** | The most starred (9k) and most used overall, but it needs a C compiler at build time. Windows builds and cross-builds would need gcc, and the release would no longer build from Linux or in the current Windows job. |
+| `github.com/ncruces/go-sqlite3` | no | SQLite as WebAssembly on the wazero runtime; modern and actively maintained by one author, smaller community. A reasonable alternative if modernc ever becomes a problem. |
+| `zombiezen.com/go/sqlite` | no | A lower-level API on top of modernc; last release May 2025. |
+
+We need a cgo-free build (the Windows exe and the release build on Linux depend on it), which leaves modernc and ncruces; modernc is the
+more widely used and matches Wails.
+
+## Practices in use
+
+- Connection options on every connection: `busy_timeout` 5 s (a second instance waits for the lock instead of failing),
+  `foreign_keys` on, `trusted_schema` off, and `_txlock=immediate` (a transaction takes the write lock when it begins, so it cannot
+  fail halfway with `SQLITE_BUSY`).
+- One connection (`SetMaxOpenConns(1)`): writes are serialised in the process.
+- `STRICT` tables (types are enforced) and `WITHOUT ROWID` for the small settings table.
+- Every write is a single statement or a transaction with `defer tx.Rollback()`; `rows.Close()` is always deferred.
+- `PRAGMA optimize` before the database closes, as SQLite recommends.
+- `PRAGMA user_version` for the schema version, and a refusal to open a newer database.
+- Rollback journal rather than WAL: the database is one file at rest, which is simpler to back up and sync, and a single-user app does
+  not need WAL's concurrent readers.
 
 ## Schema
 
