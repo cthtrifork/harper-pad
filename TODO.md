@@ -41,10 +41,11 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
 Note: `harper-editor` and `lint-framework` are not on npm (only `harper.js` is), hence CodeMirror 6 rather than a
 vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
-- [ ] Replace the spike textarea with a CodeMirror 6 editor (`@codemirror/view`, `state`, `lint`, markdown or plain text).
-- [ ] `@codemirror/lint` source that calls `WorkerLinter.lint()` (debounced), maps `Lint.span()` to diagnostics and
+- [x] Replace the spike textarea with a CodeMirror 6 editor (plain text for now; markdown highlighting comes with the views).
+- [x] `@codemirror/lint` source that calls `WorkerLinter.lint()` (debounced), maps `Lint.span()` to diagnostics and
       `suggestions()` to "apply" actions via `applySuggestion`; free wasm-backed `Lint` objects.
-- [ ] Suggestion popover on the underlined issue: replacements, "Add to dictionary", "Ignore this rule".
+- [ ] Suggestion popover on the underlined issue: replacements work (CodeMirror's lint tooltip); "Add to dictionary" and
+      "Ignore this rule" are still missing, and the tooltip is only themed with colours.
 - [ ] Problems panel on the right (Edit view only) with filter chips, counts and jump-to. A "Problems" toolbar toggle
       hides it and the editor uses the full width; the count stays on the toggle and in the status bar.
 - [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
@@ -65,11 +66,21 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 - [ ] Drawer on the left, toggled by Ctrl+J and the first toolbar button (model on trivy's `VexDrawer.vue`). While it is
       open only the Edit view is available (Split and Preview are disabled with a hint).
 - [ ] Drafts are stored by the app, not as files: JSON under the user config dir, atomic write, autosave as you type,
-      tests. Nothing reaches the file system until "Save as file".
+      tests. Nothing reaches the file system until "Save as file". A draft is `id` (UUID or ULID, not a timestamp: two
+      drafts in one second would collide), `title`, `content`, `format`, `createdAt`, `updatedAt`, all lowercase JSON
+      tags so the frontend can read them.
+- [ ] Debounced save to Go (about 500 ms after the last keystroke, separate from the 300 ms lint), plus a save on blur
+      and on window close so the last keystrokes are never lost. Show "Saved" and the last updated time in the status bar.
 - [ ] Recent drafts list: title, last touched, and a preview. Markdown task lines (`- [ ]`, `- [x]`) show as up to
       three checkbox lines with "N of M tasks done"; drafts without tasks show a two-line excerpt.
-- [ ] New draft, search, "Older drafts", delete with undo toast, and "Save as file" to promote a draft.
+- [ ] New draft (focus the editor straight away), search, "Older drafts", delete with an undo toast (the webview has no
+      working `confirm()`), and "Save as file" to promote a draft. Title comes from the first line, with "Untitled" and a
+      "No drafts yet" empty state.
+- [ ] "Save as file" and "Open file" through the Go service: `application.Get().Dialog.SaveFile()` / `OpenFile()` with a
+      filename and filters (`.md` or `.txt` from the draft's format). Report results inline, not with info dialogs.
+- [ ] Export and import all drafts as one JSON file, as a manual backup.
 - [ ] "Send to editor" and "Add to scratch pad" for the current selection.
+- [ ] Never render draft text with `v-html` (the Wails notes tutorial writes it into `innerHTML` unescaped).
 - [ ] Decide whether draft text is also Harper-checked (the mockup checks the open draft in the editor).
 
 ## 6. Packaging and install on the homeserver
