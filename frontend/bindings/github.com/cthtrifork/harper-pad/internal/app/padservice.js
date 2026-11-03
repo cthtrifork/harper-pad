@@ -27,15 +27,6 @@ export function CheckForUpdates() {
 }
 
 /**
- * Echo returns its argument trimmed; the spike uses it to prove the Go bridge works next to harper.js.
- * @param {string} text
- * @returns {$CancellablePromise<string>}
- */
-export function Echo(text) {
-    return $Call.ByID(3034314080, text);
-}
-
-/**
  * InstallUpdate downloads the release CheckForUpdates found, verifies its SHA-256 and
  * stages it beside the running binary. It blocks until staged or failed, so it must be
  * called from a binding (its own goroutine), never the UI thread.

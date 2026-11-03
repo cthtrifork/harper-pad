@@ -29,7 +29,7 @@ function onProblems(list) {
 onMounted(async () => {
   PadService.Version().then(
     (v) => (goVersion.value = v),
-    (err) => (goVersion.value = `bridge failed: ${err}`),
+    (err) => (goVersion.value = `unavailable: ${err}`),
   );
   try {
     const t0 = performance.now();
