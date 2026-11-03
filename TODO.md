@@ -39,7 +39,10 @@ never run on a real desktop yet.
   1. generates a non-extractable ECDSA P-256 key, stores **only the private `CryptoKey`** in IndexedDB and shows the public JWK;
   2. after a reload, loads the key, confirms `extractable` is false and `exportKey` throws, signs a fixed message and checks
      the signature against the JWK (raw `r‖s`, 64 bytes);
-  3. calls `navigator.storage.persist()` and reports the result.
+  3. calls `navigator.storage.persist()` and reports the result;
+  4. for v2: imports 32 random bytes as a non-extractable HKDF key, stores that handle, and after a reload derives an AES-GCM
+     key from it, encrypts and decrypts a string; and runs Argon2id (WebAssembly, 64 MiB, 3 passes) in a worker, recording the
+     time and whether the app survives (try 32 and 128 MiB as well).
 
   Run it in Safari and as an installed Home Screen app (add the icon first, then run it from the icon), on the current iOS. Record
   in `docs/sync.md` whether each step passes, then repeat after the app has been closed for a day, a week, and after an iOS
@@ -52,3 +55,6 @@ never run on a real desktop yet.
 - [ ] The enrollment and status UI: follow `docs/design-cheatsheet.html`, short eased transitions, reduced motion honoured.
 - [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md`, `architecture.md`, `pages.md`, `AGENTS.md`, and a server
       operations page.
+- [ ] v2, end-to-end encryption (`docs/sync.md`, "v2"): after v1 is in use. `lib/crypto.js` with shared test vectors, the
+      Argon2id worker, key bag endpoints, envelope validation and `purge-plaintext` on the server, and the setup, unlock,
+      change-passphrase and rotate-key screens.

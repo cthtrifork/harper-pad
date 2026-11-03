@@ -17,8 +17,8 @@ Goals:
 
 Non-goals for v1:
 
-- **End-to-end encryption.** The server can read drafts. The wire format keeps the draft as an opaque string so it can be added later
-  without a protocol change ([Later](#later)).
+- **End-to-end encryption.** In v1 the server can read drafts. The wire format keeps the draft as an opaque string, so v2
+  ([v2: end-to-end encryption](#v2-end-to-end-encryption)) can add encryption without changing how docs are pushed and pulled.
 - **More than one user.** One server holds one user's data. There are no accounts, only devices.
 - **Real-time collaboration or merging text.** Conflicts keep both versions; they are not merged.
 - **Syncing files.** A draft's link to a file on disk stays on the device.
@@ -34,7 +34,7 @@ Non-goals for v1:
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
 | Stolen-token hardening | v1: version history, a device list with last-seen and a 30-day idle expiry, "sign out other devices". v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
-| Encryption of content | None in v1 (TLS only) | Keeps the first version small; see [Later](#later) |
+| Encryption of content | None in v1 (TLS only); end-to-end in v2 | Keeps the first version small; see [v2](#v2-end-to-end-encryption) |
 | Conflicts | Server-assigned versions; the loser becomes a "conflicted copy" draft | Never loses text, no merge logic |
 
 ## Overview
@@ -256,8 +256,8 @@ This is a bearer-token model with transport security and no content encryption.
 | Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the synced settings. Neither is encrypted; there is no OS keyring in the web build. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |
 
-Not defended: a compromised device (it has the data), a compromised server (it has the data in v1), and traffic analysis (the
-server sees sizes and times).
+Not defended: a compromised device (it has the data), a compromised server (it has the data in v1; in v2 it has only ciphertext,
+see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees sizes and times).
 
 ## Deploying the server
 
@@ -281,6 +281,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 5. **Docs and policy:** the changes below, and the CSP change.
 6. **Hardening (v1.1):** the device-bound signing key, after the iPhone check in `TODO.md` passes. Version history, the device
    list and idle expiry are in steps 2 and 4, not here.
+7. **v2:** end-to-end encryption ([v2](#v2-end-to-end-encryption)), after v1 is in use. It is independent of step 6.
 
 ## Documentation changes
 
@@ -302,11 +303,121 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - **Whether a non-extractable key works in the installed iPhone app,** and how often iOS clears it. Test plan in `TODO.md`.
 - **How large the first upload can be** before it needs chunking, given the 5 MB per draft limit.
 
+## v2: end-to-end encryption
+
+Status: proposal, after v1 and the v1.1 device key. Goal: **the server stores only ciphertext**, so a compromised server, a stolen
+backup of its SQLite file or a copied device token reveals no draft text. This does not need a new kind of server: it still stores
+and returns opaque `data` strings by id and version.
+
+### What the server sees afterwards
+
+| Visible to the server | Not visible |
+|---|---|
+| Doc ids, versions, created and updated times, the deleted flag, the size of each blob, request times and the client's IP | Draft text, format, the dictionary words, the ignore list |
+
+The ids and times stay in the clear because the protocol and the [history](#history) need them. Sizes leak roughly how long a draft
+is. There is **no feature loss from hiding the text**: search already runs on each device's local copy, never on the server.
+
+### Keys
+
+- **Data key (DK):** 256 random bits made once, on the first device that turns encryption on. It is never sent to the server in the
+  clear.
+- **Per-doc key:** `HKDF-SHA-256(DK, info = "harper-pad doc " + id)`. This keeps the number of encryptions under any one AES key
+  small, so a random 96-bit nonce is safe, and a blob cannot be moved to another id and still decrypt.
+- **Cipher:** AES-256-GCM through WebCrypto, native in every browser including iOS Safari and in the desktop webview, so the sync
+  module needs no crypto library for the data itself. (XChaCha20-Poly1305 is not in WebCrypto.)
+- **Key bag on the server:** the DK **wrapped** (AES-GCM) by a key-encryption key, plus the KDF parameters, so devices can fetch it.
+  It holds one wrapping per unlock method, and the first version has two:
+  1. **Passphrase.** The key-encryption key is `Argon2id(passphrase, salt)` with parameters stored in the key bag (a starting point:
+     64 MiB, 3 passes, 1 lane), so they can be raised later. Argon2id is not in WebCrypto; use a pinned, audited WebAssembly
+     implementation (the CSP already allows `'wasm-unsafe-eval'`) run in a worker, **for both builds** so the derivation is
+     identical everywhere.
+  2. **Recovery key.** A generated 160-bit secret shown once as groups of Base32 characters, to be saved in a password manager or
+     printed. It wraps the same DK, so a forgotten passphrase is recoverable, and because it is high entropy it cannot be guessed
+     offline.
+- **Check value:** the key bag also holds a small known string encrypted under the DK, so a wrong passphrase is rejected on the
+  device, before anything is decrypted.
+- **Passphrase change:** unwrap the DK, wrap it again under the new key-encryption key, and upload the key bag with a
+  compare-and-set on its version. No document is re-encrypted.
+
+The server can serve the key bag to any device that holds a valid token, so a thief with a copied token can try passphrases
+**offline** against it. That is why the recovery key exists, why the parameters are strong, and why the setup screen enforces a long
+passphrase (a strength meter, and a length floor of about 12 characters, or four or more random words) or offers to generate one.
+
+### Envelope
+
+Each doc's `data` becomes this JSON string; the server checks only that it has this shape and is within the size limit:
+
+```json
+{"v": 2, "kid": "k1", "n": "<base64 12-byte nonce>", "c": "<base64 ciphertext + 16-byte tag>"}
+```
+
+The plaintext is the v1 blob plus a revision counter: `{"v":1,"format":"markdown","content":"...","rev":12}`. The additional
+authenticated data is `id || "|" || v || "|" || kid`, so a blob cannot be swapped between docs or relabelled. `kid` names the data
+key, which lets a later rotation tell old blobs from new ones.
+
+Settings are encrypted the same way (their own key derived with `info = "harper-pad settings " + key`), so the dictionary and the
+ignore list are hidden too.
+
+### What this does and does not stop
+
+- **A server cannot alter a blob** without the device noticing (GCM fails). It **can** refuse to return one, hide a delete, or
+  **serve an old valid version** of a doc (a rollback). Each device remembers the highest `rev` it has seen for each doc and rejects a
+  lower one. A device that has never seen the doc cannot detect a rollback; say so in the docs.
+- **A thief with a copied token** gets ciphertext only, and can offline-guess the passphrase (above).
+- **A thief with the unlocked device** has the DK in use there. After revoking the device, run **Rotate key** (below), or the thief
+  can still decrypt anything they already downloaded and anything uploaded under the old key.
+- **Losing both the passphrase and the recovery key loses the data.** The server cannot help, and the setup screen says so before
+  it finishes.
+
+### Where the data key lives on a device
+
+| Build | Storage |
+|---|---|
+| Web (iPhone Home Screen app, browsers) | After unlocking, the DK is imported as a **non-extractable** WebCrypto key (HKDF material) and only that handle is stored in IndexedDB, so the passphrase is entered once per device. Same assumption as the v1.1 device key, and the same iPhone check in `TODO.md` covers it. |
+| Desktop | The OS keyring where there is one; otherwise a file readable only by the user, or ask for the passphrase at each start (a setting). |
+
+### Turning it on (migration from v1)
+
+1. The user picks **Turn on encryption** on a device (this is the one place that needs a device already enrolled and synced).
+2. The app makes the DK, shows the recovery key, asks for a passphrase and uploads the key bag. From now on the server **rejects any
+   `data` that is not an envelope** (`encrypted` flag on the server, set by the first key bag), and any request from a client that
+   does not send `Harper-Protocol: 2` gets an error telling it to update. Without this, an old client would quietly keep
+   uploading plaintext.
+3. The device re-encrypts and pushes every local doc and setting as a new version. Other devices see the key bag, prompt for the
+   passphrase, unlock and carry on.
+4. **Plaintext remains on the server** in the older versions of [history](#history) and in any backup. The operator runs
+   `harper-pad-sync purge-plaintext` to delete history entries that are not envelopes, and backups taken before that are the
+   operator's to destroy. The settings screen says this.
+
+New devices after step 3 enroll as in v1, then are asked for the passphrase or recovery key before the first sync.
+
+### Rotating the key
+
+**Rotate key** makes a new DK (`kid` increments), re-encrypts every doc and setting under it, uploads the new key bag, and the
+old `kid` is no longer accepted by the server for new writes. Other devices unlock again with the passphrase. Use it after revoking
+a device that held the DK, or after a passphrase or recovery key may have leaked. It re-uploads everything, so it is slow on a
+phone with many drafts, and it runs in chunks that can be resumed.
+
+### Changes beyond v1
+
+- **Server:** key bag endpoints (`GET` and `PUT /keys`, with compare-and-set), envelope shape validation, the `encrypted` flag, the
+  protocol version check, `purge-plaintext`. Storage and history are unchanged; they hold ciphertext.
+- **Client:** a `lib/crypto.js` (HKDF, AES-GCM, the envelope, the key bag) with test vectors checked in as shared fixtures like the
+  existing Go and frontend tests, plus the Argon2id worker and the unlock, setup, change-passphrase and rotate screens.
+- **Docs:** [security](security.md) (the new table above), and the operations page (backup, `purge-plaintext`).
+
+### Open questions for v2
+
+- **Argon2id memory on an iPhone.** 64 MiB inside a Home Screen app may be killed under memory pressure; measure it and pick the
+  parameters from the result (add to the iPhone check in `TODO.md`).
+- **Which Argon2id WebAssembly package** to pin, and whether to keep it lazy-loaded so v1 users do not pay for it.
+- **Device pairing** as a third unlock method: an enrolled device wraps the DK to the new device's public key (ECDH P-256, in
+  WebCrypto) through the server, after the user confirms a fingerprint on both. It avoids typing the passphrase on a phone but
+  needs both devices online; leave it for after the first v2 release.
+- **Whether to encrypt the id and times.** Not planned; it would break the cursor, the history and conflict handling.
+
 ## Later
 
-- **End-to-end encryption.** Encrypt each doc's `data` on the device with an authenticated cipher, binding the id and version as
-  associated data so the server cannot swap or roll back blobs unnoticed. The key comes from a passphrase (Argon2id, which in the browser
-  needs a WebAssembly library) or from device-to-device pairing. Titles, and anything else the server sees, would have to be inside
-  the encrypted blob, and server-side search would be lost.
 - **Multiple users or sharing,** with OIDC and short-lived tokens with refresh.
 - **Merging text** with a CRDT such as Yjs (it has a CodeMirror 6 binding) if two-device simultaneous edits become common.
