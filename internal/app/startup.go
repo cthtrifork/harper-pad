@@ -1,6 +1,10 @@
 package app
 
-import "github.com/cthtrifork/harper-pad/internal/store"
+import (
+	"os"
+
+	"github.com/cthtrifork/harper-pad/internal/store"
+)
 
 // StartupState is what the page needs before it can show the editor, in one answer. Each call from the page to the Go side is a
 // round trip (Lighthouse prices each at about a second on its simulated slow network), so the page asks once. It reads one draft
@@ -15,11 +19,14 @@ type StartupState struct {
 	// Error says why the drafts could not be read (for example a database from a newer version), and is empty otherwise. The
 	// page still starts, with nothing saved.
 	Error string `json:"error"`
+	// Home is the user's home folder, so the page can show "~/Documents" for a file's folder. Empty when unknown (and in the web build).
+	Home string `json:"home"`
 }
 
 // Startup returns what the page needs to start: the demo banner, the most recent draft and the number of drafts.
 func (s *PadService) Startup() StartupState {
 	out := StartupState{Demo: demoDetail()}
+	out.Home, _ = os.UserHomeDir()
 	newest, err := s.ListDrafts(1, 0) // one summary and the count
 	if err != nil {
 		out.Error = err.Error()

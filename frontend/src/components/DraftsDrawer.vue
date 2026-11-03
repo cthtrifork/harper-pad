@@ -18,6 +18,7 @@ watch(
 );
 
 const iso = (ms) => new Date(ms).toISOString();
+const baseName = (path) => path.split(/[\\/]/).pop();
 </script>
 
 <template>
@@ -31,7 +32,7 @@ const iso = (ms) => new Date(ms).toISOString();
         </button>
       </div>
     </header>
-    <p class="hint">Kept inside Harper Pad and saved as you type.</p>
+    <p class="hint">Kept inside Harper Pad and saved as you type. Nothing is written to your files until you choose Save as file.</p>
     <div class="search">
       <label for="draft-search" class="sr-only">Search drafts</label>
       <input id="draft-search" v-model="q" type="search" placeholder="Search drafts" autocomplete="off" spellcheck="false" @input="emit('search', q)" />
@@ -57,6 +58,11 @@ const iso = (ms) => new Date(ms).toISOString();
             <span class="progress">{{ d.tasksDone }} of {{ d.tasksTotal }} {{ d.tasksTotal === 1 ? "task" : "tasks" }} done</span>
           </template>
           <span v-else-if="d.excerpt" class="excerpt">{{ d.excerpt }}</span>
+          <!-- Only drafts that were saved to a file carry this; the others are just drafts. -->
+          <span v-if="d.filePath" class="file" :title="d.filePath">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4l2.5 2.5v6.5H3zM7 1.5V4h2.5" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none" /></svg>
+            <span class="sr-only">Saved to file: </span>{{ baseName(d.filePath) }}
+          </span>
         </button>
         <button type="button" class="del" :aria-label="`Delete ${d.title}`" @click="emit('remove', d.id)">
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 3.5h7M4.5 3.5V2.5h3v1M3.5 3.5l.4 6h4.2l.4-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
@@ -245,6 +251,20 @@ time {
 .progress {
   color: var(--mute);
   font-size: 12px;
+}
+.file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--mute);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file svg {
+  flex: none;
 }
 .excerpt {
   color: var(--mute);

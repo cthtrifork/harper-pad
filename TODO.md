@@ -62,7 +62,9 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 - [ ] Show what the document is: in the toolbar its name and folder ("notes.md in ~/Documents") for a file, or a "Draft, not on
       disk" badge for a draft, and the same name in the window title ("notes.md — Harper Pad": the Wails window title on
       desktop, `document.title` on the web). The toolbar has **Open file** (Ctrl+O) and **Save as file** (Ctrl+S) buttons.
-- [ ] "Save as file" and "Open file": on desktop through the Go service (`application.Get().Dialog.SaveFile()` / `OpenFile()` with
+- [x] Save as file (Ctrl+Shift+S) and Save (Ctrl+S: the draft until it has a file, then the file); the draft keeps a link to its
+      file (`file_path`, `docs/storage.md`). The toolbar shows the file name and folder, and the drawer names the file on drafts that have one.
+- [ ] "Open file", and "Save as file" button, on desktop through the Go service (`application.Get().Dialog.SaveFile()` / `OpenFile()` with
       a filename and filters, `.md` or `.txt` from the draft's format), in the web build through the browser's file picker and
       download. Report results inline, not with info dialogs. Once it exists, the drawer's hint should say "Nothing is written to
       your files until you choose Save as file".

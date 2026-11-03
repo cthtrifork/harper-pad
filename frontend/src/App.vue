@@ -1,5 +1,5 @@
 <script setup>
-import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DraftsDrawer from "./components/DraftsDrawer.vue";
 import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
@@ -29,25 +29,39 @@ const personal = ref({ words: 0, ignored: 0 });
 const saveError = ref("");
 const editor = ref(null);
 const showDrawer = ref(false);
+const saveMenu = ref(false); // the arrow beside Save: "Save as file..." for a draft that already has a file
+const saveSplit = ref(null);
 const drafts = useDrafts(editor, showDrawer);
 // The text of the open draft. On a first run the editor is empty, except in demo mode (screenshots), which shows a sample.
 const initialDoc = drafts.init(props.start, demo.value ? sample : "");
+
+function saveElsewhere() {
+  saveMenu.value = false;
+  drafts.saveFile(true);
+}
+
+// A click anywhere else closes the menu.
+function onPointerDown(e) {
+  if (saveMenu.value && !saveSplit.value?.contains(e.target)) saveMenu.value = false;
+}
 
 function toggleDrawer() {
   showDrawer.value = !showDrawer.value;
   if (showDrawer.value) drafts.refreshList();
 }
 
-// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts; Ctrl+S (Cmd+S) saves the open draft right away.
+// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S saves: to the draft until the text has been saved to a file, then to
+// the file; Ctrl+Shift+S always asks for a file.
 function onKeydown(e) {
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
-    e.preventDefault(); // not the browser's "save page"
-    drafts.flush();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") {
+  if (e.key === "Escape") saveMenu.value = false;
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if (key === "j" && !e.shiftKey) {
     e.preventDefault();
     toggleDrawer();
+  } else if (key === "s") {
+    e.preventDefault(); // not the browser's "save page"
+    drafts.saveFile(e.shiftKey);
   }
 }
 
@@ -108,6 +122,7 @@ async function persist() {
 
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("pointerdown", onPointerDown);
   drafts.attach();
   version().then(
     (v) => (goVersion.value = v),
@@ -124,8 +139,17 @@ onMounted(async () => {
     error.value = String(err?.stack || err);
   }
 });
+// The page title follows the design: "notes.md — Harper Pad" for a file, "(draft)" for a draft.
+watch(
+  () => drafts.fileName.value,
+  (name) => {
+    document.title = name ? `${name} — Harper Pad` : "Harper Pad";
+  },
+  { immediate: true },
+);
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("pointerdown", onPointerDown);
   drafts.detach();
 });
 </script>
@@ -137,6 +161,29 @@ onBeforeUnmount(() => {
       <button type="button" class="drawer-btn" :class="{ on: showDrawer }" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="toggleDrawer">
         Scratch pad <span class="kbd">Ctrl+J</span>
       </button>
+      <span class="sep" aria-hidden="true"></span>
+      <!-- One button for the state the draft is in: a draft is saved as a file; a draft with a file is saved to it, and the arrow beside
+           it offers saving it somewhere else. -->
+      <span v-if="drafts.current.value.filePath" ref="saveSplit" class="split">
+        <button type="button" class="tool main" :disabled="!drafts.available.value" @click="drafts.saveFile(false)">
+          Save <span class="kbd">Ctrl+S</span>
+        </button>
+        <button type="button" class="tool arrow" aria-label="More ways to save" aria-haspopup="menu" :aria-expanded="saveMenu" :disabled="!drafts.available.value" @click="saveMenu = !saveMenu">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
+        </button>
+        <span v-if="saveMenu" class="menu" role="menu">
+          <button type="button" role="menuitem" class="item" @click="saveElsewhere">Save as file... <span class="kbd">Ctrl+Shift+S</span></button>
+        </span>
+      </span>
+      <button v-else type="button" class="tool" :disabled="!drafts.available.value" @click="drafts.saveFile(true)">
+        Save as file <span class="kbd">Ctrl+Shift+S</span>
+      </button>
+      <span class="sep" aria-hidden="true"></span>
+      <template v-if="drafts.current.value.filePath">
+        <span id="file-name" class="file-name">{{ drafts.fileName.value }}</span>
+        <span v-if="drafts.fileDir.value" class="mute folder" :title="drafts.fileDir.value">in {{ drafts.fileDir.value }}</span>
+      </template>
+      <span v-else id="file-badge" class="badge">Draft, not on disk</span>
       <span class="spacer"></span>
       <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
         Problems <span class="count">{{ problems.length }}</span>
@@ -226,6 +273,89 @@ onBeforeUnmount(() => {
   border-color: var(--accent);
 }
 .kbd {
+  color: var(--mute);
+  font-size: 12px;
+}
+.tool {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+}
+.split {
+  position: relative;
+  display: flex;
+}
+.split .main {
+  border-radius: 6px 0 0 6px;
+}
+.split .arrow {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+}
+.menu {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 10;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.menu .item {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  white-space: nowrap;
+}
+.menu .item:hover,
+.menu .item:focus-visible {
+  background: var(--panel);
+}
+.tool:disabled {
+  color: var(--mute);
+  cursor: not-allowed;
+}
+.sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--line);
+}
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+.folder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.badge {
+  padding: 3px 8px;
+  border-radius: 11px;
+  background: var(--raised);
   color: var(--mute);
   font-size: 12px;
 }

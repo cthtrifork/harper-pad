@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -28,7 +28,13 @@ function loadPlaywright() {
 const { chromium } = loadPlaywright();
 
 mkdirSync(outDir, { recursive: true });
-const browser = await chromium.launch({ channel: process.env.SCREENSHOT_BROWSER_CHANNEL || undefined });
+// SCREENSHOT_BROWSER_PATH runs a browser binary you already have (for example a distribution's chromium) instead of Playwright's own.
+const browserPath = process.env.SCREENSHOT_BROWSER_PATH;
+const browser = await chromium.launch({
+  channel: process.env.SCREENSHOT_BROWSER_CHANNEL || undefined,
+  executablePath: browserPath || undefined,
+  args: browserPath ? ["--no-sandbox"] : [],
+});
 const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 2 }); // the desktop window's size, sharp
 // --font-ui is system-ui, which is whatever sans font the machine has: pin it to Inter (CI installs
 // fonts-inter) so the images are the same on a laptop and in CI. The document font is bundled.
@@ -90,6 +96,35 @@ await page.waitForSelector("#drafts-drawer .item", { timeout: 15000 });
 await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
 expect((await page.locator("#drafts-drawer .item").count()) === 1, "the drafts list should hold the one draft that was typed");
 await shot("04-drafts-drawer");
+
+// A second draft, saved to a file with Ctrl+Shift+S and then edited. Real code all the way: the file is written by the Go service
+// into the demo's Documents folder and the draft keeps its link in SQLite, so the list shows both drafts and the toolbar names the file.
+await page.getByRole("button", { name: "New draft" }).click();
+await page.locator(".cm-content").click();
+await page.keyboard.type("Meeting notes");
+await page.keyboard.press("Enter");
+await page.keyboard.press("Enter");
+await page.keyboard.type("We agreed to ship the first release on Friday.");
+await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
+await page.keyboard.press("Control+Shift+S");
+await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved to Meeting notes.md", null, { timeout: 15000 });
+const filesDir = process.env.SCREENSHOT_FILES_DIR;
+if (filesDir) {
+  const onDisk = readFileSync(path.join(filesDir, "Meeting notes.md"), "utf8");
+  expect(onDisk === "Meeting notes\n\nWe agreed to ship the first release on Friday.", `the saved file should hold the text, got ${JSON.stringify(onDisk)}`);
+}
+expect((await page.textContent("#file-name")) === "Meeting notes.md", "the toolbar should name the file");
+expect((await page.textContent(".folder")).includes("~/Documents"), "the toolbar should show the folder as ~/Documents");
+// Edit it again: the draft is autosaved, the file waits for Ctrl+S.
+await page.keyboard.type(" Mikkel gets the RPM on Monday.");
+await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.includes("not updated"), null, { timeout: 15000 });
+await page.waitForFunction(() => document.querySelectorAll("#drafts-drawer .item").length === 2, null, { timeout: 15000 });
+if (filesDir) {
+  expect(readFileSync(path.join(filesDir, "Meeting notes.md"), "utf8").endsWith("Friday."), "the file should not change until Ctrl+S");
+}
+// The list tells the file draft from the plain one: only the saved one names its file.
+expect((await page.locator("#drafts-drawer .item .file").allTextContents()).map((t) => t.trim()).join() === "Saved to file: Meeting notes.md", "only the saved draft should name its file in the list");
+await shot("05-draft-saved-to-file");
 
 await browser.close();
 if (problems.length) {

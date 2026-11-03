@@ -21,7 +21,7 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 // dsnOptions are applied to every connection the driver opens:
 //   - busy_timeout: wait up to 5 s for a lock (another instance of the app) instead of failing at once;
@@ -111,7 +111,30 @@ func (s *Store) prepare() error {
 	if check != "ok" {
 		return fmt.Errorf("%w: %s", errIntegrity, check)
 	}
+	if version < schemaVersion {
+		return s.migrate(version)
+	}
 	return nil
+}
+
+// migrate brings an older database up to schemaVersion. Version 2 added file_path, the file a draft was saved to, and file_mtime.
+func (s *Store) migrate(from int) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if from < 2 {
+		for _, col := range []string{`file_path TEXT NOT NULL DEFAULT ''`, `file_mtime INTEGER NOT NULL DEFAULT 0`} {
+			if _, err := tx.Exec(`ALTER TABLE drafts ADD COLUMN ` + col); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // draftColumns are the summary columns of the drafts table, written whenever a draft is saved. The list reads only these, never
@@ -122,7 +145,9 @@ const draftColumns = `
 	excerpt     TEXT    NOT NULL DEFAULT '',
 	tasks       TEXT    NOT NULL DEFAULT '[]',
 	tasks_total INTEGER NOT NULL DEFAULT 0,
-	tasks_done  INTEGER NOT NULL DEFAULT 0`
+	tasks_done  INTEGER NOT NULL DEFAULT 0,
+		file_path   TEXT    NOT NULL DEFAULT '',
+		file_mtime  INTEGER NOT NULL DEFAULT 0`
 
 // create makes the schema in a new database.
 func (s *Store) create() error {

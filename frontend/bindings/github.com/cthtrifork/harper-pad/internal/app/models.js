@@ -11,6 +11,59 @@ import { Create as $Create } from "@wailsio/runtime";
 import * as store$0 from "../store/models.js";
 
 /**
+ * FileSave is the answer to SaveDraftToFile.
+ */
+export class FileSave {
+    /**
+     * Creates a new FileSave instance.
+     * @param {Partial<FileSave>} [$$source = {}] - The source object to create the FileSave.
+     */
+    constructor($$source = {}) {
+        if (!("draft" in $$source)) {
+            /**
+             * Draft is the draft as stored, with FilePath set to the file it was written to.
+             * @member
+             * @type {store$0.Draft}
+             */
+            this["draft"] = (new store$0.Draft());
+        }
+        if (!("cancelled" in $$source)) {
+            /**
+             * Cancelled is true when the user closed the save dialog; nothing was written and Draft is the draft as it was.
+             * @member
+             * @type {boolean}
+             */
+            this["cancelled"] = false;
+        }
+        if (!("conflict" in $$source)) {
+            /**
+             * Conflict is true when the file was changed by something else since it was last written here. Nothing was written; the draft
+             * itself was saved. Saving again with overwrite replaces the file.
+             * @member
+             * @type {boolean}
+             */
+            this["conflict"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileSave instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FileSave}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("draft" in $$parsedSource) {
+            $$parsedSource["draft"] = $$createField0_0($$parsedSource["draft"]);
+        }
+        return new FileSave(/** @type {Partial<FileSave>} */($$parsedSource));
+    }
+}
+
+/**
  * Settings is what the app remembers between runs: the personal dictionary and the findings the user chose to ignore.
  * They are kept in the database (internal/store) as two settings, "words" (a JSON list) and "ignored".
  */
@@ -53,7 +106,7 @@ export class Settings {
      * @returns {Settings}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType0;
+        const $$createField1_0 = $$createType1;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("words" in $$parsedSource) {
             $$parsedSource["words"] = $$createField1_0($$parsedSource["words"]);
@@ -105,6 +158,14 @@ export class StartupState {
              * @type {string}
              */
             this["error"] = "";
+        }
+        if (!("home" in $$source)) {
+            /**
+             * Home is the user's home folder, so the page can show "~/Documents" for a file's folder. Empty when unknown (and in the web build).
+             * @member
+             * @type {string}
+             */
+            this["home"] = "";
         }
 
         Object.assign(this, $$source);
@@ -217,6 +278,6 @@ export class UpdateStatus {
 }
 
 // Private type creation functions
-const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = store$0.Draft.createFrom;
-const $$createType2 = $Create.Nullable($$createType1);
+const $$createType0 = store$0.Draft.createFrom;
+const $$createType1 = $Create.Array($Create.Any);
+const $$createType2 = $Create.Nullable($$createType0);

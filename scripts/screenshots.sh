@@ -24,4 +24,4 @@ if [ -n "${PLAYWRIGHT_VERSION:-}" ]; then
 fi
 
 mkdir -p "$out"
-node scripts/screenshots.mjs "http://127.0.0.1:${port}/" "$out"
+SCREENSHOT_FILES_DIR="$tmp/home/Documents" node scripts/screenshots.mjs "http://127.0.0.1:${port}/" "$out"

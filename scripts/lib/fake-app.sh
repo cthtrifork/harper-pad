@@ -10,7 +10,11 @@ fake_app_build() {
 fake_app_start() {
   local dir="$1" port="$2"
 
+  # Real code throughout: a SQLite database under XDG_DATA_HOME, and files saved under $HOME/Documents (the demo has no save
+  # dialog). HOME is set so the folder reads "~/Documents" on every machine.
   HARPER_PAD_DEMO=1 \
+    HARPER_PAD_DEMO_SAVE_DIR="$dir/home/Documents" \
+    HOME="$dir/home" \
     XDG_CACHE_HOME="$dir/cache" \
     XDG_CONFIG_HOME="$dir/config" \
     XDG_DATA_HOME="$dir/data" \

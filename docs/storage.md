@@ -7,7 +7,7 @@ Everything the app remembers is in **one SQLite file**, `harper-pad.db`, in the 
 | `harper-pad.db` | `~/.local/share/harper-pad/` (`$XDG_DATA_HOME`) | `%LOCALAPPDATA%\harper-pad\` |
 
 The folder comes from Wails (`application.Path(PathDataHome)`), so it follows the platform's rules. The file and its folder are private to
-the user. Nothing is written for a draft until you type in it, and nothing becomes a normal file until you choose "Save as file".
+the user. Nothing is written for a draft until you type in it, and nothing becomes a normal file until you choose "Save as file" (Ctrl+Shift+S).
 
 It holds two things:
 
@@ -58,7 +58,8 @@ more widely used and matches Wails.
 drafts   (id TEXT PRIMARY KEY, created_at INTEGER, updated_at INTEGER,
           data TEXT,                                          -- the draft: {"v":1,"format":"markdown","content":"..."}
           format TEXT, title TEXT, excerpt TEXT,              -- its summary, written on every save
-          tasks TEXT, tasks_total INTEGER, tasks_done INTEGER)
+          tasks TEXT, tasks_total INTEGER, tasks_done INTEGER,
+          file_path TEXT, file_mtime INTEGER)                 -- the file it was saved to ('' if never) and its mtime after our write (version 2)
 settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wails", ...]; "ignored": Harper's export
 ```
 
@@ -69,13 +70,18 @@ settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wail
   Opening a draft (`Get`) is what reads its text. Search is the one query that looks into the text: it runs inside SQLite
   (`json_extract(data, '$.content') LIKE ...`), so the text is scanned there and not copied into Go. If searching gets slow with a
   very large collection, an FTS5 index can be added alongside the table.
+- **A draft saved to a file stays a draft.** Ctrl+Shift+S asks for a file once (`PadService.SaveDraftToFile`): the text is written there
+  (a temporary file beside it, then a rename) and `file_path` records it. After that Ctrl+S overwrites the file; before it, Ctrl+S only
+  saves the draft. The autosave never writes the file. If the file was changed by something else since our last write (its mtime differs from `file_mtime`), Ctrl+S saves the draft but not the file and says so; the next Ctrl+S replaces it. A file that was deleted is written again. The path is set only by `SetFilePath` after the save dialog, never taken from
+  the page: `Save` ignores `Draft.FilePath`, and `SaveDraftToFile` reads the stored path, so the page cannot make Go write to a path it
+  chose. Deleting a draft does not touch its file, and undoing the delete restores the text without the link.
 - Settings are text values; `PadService` decides what they hold. `SetSettings` saves several in one transaction.
 
 ## Durability and safety
 
 - SQLite's default rollback journal with full syncing: no `-wal` or `-shm` files beside the database, and a crash leaves the last
   committed state.
-- **Version:** `PRAGMA user_version` is 1. A database with a higher number (written by a newer app) is refused with an error and left
+- **Version:** `PRAGMA user_version` is 2 (1 had no `file_path`; an older database is upgraded when opened). A database with a higher number (written by a newer app) is refused with an error and left
   untouched, so an older build never damages newer data. Changes to the draft blob are handled with its `v` field and defaults when
   reading, so old rows keep loading.
 - **Damage:** a file that is not a database or fails SQLite's quick integrity check is moved aside as `harper-pad.db.bad-<time>` and a

@@ -8,6 +8,7 @@ export {
 };
 
 export {
+    FileSave,
     Settings,
     StartupState,
     UpdateInfo,
