@@ -21,7 +21,7 @@ Sources:
 | Cache dependencies | guide's list of enhancements | `setup-go` cache |
 | Create the release when a tag is pushed | action's release step | `release.yml` attaches the build to the draft that Release Drafter writes for the tag, then publishes it through the REST API (see [releasing](releasing.md#release-notes)) |
 | Test job: GTK4 + WebKitGTK 6 build dependencies, `GOTOOLCHAIN: local`, cancel superseded PR runs | Wails v3 `build-and-test-v3.yml` | `ci.yml` |
-| Job graph: `lint`, `test`, `build` and `windows` run in parallel, so wall time is the slowest job. `test` relies on `go test`'s built-in vet; the full `make vet` runs in `build`, after the compile it reuses. `lint` installs frontend dependencies but does not build the bundle. There is no `wails3 doctor` step (a missing GUI library fails the build), and `windows` skips the Go cache, which restored slower than it saved | this repo | `ci.yml` |
+| Job graph: `lint`, `test`, `build` and `windows` run in parallel, so wall time is the slowest job. `test` relies on `go test`'s built-in vet; the full `make vet` runs in `build`, after the compile it reuses. `lint` installs frontend dependencies but does not build the bundle. There is no `wails3 doctor` step (a missing GUI library fails the build) | this repo | `ci.yml` |
 
 ## What was left out, and why
 
