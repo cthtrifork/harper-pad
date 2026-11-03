@@ -15,11 +15,10 @@ const props = defineProps({
   canStartFresh: { type: Boolean, default: false },
   mode: { type: String, default: "edit" }, // edit | split | preview: the preview has no problems, caret or selection
   isMarkdown: { type: Boolean, default: false },
-  suggestMarkdown: { type: Boolean, default: false }, // a plain text draft that looks like Markdown
   startup: { type: Boolean, default: true }, // show "Harper ready" and the start-up and check timings (false after the first edit is saved)
   autocorrect: { type: Boolean, default: false }, // autocorrect is on (its switch is in the Problems panel, so it shows here too)
 });
-const emit = defineEmits(["start-fresh", "format", "dismiss-hint", "toggle-autocorrect"]);
+const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect"]);
 
 // "Harper ready" shows for a few seconds, then gives its place to the format switch.
 const READY_MS = 4000;
@@ -64,11 +63,6 @@ function fmt(ms) {
     <span class="spacer"></span>
     <span v-if="mode !== 'preview'" id="cursor-pos">Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
     <span v-if="cursor.selected && mode !== 'preview'" id="selection">Selection: {{ cursor.selected }} {{ cursor.selected === 1 ? "character" : "characters" }}</span>
-    <span v-if="suggestMarkdown && !showState" id="markdown-hint" class="mute">
-      Looks like Markdown.
-      <button type="button" class="link" @click="emit('format', 'markdown')">Switch?</button>
-      <button type="button" class="link" aria-label="Dismiss" @click="emit('dismiss-hint')">Not now</button>
-    </span>
     <!-- Two choices, so one small button that shows the current format and switches to the other: no popup to run off the screen. It waits
          until "Harper ready" has gone. M\u2193 is Markdown, Aa is plain text. -->
     <button v-if="!showState" id="format-btn" type="button" class="fmt-btn" :aria-label="isMarkdown ? 'Format: Markdown. Switch to plain text' : 'Format: plain text. Switch to Markdown'" :title="isMarkdown ? 'Markdown (click for plain text)' : 'Plain text (click for Markdown)'" @click="emit('format', isMarkdown ? 'text' : 'markdown')">
