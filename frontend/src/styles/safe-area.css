@@ -1,6 +1,8 @@
-/* Added to the Home Screen on an iPhone the page runs full screen (viewport-fit=cover), so it reaches under the status bar and the
-   home indicator. The header and the status bar keep their panel colour into those areas and pad their content clear of them (and of
-   the notch in landscape). Every inset is 0 in a desktop window, so nothing changes there. Loaded last to win over the shorthands above. */
+/* viewport-fit=cover makes the page full screen on an iPhone: it reaches under the home indicator and, turned sideways, under the notch.
+   The header and the status bar keep their panel colour into those areas and pad their content clear of them. With the default status
+   bar style the page starts below the status bar, so the top inset is 0 there (measured on an iPhone with a Dynamic Island); it is still
+   added, in case a device or a style gives one. Every inset is 0 in a desktop window, so nothing changes there. Loaded last to win over
+   the shorthands above. */
 .bar {
   height: calc(48px + env(safe-area-inset-top));
   padding-top: env(safe-area-inset-top);
