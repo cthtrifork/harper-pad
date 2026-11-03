@@ -9,6 +9,7 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData } from "./lib/backend.js";
+import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
 import { useDrafts } from "./lib/useDrafts.js";
@@ -128,6 +129,22 @@ function toggleProblems() {
   if (showProblems.value && narrow.matches && showDrawer.value) toggleDrawer();
 }
 
+// The text size: Ctrl+plus, Ctrl+minus and Ctrl+0 (Cmd on a Mac) step it and reset it. The editor has one, which the Split preview follows;
+// the full Preview view has its own, and the keys change that while it is showing. Both are the same on every draft and are kept on this
+// device. CodeMirror measures its lines, so it is asked to measure again after the editor's changes.
+const textSize = { editor: ref(loadSize("editor")), preview: ref(loadSize("preview")) };
+applySize("editor", textSize.editor.value);
+applySize("preview", textSize.preview.value);
+function resizeText(dir) {
+  const which = mode.value === "preview" ? "preview" : "editor";
+  const next = stepSize(textSize[which].value, dir);
+  if (next === textSize[which].value) return;
+  textSize[which].value = next;
+  applySize(which, next);
+  saveSize(which, next);
+  if (which === "editor") editor.value?.remeasure();
+}
+
 // Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S saves: to the draft until the text has been saved to a file, then to
 // the file; Ctrl+Shift+S always asks for a file.
 function onKeydown(e) {
@@ -139,6 +156,9 @@ function onKeydown(e) {
   } else if (key === "s") {
     e.preventDefault(); // not the browser's "save page"
     drafts.saveFile(e.shiftKey);
+  } else if (key === "+" || key === "=" || key === "-" || key === "_" || key === "0") {
+    e.preventDefault(); // not the webview's own zoom, which would scale the whole window
+    resizeText(key === "0" ? 0 : key === "-" || key === "_" ? -1 : 1);
   }
 }
 

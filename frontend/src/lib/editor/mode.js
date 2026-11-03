@@ -17,7 +17,7 @@ const markdownStyle = HighlightStyle.define([
 
 // Split shows the source as the design does: a monospace face, 30 px lines, line numbers and the current line.
 const sourceTheme = EditorView.theme({
-  "&": { fontSize: "15px" },
+  "&": { fontSize: "calc(var(--editor-size, 19px) * 15 / 19)" },
   ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "30px" },
   ".cm-content": { padding: "20px 0" },
 });

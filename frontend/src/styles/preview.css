@@ -46,7 +46,7 @@
 .preview .md {
   max-width: 720px;
   margin: 0 auto;
-  font: 19px / 1.75 var(--font-doc);
+  font: calc(19px * var(--preview-scale, 1)) / 1.75 var(--font-doc);
   /* A new version of the text fades in softly instead of snapping. */
   animation: md-in 0.18s var(--ease);
 }
@@ -54,7 +54,7 @@
 .preview.compact .md {
   max-width: none;
   margin: 0;
-  font-size: 17px;
+  font-size: calc(17px * var(--editor-scale, 1));
   line-height: 1.7;
 }
 
@@ -71,11 +71,11 @@
 
 .preview .md h1 {
   margin-top: 0;
-  font-size: 34px;
+  font-size: calc(34px * var(--preview-scale, 1));
 }
 
 .preview.compact .md h1 {
-  font-size: 28px;
+  font-size: calc(28px * var(--editor-scale, 1));
 }
 
 .preview .md h2 {
