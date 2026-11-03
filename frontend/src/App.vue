@@ -24,7 +24,9 @@ const error = ref("");
 const setupMs = ref(0);
 const lintMs = ref(0);
 const problems = ref([]);
-const showProblems = ref(true);
+// On a phone the problems are a sheet over the text, so they start closed.
+const narrow = window.matchMedia("(max-width: 720px)");
+const showProblems = ref(!narrow.matches);
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
@@ -66,7 +68,15 @@ function onPaneScroll() {
 
 function toggleDrawer() {
   showDrawer.value = !showDrawer.value;
-  if (showDrawer.value) drafts.refreshList();
+  if (showDrawer.value) {
+    drafts.refreshList();
+    if (narrow.matches) showProblems.value = false; // two sheets cannot share a phone screen
+  }
+}
+
+function toggleProblems() {
+  showProblems.value = !showProblems.value;
+  if (showProblems.value && narrow.matches && showDrawer.value) toggleDrawer();
 }
 
 // Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S saves: to the draft until the text has been saved to a file, then to
@@ -196,7 +206,7 @@ onBeforeUnmount(() => {
       :mode="mode"
       :update-button="UpdateButton"
       @toggle-drawer="toggleDrawer"
-      @toggle-problems="showProblems = !showProblems"
+      @toggle-problems="toggleProblems"
       @save="drafts.saveFile"
       @view="setView"
     />
