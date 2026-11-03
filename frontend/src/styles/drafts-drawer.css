@@ -89,6 +89,7 @@
 }
 
 .drawer .drafts {
+  position: relative; /* a leaving row is taken out of the flow and stays inside the list */
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -104,6 +105,9 @@
   position: relative;
   border-radius: 8px;
   border: 1px solid transparent;
+  transition:
+    background-color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
 
 .drawer .item.active {
@@ -238,6 +242,10 @@
   background: transparent;
   color: var(--mute);
   opacity: 0;
+  transition:
+    opacity 0.15s var(--ease),
+    color 0.15s var(--ease),
+    background-color 0.15s var(--ease);
 }
 
 .drawer .item:hover .del,
@@ -301,4 +309,42 @@
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+
+/* Motion (switched off by prefers-reduced-motion, see base.css): rows fade and slide in and out, the rest glide into place, and the
+   toast rises from the bottom. Only opacity and transform are animated. */
+.drawer .draft-enter-active,
+.drawer .draft-leave-active {
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.drawer .draft-move {
+  transition: transform 0.2s var(--ease);
+}
+
+.drawer .draft-enter-from,
+.drawer .draft-leave-to {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+
+.drawer .draft-leave-active {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+}
+
+.drawer .toast-enter-active,
+.drawer .toast-leave-active {
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.drawer .toast-enter-from,
+.drawer .toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }

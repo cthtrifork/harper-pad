@@ -39,7 +39,7 @@ const baseName = (path) => path.split(/[\\/]/).pop();
     </div>
     <h3 class="label">{{ query.trim() ? "Results" : "Recent" }}</h3>
 
-    <ul v-if="drafts.length" class="drafts">
+    <TransitionGroup v-if="drafts.length" name="draft" tag="ul" class="drafts">
       <li v-for="d in drafts" :key="d.id" class="item" :class="{ active: d.id === currentId }">
         <button type="button" class="card" :aria-current="d.id === currentId ? 'true' : undefined" @click="emit('open', d.id)">
           <span class="top">
@@ -68,7 +68,7 @@ const baseName = (path) => path.split(/[\\/]/).pop();
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 3.5h7M4.5 3.5V2.5h3v1M3.5 3.5l.4 6h4.2l.4-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
         </button>
       </li>
-    </ul>
+    </TransitionGroup>
     <p v-else class="empty">{{ query.trim() ? `No drafts match "${query.trim()}".` : "No drafts yet. Start typing and it is saved here." }}</p>
 
     <footer>
@@ -76,9 +76,11 @@ const baseName = (path) => path.split(/[\\/]/).pop();
       <button v-if="total > drafts.length" type="button" class="link" @click="emit('more')">Show more</button>
     </footer>
 
-    <div v-if="toast" class="toast" role="status">
-      <span>{{ toast.message }}</span>
-      <button v-if="toast.undo" type="button" class="link strong" @click="emit('undo')">Undo</button>
-    </div>
+    <Transition name="toast">
+      <div v-if="toast" class="toast" role="status">
+        <span>{{ toast.message }}</span>
+        <button v-if="toast.undo" type="button" class="link strong" @click="emit('undo')">Undo</button>
+      </div>
+    </Transition>
   </aside>
 </template>
