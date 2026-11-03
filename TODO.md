@@ -1,13 +1,14 @@
 # TODO
 
-Status: the editor (CodeMirror 6 + harper.js), Problems panel, updater, Windows release flow and web build work, and so does the scratch pad
-drawer (autosave, search, delete with undo; SQLite on desktop, IndexedDB in the web build). Open file is next (save as file works).
+Status: the editor (CodeMirror 6 + harper.js), Problems panel, Edit / Split / Preview views, updater, Windows release flow and web
+build work, and so does the scratch pad drawer (autosave, search, delete with undo; SQLite on desktop, IndexedDB in the web build)
+and Save as file. Open file is next.
 Only open items are listed here; finished work is in the git history.
 
 ## 1. Repo and CI
 
-- [ ] Set the real Go version: `.tool-versions` and `go.mod` say 1.26 (what the VM has). Left for Renovate's PR,
-      because the VM cannot build with a newer one.
+- [ ] `go.mod` still says 1.26 while `.tool-versions` has 1.27.3. Left for Renovate's PR, because the VM cannot build with a
+      newer one.
 - [ ] Immutable releases (`docs/releasing.md`) could not be checked from the VM (token lacks access): confirm in the
       repo settings.
 
@@ -17,7 +18,6 @@ Only open items are listed here; finished work is in the git history.
       and remove references to files that do not exist here (`principles.md`, `architecture.md`, `headless.md`,
       `agent-runbook.md`, `decisions.md`).
 - [ ] Write `docs/architecture.md` once the editor exists; link it from `AGENTS.md`.
-- [ ] README: mention the web app (`docs/pages.md`) next to the Linux and Windows desktop builds.
 - [ ] Optional later: a progress bar and a Cancel while downloading (needs Wails update events).
 
 ## 3. Checks only a real desktop can do
@@ -46,15 +46,8 @@ vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
 Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, split, preview, scratch pad drawer).
 
-- [ ] Show what the document is: in the toolbar its name and folder ("notes.md in ~/Documents") for a file, or a "Draft, not on
-      disk" badge for a draft, and the same name in the window title ("notes.md — Harper Pad": the Wails window title on
-      desktop, `document.title` on the web). The toolbar has **Open file** (Ctrl+O) and **Save as file** (Ctrl+S) buttons.
-- [x] Save as file (Ctrl+Shift+S) and Save (Ctrl+S: the draft until it has a file, then the file); the draft keeps a link to its
-      file (`file_path`, `docs/storage.md`). The toolbar shows the file name and folder, and the drawer names the file on drafts that have one.
-- [ ] "Open file", and "Save as file" button, on desktop through the Go service (`application.Get().Dialog.SaveFile()` / `OpenFile()` with
-      a filename and filters, `.md` or `.txt` from the draft's format), in the web build through the browser's file picker and
-      download. Report results inline, not with info dialogs. Once it exists, the drawer's hint should say "Nothing is written to
-      your files until you choose Save as file".
+- [ ] "Open file" (Ctrl+O; there is no button yet), on desktop through the Go service (`application.Get().Dialog.OpenFile()` with filters), in the web
+      build through the browser's file picker. Report results inline, not with info dialogs.
 - [ ] Export and import all drafts as one JSON file, as a manual backup. It matters most for the web build, where the browser
       can evict its storage, and it is also the only way to move drafts between the web app and the desktop app.
 - [ ] "Send to editor" and "Add to scratch pad" for the current selection (a small button that appears over the selection in
@@ -64,8 +57,6 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 
 ## 6. Cleanup and tests
 
-- [ ] Remove the unused `PadService.DemoMode` binding and its test: `Startup` returns the demo text and the frontend no longer
-      calls it.
 - [ ] `summarize` (title, excerpt, task preview) exists twice, in `internal/store/drafts.go` and `frontend/src/lib/summarize.js`,
       and must stay the same. Share one file of fixtures that both test suites run, so they cannot drift.
 - [ ] The frontend has no unit tests (the drawer, `summarize.js`, `when.js` and the web drafts store were checked by driving the
