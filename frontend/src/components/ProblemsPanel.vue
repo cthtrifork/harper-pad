@@ -89,7 +89,7 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
       </button>
     </div>
     <ul v-if="shown.length">
-      <li v-for="(p, i) in shown" :key="`${p.from}-${p.to}-${p.kind}`">
+      <li v-for="(p, i) in shown" :key="`${p.from}-${p.to}-${p.kind}`" :class="tone[p.severity]">
         <button type="button" class="item" @click="$emit('jump', p)">
           <span class="head">
             <span class="dot" :class="tone[p.severity]"></span>
