@@ -282,7 +282,7 @@ jobs:
     name: windows
     needs: changes
     if: needs.changes.outputs.build == 'true'
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 25
     defaults:
       run:
@@ -296,7 +296,7 @@ jobs:
         with:
           go-version-file: .tool-versions
           check-latest: true
-          # The Go cache restore took ~75 s on windows-2022, longer than the downloads it saves.
+          # The Go cache restore took ~75 s on Windows, longer than the downloads it saves.
           cache: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
