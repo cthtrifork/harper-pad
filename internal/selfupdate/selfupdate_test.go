@@ -303,7 +303,7 @@ func TestInstallable(t *testing.T) {
 		t.Errorf("AppImage in a writable directory rejected: %v", err)
 	}
 
-	if os.Geteuid() != 0 { // root ignores directory permissions
+	if os.Geteuid() != 0 && runtime.GOOS != "windows" { // root ignores directory permissions, and chmod does not make a directory read-only on Windows
 		t.Setenv("APPIMAGE", "")
 		ro := t.TempDir()
 		if err := os.Chmod(ro, 0o555); err != nil {
