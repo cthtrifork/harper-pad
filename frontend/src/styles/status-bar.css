@@ -2,27 +2,21 @@
   flex: 1;
 }
 
-.status .seg {
-  display: inline-flex;
+.status .fmt-btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 11px;
+  min-width: 30px;
+  padding: 3px 8px;
+  color: var(--text);
+  background: none;
   border: 1px solid var(--line);
   border-radius: 999px;
-  overflow: hidden;
-}
-
-.status .seg button {
-  font: inherit;
-  color: var(--mute);
-  background: none;
-  border: 0;
-  padding: 2px 10px;
   cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
-.status .seg button.on {
-  color: var(--text);
+.status .fmt-btn:hover {
   background: var(--line);
 }
 

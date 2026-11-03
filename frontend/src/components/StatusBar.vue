@@ -69,10 +69,10 @@ function fmt(ms) {
       <button type="button" class="link" @click="emit('format', 'markdown')">Switch?</button>
       <button type="button" class="link" aria-label="Dismiss" @click="emit('dismiss-hint')">Not now</button>
     </span>
-    <!-- Two choices, so a switch rather than a menu: it has no popup to run off the screen. It waits until "Harper ready" has gone. -->
-    <span v-if="!showState" id="format-switch" class="seg">
-      <button type="button" :aria-pressed="isMarkdown" :class="{ on: isMarkdown }" @click="emit('format', 'markdown')" title="Format: Markdown">Markdown</button>
-      <button type="button" :aria-pressed="!isMarkdown" :class="{ on: !isMarkdown }" @click="emit('format', 'text')" title="Format: plain text">Text</button>
-    </span>
+    <!-- Two choices, so one small button that shows the current format and switches to the other: no popup to run off the screen. It waits
+         until "Harper ready" has gone. M\u2193 is Markdown, Aa is plain text. -->
+    <button v-if="!showState" id="format-btn" type="button" class="fmt-btn" :aria-label="isMarkdown ? 'Format: Markdown. Switch to plain text' : 'Format: plain text. Switch to Markdown'" :title="isMarkdown ? 'Markdown (click for plain text)' : 'Plain text (click for Markdown)'" @click="emit('format', isMarkdown ? 'text' : 'markdown')">
+      {{ isMarkdown ? "M\u2193" : "Aa" }}
+    </button>
   </footer>
 </template>
