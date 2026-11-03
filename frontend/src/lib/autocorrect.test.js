@@ -10,6 +10,8 @@ test("only a finding with exactly one suggestion is safe", () => {
   assert.equal(categoryOf(finding("Spelling", ["received", "relieved", "receive"])), null);
   assert.equal(categoryOf(finding("Capitalization", ["I"])), "caps");
   assert.equal(categoryOf(finding("Repetition", ["the"])), "reps");
+  assert.equal(categoryOf(finding("Formatting", [" "])), "spaces");
+  assert.equal(categoryOf(finding("Formatting", ["x"])), null);
 });
 
 test("grammar, style and insert-only fixes are never auto-fixed", () => {
@@ -64,8 +66,8 @@ test("the choices survive a round trip, and bad or missing storage gives the def
   const data = new Map();
   const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
   assert.deepEqual(loadPrefs(storage), DEFAULT_PREFS);
-  savePrefs({ on: true, typos: true, caps: false, reps: true }, storage);
-  assert.deepEqual(loadPrefs(storage), { on: true, typos: true, caps: false, reps: true });
+  savePrefs({ on: true, typos: true, caps: false, reps: true, spaces: true }, storage);
+  assert.deepEqual(loadPrefs(storage), { on: true, typos: true, caps: false, reps: true, spaces: true });
   data.set("harper-pad.autocorrect", "{not json");
   assert.deepEqual(loadPrefs(storage), DEFAULT_PREFS);
   const broken = {

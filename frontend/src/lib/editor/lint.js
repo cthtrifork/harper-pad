@@ -1,6 +1,6 @@
 import { linter } from "@codemirror/lint";
 import { StateEffect } from "@codemirror/state";
-import { isSafe } from "../autocorrect.js";
+import { isSafe, isSpacing } from "../autocorrect.js";
 import { lintText } from "../harper.js";
 import { applyFixes, dueFixes } from "./autocorrect.js";
 
@@ -14,7 +14,17 @@ function severity(kind) {
 // Turn a Harper suggestion into a CodeMirror lint action. The range is the diagnostic's current one, so the fix
 // stays correct after the text before it has been edited.
 function toAction(fix) {
-  const name = fix.kind === "remove" || fix.text === "" ? "Remove" : fix.kind === "insert" ? `Insert "${fix.text}"` : fix.text;
+  // A fix that is only spaces has no visible text, so it needs a name (an empty label is an empty button).
+  const name =
+    fix.kind === "remove" || fix.text === ""
+      ? "Remove"
+      : fix.kind === "insert"
+        ? `Insert "${fix.text}"`
+        : isSpacing(fix)
+          ? fix.text === " "
+            ? "Use one space"
+            : "Use spacing"
+          : fix.text;
   return {
     name,
     apply(view, from, to) {
