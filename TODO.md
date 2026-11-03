@@ -14,19 +14,18 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
 
 ## 2. Repo and CI bring-up (first PR on GitHub)
 
-- [ ] Create the GitHub repo (`cthtrifork/harper-pad`), push, enable Actions.
-- [ ] Install the Renovate GitHub App and set the secrets/vars the workflows expect (see `docs/ci.md`,
-      `docs/releasing.md`): `RELEASE_GPG_PRIVATE_KEY`, `RELEASE_GPG_PASSPHRASE`, Renovate app credentials.
-- [ ] Branch rules: require `lint`, `test`, `build`, `check title`; enable immutable releases (`docs/releasing.md`).
-- [ ] First green CI run; fix what the trivy-specific copies got wrong (workflows were only linted with
-      actionlint/yamllint, never run).
-- [ ] Dry-run `release.yml` on a branch (`workflow_dispatch`): confirm deb/rpm build with `harper-pad` names and the
-      MCP/pprof grep checks pass.
-- [ ] Swap the placeholder icons (`build/appicon.png`, `frontend/public/favicon.svg`, tray and window icons are still
-      trivy art).
-- [ ] `bindings.yml` from trivy (auto-updates stale bindings on PRs) was not ported; `ci.yml` only checks them. Port
-      if wanted.
-- [ ] Set the real Go version: `.tool-versions` and `go.mod` say 1.26 (what the VM has); trivy uses 1.27.
+- [x] Create the GitHub repo (`cthtrifork/harper-pad`), push, enable Actions.
+- [x] Install the Renovate GitHub App and set the secrets/vars the workflows expect (`RENOVATE_APP_CLIENT_ID` is set,
+      and the signed `v0.0.1` release shows the GPG key works).
+- [x] Branch rules: `main` requires a PR and `lint`, `test`, `build`, `check title`, and blocks deletion and force
+      pushes. Immutable releases (`docs/releasing.md`) could not be checked from the VM (token lacks access): confirm
+      in the repo settings.
+- [x] First green CI run, and a `release.yml` dry run (`v0.0.1`: deb, rpm, tarball, SBOM, checksums, signing key).
+- [x] Swap the placeholder icons (`build/appicon.png`, `frontend/public/favicon.svg`, tray and window icons): new
+      amber "H with a squiggle" icon, rendered from the SVG.
+- [x] `bindings.yml` from trivy: not ported on purpose; `ci.yml` checks the bindings and the repo has one service.
+- [ ] Set the real Go version: `.tool-versions` and `go.mod` say 1.26 (what the VM has); trivy uses 1.27. Left for
+      Renovate's PR, because the VM cannot build with 1.27.
 
 ## 3. Docs audit
 
