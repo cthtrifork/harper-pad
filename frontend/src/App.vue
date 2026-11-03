@@ -269,8 +269,13 @@ onBeforeUnmount(() => {
   background: var(--raised);
   color: var(--text);
 }
+.drawer-btn:hover {
+  border-color: var(--mute);
+}
 .drawer-btn.on {
   border-color: var(--accent);
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .kbd {
   color: var(--mute);
@@ -286,6 +291,12 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   background: var(--raised);
   color: var(--text);
+}
+.tool:hover:not(:disabled) {
+  border-color: var(--mute);
+}
+.tool:active:not(:disabled) {
+  background: var(--panel);
 }
 .split {
   position: relative;
@@ -370,8 +381,13 @@ onBeforeUnmount(() => {
   background: var(--raised);
   color: var(--text);
 }
+.toggle:hover {
+  border-color: var(--mute);
+}
 .toggle.on {
   border-color: var(--accent);
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .count {
   min-width: 18px;
