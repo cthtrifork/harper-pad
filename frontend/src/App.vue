@@ -210,8 +210,12 @@ const removeWord = (word) =>
     old.dispose().catch(() => {});
   });
 
+// A tap on the empty page beside or below the editor: focus it from the click itself, the only place a phone opens its keyboard.
+const focusFromClick = (e) => e.target === pane.value && editor.value?.focusEnd();
+
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
+  pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
   keepData();
   await nextTick(); // the editor is in the page now; Harper starts loading after it has been painted
