@@ -13,7 +13,7 @@ func TestNonReleaseBuildsCannotUpdate(t *testing.T) {
 
 	for _, v := range []string{"dev", "", "ci-0123456", "1.2.3", "latest"} {
 		version = v
-		s := &PadService{}
+		s := &UpdateService{}
 		InitUpdater(s, nil) // never reaches the updater, so no app is needed
 
 		info := s.UpdateInfo()

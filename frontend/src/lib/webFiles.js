@@ -1,4 +1,4 @@
-// Saving a draft to a file in the browser (the web build), the counterpart of PadService.SaveDraftToFile. The File System Access
+// Saving a draft to a file in the browser (the web build), the counterpart of DraftService.SaveDraftToFile. The File System Access
 // API (Chrome, Edge) lets the page keep a handle to the file, so later saves overwrite it without asking. Elsewhere (Firefox,
 // Safari) the page can only download a copy, so the draft is never linked to a file there and "Save" keeps updating the draft.
 import { summarize } from "./summarize.js";

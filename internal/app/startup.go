@@ -27,7 +27,7 @@ type StartupState struct {
 func (s *PadService) Startup() StartupState {
 	out := StartupState{Demo: demoDetail()}
 	out.Home, _ = os.UserHomeDir()
-	newest, err := s.ListDrafts(1, 0) // one summary and the count
+	newest, err := s.drafts.ListDrafts(1, 0) // one summary and the count
 	if err != nil {
 		out.Error = err.Error()
 		return out
@@ -36,7 +36,7 @@ func (s *PadService) Startup() StartupState {
 	if len(newest.Drafts) == 0 {
 		return out
 	}
-	d, err := s.GetDraft(newest.Drafts[0].ID)
+	d, err := s.drafts.GetDraft(newest.Drafts[0].ID)
 	if err != nil {
 		out.Error = err.Error()
 		return out

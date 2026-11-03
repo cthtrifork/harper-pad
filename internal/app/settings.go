@@ -35,12 +35,17 @@ type Settings struct {
 	Dialect string `json:"dialect"`
 }
 
+// SettingsService is the Wails binding for what the app remembers between runs.
+type SettingsService struct {
+	db *database
+}
+
 // LoadSettings returns the saved settings, or empty ones when there are none yet. With no data folder it behaves
 // like a first run. Unusable saved values are ignored (empty settings), so the app still starts; a database that
 // cannot be opened (for example a newer one) is an error the UI shows.
-func (s *PadService) LoadSettings() (Settings, error) {
+func (s *SettingsService) LoadSettings() (Settings, error) {
 	out := Settings{Version: settingsVersion, Words: []string{}, IgnoredLabels: map[string]string{}}
-	st, err := s.openStore()
+	st, err := s.db.open()
 	if errors.Is(err, errNoDataDir) {
 		return out, nil
 	}
@@ -71,12 +76,12 @@ func (s *PadService) LoadSettings() (Settings, error) {
 }
 
 // SaveSettings validates and saves the settings. The frontend sends the whole set after every change.
-func (s *PadService) SaveSettings(in Settings) error {
+func (s *SettingsService) SaveSettings(in Settings) error {
 	clean, err := sanitize(in)
 	if err != nil {
 		return err
 	}
-	st, err := s.openStore()
+	st, err := s.db.open()
 	if err != nil {
 		return err
 	}

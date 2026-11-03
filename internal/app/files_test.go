@@ -11,7 +11,7 @@ import (
 )
 
 func TestSaveDraftToFile(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Drafts
 	dir := t.TempDir()
 	target := filepath.Join(dir, "plan.md")
 	picks := 0
@@ -79,7 +79,7 @@ func TestSaveDraftToFile(t *testing.T) {
 }
 
 func TestSaveDraftDoesNotChangeTheFile(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "a.md")
 	s.pickPath = func(string, string) (string, error) { return target, nil }
 	r, err := s.SaveDraftToFile(store.Draft{Content: "x"}, false, false)
@@ -94,7 +94,7 @@ func TestSaveDraftDoesNotChangeTheFile(t *testing.T) {
 }
 
 func TestSaveDraftToFileRejectsRelativePath(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Drafts
 	s.pickPath = func(string, string) (string, error) { return "notes.md", nil }
 	if _, err := s.SaveDraftToFile(store.Draft{Content: "x"}, false, false); err == nil {
 		t.Error("a relative path was accepted")
@@ -114,7 +114,7 @@ func TestSuggestName(t *testing.T) {
 }
 
 func TestSaveDraftToFileNoticesOutsideChanges(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "a.md")
 	var offered string
 	s.pickPath = func(name, _ string) (string, error) { offered = name; return target, nil }

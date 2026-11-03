@@ -8,22 +8,23 @@ import (
 	"testing"
 )
 
-func newTestService(t *testing.T) *PadService {
+// newTestServices returns the services on a database in a temporary folder, closed when the test ends.
+func newTestServices(t *testing.T) *Services {
 	t.Helper()
-	s := &PadService{dataDir: filepath.Join(t.TempDir(), "harper-pad")}
-	t.Cleanup(func() { _ = s.ServiceShutdown() })
-	return s
+	db := newDatabase(filepath.Join(t.TempDir(), "harper-pad"))
+	t.Cleanup(func() { _ = db.close() })
+	return newServices(db)
 }
 
 func TestSettingsFirstRunIsEmpty(t *testing.T) {
-	got, err := newTestService(t).LoadSettings()
+	got, err := newTestServices(t).Settings.LoadSettings()
 	if err != nil || len(got.Words) != 0 || got.Ignored != "" || got.Version != settingsVersion {
 		t.Errorf("LoadSettings = %+v, %v", got, err)
 	}
 }
 
 func TestSettingsRoundTripAndClean(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Settings
 	in := Settings{Words: []string{" Wails ", "bootc", "Wails", "", "nfpm", "Wails"}, Ignored: `{"context_hashes":[1,2,3]}`}
 	if err := s.SaveSettings(in); err != nil {
 		t.Fatal(err)
@@ -36,11 +37,11 @@ func TestSettingsRoundTripAndClean(t *testing.T) {
 		t.Errorf("LoadSettings = %+v", got)
 	}
 	// A second service on the same folder sees the same data, as after a restart.
-	if err := s.ServiceShutdown(); err != nil {
+	if err := s.db.close(); err != nil {
 		t.Fatal(err)
 	}
-	again := &PadService{dataDir: s.dataDir}
-	t.Cleanup(func() { _ = again.ServiceShutdown() })
+	again := &SettingsService{db: newDatabase(s.db.dir)}
+	t.Cleanup(func() { _ = again.db.close() })
 	got, _ = again.LoadSettings()
 	if strings.Join(got.Words, ",") != "Wails,bootc,nfpm" {
 		t.Errorf("after restart: %+v", got)
@@ -48,7 +49,7 @@ func TestSettingsRoundTripAndClean(t *testing.T) {
 }
 
 func TestSettingsRejectBadInput(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Settings
 	many := make([]string, maxWords+1)
 	for i := range many {
 		many[i] = fmt.Sprintf("word%d", i)
@@ -73,8 +74,8 @@ func TestSettingsRejectBadInput(t *testing.T) {
 }
 
 func TestSettingsUnusableSavedValuesStartEmpty(t *testing.T) {
-	s := newTestService(t)
-	st, err := s.openStore()
+	s := newTestServices(t).Settings
+	st, err := s.db.open()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +92,7 @@ func TestSettingsUnusableSavedValuesStartEmpty(t *testing.T) {
 }
 
 func TestSettingsWithoutDataFolder(t *testing.T) {
-	s := &PadService{}
+	s := &SettingsService{db: newDatabase("")}
 	if got, err := s.LoadSettings(); err != nil || len(got.Words) != 0 {
 		t.Errorf("LoadSettings = %+v, %v", got, err)
 	}
@@ -101,11 +102,11 @@ func TestSettingsWithoutDataFolder(t *testing.T) {
 }
 
 func TestSettingsDamagedDatabaseStartsEmpty(t *testing.T) {
-	s := newTestService(t)
-	if err := os.MkdirAll(s.dataDir, 0o700); err != nil {
+	s := newTestServices(t).Settings
+	if err := os.MkdirAll(s.db.dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(s.dataDir, "harper-pad.db"), []byte(strings.Repeat("junk ", 400)), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(s.db.dir, "harper-pad.db"), []byte(strings.Repeat("junk ", 400)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := s.LoadSettings(); err != nil || len(got.Words) != 0 {
@@ -117,7 +118,7 @@ func TestSettingsDamagedDatabaseStartsEmpty(t *testing.T) {
 }
 
 func TestSettingsDialectAndIgnoredLabels(t *testing.T) {
-	s := newTestService(t)
+	s := newTestServices(t).Settings
 	long := strings.Repeat("é", maxLabelRunes+20)
 	in := Settings{Dialect: "british", IgnoredLabels: map[string]string{"18446744073709551615": "teh (Spelling)", "7": long}}
 	if err := s.SaveSettings(in); err != nil {

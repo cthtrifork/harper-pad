@@ -7,12 +7,8 @@ Only open items are listed here; finished work is in the git history.
 
 ## 1. Cleanup and tests
 
-- [ ] `summarize` (title, excerpt, task preview) exists twice, in `internal/store/drafts.go` and `frontend/src/lib/summarize.js`,
-      and must stay the same. Share one file of fixtures that both test suites run, so they cannot drift.
-- [ ] The frontend has no unit tests (the drawer, `summarize.js`, `when.js` and the web drafts store were checked by driving the
-      app). Add Vitest for them.
-- [ ] `PadService` holds the updater, the drafts and the settings. Wails' binding guidance prefers focused services
-      (`UpdateService`, `DraftService`, `SettingsService`); optional.
+- [ ] The frontend's only unit test is the `summarize` fixture test (`npm test`, Node's built-in runner). The drawer, `when.js`
+      and the web drafts store were checked by driving the app; add tests for them.
 
 ## 2. Packaging and install on the homeserver
 

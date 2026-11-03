@@ -6,7 +6,7 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 | | Desktop | Web |
 |---|---|---|
 | Build | `npm run build` (embedded by Go) | `npm run build:web` (`vite build --mode web`, output `frontend/dist-web`) |
-| Data | SQLite file in the user's data folder, through `PadService` | IndexedDB in the browser (`harper-pad` database, key `settings`) |
+| Data | SQLite file in the user's data folder, through `DraftService` and `SettingsService` | IndexedDB in the browser (`harper-pad` database, key `settings`) |
 | Updates | in-app updater (GitHub releases) | none: a new deploy is picked up on the next load |
 | Offline | always | after the first load, through the service worker `web/sw.js` |
 

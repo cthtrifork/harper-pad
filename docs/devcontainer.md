@@ -20,7 +20,7 @@ The container user is `vscode` with `updateRemoteUserUID` on, so on Linux it tak
 
 `make dev` runs `wails3 dev` with `build/config.yml`: Vite serves the Vue app with hot module replacement, and a change to a `.go` file rebuilds and restarts the server-mode binary.
 
-After changing an exported `PadService` method or a type it exchanges, run `make bindings` and commit `frontend/bindings`.
+After changing an exported method of a service in `internal/app` or a type it exchanges, run `make bindings` and commit `frontend/bindings`.
 
 ## Checks
 

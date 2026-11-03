@@ -10,7 +10,7 @@ import { saveWebFile } from "./webFiles.js";
 
 export const isWeb = import.meta.env.MODE === "web";
 
-const bindings = isWeb ? undefined : async () => (await import("../../bindings/github.com/cthtrifork/harper-pad/internal/app")).PadService;
+const bindings = isWeb ? undefined : () => import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
 
 const emptySettings = () => ({ version: 1, words: [], ignored: "" });
 
@@ -59,18 +59,18 @@ async function idbPut(key, value) {
 
 // The saved dictionary and ignore list: {version, words, ignored}. Empty settings on a first run.
 export async function loadSettings() {
-  if (!isWeb) return (await bindings()).LoadSettings();
+  if (!isWeb) return (await bindings()).SettingsService.LoadSettings();
   const saved = await idbGet("settings");
   return { ...emptySettings(), ...saved };
 }
 
 export async function saveSettings(settings) {
-  if (!isWeb) return (await bindings()).SaveSettings(settings);
+  if (!isWeb) return (await bindings()).SettingsService.SaveSettings(settings);
   return idbPut("settings", settings);
 }
 
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
-// The same operations on both builds: PadService's drafts methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).
+// The same operations on both builds: DraftService's methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).
 
 const web = isWeb ? createWebDrafts(openDb) : undefined;
 
@@ -78,33 +78,33 @@ const web = isWeb ? createWebDrafts(openDb) : undefined;
 // desktop development build's demo mode (empty otherwise), `open` the most recent draft with its text (or null), `total` how many
 // drafts there are, and `error` why drafts are unavailable (empty when they are).
 export async function startup() {
-  return isWeb ? web.startup() : (await bindings()).Startup();
+  return isWeb ? web.startup() : (await bindings()).PadService.Startup();
 }
 
 // Desktop only: move the database aside (as harper-pad.db.bad-<time>, never deleted) and start a new, empty one. Offered when the
 // drafts cannot be read. Returns where the old file went.
 export async function startFresh() {
   if (isWeb) throw new Error("there is no database file in the web build");
-  return (await bindings()).StartFresh();
+  return (await bindings()).DraftService.StartFresh();
 }
 
 // A page of draft summaries, newest first: {drafts, total}. The summaries carry no text.
 export async function listDrafts(limit, offset) {
-  return isWeb ? web.list(limit, offset) : (await bindings()).ListDrafts(limit, offset);
+  return isWeb ? web.list(limit, offset) : (await bindings()).DraftService.ListDrafts(limit, offset);
 }
 
 // The drafts whose text contains `query`, newest first: {drafts, total}.
 export async function searchDrafts(query, limit) {
-  return isWeb ? web.search(query, limit) : (await bindings()).SearchDrafts(query, limit);
+  return isWeb ? web.search(query, limit) : (await bindings()).DraftService.SearchDrafts(query, limit);
 }
 
 export async function getDraft(id) {
-  return isWeb ? web.get(id) : (await bindings()).GetDraft(id);
+  return isWeb ? web.get(id) : (await bindings()).DraftService.GetDraft(id);
 }
 
 // Creates a draft (empty id) or updates one, and returns it as stored. Saving an id that is no longer stored brings it back.
 export async function saveDraft(draft) {
-  return isWeb ? web.save(draft) : (await bindings()).SaveDraft(draft);
+  return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(draft);
 }
 
 // Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. With `saveAs`, or when the draft was
@@ -113,7 +113,7 @@ export async function saveDraft(draft) {
 // When the file was changed by something else since it was last written, nothing is written and `conflict` is true, unless
 // `overwrite` is set.
 export async function saveDraftToFile(draft, saveAs, overwrite = false) {
-  if (!isWeb) return (await bindings()).SaveDraftToFile(draft, saveAs, overwrite);
+  if (!isWeb) return (await bindings()).DraftService.SaveDraftToFile(draft, saveAs, overwrite);
   return saveWebFile(
     web,
     (id) => idbGet(`file:${id}`),
@@ -125,7 +125,7 @@ export async function saveDraftToFile(draft, saveAs, overwrite = false) {
 }
 
 export async function deleteDraft(id) {
-  return isWeb ? web.remove(id) : (await bindings()).DeleteDraft(id);
+  return isWeb ? web.remove(id) : (await bindings()).DraftService.DeleteDraft(id);
 }
 
 // Ask the browser not to evict this site's data when storage runs low. Safari grants it to an installed (Add to Home Screen) app.

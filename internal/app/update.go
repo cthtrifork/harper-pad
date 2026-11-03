@@ -11,6 +11,12 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
+// UpdateService is the Wails binding for the in-app updater.
+type UpdateService struct {
+	app    *application.App
+	update UpdateInfo
+}
+
 // UpdateInfo tells the UI what this build can do about updates.
 type UpdateInfo struct {
 	Version string `json:"version"`
@@ -22,7 +28,7 @@ type UpdateInfo struct {
 // InitUpdater enables in-app updates for release builds. Development builds, CI builds
 // and headless server mode stay disabled: see selfupdate.Enabled for why a development
 // build must never be allowed to "update" itself.
-func InitUpdater(s *PadService, app *application.App) {
+func InitUpdater(s *UpdateService, app *application.App) {
 	s.app = app
 	s.update = UpdateInfo{Version: version}
 	switch {
@@ -52,7 +58,7 @@ func InitUpdater(s *PadService, app *application.App) {
 }
 
 // UpdateInfo reports the running version and whether it can update itself.
-func (s *PadService) UpdateInfo() UpdateInfo { return s.update }
+func (s *UpdateService) UpdateInfo() UpdateInfo { return s.update }
 
 // UpdateStatus is what a check found.
 type UpdateStatus struct {
@@ -63,7 +69,7 @@ type UpdateStatus struct {
 
 // CheckForUpdates asks GitHub Releases whether a newer release exists. It only looks:
 // nothing is downloaded until InstallUpdate is called.
-func (s *PadService) CheckForUpdates() (UpdateStatus, error) {
+func (s *UpdateService) CheckForUpdates() (UpdateStatus, error) {
 	if !s.update.Enabled {
 		return UpdateStatus{}, errors.New(s.update.Reason)
 	}
@@ -77,7 +83,7 @@ func (s *PadService) CheckForUpdates() (UpdateStatus, error) {
 // InstallUpdate downloads the release CheckForUpdates found, verifies its SHA-256 and
 // stages it beside the running binary. It blocks until staged or failed, so it must be
 // called from a binding (its own goroutine), never the UI thread.
-func (s *PadService) InstallUpdate() error {
+func (s *UpdateService) InstallUpdate() error {
 	if !s.update.Enabled {
 		return errors.New(s.update.Reason)
 	}
@@ -92,7 +98,7 @@ func (s *PadService) InstallUpdate() error {
 }
 
 // RestartToUpdate swaps the staged binary in and relaunches the app.
-func (s *PadService) RestartToUpdate() error {
+func (s *UpdateService) RestartToUpdate() error {
 	if !s.update.Enabled {
 		return errors.New(s.update.Reason)
 	}

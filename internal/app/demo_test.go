@@ -9,7 +9,7 @@ import (
 )
 
 func TestDemoMode(t *testing.T) {
-	svc := NewPadService()
+	svc := &PadService{}
 	t.Setenv(demoFlag, "")
 	if got := svc.DemoMode(); got != "" {
 		t.Errorf("DemoMode() = %q with the flag unset, want empty", got)
