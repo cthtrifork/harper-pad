@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -187,7 +188,7 @@ func TestWriteFileKeepsSymlink(t *testing.T) {
 	if got, _ := os.ReadFile(real); string(got) != "new" {
 		t.Errorf("target = %q", got)
 	}
-	if fi, _ := os.Stat(real); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(real); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 { // Windows has no Unix modes
 		t.Errorf("mode = %v", fi.Mode().Perm())
 	}
 }
