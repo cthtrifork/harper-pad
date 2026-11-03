@@ -95,29 +95,33 @@
   overflow: auto;
   list-style: none;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .drawer .item {
   position: relative;
   touch-action: pan-y; /* horizontal moves reach the swipe handlers, vertical ones scroll the list */
-  border-radius: 8px;
-  border: 1px solid transparent;
-  transition:
-    background-color 0.15s var(--ease),
-    border-color 0.15s var(--ease);
-}
-
-.drawer .item.active {
+  /* Each draft is a card of its own, like a sheet of paper (the Problems panel is a flat list instead). */
+  border-radius: 10px;
+  border: 1px solid var(--line);
   background: var(--raised);
-  border-color: var(--line);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
 }
 
 .drawer .item:hover {
-  background: var(--raised);
+  border-color: var(--mute);
+}
+
+.drawer .item.active,
+.drawer .item.active:hover {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .drawer .card {
@@ -125,7 +129,7 @@
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  padding: 12px 7px; /* 8px list inset + 1px border + 7px = the 16px edge of the header and search */
+  padding: 12px 13px;
   border: 0;
   background: none;
   color: inherit;
@@ -219,7 +223,8 @@
 
 .drawer .excerpt {
   color: var(--mute);
-  font-size: 13px;
+  font-family: var(--font-doc);
+  font-size: 13.5px;
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -231,7 +236,7 @@
 .drawer .del {
   position: absolute;
   top: 9px;
-  right: 5px;
+  right: 9px;
   width: 30px;
   height: 30px;
   display: flex;
@@ -359,8 +364,8 @@
 
 .drawer .draft-leave-active {
   position: absolute;
-  left: 8px;
-  right: 8px;
+  left: 12px;
+  right: 12px;
 }
 
 .drawer .toast-enter-active,
@@ -384,7 +389,7 @@
   align-items: center;
   justify-content: flex-end;
   padding-right: 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--bad);
   font-size: 13px;
   font-weight: 600;

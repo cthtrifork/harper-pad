@@ -3,7 +3,7 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
+  background: var(--well);
   border-left: 1px solid var(--line);
   overflow: auto;
 }
@@ -27,6 +27,36 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* The findings are a flat list on a darker surface: dividers, and an edge in the colour of the kind (the Drafts drawer is cards). */
+.panel > ul:not(.entries) {
+  padding: 0 0 12px;
+  gap: 0;
+}
+
+.panel > ul:not(.entries) > li {
+  padding: 10px 16px 10px 13px;
+  border-left: 3px solid var(--mute);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  transition: background-color 0.15s var(--ease);
+}
+
+.panel > ul:not(.entries) > li:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.panel > ul:not(.entries) > li.spelling {
+  border-left-color: var(--c-spelling);
+}
+
+.panel > ul:not(.entries) > li.grammar {
+  border-left-color: var(--c-grammar);
+}
+
+.panel > ul:not(.entries) > li.style {
+  border-left-color: var(--c-style);
 }
 
 .panel li {
@@ -104,15 +134,16 @@
 .panel .fix {
   height: 24px;
   padding: 0 10px;
-  border: 1px solid transparent;
+  border: 1px solid var(--accent);
   border-radius: 12px;
-  background: var(--accent-tint);
-  color: var(--text);
+  background: transparent;
+  color: var(--accent);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .panel .fix:hover {
-  border-color: var(--accent);
+  background: var(--accent-tint);
 }
 
 .panel .mute {
