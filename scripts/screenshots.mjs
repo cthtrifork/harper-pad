@@ -187,6 +187,51 @@ expect((await page.locator(".md input[type=checkbox]:checked").count()) === 2, "
 expect((await page.locator(".md strong").textContent()) === "Mikkel", "the preview should show the bold name");
 await shot("07-markdown-split");
 
+// The same app on a phone (390 x 844, touch): below 720 px the scratch pad is a sheet over the page, Problems is a bottom sheet and
+// Split stacks. A second context shares the server, so the drafts made above are in the list.
+await page.close();
+const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await phone.addInitScript(() => {
+  document.addEventListener("DOMContentLoaded", () => {
+    const style = document.createElement("style");
+    style.textContent = ":root{--font-ui:Inter,sans-serif !important}";
+    document.head.append(style);
+  });
+});
+phone.on("pageerror", (e) => problems.push(`page error (phone): ${e.message}`));
+const phoneShot = async (name) => {
+  await phone.waitForTimeout(500);
+  await phone.screenshot({ path: path.join(outDir, `${name}.png`), animations: "disabled", caret: "hide" });
+  console.log(`  ${name}.png`);
+};
+await phone.goto(url);
+await phone.waitForSelector(".state.ready", { timeout: 60000 });
+expect((await phone.locator(".panel").count()) === 0, "Problems should start closed on a phone");
+expect(!(await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth)), "the phone layout should not scroll sideways");
+
+await phone.click(".drawer-btn");
+await phone.waitForSelector("#drafts-drawer .item");
+expect((await phone.locator(".views").count()) === 0, "the view switcher should be hidden while the scratch pad is open");
+await phoneShot("08-mobile-drafts-drawer");
+
+// A new draft with a few mistakes, then Problems as a bottom sheet under the text.
+await phone.getByRole("button", { name: "New draft" }).click();
+if (await phone.locator("#drafts-drawer").count()) await phone.getByRole("button", { name: "Close the drafts list" }).click();
+await phone.waitForSelector("#drafts-drawer", { state: "detached" });
+await phone.locator(".cm-content").click();
+await phone.keyboard.insertText("This are a example of a sentense with with a few mistakes. Harper shuld find them.");
+await phone.waitForSelector(".cm-lintRange", { timeout: 30000 });
+await phone.click(".toggle");
+await phone.waitForSelector(".panel li");
+await phoneShot("09-mobile-problems");
+
+// Split with Problems closed: the source above the preview.
+await phone.click(".toggle");
+await phone.waitForSelector(".panel", { state: "detached" });
+await phone.getByRole("button", { name: "Split" }).click();
+await phone.waitForSelector(".md");
+await phoneShot("10-mobile-markdown-split");
+
 await browser.close();
 if (problems.length) {
   console.error(problems.join("\n"));
