@@ -43,11 +43,14 @@ func pickSavePath(suggested, dir string) (string, error) {
 	if app == nil {
 		return "", errors.New("saving to a file needs the desktop app")
 	}
-	d := app.Dialog.SaveFile().SetMessage("Save this draft as a file").SetFilename(suggested).
-		AddFilter("Markdown", "*.md").AddFilter("Text", "*.txt").AddFilter("All files", "*")
-	if dir != "" {
-		d.SetDirectory(dir)
-	}
+	// The GTK4 chooser takes its title from Title (Message is not shown there) and is only modal over a window it is attached to.
+	d := app.Dialog.SaveFileWithOptions(&application.SaveFileDialogOptions{
+		Title:                "Save draft as a file",
+		Filename:             suggested,
+		Directory:            dir,
+		CanCreateDirectories: true,
+		Window:               app.Window.Current(),
+	}).AddFilter("Markdown", "*.md").AddFilter("Text", "*.txt").AddFilter("All files", "*")
 	return d.PromptForSingleSelection()
 }
 

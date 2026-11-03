@@ -42,6 +42,12 @@ export function useDrafts(editor, drawerOpen) {
   let toastTimer = null;
 
   const fileName = computed(() => current.value.filePath.split(/[\\/]/).pop());
+  // The folder of the file ("" in the web build, which only knows the name).
+  const fileDir = computed(() => {
+    const p = current.value.filePath;
+    const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+    return i > 0 ? p.slice(0, i) : "";
+  });
 
   const status = computed(() => {
     if (state.value === "error") return error.value;
@@ -341,6 +347,7 @@ export function useDrafts(editor, drawerOpen) {
     status,
     state,
     fileName,
+    fileDir,
     list,
     query,
     toast,

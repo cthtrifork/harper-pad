@@ -1,5 +1,5 @@
 <script setup>
-import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DraftsDrawer from "./components/DraftsDrawer.vue";
 import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
@@ -125,6 +125,14 @@ onMounted(async () => {
     error.value = String(err?.stack || err);
   }
 });
+// The page title follows the design: "notes.md — Harper Pad" for a file, "(draft)" for a draft.
+watch(
+  () => drafts.fileName.value,
+  (name) => {
+    document.title = name ? `${name} — Harper Pad` : "Harper Pad";
+  },
+  { immediate: true },
+);
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   drafts.detach();
@@ -138,6 +146,19 @@ onBeforeUnmount(() => {
       <button type="button" class="drawer-btn" :class="{ on: showDrawer }" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="toggleDrawer">
         Scratch pad <span class="kbd">Ctrl+J</span>
       </button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" class="tool" :disabled="!drafts.available.value" @click="drafts.saveFile(false)">
+        Save <span class="kbd">Ctrl+S</span>
+      </button>
+      <button type="button" class="tool" :disabled="!drafts.available.value" @click="drafts.saveFile(true)">
+        Save as file <span class="kbd">Ctrl+Shift+S</span>
+      </button>
+      <span class="sep" aria-hidden="true"></span>
+      <template v-if="drafts.current.value.filePath">
+        <span id="file-name" class="file-name">{{ drafts.fileName.value }}</span>
+        <span v-if="drafts.fileDir.value" class="mute folder" :title="drafts.fileDir.value">in {{ drafts.fileDir.value }}</span>
+      </template>
+      <span v-else id="file-badge" class="badge">Draft, not on disk</span>
       <span class="spacer"></span>
       <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
         Problems <span class="count">{{ problems.length }}</span>
@@ -227,6 +248,45 @@ onBeforeUnmount(() => {
   border-color: var(--accent);
 }
 .kbd {
+  color: var(--mute);
+  font-size: 12px;
+}
+.tool {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+}
+.tool:disabled {
+  color: var(--mute);
+  cursor: not-allowed;
+}
+.sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--line);
+}
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+.folder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.badge {
+  padding: 3px 8px;
+  border-radius: 11px;
+  background: var(--raised);
   color: var(--mute);
   font-size: 12px;
 }
