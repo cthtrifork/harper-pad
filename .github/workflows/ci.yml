@@ -223,3 +223,42 @@ jobs:
           path: dist/harper-pad
           if-no-files-found: error
           retention-days: 7
+
+  # The Windows build needs no cgo or GUI libraries, so this runs the real thing: vet and test with the production
+  # tag, then the same packaging script the release uses (without the installer, which release.yml builds and tries).
+  windows:
+    name: windows
+    runs-on: windows-2022
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      - name: Vet and test
+        run: |
+          go vet ./...
+          go vet -tags production ./...
+          go test -count=1 ./...
+
+      - name: Build the exe and zip
+        run: |
+          CGO_ENABLED=0 go install -tags server github.com/wailsapp/wails/v3/cmd/wails3@"$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          (cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
+          scripts/package-windows.sh "ci-${GITHUB_SHA::7}" dist --no-installer

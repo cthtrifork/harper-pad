@@ -1,9 +1,10 @@
 name: Release
 
 # Publishes a GitHub release with a Linux amd64 binary, a tarball, a .deb and an .rpm (PGP-signed,
-# with the public key published alongside), SHA256SUMS, a CycloneDX SBOM and signed attestations
-# (build provenance for the binary, tarball, packages and SBOM; the SBOM bound to the binary). The
-# in-app updater installs the raw binary and verifies it against SHA256SUMS, so those names are an interface. Three ways to run it:
+# with the public key published alongside), a Windows amd64 binary, zip and installer, SHA256SUMS, a CycloneDX SBOM and
+# signed attestations (build provenance for the binaries, archives, packages, installer and SBOM; the SBOM bound to the
+# Linux binary). The in-app updater installs the raw binary of its platform and verifies it against SHA256SUMS, so those
+# names are an interface. Three ways to run it:
 #   - the "Tag and release" workflow calls this one (workflow_call) with a new version and the commit
 #     to release. This is the normal route. The tag does not exist yet: the release is published with
 #     that commit as its target, and GitHub creates the tag then.
@@ -127,6 +128,12 @@ jobs:
 
       - name: Vet and test
         run: make vet test
+
+      # The Windows build needs no cgo, so the Linux runner can prove it still compiles (the Windows job below builds it).
+      - name: Vet (windows/amd64)
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet -tags production ./...
 
       - name: govulncheck
         env:
@@ -252,26 +259,115 @@ jobs:
           output: ${{ runner.temp }}/sbom.cdx.json
           skip-dirs: frontend/node_modules,dist
 
+      # SHA256SUMS is written by the publish job, once the Linux and Windows files are together.
       - name: Add SBOM to the release files
         env:
           VERSION: ${{ needs.meta.outputs.version }}
-        run: |
-          cp "$RUNNER_TEMP/sbom.cdx.json" "dist/${APP}_${VERSION}.sbom.cdx.json"
-          # SHA256SUMS lists every asset, so regenerate it with the SBOM included.
-          (cd dist && sha256sum "${APP}_linux_amd64" "${APP}_${VERSION}_linux_amd64.tar.gz" \
-            "${APP}_${VERSION}_amd64.deb" "${APP}_${VERSION}_x86_64.rpm" \
-            "${APP}_${VERSION}.sbom.cdx.json" $(ls "${APP}-release-key.asc" 2>/dev/null) > SHA256SUMS)
+        run: cp "$RUNNER_TEMP/sbom.cdx.json" "dist/${APP}_${VERSION}.sbom.cdx.json"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-files
+          name: release-files-linux
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  # The Windows files: the raw exe (what the updater installs), a zip and a per-user NSIS installer, made by
+  # scripts/package-windows.sh. The build needs no cgo; it runs on Windows so the installer can be built and the
+  # result tried (installed, started, uninstalled) before anything is published.
+  build-windows:
+    name: build windows/amd64
+    needs: meta
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # When called with a commit, build exactly that; with only a tag, that tag; otherwise the ref that triggered the run.
+          ref: ${{ inputs.sha || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || '' }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: ${{ needs.meta.outputs.publish != 'true' }} # off when publishing: a restored cache could poison the release; on for dry runs # zizmor: ignore[cache-poisoning]
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      # NSIS builds the installer. The runner image may carry a copy; pin the version we expect.
+      - name: Install NSIS
+        shell: pwsh
+        env:
+          NSIS_VERSION: 3.11.0
+        run: |
+          choco install nsis --version $env:NSIS_VERSION --no-progress -y
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install the wails3 CLI and build the frontend
+        run: |
+          CGO_ENABLED=0 go install -tags server github.com/wailsapp/wails/v3/cmd/wails3@"$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          wails3 version
+          makensis -VERSION
+          (cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
+
+      - name: Build the exe, zip and installer
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          scripts/package-windows.sh "$VERSION" dist
+
+      # The MCP server and the pprof endpoint are development tools without authentication (docs/mcp.md, docs/pprof.md).
+      - name: Release binary contains no development endpoint
+        run: |
+          if grep -aqF "MCP server started" dist/${APP}_windows_amd64.exe || grep -aqF "pprof endpoint started" dist/${APP}_windows_amd64.exe; then
+            echo "::error::a development endpoint (MCP or pprof) is present in the Windows release binary"; exit 1
+          fi
+
+      # Try what people will do: install per user without prompts, start the app and check it stays up (it loads
+      # WebView2 and the embedded frontend), then uninstall. A crash on start or a broken installer fails the release.
+      - name: Smoke test the installer and the app
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          MSYS_NO_PATHCONV: '1' # Git Bash would rewrite /S and /F as paths
+        run: |
+          installer="$(ls dist/${APP}_${VERSION}_windows_amd64_installer.exe)"
+          "$installer" /S
+          dir="$LOCALAPPDATA/Programs/Harper Pad"
+          for i in $(seq 1 30); do [ -f "$dir/harper-pad.exe" ] && break; sleep 2; done
+          ls -la "$dir"
+          [ -f "$dir/harper-pad.exe" ] || { echo "::error::the installer did not install harper-pad.exe"; exit 1; }
+          "$dir/harper-pad.exe" &
+          sleep 20
+          if ! tasklist | grep -qi "harper-pad.exe"; then
+            echo "::error::harper-pad.exe is not running 20 s after it was started"; exit 1
+          fi
+          echo "harper-pad.exe is running"
+          taskkill /F /IM harper-pad.exe
+          sleep 2
+          "$dir/uninstall.exe" /S
+          for i in $(seq 1 30); do [ -f "$dir/harper-pad.exe" ] || break; sleep 2; done
+          [ ! -f "$dir/harper-pad.exe" ] || { echo "::error::the uninstaller left harper-pad.exe behind"; exit 1; }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-files-windows
           path: dist/
           if-no-files-found: error
           retention-days: 14
 
   publish:
     name: publish release
-    needs: [meta, checks, build]
+    needs: [meta, checks, build, build-windows]
     if: needs.meta.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -283,8 +379,16 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-files
+          pattern: release-files-*
+          merge-multiple: true
           path: dist
+
+      # SHA256SUMS lists every asset, Linux and Windows. The updater looks it up by this fixed name.
+      - name: Write SHA256SUMS
+        run: |
+          cd dist
+          sha256sum $(ls | grep -vx SHA256SUMS | sort) > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -294,6 +398,9 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/*_linux_amd64
+            dist/*_windows_amd64.exe
+            dist/*_windows_amd64.zip
+            dist/*_installer.exe
             dist/*.sbom.cdx.json
 
       # Unlike subject-path, sbom-path takes one literal path (no glob), so resolve it first.
@@ -313,7 +420,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          for f in dist/*_linux_amd64 dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.cdx.json; do
+          for f in dist/*_linux_amd64 dist/*_windows_amd64.exe dist/*_windows_amd64.zip dist/*_installer.exe \
+                   dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.cdx.json; do
             gh attestation verify "$f" --repo "$REPO" \
               --signer-workflow "$REPO/.github/workflows/release.yml"
           done

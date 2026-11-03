@@ -34,11 +34,12 @@ const (
 // is the whole test: "dev", "ci-<sha>" and the like are not release versions.
 func Enabled(version string) bool { return semver.IsValid(version) }
 
-// isArchive reports whether an asset name is an archive or a Linux package (.deb, .rpm), none of
-// which the updater can install in place.
+// isArchive reports whether an asset name is an archive, a Linux package (.deb, .rpm) or the Windows
+// installer (..._installer.exe), none of which the updater can install in place. The raw Windows binary,
+// harper-pad_windows_amd64.exe, is the one .exe it does install.
 func isArchive(name string) bool {
 	n := strings.ToLower(name)
-	for _, ext := range []string{".tar.gz", ".tgz", ".zip", ".deb", ".rpm"} {
+	for _, ext := range []string{".tar.gz", ".tgz", ".zip", ".deb", ".rpm", "_installer.exe"} {
 		if strings.HasSuffix(n, ext) {
 			return true
 		}
@@ -47,8 +48,8 @@ func isArchive(name string) bool {
 }
 
 // MatchAsset picks the raw binary for the running platform. Archives and packages are
-// skipped on purpose: the release also ships a tarball (binary + README + LICENSE) and
-// .deb/.rpm packages for people, but the updater can only install a single file or an archive with
+// skipped on purpose: the release also ships a tarball and a zip (binary + README + LICENSE), the
+// .deb/.rpm packages and the Windows installer for people, but the updater can only install a single file or an archive with
 // exactly one top-level entry, and the default matcher would take whichever
 // matching asset GitHub lists first.
 func MatchAsset(req updater.CheckRequest, assets []github.ReleaseAsset) int {

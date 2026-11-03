@@ -79,6 +79,19 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 - [ ] Decide on self-update vs. image updates: on bootc `/usr` is read-only, so the in-app updater cannot replace the
       packaged binary (`selfupdate.Installable` should report it); likely disable it for the image install.
 
+## 6b. Windows
+
+Release flow and installer: `docs/windows.md`. Built by `release.yml`, tried on a runner, never run on a real desktop yet.
+
+- [ ] Try the release on a real Windows 10/11 machine: install, window and fonts, HiDPI, uninstall, then the updater
+      (a newer release replacing the running exe).
+- [ ] Code signing: get a certificate (or use Azure Trusted Signing / SignPath) and sign the exe, installer and
+      uninstaller in `release.yml`; until then SmartScreen warns on first run.
+- [ ] Windows tray icon (`internal/app/tray_other.go` is a no-op there).
+- [ ] winget and Scoop manifests once the release has settled.
+- [ ] Windows on ARM64 (needs an `arm64` build, a second NSIS binary and the asset names for the updater).
+- [ ] Pin the NSIS version (`NSIS_VERSION` in `release.yml`) through Renovate.
+
 ## 7. Later / maybe
 
 - [ ] Global shortcut or tray action to open a fresh scratch note.
