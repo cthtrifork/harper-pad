@@ -77,6 +77,7 @@ onBeforeUnmount(() => {
     </template>
     <span v-else id="file-badge" class="badge">Draft, not on disk</span>
     <span class="spacer"></span>
+    <span v-if="isMarkdown" class="sep" aria-hidden="true"></span>
     <div v-if="isMarkdown" class="views" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">
       <span class="thumb" aria-hidden="true"></span>
       <button
@@ -93,9 +94,11 @@ onBeforeUnmount(() => {
         {{ v.label }}
       </button>
     </div>
+    <span v-if="isMarkdown && mode !== 'preview'" class="sep" aria-hidden="true"></span>
     <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
       Problems <span class="count">{{ problemCount }}</span>
     </button>
+    <span v-if="updateButton" class="sep" aria-hidden="true"></span>
     <component :is="updateButton" v-if="updateButton" />
   </header>
 </template>

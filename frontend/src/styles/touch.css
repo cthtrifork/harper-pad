@@ -1,0 +1,24 @@
+/* Touch devices: every control is at least 44 px high (design cheat sheet). Only the hit area grows; the look stays. */
+@media (pointer: coarse) {
+  .tool,
+  .drawer-btn,
+  .toggle,
+  .view,
+  .btn,
+  .primary,
+  .close,
+  .del,
+  .remove,
+  .fix,
+  .chip,
+  .menu .item,
+  .drawer input {
+    min-height: 44px;
+  }
+
+  .close,
+  .del,
+  .tool.arrow {
+    min-width: 44px;
+  }
+}

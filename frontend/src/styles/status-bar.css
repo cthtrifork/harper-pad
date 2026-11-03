@@ -48,7 +48,7 @@
 
 .status .link {
   font: inherit;
-  color: var(--accent, #6aa9ff);
+  color: var(--c-style);
   background: none;
   border: 0;
   padding: 0;

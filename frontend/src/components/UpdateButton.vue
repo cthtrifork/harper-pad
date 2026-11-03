@@ -79,8 +79,11 @@ onBeforeUnmount(() => {
       aria-haspopup="dialog"
       @click="open = !open"
     >
-      <span v-if="state === 'available'" class="dot" aria-hidden="true"></span>
-      <template v-if="state === 'available'">Update to {{ found }}</template>
+      <span v-if="busy()" class="spin" aria-hidden="true"></span>
+      <span v-else-if="state === 'available'" class="dot" aria-hidden="true"></span>
+      <template v-if="state === 'checking'">Checking...</template>
+      <template v-else-if="state === 'downloading'">Downloading {{ found }}...</template>
+      <template v-else-if="state === 'available'">Update to {{ found }}</template>
       <template v-else-if="state === 'ready'">Restart to update</template>
       <template v-else>{{ info.version || "..." }}</template>
     </button>
