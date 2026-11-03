@@ -178,6 +178,7 @@ export function createEditor(parent, { doc, getHarper, onResult, onProblems, per
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
+        EditorView.contentAttributes.of({ "aria-label": "Document" }), // the textbox needs an accessible name
         harperSource(getHarper, onResult, persist),
         theme,
         EditorView.updateListener.of((u) => onProblems?.(collectProblems(u.view))),

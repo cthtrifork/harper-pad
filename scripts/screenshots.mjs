@@ -38,8 +38,8 @@ const expect = (cond, what) => {
 
 const shot = async (name) => {
   await page.waitForTimeout(500); // let transitions finish so the pixels are stable
-  // The status bar shows timings that differ on every run.
-  await page.screenshot({ path: path.join(outDir, `${name}.png`), animations: "disabled", caret: "hide", mask: [page.locator(".status .mute").first()] });
+  // The status bar shows timings that differ on every run; the mask is painted in the bar's own colour.
+  await page.screenshot({ path: path.join(outDir, `${name}.png`), animations: "disabled", caret: "hide", mask: [page.locator(".status .mute").first()], maskColor: "#eceff3" });
   console.log(`  ${name}.png`);
 };
 
