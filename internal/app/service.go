@@ -21,5 +21,8 @@ type PadService struct {
 // NewPadService returns the service, keeping its database in the user's data folder.
 func NewPadService() *PadService { return &PadService{dataDir: dataDir()} }
 
+// DemoMode returns the banner text when a development build runs in demo mode (HARPER_PAD_DEMO is set), and an empty string otherwise.
+func (*PadService) DemoMode() string { return demoDetail() }
+
 // Version reports the build version, so the frontend can show it.
 func (*PadService) Version() string { return version }

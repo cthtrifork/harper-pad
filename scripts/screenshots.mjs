@@ -48,12 +48,13 @@ const expect = (cond, what) => {
 
 const shot = async (name) => {
   await page.waitForTimeout(500); // let transitions finish so the pixels are stable
-  // The status bar shows timings that differ on every run; the mask is painted in the bar's own colour.
-  await page.screenshot({ path: path.join(outDir, `${name}.png`), animations: "disabled", caret: "hide", mask: [page.locator(".status .mute").first()], maskColor: "#eceff3" });
+  await page.screenshot({ path: path.join(outDir, `${name}.png`), animations: "disabled", caret: "hide" });
   console.log(`  ${name}.png`);
 };
 
 await page.goto(url);
+await page.waitForSelector("#mode-banner", { timeout: 15000 });
+expect((await page.textContent("#mode-banner")).includes("Demo mode"), "the demo banner should be visible");
 await page.waitForSelector(".state.ready", { timeout: 60000 }); // harper.js loads its wasm in a worker
 try {
   await page.waitForSelector(".panel li", { timeout: 30000 });

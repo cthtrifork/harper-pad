@@ -40,6 +40,14 @@ export function DeleteDraft(id) {
 }
 
 /**
+ * DemoMode returns the banner text when a development build runs in demo mode (HARPER_PAD_DEMO is set), and an empty string otherwise.
+ * @returns {$CancellablePromise<string>}
+ */
+export function DemoMode() {
+    return $Call.ByID(2371659401);
+}
+
+/**
  * GetDraft returns one draft with its full content.
  * @param {string} id
  * @returns {$CancellablePromise<store$0.Draft>}

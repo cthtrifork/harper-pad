@@ -1,5 +1,6 @@
 # Sourced by screenshots.sh and lighthouse.sh: run the headless server build (no GTK, no window).
-# The version is stamped so the footer reads the same on every machine.
+# The version is stamped and demo mode (a development build only) fixes the status bar's timings,
+# so the footer reads the same on every machine and run.
 
 fake_app_build() {
   make frontend
@@ -9,7 +10,8 @@ fake_app_build() {
 fake_app_start() {
   local dir="$1" port="$2"
 
-  XDG_CACHE_HOME="$dir/cache" \
+  HARPER_PAD_DEMO=1 \
+    XDG_CACHE_HOME="$dir/cache" \
     XDG_CONFIG_HOME="$dir/config" \
     WAILS_SERVER_HOST=127.0.0.1 \
     WAILS_SERVER_PORT="$port" \

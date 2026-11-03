@@ -231,6 +231,13 @@ jobs:
             echo "::error::the MCP server is present in a -tags production binary"; exit 1
           fi
 
+      # Demo mode (fixed timings, banner) is for screenshots; a release must not have it.
+      - name: Production build contains no demo mode
+        run: |
+          if grep -aqF "HARPER_PAD_DEMO" dist/harper-pad; then
+            echo "::error::demo mode is present in a -tags production binary"; exit 1
+          fi
+
       # The pprof endpoint exposes stacks and heap contents without authentication.
       - name: Production build contains no pprof endpoint
         run: |
