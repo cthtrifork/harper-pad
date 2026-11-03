@@ -69,11 +69,6 @@ export async function saveSettings(settings) {
   return idbPut("settings", settings);
 }
 
-// The build version for the status bar. Desktop only; the web build has no version number, so the footer shows nothing there.
-export async function version() {
-  return isWeb ? "" : (await bindings()).Version();
-}
-
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
 // The same operations on both builds: PadService's drafts methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).
 

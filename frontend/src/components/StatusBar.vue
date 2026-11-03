@@ -13,7 +13,6 @@ defineProps({
   draftStatus: { type: String, default: "" },
   draftState: { type: String, default: "" },
   canStartFresh: { type: Boolean, default: false },
-  versionLabel: { type: String, default: "" },
   mode: { type: String, default: "edit" }, // edit | split | preview: the preview has no problems, caret or selection
   isMarkdown: { type: Boolean, default: false },
   suggestMarkdown: { type: Boolean, default: false }, // a plain text draft that looks like Markdown
@@ -79,6 +78,5 @@ function fmt(ms) {
         </span>
       </Transition>
     </span>
-    <span v-if="versionLabel" class="mute">{{ versionLabel }}</span>
   </footer>
 </template>
