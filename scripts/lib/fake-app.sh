@@ -1,10 +1,10 @@
 # Sourced by screenshots.sh and lighthouse.sh: run the headless server build (no GTK, no window).
-# The version is stamped and demo mode (a development build only) fixes the status bar's timings,
+# The version is stamped (a fixed, release-shaped v1.2.3, so the top bar button reads like a real build) and demo mode (a development build only) fixes the status bar's timings,
 # so the footer reads the same on every machine and run.
 
 fake_app_build() {
   make frontend
-  CGO_ENABLED=0 go build -tags server -ldflags "-X github.com/cthtrifork/harper-pad/internal/app.version=ci" -o "$1/app" .
+  CGO_ENABLED=0 go build -tags server -ldflags "-X github.com/cthtrifork/harper-pad/internal/app.version=v1.2.3" -o "$1/app" .
 }
 
 fake_app_start() {
