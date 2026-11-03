@@ -1,4 +1,5 @@
 <script setup>
+import { EditorView } from "@codemirror/view";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { applyFix, createEditor, jumpTo, loadDocument, relint, setMode } from "../lib/editor/index.js";
 
@@ -47,7 +48,24 @@ function focusEnd() {
   view.focus();
 }
 
+// Edit and Split lay the text out differently (font, line height, width, gutter), so the same pixel scroll offset lands on other
+// text. The page remembers which position is at the top of its scroll area before a switch and scrolls it back there after.
+function topPosition(scroller) {
+  if (!view || !scroller || scroller.scrollTop <= 0) return null;
+  const { top } = scroller.getBoundingClientRect();
+  const { left } = view.contentDOM.getBoundingClientRect();
+  return view.posAtCoords({ x: left + 1, y: top + 1 }, false);
+}
+
+function scrollToTop(pos) {
+  if (!view) return;
+  if (pos == null) return;
+  view.dispatch({ effects: EditorView.scrollIntoView(Math.min(pos, view.state.doc.length), { y: "start", yMargin: 0 }) });
+}
+
 defineExpose({
+  topPosition,
+  scrollToTop,
   focusEnd,
   focus: () => view?.focus(),
   relint: () => view && relint(view),

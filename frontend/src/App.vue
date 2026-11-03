@@ -53,8 +53,15 @@ const suggestMarkdown = computed(() => format.value === "text" && !hintDismissed
 
 function setView(id) {
   if (showDrawer.value && id !== "edit") return;
+  // Keep the text that is at the top of the page at the top across Edit <-> Split, which lay it out differently.
+  const top = view.value !== "preview" && id !== "preview" ? editor.value?.topPosition(pane.value) : null;
   view.value = id;
-  if (id !== "preview") nextTick(() => editor.value?.focus());
+  if (id !== "preview") {
+    nextTick(() => {
+      editor.value?.focus();
+      if (top != null) requestAnimationFrame(() => editor.value?.scrollToTop(top));
+    });
+  }
 }
 
 const chooseFormat = (f) => drafts.setFormat(f);
