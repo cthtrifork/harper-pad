@@ -1,7 +1,7 @@
 // Service worker for the web build (GitHub Pages), so Harper Pad opens offline once it has been loaded.
 // It is not registered by the desktop build.
 //   - Hashed files under assets/ (scripts, fonts, the Harper wasm) never change for a given name: cache first.
-//   - The page itself and the manifest and icons: network first, so a new deploy shows up on the next load; the
+//   - The page itself and the manifest and icons: network first (always revalidated, not taken from the HTTP cache), so a new deploy shows up on the next load; the
 //     cached copy is used when offline.
 const CACHE = "harper-pad-v1";
 
@@ -36,7 +36,9 @@ async function cacheFirst(req) {
 async function networkFirst(req) {
   const cache = await caches.open(CACHE);
   try {
-    const res = await fetch(req);
+    // "no-cache" makes the browser ask the server whether its copy is still current. A plain fetch() may be answered from the HTTP
+    // cache (GitHub Pages allows it to keep a page for minutes), so a Home Screen app could keep showing the build before a deploy.
+    const res = await fetch(req, { cache: "no-cache" });
     if (res.ok) await cache.put(req, res.clone());
     return res;
   } catch (err) {
