@@ -409,6 +409,9 @@ onBeforeUnmount(() => {
   appearance: none;
   cursor: pointer;
 }
+.dialect select:hover:not(:disabled) {
+  border-color: var(--mute);
+}
 .dialect select:disabled {
   color: var(--mute);
   cursor: not-allowed;

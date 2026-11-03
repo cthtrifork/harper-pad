@@ -195,36 +195,40 @@ code {
   gap: 6px;
   padding: 0 16px 12px;
 }
+/* Filter chips are toggles (design cheat sheet): the chosen one is shown by fill and an accent border, not by border colour alone. */
 .chip {
-  height: 26px;
+  height: 24px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 13px;
-  background: transparent;
+  border-radius: 12px;
+  background: var(--raised);
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
 }
-.chip.on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--accent);
+.chip:hover {
+  border-color: var(--mute);
 }
+.chip.on,
+.chip.on:hover {
+  background: var(--selected);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* Text links, as in the cheat sheet: --c-style, underlined. */
 .link {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--c-style);
   font: inherit;
   font-size: 12px;
   text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
-.foot .link {
-  color: var(--mute);
-}
 .foot .link[aria-pressed="true"] {
-  color: var(--text);
+  font-weight: 600;
 }
 .entries li {
   display: flex;
@@ -237,17 +241,21 @@ code {
   overflow-wrap: anywhere;
   font-size: 13px;
 }
+/* Destructive: --bad text, border turns --bad on hover, never filled at rest. */
 .remove {
   flex: none;
-  padding: 3px 10px;
+  height: 30px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--raised);
-  color: var(--text);
+  background: transparent;
+  color: var(--bad);
   font-size: 12px;
+  cursor: pointer;
 }
 .remove:hover {
   border-color: var(--bad);
+  background: var(--raised);
 }
 .empty {
   padding: 0 16px;

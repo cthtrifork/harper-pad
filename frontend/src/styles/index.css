@@ -2,6 +2,7 @@
   --bg: #f6f7f9;
   --panel: #eceff3;
   --raised: #ffffff;
+  --selected: #dde4ec;
   --line: #d3d9e0;
   --text: #1a2028;
   --mute: #566170;
@@ -23,6 +24,7 @@
     --bg: #12161b;
     --panel: #181d23;
     --raised: #1f252d;
+    --selected: #2c3745;
     --line: #2b333d;
     --text: #e8ebef;
     --mute: #9aa5b1;
@@ -50,4 +52,10 @@ body {
 button {
   font: inherit;
   cursor: pointer;
+}
+
+/* Keyboard focus: a 2px accent outline, offset by 2px (design cheat sheet). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
