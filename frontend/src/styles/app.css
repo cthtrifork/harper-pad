@@ -11,6 +11,7 @@
 }
 
 .page {
+  position: relative; /* the autocorrect toast floats over its bottom edge */
   flex: 1;
   min-width: 0;
   display: flex;

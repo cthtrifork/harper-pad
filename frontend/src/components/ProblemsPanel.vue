@@ -6,8 +6,9 @@ const props = defineProps({
   active: { type: Number, default: -1 },
   words: { type: Array, default: () => [] }, // the personal dictionary
   ignored: { type: Array, default: () => [] }, // ignored findings: {hash, label}
+  fixed: { type: Array, default: () => [] }, // what autocorrect changed and can still take back: {id, original, replacement}
 });
-defineEmits(["jump", "fix", "remove-word", "remove-ignored"]);
+defineEmits(["jump", "fix", "remove-word", "remove-ignored", "fix-all", "revert"]);
 
 const tone = { error: "spelling", warning: "grammar", info: "style" };
 // The chips follow the design: the two kinds people meet most, then everything else.
@@ -25,6 +26,7 @@ const counts = computed(() => {
   for (const p of props.problems) c[chipOf(p)]++;
   return c;
 });
+const safeCount = computed(() => props.problems.filter((p) => p.safe).length);
 const shown = computed(() => (filter.value === "all" ? props.problems : props.problems.filter((p) => chipOf(p) === filter.value)));
 </script>
 
@@ -54,6 +56,7 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
       <h2>Problems</h2>
       <span class="mute">{{ problems.length }} in this document</span>
     </header>
+    <button v-if="safeCount" type="button" class="fix-all" @click="$emit('fix-all')">Fix all safe issues ({{ safeCount }})</button>
     <div class="chips">
       <button v-for="c in chips" :key="c.id" type="button" class="chip" :class="{ on: filter === c.id }" :aria-pressed="filter === c.id" @click="filter = c.id">
         {{ c.label }} {{ counts[c.id] }}
@@ -76,6 +79,15 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
       </li>
     </ul>
     <p v-else class="empty mute">{{ problems.length ? "No problems of this kind." : "No problems found." }}</p>
+    <section v-if="fixed.length" class="recent" aria-label="Recently fixed">
+      <h3>Recently fixed <span>{{ fixed.length }}</span></h3>
+      <ul>
+        <li v-for="f in fixed" :key="f.id">
+          <code>{{ f.original }} → {{ f.replacement || "(removed)" }}</code>
+          <button type="button" class="undo" :aria-label="`Undo ${f.original} to ${f.replacement}`" @click="$emit('revert', f.id)">Undo</button>
+        </li>
+      </ul>
+    </section>
     </template>
     <footer class="foot mute">
       <button type="button" class="link" :aria-pressed="manage === 'words'" @click="manage = manage === 'words' ? '' : 'words'">

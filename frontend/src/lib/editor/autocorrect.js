@@ -1,0 +1,117 @@
+import { isolateHistory } from "@codemirror/commands";
+import { syntaxTree } from "@codemirror/language";
+import { Annotation, StateField } from "@codemirror/state";
+import { forEachDiagnostic } from "@codemirror/lint";
+import { addRange, isFinished, nonOverlapping, touches } from "../autocorrect.js";
+
+// Autocorrect in the editor. Three things are remembered in the editor state, so that opening another draft (which starts a fresh
+// state) forgets them:
+//   - touched: the parts of the text the user has typed or pasted. Autocorrect only fixes findings there, never in text that was
+//     already in the draft when it was opened.
+//   - fixes: what autocorrect changed and where it is now, for the Recently fixed list and Undo. An entry is dropped as soon as the
+//     user edits those words themselves.
+//   - batch: the last set of fixes with the text before and after, to tell when Ctrl+Z has taken it back (so it is not fixed again).
+
+// Marks a transaction autocorrect made. Its value is the list of fixes, with their positions in the new text.
+export const autoFix = Annotation.define();
+
+let nextId = 1;
+
+const NOT_CODE = /Code|URL|Link|Image|HTML/;
+
+// Markdown code, links and raw HTML are left alone: the text in them is not prose.
+function inCode(state, from, to) {
+  for (let node = syntaxTree(state).resolveInner(from, 1); node; node = node.parent) {
+    if (NOT_CODE.test(node.name)) return true;
+  }
+  return to > from && NOT_CODE.test(syntaxTree(state).resolveInner(to, -1).name);
+}
+
+export const autoField = StateField.define({
+  create: () => ({ touched: [], fixes: [], batch: null }),
+  update(value, tr) {
+    const mine = tr.annotation(autoFix);
+    let { touched, fixes, batch } = value;
+    if (tr.docChanged) {
+      touched = touched.map(([a, b]) => [tr.changes.mapPos(a, -1), tr.changes.mapPos(b, 1)]);
+      fixes = fixes
+        .filter((f) => mine || !tr.changes.touchesRange(f.from, f.to))
+        .map((f) => ({ ...f, from: tr.changes.mapPos(f.from, 1), to: tr.changes.mapPos(f.to, -1) }));
+      if (!mine) {
+        tr.changes.iterChangedRanges((_fromA, _toA, from, to) => {
+          touched = addRange(touched, from, to);
+        });
+      }
+    }
+    if (mine) {
+      fixes = [...fixes, ...mine];
+      batch = { before: tr.startState.doc, after: tr.newDoc, fixes: mine };
+    }
+    return { touched, fixes, batch };
+  },
+});
+
+// Apply findings as one transaction that is its own step in the undo history, so Ctrl+Z takes back exactly these fixes. Each item is
+// {from, to, fix: {kind, text}, problem, kind, hash}; the ones that overlap an earlier item are skipped. Returns how many were applied.
+export function applyFixes(view, items) {
+  const chosen = nonOverlapping(items);
+  if (!chosen.length) return 0;
+  let delta = 0;
+  const done = [];
+  const changes = chosen.map((it) => {
+    const insert = it.fix.kind === "remove" ? "" : it.fix.text;
+    const from = it.from + delta;
+    done.push({ id: nextId++, from, to: from + insert.length, original: it.problem, replacement: insert, kind: it.kind, hash: it.hash });
+    delta += insert.length - (it.to - it.from);
+    return { from: it.from, to: it.to, insert };
+  });
+  view.dispatch({ changes, userEvent: "input.autocorrect", annotations: [autoFix.of(done), isolateHistory.of("full")] });
+  return done.length;
+}
+
+// The findings autocorrect may fix now: safe ones the user has typed, that are finished and are not in code. `found` are the
+// findings of one lint run on `text`; `caret` is where the cursor was.
+export function dueFixes(state, text, found, caret) {
+  const { touched } = state.field(autoField);
+  return found
+    .filter((f) => f.safe && touches(touched, f.from, f.to) && isFinished(text, f.to, caret) && !inCode(state, f.from, f.to))
+    .map((f) => ({ from: f.from, to: f.to, fix: f.fixes[0], problem: f.problem, kind: f.kind, hash: f.hash }));
+}
+
+// "Fix all safe issues": every safe finding the linter currently shows, wherever it is. Only ones whose text is still what was found.
+export function fixAllSafe(view) {
+  const items = [];
+  forEachDiagnostic(view.state, (d, from, to) => {
+    const a = d.autofix;
+    if (a && view.state.sliceDoc(from, to) === a.problem)
+      items.push({ from, to, fix: a.fix, problem: a.problem, kind: d.source, hash: a.hash });
+  });
+  return applyFixes(view, items);
+}
+
+// Take fixes back: put the original text where the fix still is (not where the user has since edited), and tell Harper not to suggest
+// it again. `ignore(entries)` does the second part. Returns how many were taken back.
+export function undoFixes(view, ids, ignore) {
+  const { fixes } = view.state.field(autoField);
+  const wanted = fixes.filter((f) => ids.includes(f.id) && view.state.sliceDoc(f.from, f.to) === f.replacement);
+  if (!wanted.length) return 0;
+  view.dispatch({ changes: wanted.map((f) => ({ from: f.from, to: f.to, insert: f.original })), userEvent: "input.autocorrect-revert" });
+  ignore?.(wanted);
+  return wanted.length;
+}
+
+// Called for every update: reports what changed to the page. `h` has onFixes(list) (the Recently fixed list changed), onFixed(count,
+// ids) (autocorrect just applied fixes), onUserEdit() (the user changed the text) and ignore(entries) (Ctrl+Z took fixes back).
+export function reportAutocorrect(u, h) {
+  const now = u.state.field(autoField);
+  const before = u.startState.field(autoField);
+  const mine = u.transactions.map((tr) => tr.annotation(autoFix)).find(Boolean);
+  if (mine) h.onFixed?.(mine.map((f) => f.id));
+  const edited = u.transactions.some((tr) => tr.docChanged && !tr.annotation(autoFix));
+  if (edited) h.onUserEdit?.();
+  // Ctrl+Z that returns the text to just before a batch: those findings must not come back.
+  if (before.batch && u.transactions.some((tr) => tr.isUserEvent("undo")) && u.state.doc.eq(before.batch.before))
+    h.ignore?.(before.batch.fixes);
+  const ids = (list) => list.map((f) => f.id).join(",");
+  if (ids(now.fixes) !== ids(before.fixes)) h.onFixes?.(now.fixes.map(({ id, original, replacement }) => ({ id, original, replacement })));
+}

@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from "vue";
+import { CATEGORIES } from "../lib/autocorrect.js";
 
 const VIEWS = [
   { id: "edit", label: "Edit" },
@@ -7,7 +8,9 @@ const VIEWS = [
   { id: "preview", label: "Preview" },
 ];
 
-defineProps({
+const props = defineProps({
+  // Autocorrect: the switch and which kinds of finding may be fixed (see lib/autocorrect.js).
+  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true }) },
   showDrawer: { type: Boolean, default: false },
   showProblems: { type: Boolean, default: true },
   problemCount: { type: Number, default: 0 },
@@ -22,10 +25,13 @@ defineProps({
   // The in-app updater (desktop builds only), rendered at the end of the bar.
   updateButton: { type: [Object, Function], default: null },
 });
-const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view"]);
+const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view", "autocorrect"]);
 
 const saveMenu = ref(false); // the arrow beside Save: "Save as file..." for a draft that already has a file
 const saveSplit = ref(null);
+const autoMenu = ref(false); // the arrow beside Autocorrect: what may be fixed
+const autoSplit = ref(null);
+const setAuto = (change) => emit("autocorrect", { ...props.autocorrect, ...change });
 
 function saveElsewhere() {
   saveMenu.value = false;
@@ -35,9 +41,13 @@ function saveElsewhere() {
 // A click anywhere else, or Escape, closes the menu.
 function onPointerDown(e) {
   if (saveMenu.value && !saveSplit.value?.contains(e.target)) saveMenu.value = false;
+  if (autoMenu.value && !autoSplit.value?.contains(e.target)) autoMenu.value = false;
 }
 function onKeydown(e) {
-  if (e.key === "Escape") saveMenu.value = false;
+  if (e.key === "Escape") {
+    saveMenu.value = false;
+    autoMenu.value = false;
+  }
 }
 onMounted(() => {
   window.addEventListener("pointerdown", onPointerDown);
@@ -78,6 +88,26 @@ onBeforeUnmount(() => {
     </template>
     <span v-else id="file-badge" class="badge">Draft, not on disk</span>
     <span class="spacer"></span>
+    <!-- Autocorrect: the switch fixes obvious mistakes as you type; the arrow chooses which kinds. Fix all safe issues is in the Problems panel. -->
+    <span ref="autoSplit" class="autocorrect" :class="{ on: autocorrect.on }">
+      <button type="button" class="tool main" role="switch" :aria-checked="autocorrect.on" @click="setAuto({ on: !autocorrect.on })">
+        Autocorrect <span class="track" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="tool arrow" aria-label="What autocorrect may fix" aria-haspopup="menu" :aria-expanded="autoMenu" @click="autoMenu = !autoMenu">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
+      </button>
+      <Transition name="pop">
+        <fieldset v-if="autoMenu" class="menu">
+          <legend>What may be fixed</legend>
+          <label v-for="c in CATEGORIES" :key="c.id" class="choice">
+            <input type="checkbox" :checked="autocorrect[c.id]" @change="setAuto({ [c.id]: $event.target.checked })" />
+            <span>{{ c.label }}</span>
+            <span class="example">{{ c.example }}</span>
+          </label>
+          <p class="note">Grammar and style always ask you. Code, links and words you have not typed are left alone, and so is the word you are typing. Ctrl+Z takes a fix back and it will not be fixed again.</p>
+        </fieldset>
+      </Transition>
+    </span>
     <span v-if="isMarkdown && !showDrawer" class="sep" aria-hidden="true"></span>
     <div v-if="isMarkdown && !showDrawer" class="views" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">
       <span class="thumb" aria-hidden="true"></span>
