@@ -21,18 +21,15 @@
   color: var(--text);
 }
 
-.wrap .btn.ready {
-  border: 0;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
-}
-
 .wrap .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+.wrap .spin {
+  color: var(--accent);
 }
 
 .wrap .pop {
@@ -41,6 +38,9 @@
   right: 0;
   z-index: 10;
   width: 300px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -65,16 +65,10 @@
   overflow-wrap: anywhere;
 }
 
-.wrap .row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .wrap .primary {
-  align-self: flex-start;
-  height: 30px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 4px 12px;
+  text-align: left;
   border: 0;
   border-radius: 6px;
   background: var(--accent);
@@ -87,4 +81,15 @@
   border: 0;
   background: none;
   color: var(--c-style);
+}
+
+.wrap .foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wrap .foot .link {
+  margin-left: auto; /* stays at the right when there is no action beside it */
 }

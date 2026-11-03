@@ -1,10 +1,10 @@
 <script setup>
 import "../styles/update-button.css"; // loaded with this component, so the web build never carries it
 import { Browser } from "@wailsio/runtime";
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { UpdateService } from "../../bindings/github.com/cthtrifork/harper-pad/internal/app";
 
-const RELEASES = "https://github.com/cthtrifork/harper-pad/releases/tag/";
+const LATEST_RELEASE = "https://github.com/cthtrifork/harper-pad/releases/latest";
 
 const info = ref({ version: "", enabled: false, reason: "" });
 // idle -> checking -> current | available | error; available -> downloading -> ready | error
@@ -24,6 +24,7 @@ async function run(next, work) {
   } catch (err) {
     error.value = String(err?.message || err);
     state.value = "error";
+    open.value = true;
   }
 }
 
@@ -45,7 +46,32 @@ const restart = () =>
     await UpdateService.RestartToUpdate();
   });
 
-const whatsNew = () => Browser.OpenURL(RELEASES + encodeURIComponent(/^v/.test(found.value) ? found.value : `v${found.value}`)).catch(() => {});
+// The first click checks, because updates are only looked for on request; later clicks just toggle the popover.
+function onClick() {
+  const first = info.value.enabled && state.value === "idle";
+  open.value = !open.value;
+  if (first) check();
+}
+
+// The one primary action of the popover, if the current state has one.
+const action = computed(() => {
+  if (!info.value.enabled) return null;
+  switch (state.value) {
+    case "current":
+      return { label: "Check again", run: check };
+    case "available":
+      return { label: `Download ${found.value}`, run: download };
+    case "ready":
+      return { label: "Restart to update", run: restart };
+    case "checking":
+    case "downloading":
+      return null;
+    default:
+      return { label: "Try again", run: check };
+  }
+});
+
+const whatsNew = () => Browser.OpenURL(LATEST_RELEASE).catch(() => {});
 
 function outside(e) {
   if (open.value && root.value && !root.value.contains(e.target)) open.value = false;
@@ -71,32 +97,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="root" class="wrap">
-    <button
-      type="button"
-      class="btn"
-      :class="{ open, ready: state === 'ready' }"
-      :aria-expanded="open"
-      aria-haspopup="dialog"
-      @click="open = !open"
-    >
+    <button type="button" class="btn" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="onClick">
       <span v-if="busy()" class="spin" aria-hidden="true"></span>
-      <span v-else-if="state === 'available'" class="dot" aria-hidden="true"></span>
-      <template v-if="state === 'checking'">Checking...</template>
-      <template v-else-if="state === 'downloading'">Downloading {{ found }}...</template>
-      <template v-else-if="state === 'available'">Update to {{ found }}</template>
-      <template v-else-if="state === 'ready'">Restart to update</template>
-      <template v-else>{{ info.version || "..." }}</template>
+      <span v-else-if="state === 'available' || state === 'ready'" class="dot" aria-hidden="true"></span>
+      {{ info.version || "..." }}
     </button>
 
     <div v-if="open" class="pop" role="dialog" aria-label="Updates">
       <template v-if="!info.enabled">
         <h3>Updates are off here</h3>
         <p>{{ info.reason }}</p>
-      </template>
-      <template v-else-if="state === 'idle'">
-        <h3>Harper Pad {{ info.version }}</h3>
-        <p>Updates are only checked when you ask.</p>
-        <button type="button" class="primary" @click="check">Check for updates</button>
       </template>
       <template v-else-if="state === 'checking'">
         <h3>Checking GitHub releases</h3>
@@ -105,15 +115,10 @@ onBeforeUnmount(() => {
       <template v-else-if="state === 'current'">
         <h3>You are up to date</h3>
         <p>{{ info.version }} is the latest release.</p>
-        <button type="button" class="primary" @click="check">Check again</button>
       </template>
       <template v-else-if="state === 'available'">
         <h3>Version {{ found }} is available</h3>
         <p>You have {{ info.version }}. The download is verified before it is installed.</p>
-        <div class="row">
-          <button type="button" class="primary" @click="download">Download {{ found }}</button>
-          <button type="button" class="link" @click="whatsNew">What is new</button>
-        </div>
       </template>
       <template v-else-if="state === 'downloading'">
         <h3>Downloading {{ found }}</h3>
@@ -122,16 +127,15 @@ onBeforeUnmount(() => {
       <template v-else-if="state === 'ready'">
         <h3>{{ found }} is ready</h3>
         <p>Restart to finish the update.</p>
-        <div class="row">
-          <button type="button" class="primary" @click="restart">Restart to update</button>
-          <button type="button" class="link" @click="open = false">Later</button>
-        </div>
       </template>
       <template v-else>
         <h3>Could not update</h3>
         <p>{{ error }}</p>
-        <button type="button" class="primary" @click="check">Try again</button>
       </template>
+      <div class="foot">
+        <button v-if="action" type="button" class="primary" @click="action.run">{{ action.label }}</button>
+        <button type="button" class="link" @click="whatsNew">What is new</button>
+      </div>
     </div>
   </div>
 </template>
