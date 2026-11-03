@@ -4,6 +4,7 @@
   --raised: #ffffff;
   --selected: #dde4ec;
   --sunken: #eef1f5;
+  --well: #e3e7ed; /* the Problems panel: a step darker than --panel, so it reads as a list of findings, not as the drafts cards */
   --line: #d3d9e0;
   --text: #1a2028;
   --mute: #566170;
@@ -32,6 +33,7 @@
     --raised: #1f252d;
     --selected: #2c3745;
     --sunken: #151a20;
+    --well: #11151a;
     --line: #2b333d;
     --text: #e8ebef;
     --mute: #9aa5b1;
