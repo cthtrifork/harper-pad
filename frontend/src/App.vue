@@ -46,6 +46,22 @@ const source = ref(props.start.open?.content ?? (demo.value ? sample : ""));
 const paneScroll = ref(0); // how far the source is scrolled, 0 to 1, for the preview to follow
 const pane = ref(null);
 const hintDismissed = ref(false);
+
+// "Harper ready" and the start-up and check timings are for the first moments, to show Harper has loaded and how long it took. They go
+// once the first edit has been saved, and stay away. Where nothing is saved (the database is unavailable) the first edit is the signal.
+const startup = ref(true);
+let typed = false;
+function onEdited() {
+  typed = true;
+  drafts.edited();
+  if (!drafts.available.value) startup.value = false;
+}
+watch(
+  () => drafts.state.value,
+  (s) => {
+    if (s === "saved" && typed) startup.value = false;
+  },
+);
 const format = computed(() => drafts.current.value.format);
 const isMarkdown = computed(() => format.value === "markdown");
 const mode = computed(() => (isMarkdown.value && !showDrawer.value ? view.value : "edit"));
@@ -253,7 +269,7 @@ onBeforeUnmount(() => {
             @stats="counts = $event"
             @cursor="cursor = $event"
             @doc="source = $event"
-            @edited="drafts.edited"
+            @edited="onEdited"
           />
           <pre v-if="error" class="error">{{ error }}</pre>
         </main>
@@ -281,6 +297,7 @@ onBeforeUnmount(() => {
       :mode="mode"
       :is-markdown="isMarkdown"
       :suggest-markdown="suggestMarkdown"
+      :startup="startup"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
       @dismiss-hint="hintDismissed = true"
