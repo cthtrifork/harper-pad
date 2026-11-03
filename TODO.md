@@ -41,23 +41,36 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
 Note: `harper-editor` and `lint-framework` are not on npm (only `harper.js` is), hence CodeMirror 6 rather than a
 vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
-
 - [ ] Replace the spike textarea with a CodeMirror 6 editor (`@codemirror/view`, `state`, `lint`, markdown or plain text).
 - [ ] `@codemirror/lint` source that calls `WorkerLinter.lint()` (debounced), maps `Lint.span()` to diagnostics and
       `suggestions()` to "apply" actions via `applySuggestion`; free wasm-backed `Lint` objects.
-- [ ] Problems list (sidebar or panel) with jump-to and counts.
+- [ ] Suggestion popover on the underlined issue: replacements, "Add to dictionary", "Ignore this rule".
+- [ ] Problems panel on the right (Edit view only) with filter chips, counts and jump-to. A "Problems" toolbar toggle
+      hides it and the editor uses the full width; the count stays on the toggle and in the status bar.
+- [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
+      source left and the rendered preview right; Preview uses the whole window. The preview is read-only and
+      follows the editor's scroll. Only shown for markdown (see below).
+- [ ] Document `format` (`markdown` or `text`): files by extension (`.md`, `.markdown`), drafts store it, default
+      markdown for new drafts, unknown files open as text. The status bar "Markdown" label is a menu to switch it.
+      A plain-text draft that looks like markdown gets a "Looks like Markdown. Switch?" hint, never an automatic switch.
 - [ ] Add word to a user dictionary and ignore a rule; persist both through `PadService`.
 - [ ] Dialect/language setting (Harper config), persisted.
-- [ ] Open/save files through Wails dialogs (Go side), dirty state, autosave of the current document.
+- [ ] Open/save files through Wails dialogs (Go side), dirty state. "Save as file" on a draft suggests `.md` or `.txt`.
 - [ ] Light/dark theme from the existing CSS variables.
 
-## 5. Scratch pad drawer
+## 5. Scratch pad drawer (drafts)
 
-- [ ] Drawer component (model on trivy's `VexDrawer.vue`), toggle by shortcut and button.
-- [ ] Notes storage in Go: JSON file under the user config dir, atomic write, tests.
-- [ ] Multiple notes, search, delete with undo.
-- [ ] "Send to editor" and "append selection to scratch pad".
-- [ ] Decide whether the scratch pad text is also Harper-checked.
+Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, split, preview, scratch pad drawer).
+
+- [ ] Drawer on the left, toggled by Ctrl+J and the first toolbar button (model on trivy's `VexDrawer.vue`). While it is
+      open only the Edit view is available (Split and Preview are disabled with a hint).
+- [ ] Drafts are stored by the app, not as files: JSON under the user config dir, atomic write, autosave as you type,
+      tests. Nothing reaches the file system until "Save as file".
+- [ ] Recent drafts list: title, last touched, and a preview. Markdown task lines (`- [ ]`, `- [x]`) show as up to
+      three checkbox lines with "N of M tasks done"; drafts without tasks show a two-line excerpt.
+- [ ] New draft, search, "Older drafts", delete with undo toast, and "Save as file" to promote a draft.
+- [ ] "Send to editor" and "Add to scratch pad" for the current selection.
+- [ ] Decide whether draft text is also Harper-checked (the mockup checks the open draft in the editor).
 
 ## 6. Packaging and install on the homeserver
 
