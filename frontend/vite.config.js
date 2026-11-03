@@ -65,10 +65,9 @@ const webApp = () => {
       }
     },
     transformIndexHtml: () => [
-      // `black` is documented by Apple as a black status bar with the page below it. `default` was meant to do the same, but on an iPhone
-      // with a Dynamic Island the installed app drew the page under the bar anyway, with a blur over the top of the header. This is a
-      // trial of `black`: the diagnostics readout (lib/diagnostics.js, five taps on the status bar) shows the insets the page gets. The
-      // text is white on the black bar, readable with the light header too; black-translucent is avoided (its text is always white).
+      // `default`: the status bar is a strip of its own with text that follows light and dark, and the page starts below it. `black` was
+      // tried on an iPhone and looked the same in the dark scheme (the blur at the top of the header is iOS's, see styles/safe-area.css),
+      // but would be a black strip over the light header. black-translucent is avoided: its text is always white.
       // viewport-fit=cover (index.html) and the safe-area insets (styles/safe-area.css) still keep the page clear of the notch, the
       // home indicator and, in landscape, the sides. theme-color follows the header colour (--panel) for Android and Safari's own bar.
       { tag: "meta", attrs: { name: "theme-color", content: "#eceff3", media: "(prefers-color-scheme: light)" }, injectTo: "head" },
@@ -76,7 +75,7 @@ const webApp = () => {
       { tag: "meta", attrs: { name: "mobile-web-app-capable", content: "yes" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "apple-mobile-web-app-capable", content: "yes" }, injectTo: "head" }, // older iOS only knows this one
       { tag: "meta", attrs: { name: "apple-mobile-web-app-title", content: "Harper Pad" }, injectTo: "head" },
-      { tag: "meta", attrs: { name: "apple-mobile-web-app-status-bar-style", content: "black" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "apple-mobile-web-app-status-bar-style", content: "default" }, injectTo: "head" },
       { tag: "link", attrs: { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }, injectTo: "head" },
       { tag: "link", attrs: { rel: "manifest", href: `${base}manifest.webmanifest` }, injectTo: "head" },
     ],

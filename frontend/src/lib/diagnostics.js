@@ -1,4 +1,4 @@
-// A readout for sorting out how the installed app is laid out on a phone: tap the status bar five times in a row to show it, tap the
+// A readout for sorting out how the installed app is laid out on a phone: tap the footer five times in a row to show it, tap the
 // readout to hide it. It measures what the page really gets (safe-area insets, display mode, sizes) instead of assuming, so a fix for
 // the notch or the status bar can be based on numbers. Text only (no HTML is built from the values).
 const TAPS = 5;

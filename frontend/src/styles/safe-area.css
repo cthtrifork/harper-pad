@@ -73,13 +73,14 @@ html {
   }
 }
 
-/* Installed on an iPhone, iOS draws the page under the status bar and lays a blur and fade of its own over the top of it, which reaches
-   well below the notch inset (about 25 pt further on an iPhone with a Dynamic Island, seen on a device): buttons and the count badge
-   that start right at the inset come out dim and blurry. Pushing the header content down by a share of the inset keeps it clear. The
-   share is 0 where there is no inset (Android, a desktop window), and the extra only applies to the installed app (not to Safari tabs,
-   whose own bar already sits above the page) and only to the portrait phone layout (landscape has no status bar). */
+/* Installed on an iPhone, the page starts below the status bar (the safe-area inset is 0 there; measured on an iPhone with a Dynamic
+   Island: window 812 pt high on an 874 pt screen), but iOS fades the first stretch of the page under the bar, about 24 pt on that
+   phone (seen on a device): buttons and the count badge that start right at the top come out dim and blurry, where the same page in a
+   Safari tab is crisp. The header's top padding keeps its content below that. Only the installed app, in portrait (landscape has no
+   status bar), on the phone layout. --edge-fade is the fade's height as seen on the one device; it is not an Apple value. */
 @media ((max-width: 720px) or ((pointer: coarse) and (max-height: 500px))) and (display-mode: standalone) and (orientation: portrait) {
   .bar {
-    padding-top: calc(8px + env(safe-area-inset-top) * 1.45);
+    --edge-fade: 24px;
+    padding-top: calc(8px + var(--edge-fade) + env(safe-area-inset-top));
   }
 }
