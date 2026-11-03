@@ -355,3 +355,53 @@ func TestRejectsPathsSQLiteCannotTake(t *testing.T) {
 		t.Error("a path with a question mark was accepted")
 	}
 }
+
+func TestSetFilePathAndMigration(t *testing.T) {
+	s, _ := open(t)
+	d, err := s.Save(Draft{Content: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFilePath(d.ID, "/tmp/a.md"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Get(d.ID); got.FilePath != "/tmp/a.md" {
+		t.Errorf("Get path = %q", got.FilePath)
+	}
+	if l, _ := s.List(10, 0); l.Drafts[0].FilePath != "/tmp/a.md" {
+		t.Errorf("List path = %q", l.Drafts[0].FilePath)
+	}
+	// Saving the text again keeps the link, whatever the caller sends.
+	d.FilePath = "/elsewhere"
+	d.Content = "b"
+	if got, _ := s.Save(d); got.FilePath != "/tmp/a.md" {
+		t.Errorf("Save changed the path to %q", got.FilePath)
+	}
+	if err := s.SetFilePath("00000000000000000000000000000000", "x"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("SetFilePath on a missing draft = %v", err)
+	}
+
+	// A version 1 database (no file_path column) is upgraded and keeps its drafts.
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE drafts (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, data TEXT NOT NULL,
+		format TEXT NOT NULL DEFAULT 'markdown', title TEXT NOT NULL DEFAULT '', excerpt TEXT NOT NULL DEFAULT '', tasks TEXT NOT NULL DEFAULT '[]',
+		tasks_total INTEGER NOT NULL DEFAULT 0, tasks_done INTEGER NOT NULL DEFAULT 0) STRICT;
+		CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT, WITHOUT ROWID;
+		INSERT INTO drafts (id, created_at, updated_at, data) VALUES ('0123456789abcdef0123456789abcdef', 1, 2, '{"v":1,"format":"markdown","content":"old"}');
+		PRAGMA user_version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	old, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = old.Close() }()
+	if got, err := old.Get("0123456789abcdef0123456789abcdef"); err != nil || got.Content != "old" || got.FilePath != "" {
+		t.Errorf("migrated draft = %+v, %v", got, err)
+	}
+}

@@ -6,6 +6,7 @@
 // The bindings are imported on demand and only in the desktop build, so the web bundle carries no Wails code.
 
 import { createWebDrafts, DB_NAME, DB_VERSION, upgrade } from "./webDrafts.js";
+import { saveWebFile } from "./webFiles.js";
 
 export const isWeb = import.meta.env.MODE === "web";
 
@@ -109,6 +110,20 @@ export async function getDraft(id) {
 // Creates a draft (empty id) or updates one, and returns it as stored. Saving an id that is no longer stored brings it back.
 export async function saveDraft(draft) {
   return isWeb ? web.save(draft) : (await bindings()).SaveDraft(draft);
+}
+
+// Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. With `saveAs`, or when the draft was
+// never saved to a file, the user picks the file (`cancelled` is true when they close the dialog); otherwise the file it was
+// saved to before is overwritten. The returned draft carries `filePath`. On desktop the path never comes from the page.
+export async function saveDraftToFile(draft, saveAs) {
+  if (!isWeb) return (await bindings()).SaveDraftToFile(draft, saveAs);
+  return saveWebFile(
+    web,
+    (id) => idbGet(`file:${id}`),
+    (id, handle) => idbPut(`file:${id}`, handle),
+    draft,
+    saveAs,
+  );
 }
 
 export async function deleteDraft(id) {

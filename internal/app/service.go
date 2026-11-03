@@ -16,6 +16,8 @@ type PadService struct {
 	dataDir string       // where the database lives (see dataDir); empty when the user's data folder is unknown
 	smu     sync.Mutex   // guards store
 	store   *store.Store // the database, opened on first use
+
+	pickPath func(suggested, dir string) (string, error) // the save dialog; nil means the real one (replaced in tests)
 }
 
 // NewPadService returns the service, keeping its database in the user's data folder.

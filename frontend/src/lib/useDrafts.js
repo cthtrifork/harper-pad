@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { deleteDraft, getDraft, isWeb, listDrafts, startFresh as moveDatabaseAside, saveDraft, searchDrafts } from "./backend.js";
+import { deleteDraft, getDraft, isWeb, listDrafts, startFresh as moveDatabaseAside, saveDraft, saveDraftToFile, searchDrafts } from "./backend.js";
 
 // How long after the last keystroke the draft is saved (the 300 ms lint is separate). Kept short: a reload before the save has
 // started loses the text, because the flush on pagehide cannot finish writing to IndexedDB while the page is going away.
@@ -14,16 +14,22 @@ const message = (err) => String(err?.message || err);
 // to the Editor component (getText, load), `drawerOpen` a ref that says whether the list is on screen (it is only fetched
 // then, because each fetch reads every listed draft).
 //
+// A draft can also be saved to a file (Ctrl+Shift+S the first time, then Ctrl+S): it stays a draft here, autosaved as before, and
+// remembers the file (`filePath`). Until it has been saved to a file, Ctrl+S only saves the draft; afterwards it writes the file.
+// The file is only written on request, never by the autosave.
+//
 // A draft is created by the first save, so an empty editor never leaves an empty draft behind. Saves run one after another,
 // and a save never covers text typed while it was running: that text gets its own save.
 export function useDrafts(editor, drawerOpen) {
-  const current = ref({ id: "", createdAt: 0, format: "markdown" });
+  const current = ref({ id: "", createdAt: 0, format: "markdown", filePath: "" });
   const state = ref("idle"); // idle | dirty | saving | saved | error
   const error = ref("");
   const list = ref({ drafts: [], total: 0 });
   const query = ref("");
   const toast = ref(null); // { message, undo } while the "Draft deleted" bar is showing
   const available = ref(true); // false when the database cannot be opened: the editor still works, nothing is saved
+
+  const fileState = ref("none"); // none | unknown (linked, not written in this session) | synced | stale (edited since the file was written)
 
   let dirty = false;
   let edits = 0;
@@ -35,16 +41,26 @@ export function useDrafts(editor, drawerOpen) {
   let searchTimer = null;
   let toastTimer = null;
 
+  const fileName = computed(() => current.value.filePath.split(/[\\/]/).pop());
+
   const status = computed(() => {
     if (state.value === "error") return error.value;
     if (state.value === "saving") return "Saving...";
     if (state.value === "dirty") return "Unsaved changes";
-    if (state.value === "saved") return "Saved";
+    if (state.value === "saved") {
+      if (fileState.value === "synced") return `Saved to ${fileName.value}`;
+      if (fileState.value === "stale") return `Draft saved, ${fileName.value} not updated (Ctrl+S)`;
+      if (fileState.value === "unknown") return `Saved, file: ${fileName.value}`;
+      return "Saved";
+    }
     return "";
   });
 
+  const asCurrent = (d) => ({ id: d.id, createdAt: d.createdAt, format: d.format, filePath: d.filePath ?? "" });
+
   function setCurrent(d) {
-    current.value = { id: d.id, createdAt: d.createdAt, format: d.format };
+    current.value = asCurrent(d);
+    fileState.value = current.value.filePath ? "unknown" : "none";
     dirty = false;
     state.value = d.id ? "saved" : "idle";
   }
@@ -54,6 +70,7 @@ export function useDrafts(editor, drawerOpen) {
     if (!available.value) return;
     dirty = true;
     edits++;
+    if (current.value.filePath) fileState.value = "stale";
     if (state.value !== "saving") state.value = "dirty";
     clearTimeout(timer);
     timer = setTimeout(flush, SAVE_DELAY_MS);
@@ -76,7 +93,7 @@ export function useDrafts(editor, drawerOpen) {
         content: text,
         createdAt: current.value.createdAt,
       });
-      current.value = { id: d.id, createdAt: d.createdAt, format: d.format };
+      current.value = asCurrent(d);
       if (edits === mine) {
         dirty = false;
         state.value = "saved";
@@ -96,6 +113,57 @@ export function useDrafts(editor, drawerOpen) {
     timer = null;
     chain = chain.then(saveNow);
     return chain;
+  }
+
+  // Write the text to its file, and save the draft with it. With `saveAs`, or when the draft has no file yet, the user picks the file;
+  // when they cancel nothing changes. A draft that has never been saved to a file only gets its draft saved (Ctrl+S).
+  function saveFile(saveAs = false) {
+    if (!available.value) return Promise.resolve();
+    if (!saveAs && !current.value.filePath) return flush();
+    chain = chain.then(() => writeFile(saveAs));
+    return chain;
+  }
+
+  async function writeFile(saveAs) {
+    const text = editor.value?.getText() ?? "";
+    if (!current.value.id && text.trim() === "") return;
+    const mine = edits;
+    const before = state.value;
+    state.value = "saving";
+    try {
+      const r = await saveDraftToFile(
+        {
+          id: current.value.id,
+          format: current.value.format,
+          content: text,
+          createdAt: current.value.createdAt,
+          filePath: current.value.filePath,
+        },
+        saveAs,
+      );
+      if (r.cancelled) {
+        state.value = before === "saving" ? "saved" : before;
+        return;
+      }
+      current.value = asCurrent(r.draft);
+      if (!current.value.filePath) {
+        // The browser could only download a copy: the draft is saved, but not linked to a file.
+        fileState.value = "none";
+      } else {
+        fileState.value = edits === mine ? "synced" : "stale";
+      }
+      if (edits === mine) {
+        dirty = false;
+        state.value = "saved";
+      } else {
+        state.value = "dirty"; // typed during the save: its own timer is already running
+      }
+      refreshListSoon();
+    } catch (err) {
+      error.value = `Not saved to a file: ${message(err)}`;
+      state.value = "error"; // the text stays dirty, so the next edit or flush tries again
+      dirty = true;
+    }
   }
 
   async function refreshList() {
@@ -194,7 +262,7 @@ export function useDrafts(editor, drawerOpen) {
       editor.value?.focus();
       return;
     }
-    setCurrent({ id: "", createdAt: 0, format: "markdown" });
+    setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
     editor.value?.load("");
   }
 
@@ -226,7 +294,7 @@ export function useDrafts(editor, drawerOpen) {
       const next = list.value.drafts[0];
       if (next) await open(next.id);
       else {
-        setCurrent({ id: "", createdAt: 0, format: "markdown" });
+        setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
         editor.value?.load("");
       }
     }
@@ -272,6 +340,7 @@ export function useDrafts(editor, drawerOpen) {
     current,
     status,
     state,
+    fileName,
     list,
     query,
     toast,
@@ -281,6 +350,7 @@ export function useDrafts(editor, drawerOpen) {
     init,
     edited,
     flush,
+    saveFile,
     refreshList,
     setQuery,
     showMore,

@@ -45,6 +45,9 @@ type Draft struct {
 	Content   string `json:"content"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
+	// FilePath is the file the draft was saved to ("" when it never was). The draft stays here too; Save ignores this field
+	// and only SetFilePath changes it, so the path always comes from the save dialog and never from the page.
+	FilePath string `json:"filePath"`
 }
 
 // Task is one markdown task line, as shown in a draft's preview.
@@ -60,6 +63,7 @@ type Summary struct {
 	Format    string `json:"format"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
+	FilePath  string `json:"filePath"`
 	// Excerpt is the start of the text after the title, on one line, without the task lines (they are in Tasks).
 	Excerpt string `json:"excerpt"`
 	// Tasks holds the first few task lines; TasksTotal and TasksDone count all of them.
@@ -137,8 +141,8 @@ func (s *Store) Save(d Draft) (Draft, error) {
 func (s *Store) Get(id string) (Draft, error) {
 	var d Draft
 	var data string
-	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data FROM drafts WHERE id = ?`, id).
-		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data)
+	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data, file_path FROM drafts WHERE id = ?`, id).
+		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data, &d.FilePath)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Draft{}, ErrNotFound
 	}
@@ -151,6 +155,18 @@ func (s *Store) Get(id string) (Draft, error) {
 	}
 	d.Format, d.Content = b.Format, b.Content
 	return d, nil
+}
+
+// SetFilePath records the file a draft was saved to, or clears it with "". ErrNotFound when there is no such draft.
+func (s *Store) SetFilePath(id, path string) error {
+	res, err := s.db.Exec(`UPDATE drafts SET file_path = ? WHERE id = ?`, path, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // Delete removes a draft. Deleting one that is not there is not an error.
@@ -198,7 +214,7 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 		return List{}, err
 	}
 	// Only the summary columns are read, never the text (the data column), so this stays quick however large the drafts are.
-	rows, err := s.db.Query(`SELECT id, created_at, updated_at, format, title, excerpt, tasks, tasks_total, tasks_done FROM drafts`+where+
+	rows, err := s.db.Query(`SELECT id, created_at, updated_at, file_path, format, title, excerpt, tasks, tasks_total, tasks_done FROM drafts`+where+
 		` ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if err != nil {
 		return List{}, err
@@ -207,7 +223,7 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	for rows.Next() {
 		var sum Summary
 		var tasks string
-		if err := rows.Scan(&sum.ID, &sum.CreatedAt, &sum.UpdatedAt, &sum.Format, &sum.Title, &sum.Excerpt, &tasks, &sum.TasksTotal, &sum.TasksDone); err != nil {
+		if err := rows.Scan(&sum.ID, &sum.CreatedAt, &sum.UpdatedAt, &sum.FilePath, &sum.Format, &sum.Title, &sum.Excerpt, &tasks, &sum.TasksTotal, &sum.TasksDone); err != nil {
 			return List{}, err
 		}
 		if err := json.Unmarshal([]byte(tasks), &sum.Tasks); err != nil || sum.Tasks == nil {
@@ -246,6 +262,12 @@ func decode(data string) (blob, error) {
 		b.Format = FormatMarkdown
 	}
 	return b, nil
+}
+
+// Title is the draft's title as the drawer shows it: its first line without the markdown marks, or "Untitled".
+func Title(content string) string {
+	title, _, _, _, _ := summarize(content)
+	return title
 }
 
 // summarize works out what the drawer shows for a draft.

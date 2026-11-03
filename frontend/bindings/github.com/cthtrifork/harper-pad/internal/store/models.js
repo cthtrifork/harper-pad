@@ -50,6 +50,15 @@ export class Draft {
              */
             this["updatedAt"] = 0;
         }
+        if (!("filePath" in $$source)) {
+            /**
+             * FilePath is the file the draft was saved to ("" when it never was). The draft stays here too; Save ignores this field
+             * and only SetFilePath changes it, so the path always comes from the save dialog and never from the page.
+             * @member
+             * @type {string}
+             */
+            this["filePath"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -151,6 +160,13 @@ export class Summary {
              */
             this["updatedAt"] = 0;
         }
+        if (!("filePath" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["filePath"] = "";
+        }
         if (!("excerpt" in $$source)) {
             /**
              * Excerpt is the start of the text after the title, on one line, without the task lines (they are in Tasks).
@@ -191,10 +207,10 @@ export class Summary {
      * @returns {Summary}
      */
     static createFrom($$source = {}) {
-        const $$createField6_0 = $$createType3;
+        const $$createField7_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tasks" in $$parsedSource) {
-            $$parsedSource["tasks"] = $$createField6_0($$parsedSource["tasks"]);
+            $$parsedSource["tasks"] = $$createField7_0($$parsedSource["tasks"]);
         }
         return new Summary(/** @type {Partial<Summary>} */($$parsedSource));
     }

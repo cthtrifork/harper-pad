@@ -56,7 +56,14 @@ export function createWebDrafts(open) {
     }
   }
 
-  const summaryOf = (d) => ({ id: d.id, format: d.format, createdAt: d.createdAt, updatedAt: d.updatedAt, ...summarize(d.content) });
+  const summaryOf = (d) => ({
+    id: d.id,
+    format: d.format,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    filePath: d.filePath ?? "",
+    ...summarize(d.content),
+  });
 
   async function get(id) {
     return withDb(async (db) => {
@@ -82,7 +89,23 @@ export function createWebDrafts(open) {
       const existing = await request(drafts.get(id));
       // Saving an id that is no longer stored restores it (undoing a delete), keeping its creation time when one is given.
       const createdAt = existing?.createdAt ?? (input.id && input.createdAt > 0 ? input.createdAt : now);
-      const d = { id, format, content, createdAt, updatedAt: now };
+      // The file link is only ever set by setFilePath, as on the Go side, so saving the text keeps it.
+      const d = { id, format, content, createdAt, updatedAt: now, filePath: existing?.filePath ?? "" };
+      drafts.put(d);
+      tx.objectStore("summaries").put(summaryOf(d));
+      await done(tx);
+      return d;
+    });
+  }
+
+  // The name of the file a draft was saved to ("" clears it); the browser only knows the name, the handle is kept by backend.js.
+  async function setFilePath(id, filePath) {
+    return withDb(async (db) => {
+      const tx = db.transaction(["drafts", "summaries"], "readwrite");
+      const drafts = tx.objectStore("drafts");
+      const d = await request(drafts.get(id));
+      if (!d) throw new Error("draft not found");
+      d.filePath = filePath;
       drafts.put(d);
       tx.objectStore("summaries").put(summaryOf(d));
       await done(tx);
@@ -153,5 +176,5 @@ export function createWebDrafts(open) {
     return { demo: "", open: drafts.length ? await get(drafts[0].id) : null, total, error: "" };
   }
 
-  return { get, save, remove, list, search, startup };
+  return { get, save, setFilePath, remove, list, search, startup };
 }

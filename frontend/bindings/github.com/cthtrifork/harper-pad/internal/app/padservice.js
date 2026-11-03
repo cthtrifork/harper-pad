@@ -113,6 +113,21 @@ export function SaveDraft(d) {
 }
 
 /**
+ * SaveDraftToFile saves the draft's text to a file, and the draft itself in the database as SaveDraft does, so the draft stays
+ * in the scratch pad and remembers the file. With saveAs, or when the draft was never saved to a file, the user picks the file in
+ * a dialog; otherwise the file it was saved to before is overwritten. The path is never taken from the page: it comes from the
+ * dialog, or from what the database holds for the draft.
+ * @param {store$0.Draft} d
+ * @param {boolean} saveAs
+ * @returns {$CancellablePromise<$models.FileSave>}
+ */
+export function SaveDraftToFile(d, saveAs) {
+    return $Call.ByID(900743716, d, saveAs).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType4($result);
+    }));
+}
+
+/**
  * SaveSettings validates and saves the settings. The frontend sends the whole set after every change.
  * @param {$models.Settings} $in
  * @returns {$CancellablePromise<void>}
@@ -148,7 +163,7 @@ export function StartFresh() {
  */
 export function Startup() {
     return $Call.ByID(3746126598).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -158,7 +173,7 @@ export function Startup() {
  */
 export function UpdateInfo() {
     return $Call.ByID(4196675356).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType6($result);
     }));
 }
 
@@ -175,5 +190,6 @@ const $$createType0 = $models.UpdateStatus.createFrom;
 const $$createType1 = store$0.Draft.createFrom;
 const $$createType2 = store$0.List.createFrom;
 const $$createType3 = $models.Settings.createFrom;
-const $$createType4 = $models.StartupState.createFrom;
-const $$createType5 = $models.UpdateInfo.createFrom;
+const $$createType4 = $models.FileSave.createFrom;
+const $$createType5 = $models.StartupState.createFrom;
+const $$createType6 = $models.UpdateInfo.createFrom;

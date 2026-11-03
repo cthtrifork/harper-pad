@@ -38,16 +38,17 @@ function toggleDrawer() {
   if (showDrawer.value) drafts.refreshList();
 }
 
-// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts; Ctrl+S (Cmd+S) saves the open draft right away.
+// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S saves: to the draft until the text has been saved to a file, then to
+// the file; Ctrl+Shift+S always asks for a file.
 function onKeydown(e) {
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
-    e.preventDefault(); // not the browser's "save page"
-    drafts.flush();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if (key === "j" && !e.shiftKey) {
     e.preventDefault();
     toggleDrawer();
+  } else if (key === "s") {
+    e.preventDefault(); // not the browser's "save page"
+    drafts.saveFile(e.shiftKey);
   }
 }
 

@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Start here. This file is for AI coding agents (and humans) picking up work on **Harper Pad**, a Go + Wails v3
-desktop app: a Harper-checked editor plus a scratch pad drawer. It is early: the editor, Problems panel and drafts drawer work; the markdown preview and file open/save are not built yet (`TODO.md`).
+desktop app: a Harper-checked editor plus a scratch pad drawer. It is early: the editor, Problems panel and drafts drawer work; the markdown preview and opening files are not built yet; saving a draft to a file works (Ctrl+Shift+S, then Ctrl+S) (`TODO.md`).
 
 ## Commands
 
