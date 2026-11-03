@@ -14,7 +14,7 @@
   padding-right: max(16px, env(safe-area-inset-right));
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .bar {
     height: auto;
     padding-top: calc(8px + env(safe-area-inset-top));
@@ -25,6 +25,25 @@
   .status {
     padding-left: max(12px, env(safe-area-inset-left));
     padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  /* Turned sideways, the notch or the Dynamic Island takes a strip at one edge (the left one, or the right one the other way round).
+     The text, the scratch pad and the problems sheet keep clear of it, their content lining up at the inset; their own backgrounds still reach the edge. */
+  .pane {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  /* Their own gutter is 16 px, so only what the inset adds beyond that is padded: the headings then start where the text does. */
+  .drawer,
+  .panel {
+    padding-left: max(0px, calc(env(safe-area-inset-left) - 16px));
+    padding-right: max(0px, calc(env(safe-area-inset-right) - 16px));
+  }
+
+  .banner {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
   }
 }
 

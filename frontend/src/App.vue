@@ -27,7 +27,7 @@ const setupMs = ref(0);
 const lintMs = ref(0);
 const problems = ref([]);
 // On a phone the problems are a sheet over the text, so they start closed.
-const narrow = window.matchMedia("(max-width: 720px)");
+const narrow = window.matchMedia("(max-width: 720px), (pointer: coarse) and (max-height: 500px)");
 const isNarrow = ref(narrow.matches); // reactive copy: Split is not offered on a phone (see below)
 const onNarrowChange = (e) => (isNarrow.value = e.matches);
 narrow.addEventListener("change", onNarrowChange);
