@@ -16,6 +16,10 @@
   },
   "overrides": [
     {
+      "includes": ["index.html"],
+      "html": { "formatter": { "enabled": true } }
+    },
+    {
       "includes": ["**/*.vue"],
       "linter": { "rules": { "correctness": { "noUnusedVariables": "off" } } }
     }
