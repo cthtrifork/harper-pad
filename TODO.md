@@ -45,8 +45,8 @@ vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 - [x] Replace the spike textarea with a CodeMirror 6 editor (plain text for now; markdown highlighting comes with the views).
 - [x] `@codemirror/lint` source that calls `WorkerLinter.lint()` (debounced), maps `Lint.span()` to diagnostics and
       `suggestions()` to "apply" actions via `applySuggestion`; free wasm-backed `Lint` objects.
-- [ ] Suggestion popover on the underlined issue: replacements work (CodeMirror's lint tooltip); "Add to dictionary" and
-      "Ignore this rule" are still missing, and the tooltip is only themed with colours.
+- [x] Suggestion popover on the underlined issue: replacements, "Add to dictionary" (spelling) and "Ignore this one". Turning
+      a whole rule off is not built (needs `organizedLints` and `setLintConfig`); maybe in a settings screen.
 - [ ] Problems panel on the right (Edit view only) with filter chips, counts and jump-to. A "Problems" toolbar toggle
       hides it and the editor uses the full width; the count stays on the toggle and in the status bar.
 - [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
@@ -55,7 +55,8 @@ vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 - [ ] Document `format` (`markdown` or `text`): files by extension (`.md`, `.markdown`), drafts store it, default
       markdown for new drafts, unknown files open as text. The status bar "Markdown" label is a menu to switch it.
       A plain-text draft that looks like markdown gets a "Looks like Markdown. Switch?" hint, never an automatic switch.
-- [ ] Add word to a user dictionary and ignore a rule; persist both through `PadService`.
+- [x] Personal dictionary and ignored findings, saved through `PadService` (`docs/storage.md`).
+- [ ] A way to see and remove dictionary words and ignored findings (the Problems panel only shows the counts).
 - [ ] Dialect/language setting (Harper config), persisted.
 - [ ] Open/save files through Wails dialogs (Go side), dirty state. "Save as file" on a draft suggests `.md` or `.txt`.
 - [ ] Light/dark theme from the existing CSS variables.

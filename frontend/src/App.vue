@@ -5,6 +5,7 @@ import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import UpdateButton from "./components/UpdateButton.vue";
 import { createLinter } from "./lib/harper.js";
+import { loadPersonal, savePersonal } from "./lib/personal.js";
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
 const state = ref("loading");
@@ -15,6 +16,8 @@ const problems = ref([]);
 const showProblems = ref(true);
 const goVersion = ref("");
 const harper = ref(null);
+const personal = ref({ words: 0, ignored: 0 });
+const saveError = ref("");
 const editor = ref(null);
 
 function onResult({ ms }) {
@@ -26,6 +29,16 @@ function onProblems(list) {
   if (JSON.stringify(list) !== JSON.stringify(problems.value)) problems.value = list;
 }
 
+// Save the dictionary and ignore list after a change. A failure is shown in the status bar; the change still holds for this run.
+async function persist() {
+  try {
+    personal.value = await savePersonal(harper.value);
+    saveError.value = "";
+  } catch (err) {
+    saveError.value = `Could not save settings: ${err?.message || err}`;
+  }
+}
+
 onMounted(async () => {
   PadService.Version().then(
     (v) => (goVersion.value = v),
@@ -33,7 +46,13 @@ onMounted(async () => {
   );
   try {
     const t0 = performance.now();
-    harper.value = await createLinter();
+    const linter = await createLinter();
+    try {
+      personal.value = await loadPersonal(linter);
+    } catch (err) {
+      saveError.value = `Could not load settings: ${err?.message || err}`;
+    }
+    harper.value = linter;
     setupMs.value = Math.round(performance.now() - t0);
     state.value = "ready";
   } catch (err) {
@@ -55,16 +74,17 @@ onMounted(async () => {
     </header>
     <div class="body">
       <main class="page" @mousedown.self.prevent="editor?.focusEnd()">
-        <Editor v-if="harper" ref="editor" :harper="harper" :doc="sample" @result="onResult" @problems="onProblems" />
+        <Editor v-if="harper" ref="editor" :harper="harper" :doc="sample" :persist="persist" @result="onResult" @problems="onProblems" />
         <p v-else-if="state === 'loading'" class="mute">Starting Harper...</p>
         <pre v-if="error" class="error">{{ error }}</pre>
       </main>
-      <ProblemsPanel v-if="showProblems" :problems="problems" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
+      <ProblemsPanel v-if="showProblems" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
     </div>
     <footer class="status">
       <span :class="['state', state]">Harper {{ state }}</span>
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
       <span v-if="state === 'ready'" class="mute">setup {{ setupMs }} ms, last check {{ lintMs }} ms</span>
+      <span v-if="saveError" class="state failed">{{ saveError }}</span>
       <span class="spacer"></span>
       <span class="mute">Version {{ goVersion || "..." }}</span>
     </footer>

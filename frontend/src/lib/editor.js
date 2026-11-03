@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { forEachDiagnostic, linter } from "@codemirror/lint";
-import { EditorState } from "@codemirror/state";
+import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { lintText } from "./harper.js";
 
@@ -25,9 +25,34 @@ function toAction(fix) {
   };
 }
 
+// Dispatched to make the linter run again without a text change (the dictionary or the ignore list changed).
+const relint = StateEffect.define();
+
+// Actions that change what Harper remembers: add the word to the dictionary (spelling only), or ignore this one
+// finding in its context. persist() saves the new state; the editor then lints again so the underline goes away.
+// markClass styles them as quieter than the fixes, and keeps them out of the Problems panel's fix list.
+function personalActions(harper, f, persist) {
+  const run = (work) => async (view) => {
+    try {
+      await work();
+      await persist();
+    } finally {
+      view.dispatch({ effects: relint.of(null) });
+    }
+  };
+  const actions = [];
+  if (f.kind === "Spelling") {
+    actions.push({ name: "Add to dictionary", markClass: "cm-action-quiet", apply: run(() => harper.importWords([f.problem])) });
+  }
+  if (f.hash !== undefined) {
+    actions.push({ name: "Ignore this one", markClass: "cm-action-quiet", apply: run(() => harper.ignoreLintHash(f.hash)) });
+  }
+  return actions;
+}
+
 // The lint source: runs Harper on the whole document (debounced by the linter extension) and maps the findings.
 // onResult gets the finding count and how long Harper took, for the status line.
-function harperSource(harper, onResult) {
+function harperSource(harper, onResult, persist) {
   return linter(
     async (view) => {
       const t0 = performance.now();
@@ -39,10 +64,10 @@ function harperSource(harper, onResult) {
         severity: severity(f.kind),
         source: f.kind,
         message: f.message,
-        actions: f.fixes.map(toAction),
+        actions: [...f.fixes.map(toAction), ...personalActions(harper, f, persist)],
       }));
     },
-    { delay: 300 },
+    { delay: 300, needsRefresh: (update) => update.transactions.some((tr) => tr.effects.some((e) => e.is(relint))) },
   );
 }
 
@@ -91,10 +116,16 @@ const theme = EditorView.theme({
     border: "0",
     borderRadius: "6px",
     padding: "4px 12px",
-    margin: "0 6px 0 0",
+    margin: "0 6px 6px 0",
     font: "inherit",
     fontWeight: "600",
     cursor: "pointer",
+  },
+  ".cm-diagnosticAction.cm-action-quiet": {
+    backgroundColor: "transparent",
+    color: "var(--text)",
+    border: "1px solid var(--line)",
+    fontWeight: "400",
   },
 });
 
@@ -109,7 +140,7 @@ export function collectProblems(view) {
       problem: view.state.sliceDoc(from, to),
       from,
       to,
-      fixes: (d.actions ?? []).map((a) => a.name),
+      fixes: (d.actions ?? []).filter((a) => !a.markClass).map((a) => a.name),
     });
   });
   return out.sort((a, b) => a.from - b.from);
@@ -129,7 +160,7 @@ export function applyFix(view, from, to, i) {
 }
 
 // Create the editor in `parent`. `harper` is a WorkerLinter; `onResult` hears about every lint run and `onProblems` gets the current findings after every update.
-export function createEditor(parent, { doc, harper, onResult, onProblems }) {
+export function createEditor(parent, { doc, harper, onResult, onProblems, persist }) {
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -138,7 +169,7 @@ export function createEditor(parent, { doc, harper, onResult, onProblems }) {
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
-        harperSource(harper, onResult),
+        harperSource(harper, onResult, persist),
         theme,
         EditorView.updateListener.of((u) => onProblems?.(collectProblems(u.view))),
       ],

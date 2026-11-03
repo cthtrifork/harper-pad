@@ -46,6 +46,17 @@ export function InstallUpdate() {
 }
 
 /**
+ * LoadSettings returns the saved settings, or empty ones when there are none yet. A damaged file is moved aside
+ * (settings.json.bad) and empty settings are returned, so the app still starts.
+ * @returns {$CancellablePromise<$models.Settings>}
+ */
+export function LoadSettings() {
+    return $Call.ByID(161342464).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType1($result);
+    }));
+}
+
+/**
  * RestartToUpdate swaps the staged binary in and relaunches the app.
  * @returns {$CancellablePromise<void>}
  */
@@ -54,12 +65,21 @@ export function RestartToUpdate() {
 }
 
 /**
+ * SaveSettings validates and saves the settings. The frontend sends the whole set after every change.
+ * @param {$models.Settings} $in
+ * @returns {$CancellablePromise<void>}
+ */
+export function SaveSettings($in) {
+    return $Call.ByID(3266976473, $in);
+}
+
+/**
  * UpdateInfo reports the running version and whether it can update itself.
  * @returns {$CancellablePromise<$models.UpdateInfo>}
  */
 export function UpdateInfo() {
     return $Call.ByID(4196675356).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType2($result);
     }));
 }
 
@@ -73,4 +93,5 @@ export function Version() {
 
 // Private type creation functions
 const $$createType0 = $models.UpdateStatus.createFrom;
-const $$createType1 = $models.UpdateInfo.createFrom;
+const $$createType1 = $models.Settings.createFrom;
+const $$createType2 = $models.UpdateInfo.createFrom;

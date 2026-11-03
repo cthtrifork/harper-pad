@@ -8,6 +8,7 @@ export {
 };
 
 export {
+    Settings,
     UpdateInfo,
     UpdateStatus
 } from "./models.js";

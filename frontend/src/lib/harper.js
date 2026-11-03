@@ -15,22 +15,27 @@ const SUGGESTION_KIND = { 0: "replace", 1: "remove", 2: "insert" };
 export async function lintText(linter, text) {
   const lints = await linter.lint(text);
   try {
-    return lints.map((l) => {
-      const span = l.span();
-      const fixes = l.suggestions().map((sug) => {
-        const fix = { kind: SUGGESTION_KIND[sug.kind()] ?? "replace", text: sug.get_replacement_text() };
-        sug.free();
-        return fix;
-      });
-      return {
-        kind: l.lint_kind_pretty(),
-        message: l.message(),
-        problem: l.get_problem_text(),
-        from: span.start,
-        to: span.end,
-        fixes,
-      };
-    });
+    return await Promise.all(
+      lints.map(async (l) => {
+        const span = l.span();
+        const fixes = l.suggestions().map((sug) => {
+          const fix = { kind: SUGGESTION_KIND[sug.kind()] ?? "replace", text: sug.get_replacement_text() };
+          sug.free();
+          return fix;
+        });
+        // The hash identifies this finding in its context. Ignoring needs it later, after the Lint object is freed.
+        const hash = await linter.contextHash(text, l).catch(() => undefined);
+        return {
+          kind: l.lint_kind_pretty(),
+          message: l.message(),
+          problem: l.get_problem_text(),
+          from: span.start,
+          to: span.end,
+          fixes,
+          hash,
+        };
+      }),
+    );
   } finally {
     for (const l of lints) l.free();
   }
