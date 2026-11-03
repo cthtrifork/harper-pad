@@ -1,0 +1,56 @@
+/* Two cues that autocorrect is on, for when the Problems panel (where its switch is) is closed: a check on the Problems button in the
+   header, and a chip in the status bar that is also a one-click switch. */
+.bar .toggle {
+  position: relative;
+}
+
+.bar .toggle .mark {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--panel); /* a ring in the bar's colour, so the badge reads as sitting on the button */
+  border-radius: 50%;
+  box-sizing: content-box;
+  background: var(--ok);
+  color: var(--on-accent);
+}
+
+.status .auto-chip {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--mute);
+  font: inherit;
+}
+
+.status .auto-chip:hover {
+  border-color: var(--line);
+  background: var(--raised);
+}
+
+.status .auto-chip.on {
+  color: var(--ok);
+}
+
+/* Off is a hollow dot, on a filled one. */
+.status .auto-chip .dot {
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.status .auto-chip.on .dot {
+  background: currentColor;
+}

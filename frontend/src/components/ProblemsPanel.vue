@@ -67,7 +67,7 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
         <button type="button" class="auto-toggle" :aria-expanded="choices" aria-controls="auto-choices" @click="choices = !choices">
           <svg class="chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2l3 3-3 3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
           <strong>Autocorrect</strong>
-          <span class="mute">{{ autocorrect.on ? "On" : "Off" }}</span>
+          <span class="mute">{{ autocorrect.on ? (fixed.length ? `On · ${fixed.length} fixed` : "On") : "Off" }}</span>
         </button>
         <button type="button" class="switch" role="switch" aria-label="Autocorrect" :aria-checked="autocorrect.on" @click="setAuto({ on: !autocorrect.on })"></button>
       </div>

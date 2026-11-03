@@ -12,4 +12,5 @@
 @import "./problems-panel.css";
 @import "./problems-autofix.css";
 @import "./autofix-toast.css";
+@import "./autocorrect-indicators.css";
 @import "./responsive.css";

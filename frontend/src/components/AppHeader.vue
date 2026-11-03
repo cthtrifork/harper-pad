@@ -21,6 +21,8 @@ defineProps({
   mode: { type: String, default: "edit" },
   // The in-app updater (desktop builds only), rendered at the end of the bar.
   updateButton: { type: [Object, Function], default: null },
+  // Autocorrect is on: a small check on the Problems button, so it shows while the panel (with its switch) is closed.
+  autocorrect: { type: Boolean, default: false },
 });
 const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view"]);
 
@@ -97,6 +99,9 @@ onBeforeUnmount(() => {
     <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
       <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="10" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
       Problems <span class="count">{{ problemCount }}</span>
+      <span v-if="autocorrect" class="mark" role="img" aria-label="Autocorrect is on">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5.2l2 2 4-4.4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </span>
     </button>
     <span v-if="updateButton" class="sep" aria-hidden="true"></span>
     <component :is="updateButton" v-if="updateButton" />
