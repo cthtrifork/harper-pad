@@ -168,8 +168,14 @@ export function applyFix(view, from, to, i) {
   });
 }
 
-// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update. `persist` saves the dictionary and ignore list after a change.
-export function createEditor(parent, { doc, getHarper, onResult, onProblems, persist }) {
+// Words (runs of non-space characters) and characters (UTF-16 code points, so an emoji counts once) in a text.
+export function countText(text) {
+  return { words: (text.match(/\S+/g) ?? []).length, chars: [...text].length };
+}
+
+// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update, and `onStats` the word and character counts at the start and after every edit. `persist` saves the dictionary and ignore list after a change.
+export function createEditor(parent, { doc, getHarper, onResult, onProblems, onStats, persist }) {
+  onStats?.(countText(doc));
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -178,9 +184,13 @@ export function createEditor(parent, { doc, getHarper, onResult, onProblems, per
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
+        EditorView.contentAttributes.of({ "aria-label": "Document" }), // the textbox needs an accessible name
         harperSource(getHarper, onResult, persist),
         theme,
-        EditorView.updateListener.of((u) => onProblems?.(collectProblems(u.view))),
+        EditorView.updateListener.of((u) => {
+          if (u.docChanged) onStats?.(countText(u.state.doc.toString()));
+          onProblems?.(collectProblems(u.view));
+        }),
       ],
     }),
   });

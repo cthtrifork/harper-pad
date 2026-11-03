@@ -15,6 +15,8 @@ const lintMs = ref(0);
 const problems = ref([]);
 const showProblems = ref(true);
 const goVersion = ref("");
+const demo = ref(""); // banner text in demo mode (development builds only); the timings are then fixed
+const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
 const personal = ref({ words: 0, ignored: 0 });
 const saveError = ref("");
@@ -38,6 +40,10 @@ function fmt(ms) {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
+// Demo mode shows these instead of the measured times, so screenshots are the same on every run.
+const DEMO_SETUP_MS = 1200;
+const DEMO_LINT_MS = 20;
+
 function onResult({ ms }) {
   lintMs.value = ms;
 }
@@ -58,6 +64,10 @@ async function persist() {
 }
 
 onMounted(async () => {
+  PadService.DemoMode().then(
+    (text) => (demo.value = text),
+    () => {},
+  );
   PadService.Version().then(
     (v) => (goVersion.value = v),
     (err) => (goVersion.value = `unavailable: ${err}`),
@@ -83,9 +93,10 @@ onMounted(async () => {
       </button>
       <UpdateButton />
     </header>
+    <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
     <div class="body">
       <main class="page" @mousedown.self.prevent="editor?.focusEnd()">
-        <Editor ref="editor" :harper="harper" :doc="sample" :persist="persist" @result="onResult" @problems="onProblems" />
+        <Editor ref="editor" :harper="harper" :doc="sample" :persist="persist" @result="onResult" @problems="onProblems" @stats="counts = $event" />
         <pre v-if="error" class="error">{{ error }}</pre>
       </main>
       <ProblemsPanel v-if="showProblems" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
@@ -93,7 +104,8 @@ onMounted(async () => {
     <footer class="status">
       <span :class="['state', state]">{{ state === "loading" ? "Starting Harper, you can already type..." : `Harper ${state}` }}</span>
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
-      <span v-if="state === 'ready'" class="mute">started in {{ fmt(setupMs) }}, last check {{ fmt(lintMs) }}</span>
+      <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span>
+      <span v-if="state === 'ready'" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
       <span v-if="saveError" class="state failed">{{ saveError }}</span>
       <span class="spacer"></span>
       <span class="mute">Version {{ goVersion || "..." }}</span>
@@ -168,6 +180,15 @@ onMounted(async () => {
   padding: 6px 16px;
   border-top: 1px solid var(--line);
   background: var(--panel);
+  font-size: 12px;
+}
+.banner {
+  flex: none;
+  margin: 0;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--text);
   font-size: 12px;
 }
 .mute {

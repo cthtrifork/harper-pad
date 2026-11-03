@@ -1,0 +1,145 @@
+name: Dependency scan
+
+# Scans the PR and its base with Trivy (.github/trivy/dependency-scan.tpl lists the findings) and
+# comments the HIGH and CRITICAL vulnerabilities the PR adds and removes. It runs only when a dependency manifest or lockfile
+# (or this workflow or its template) changes. The comment is informational; the blocking check is the Trivy job in security.yml. It uses
+# a paths filter, so do not mark it as a required check.
+#
+# It scans the repository files only (go.mod, go.sum and the npm lockfile); the report groups the
+# findings by the file Trivy found them in. There is no container image to scan.
+#
+# Hardening: the scan job runs Trivy over PR-controlled files with a read-only token and no
+# write permissions; only the separate comment job holds pull-requests: write and it never checks
+# out or runs PR code. Trivy is pinned (action by SHA, binary by version). The vulnerability DB comes
+# from the daily cache in trivy-cache.yml; a pull request's own caches are scoped to that PR, so
+# they cannot reach the default branch.
+on:
+  pull_request:
+    paths:
+      - go.mod
+      - go.sum
+      - frontend/package.json
+      - frontend/package-lock.json
+      - .github/trivy/**
+      - .github/workflows/dependency-scan.yml
+  # Manual run on any branch: compares it with the default branch and only writes the job summary.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-scan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
+  # The DB comes from the cache that trivy-cache.yml refreshes daily.
+  TRIVY_SKIP_DB_UPDATE: 'true'
+
+jobs:
+  scan:
+    name: trivy (dependency changes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: head
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          path: base
+
+      - name: Scan pull request
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: head
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: template
+          template: '@head/.github/trivy/dependency-scan.tpl'
+          output: head.tsv
+          skip-dirs: frontend/node_modules
+          exit-code: '0'
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Scan base
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: base
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: template
+          template: '@head/.github/trivy/dependency-scan.tpl'
+          output: base.tsv
+          skip-dirs: frontend/node_modules
+          exit-code: '0'
+          version: ${{ env.TRIVY_VERSION }}
+
+      # Short overview: the findings that appear or disappear with this PR, grouped by file.
+      - name: Build report
+        run: |
+          export LC_ALL=C
+          sort -u base.tsv > base.sorted
+          sort -u head.tsv > head.sorted
+          comm -13 base.sorted head.sorted > added.tsv
+          comm -23 base.sorted head.sorted > removed.tsv
+
+          # a heading whenever the file (first column) changes, then the list item (second column)
+          group='$1 != file { printf "\n**`%s`**\n\n", $1; file = $1 } { print $2 }'
+
+          {
+            echo '## Trivy dependency scan'
+            echo
+            echo "HIGH and CRITICAL vulnerabilities: **+$(wc -l < added.tsv)** added, **-$(wc -l < removed.tsv)** removed ($(wc -l < head.sorted) on this branch)."
+            if [ -s added.tsv ]; then
+              printf '\n### Added\n'
+              awk -F'\t' "$group" added.tsv
+            fi
+            if [ -s removed.tsv ]; then
+              printf '\n### Removed\n'
+              awk -F'\t' "$group" removed.tsv
+            fi
+          } | tee report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-scan-report
+          path: report.md
+          if-no-files-found: error
+
+  # Separate from the scan so the token that can write comments never sits next to a scanner
+  # reading PR-controlled files. Pull requests from forks get a read-only token, so a failure here
+  # must not fail the run; the report is in the scan job's summary.
+  comment:
+    name: comment on pull request
+    needs: scan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write # create or update the report comment
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dependency-scan-report
+
+      # One sticky comment, found by header (a hidden marker the action manages). Not
+      # `gh pr comment --edit-last`: that edits the token's newest comment on the pull request, and
+      # lighthouse.yml and screenshots.yml comment as the same bot, so it overwrote their comments,
+      # which they then created again, leaving several copies of this report.
+      - name: Comment on pull request
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: trivy-dependency-scan
+          path: report.md

@@ -10,7 +10,7 @@ OUT       ?= harper-pad
 MODULE    := github.com/cthtrifork/harper-pad
 
 .DEFAULT_GOAL := help
-.PHONY: help test check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server
+.PHONY: help test check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server screenshots lighthouse
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-17s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -87,3 +87,9 @@ run-mcp-server: frontend ## Headless app with the MCP server; only app_info, win
 
 run-pprof-server: frontend ## Headless app with a pprof endpoint on 127.0.0.1:6060 (dev only; see docs/pprof.md)
 	CGO_ENABLED=0 go run -tags server,pprof .
+
+screenshots: ## Render docs/screenshots, gitignored (needs Node and Playwright; see scripts/screenshots.sh)
+	scripts/screenshots.sh
+
+lighthouse: ## Lighthouse scores into ./lighthouse (needs Chrome, CHROME_PATH and LIGHTHOUSE_VERSION)
+	scripts/lighthouse.sh
