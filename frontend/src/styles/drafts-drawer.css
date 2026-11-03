@@ -242,15 +242,25 @@
   background: transparent;
   color: var(--mute);
   opacity: 0;
+  pointer-events: none; /* invisible, so it must not take the tap meant for the card (touch has no hover to reveal it) */
   transition:
     opacity 0.15s var(--ease),
     color 0.15s var(--ease),
     background-color 0.15s var(--ease);
 }
 
-.drawer .item:hover .del,
-.drawer .item:focus-within .del {
+/* Shown by a mouse hover or keyboard focus only. A tap on touch focuses the card, and must not reveal (and then hit) the button;
+   touch deletes by swiping. */
+@media (hover: hover) {
+  .drawer .item:hover .del {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.drawer .item:has(:focus-visible) .del {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* The delete button sits over the time, in the same slot: the time fades out as the button fades in, so they never overlap. */
@@ -260,8 +270,13 @@
   transition: opacity 0.15s var(--ease);
 }
 
-.drawer .item:hover .top time,
-.drawer .item:focus-within .top time {
+@media (hover: hover) {
+  .drawer .item:hover .top time {
+    opacity: 0;
+  }
+}
+
+.drawer .item:has(:focus-visible) .top time {
   opacity: 0;
 }
 
