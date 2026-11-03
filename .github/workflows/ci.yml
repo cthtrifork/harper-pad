@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read # dorny/paths-filter lists the files of a pull request through the API
     outputs:
       # Pushes to main and manual runs always build.
       build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build }}
