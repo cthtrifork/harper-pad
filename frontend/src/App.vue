@@ -147,10 +147,12 @@ onBeforeUnmount(() => {
         Scratch pad <span class="kbd">Ctrl+J</span>
       </button>
       <span class="sep" aria-hidden="true"></span>
-      <button type="button" class="tool" :disabled="!drafts.available.value" @click="drafts.saveFile(false)">
+      <!-- One button for the state the draft is in: a draft is saved as a file; a draft with a file is saved to it (Ctrl+Shift+S
+           still saves it somewhere else). -->
+      <button v-if="drafts.current.value.filePath" type="button" class="tool" :disabled="!drafts.available.value" @click="drafts.saveFile(false)">
         Save <span class="kbd">Ctrl+S</span>
       </button>
-      <button type="button" class="tool" :disabled="!drafts.available.value" @click="drafts.saveFile(true)">
+      <button v-else type="button" class="tool" :disabled="!drafts.available.value" @click="drafts.saveFile(true)">
         Save as file <span class="kbd">Ctrl+Shift+S</span>
       </button>
       <span class="sep" aria-hidden="true"></span>
