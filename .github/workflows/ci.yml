@@ -84,10 +84,16 @@ jobs:
           node --version
           cd frontend && npm ci --ignore-scripts --no-audit --no-fund
 
-      # Biome lint (see frontend/biome.json), format check and knip (unused exports and dependencies,
-      # frontend/knip.json). Run `npm run format` to fix formatting.
+      # `biome check`: lint, format check and import order (see frontend/biome.json), plus knip (unused exports and
+      # dependencies, frontend/knip.json). Run `npx biome check --write .` in frontend/ to fix what it can.
       - name: Lint and check formatting (frontend)
         run: make lint-frontend
+
+      # Indentation style (tabs or spaces), trailing whitespace, final newline and line endings of every tracked file, from
+      # .editorconfig; config in .editorconfig-checker.json. Not the indent size: comment and Markdown continuation lines
+      # are legitimately off the grid. Biome and gofmt already cover the code; this covers Markdown, YAML, Makefile, HTML.
+      - name: Check .editorconfig
+        run: make lint-editorconfig
 
       - id: wails3
         run: echo "version=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)" >> "$GITHUB_OUTPUT"

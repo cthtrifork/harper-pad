@@ -39,7 +39,7 @@ the two builds differ and how to deploy.
 make help      # list targets
 make frontend  # build the Vue app into frontend/dist (needed before any go build/run)
 make check     # gofmt, go mod tidy, vet, tests and a headless build; no GTK needed
-make lint      # golangci-lint plus Biome
+make lint      # golangci-lint, Biome and the .editorconfig check
 make run       # desktop window (needs GTK4 + WebKitGTK 6)
 ```
 

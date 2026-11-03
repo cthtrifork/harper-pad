@@ -9,6 +9,7 @@
     "build:web": "vite build --mode web",
     "preview": "vite preview",
     "lint": "biome lint .",
+    "check": "biome check .",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "test": "node --test \"src/**/*.test.js\""

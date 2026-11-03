@@ -10,7 +10,7 @@ OUT       ?= harper-pad
 MODULE    := github.com/cthtrifork/harper-pad
 
 .DEFAULT_GOAL := help
-.PHONY: help test test-frontend check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server screenshots lighthouse
+.PHONY: help test test-frontend check fmt format lint lint-go lint-frontend lint-editorconfig tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server screenshots lighthouse
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-17s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,8 +33,10 @@ format: fmt format-frontend ## Format the Go code and the Vue app
 GOLANGCI_LINT_VERSION := v2.15.0
 # renovate: datasource=go depName=golang.org/x/tools
 GOIMPORTS_VERSION := v0.52.0
+# renovate: datasource=github-releases depName=editorconfig-checker/editorconfig-checker
+EDITORCONFIG_CHECKER_VERSION := v3.10.0
 
-lint: lint-go lint-frontend ## golangci-lint plus the frontend's Biome lint and format check (as CI runs them)
+lint: lint-go lint-frontend lint-editorconfig ## golangci-lint, the frontend's Biome check and the .editorconfig check (as CI runs them)
 
 lint-go: ## golangci-lint on the server-tag build (CGO off, no GTK needed)
 	CGO_ENABLED=0 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config .github/linters/golangci.yml --build-tags server ./...
@@ -43,8 +45,11 @@ tools: ## Install goimports and golangci-lint into GOBIN (for editors)
 	go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
-lint-frontend: ## Biome lint and format check for the Vue app (needs `make frontend` once for node_modules)
-	cd frontend && npm run lint && npm run format:check
+lint-frontend: ## Biome lint, format and import-order check for the Vue app (needs `make frontend` once for node_modules)
+	cd frontend && npm run check
+
+lint-editorconfig: ## Tabs or spaces, trailing whitespace, final newline and line endings in every tracked file (.editorconfig)
+	go run github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@$(EDITORCONFIG_CHECKER_VERSION)
 
 format-frontend: ## Reformat the Vue app with Biome
 	cd frontend && npm run format

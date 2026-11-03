@@ -1,0 +1,4 @@
+{
+  "Exclude": ["^LICENSE$", "^frontend/bindings/", "^frontend/package-lock\\.json$", "^go\\.sum$", "/testdata/"],
+  "Disable": { "IndentSize": true }
+}
