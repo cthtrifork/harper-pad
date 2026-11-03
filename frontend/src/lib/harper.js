@@ -7,18 +7,31 @@ export async function createLinter() {
   return linter;
 }
 
-// Plain objects, so Vue state never holds wasm-backed Lint instances (which need free()).
+// How a Harper suggestion edits the problem range: replace it, remove it, or insert after it.
+const SUGGESTION_KIND = { 0: "replace", 1: "remove", 2: "insert" };
+
+// Lint the text and return plain objects (spans are UTF-16 offsets, as in JS strings and CodeMirror), so neither Vue nor CodeMirror state ever holds
+// wasm-backed Lint instances. Those are freed here.
 export async function lintText(linter, text) {
   const lints = await linter.lint(text);
-  return lints.map((l) => {
-    const span = l.span();
-    return {
-      kind: l.lint_kind_pretty(),
-      message: l.message(),
-      problem: l.get_problem_text(),
-      start: span.start,
-      end: span.end,
-      suggestions: l.suggestions().length,
-    };
-  });
+  try {
+    return lints.map((l) => {
+      const span = l.span();
+      const fixes = l.suggestions().map((sug) => {
+        const fix = { kind: SUGGESTION_KIND[sug.kind()] ?? "replace", text: sug.get_replacement_text() };
+        sug.free();
+        return fix;
+      });
+      return {
+        kind: l.lint_kind_pretty(),
+        message: l.message(),
+        problem: l.get_problem_text(),
+        from: span.start,
+        to: span.end,
+        fixes,
+      };
+    });
+  } finally {
+    for (const l of lints) l.free();
+  }
 }
