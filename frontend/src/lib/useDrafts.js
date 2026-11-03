@@ -1,7 +1,9 @@
 import { computed, ref } from "vue";
 import { deleteDraft, getDraft, listDrafts, saveDraft, searchDrafts } from "./backend.js";
 
-const SAVE_DELAY_MS = 500; // how long after the last keystroke the draft is saved (the 300 ms lint is separate)
+// How long after the last keystroke the draft is saved (the 300 ms lint is separate). Kept short: a reload before the save has
+// started loses the text, because the flush on pagehide cannot finish writing to IndexedDB while the page is going away.
+const SAVE_DELAY_MS = 100;
 const SEARCH_DELAY_MS = 200;
 const PAGE = 50; // drafts shown at first, and added by "Show more"
 const TOAST_MS = 8000;
