@@ -6,7 +6,7 @@ import Editor from "./components/Editor.vue";
 import Preview from "./components/Preview.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
-import { isWeb, keepData, version } from "./lib/backend.js";
+import { keepData } from "./lib/backend.js";
 import { createLinter } from "./lib/harper.js";
 import { looksLikeMarkdown } from "./lib/markdown.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
@@ -25,13 +25,6 @@ const setupMs = ref(0);
 const lintMs = ref(0);
 const problems = ref([]);
 const showProblems = ref(true);
-const goVersion = ref("");
-// A release build reports its version number; the web build has none (the footer shows nothing), and a development build (demo mode too) reports "dev".
-const versionLabel = computed(() => {
-  if (isWeb) return "";
-  if (!goVersion.value) return "...";
-  return goVersion.value === "dev" ? "Development build" : `Version ${goVersion.value}`;
-});
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
@@ -160,10 +153,6 @@ const removeWord = (word) =>
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
   drafts.attach();
-  version().then(
-    (v) => (goVersion.value = v),
-    (err) => (goVersion.value = `unavailable: ${err}`),
-  );
   keepData();
   await nextTick(); // the editor is in the page now; Harper starts loading after it has been painted
   try {
@@ -272,7 +261,6 @@ onBeforeUnmount(() => {
       :draft-status="drafts.status.value"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"
-      :version-label="versionLabel"
       :mode="mode"
       :is-markdown="isMarkdown"
       :suggest-markdown="suggestMarkdown"
