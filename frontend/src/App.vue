@@ -38,8 +38,13 @@ function toggleDrawer() {
   if (showDrawer.value) drafts.refreshList();
 }
 
-// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts.
+// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts; Ctrl+S (Cmd+S) saves the open draft right away.
 function onKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
+    e.preventDefault(); // not the browser's "save page"
+    drafts.flush();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") {
     e.preventDefault();
     toggleDrawer();
