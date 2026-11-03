@@ -83,6 +83,12 @@ jobs:
           node-version-file: .tool-versions
           package-manager-cache: false
 
+      # scripts/screenshots.mjs pins Inter for the UI (system-ui would be a different font on every machine).
+      - name: Install fonts
+        uses: $/.github/actions/linux-build-deps
+        with:
+          packages: fonts-inter fonts-dejavu-core
+
       # Playwright drives the runner's Google Chrome; only the pinned playwright-core package is installed.
       - name: Generate screenshots
         env:

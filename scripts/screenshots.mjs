@@ -29,7 +29,16 @@ const { chromium } = loadPlaywright();
 
 mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.SCREENSHOT_BROWSER_CHANNEL || undefined });
-const page = await browser.newPage({ viewport: { width: 1100, height: 760 } }); // the desktop window's size
+const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 2 }); // the desktop window's size, sharp
+// --font-ui is system-ui, which is whatever sans font the machine has: pin it to Inter (CI installs
+// fonts-inter) so the images are the same on a laptop and in CI. The document font is bundled.
+await page.addInitScript(() => {
+  document.addEventListener("DOMContentLoaded", () => {
+    const style = document.createElement("style");
+    style.textContent = ":root{--font-ui:Inter,sans-serif !important}";
+    document.head.append(style);
+  });
+});
 const problems = [];
 page.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
 page.on("console", (m) => m.type() === "error" && console.error(`console error: ${m.text()}`));
