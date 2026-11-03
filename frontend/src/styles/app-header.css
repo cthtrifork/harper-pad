@@ -226,3 +226,8 @@
 .bar .on .icon {
   color: var(--accent);
 }
+
+/* The save button's icon is for phones, where the label is hidden (responsive.css). */
+.bar .save-icon {
+  display: none;
+}

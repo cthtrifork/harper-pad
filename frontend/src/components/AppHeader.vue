@@ -54,15 +54,18 @@ onBeforeUnmount(() => {
 <template>
   <header class="bar">
     <span class="brand">Harper Pad</span>
-    <button type="button" class="drawer-btn" :class="{ on: showDrawer }" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="emit('toggle-drawer')">
+    <button type="button" class="drawer-btn" :class="{ on: showDrawer }" aria-label="Scratch pad" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="emit('toggle-drawer')">
       <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="2.5" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M6 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
-      Scratch pad <span class="kbd">Ctrl+J</span>
+      <span class="label">Scratch pad</span> <span class="kbd">Ctrl+J</span>
     </button>
     <span class="sep" aria-hidden="true"></span>
     <!-- One button for the state the draft is in: a draft is saved as a file; a draft with a file is saved to it, and the arrow beside
          it offers saving it somewhere else. -->
     <span v-if="filePath" ref="saveSplit" class="split">
-      <button type="button" class="tool main" :disabled="!canSave" @click="emit('save', false)">Save <span class="kbd">Ctrl+S</span></button>
+      <button type="button" class="tool main" aria-label="Save" :disabled="!canSave" @click="emit('save', false)">
+        <svg class="save-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <span class="label">Save</span> <span class="kbd">Ctrl+S</span>
+      </button>
       <button type="button" class="tool arrow" aria-label="More ways to save" aria-haspopup="menu" :aria-expanded="saveMenu" :disabled="!canSave" @click="saveMenu = !saveMenu">
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
       </button>
@@ -72,7 +75,10 @@ onBeforeUnmount(() => {
         </span>
       </Transition>
     </span>
-    <button v-else type="button" class="tool" :disabled="!canSave" @click="emit('save', true)">Save as file <span class="kbd">Ctrl+Shift+S</span></button>
+    <button v-else type="button" class="tool" aria-label="Save as file" :disabled="!canSave" @click="emit('save', true)">
+      <svg class="save-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <span class="label">Save as file</span> <span class="kbd">Ctrl+Shift+S</span>
+    </button>
     <span class="sep" aria-hidden="true"></span>
     <template v-if="filePath">
       <span id="file-name" class="file-name">{{ fileName }}</span>
@@ -81,13 +87,14 @@ onBeforeUnmount(() => {
     <span v-else id="file-badge" class="badge">Draft, not on disk</span>
     <span class="spacer"></span>
     <span v-if="isMarkdown && !showDrawer" class="sep" aria-hidden="true"></span>
-    <div v-if="isMarkdown && !showDrawer" class="views" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">
+    <div v-if="isMarkdown && !showDrawer" class="views" :data-mode="mode" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">
       <span class="thumb" aria-hidden="true"></span>
       <button
         v-for="v in VIEWS"
         :key="v.id"
         type="button"
         class="view"
+        :data-view="v.id"
         :class="{ on: mode === v.id }"
         :aria-pressed="mode === v.id"
         @click="emit('view', v.id)"
@@ -96,9 +103,9 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <span v-if="isMarkdown && !showDrawer && mode !== 'preview'" class="sep" aria-hidden="true"></span>
-    <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
+    <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-label="`Problems, ${problemCount}`" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
       <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="10" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
-      Problems <span class="count">{{ problemCount }}</span>
+      <span class="label">Problems</span> <span class="count">{{ problemCount }}</span>
       <span v-if="autocorrect" class="mark" role="img" aria-label="Autocorrect is on">
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5.2l2 2 4-4.4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </span>

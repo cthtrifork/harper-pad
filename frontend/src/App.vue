@@ -28,6 +28,9 @@ const lintMs = ref(0);
 const problems = ref([]);
 // On a phone the problems are a sheet over the text, so they start closed.
 const narrow = window.matchMedia("(max-width: 720px)");
+const isNarrow = ref(narrow.matches); // reactive copy: Split is not offered on a phone (see below)
+const onNarrowChange = (e) => (isNarrow.value = e.matches);
+narrow.addEventListener("change", onNarrowChange);
 const showProblems = ref(!narrow.matches);
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
@@ -83,7 +86,12 @@ watch(
 );
 const format = computed(() => drafts.current.value.format);
 const isMarkdown = computed(() => format.value === "markdown");
-const mode = computed(() => (isMarkdown.value && !showDrawer.value ? view.value : "edit"));
+// Split needs two panes side by side, so a phone shows Edit instead (the header does not offer Split there either); the choice comes
+// back when the window is wide again.
+const mode = computed(() => {
+  if (!isMarkdown.value || showDrawer.value) return "edit";
+  return view.value === "split" && isNarrow.value ? "edit" : view.value;
+});
 const suggestMarkdown = computed(() => format.value === "text" && !hintDismissed.value && looksLikeMarkdown(source.value));
 
 function setView(id) {
@@ -233,6 +241,7 @@ watch(
   },
 );
 onBeforeUnmount(() => {
+  narrow.removeEventListener("change", onNarrowChange);
   window.removeEventListener("keydown", onKeydown);
   drafts.detach();
 });
