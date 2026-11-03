@@ -175,8 +175,8 @@ onBeforeUnmount(() => {
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
       <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span>
       <span v-if="state === 'ready'" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
-      <span v-if="saveError" class="state failed">{{ saveError }}</span>
-      <span v-if="drafts.status.value" id="draft-status" :class="['state', drafts.state.value === 'error' ? 'failed' : 'mute']">{{ drafts.status.value }}</span>
+      <span v-if="saveError" class="state failed clip" :title="saveError">{{ saveError }}</span>
+      <span v-if="drafts.status.value" id="draft-status" :class="['state', 'clip', drafts.state.value === 'error' ? 'failed' : 'mute']" :title="drafts.status.value">{{ drafts.status.value }}</span>
       <button v-if="drafts.canStartFresh.value" id="start-fresh" type="button" class="link" title="Moves the unreadable database aside (it is kept, not deleted) and starts a new one" @click="drafts.startFresh">Start fresh</button>
       <span class="spacer"></span>
       <span class="mute">Version {{ goVersion || "..." }}</span>
@@ -270,6 +270,17 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--line);
   background: var(--panel);
   font-size: 12px;
+}
+/* A long message (an SQL error can be) shrinks with an ellipsis, with the full text in the tooltip; everything else keeps its size,
+   so the Start fresh link and the version never leave the window. */
+.status > :not(.spacer):not(.clip) {
+  flex: none;
+}
+.status > .clip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .banner {
   flex: none;
