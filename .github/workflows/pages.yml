@@ -56,8 +56,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      pages: write
-      id-token: write
+      pages: write # actions/deploy-pages publishes the uploaded artifact to GitHub Pages
+      id-token: write # deploy-pages proves to Pages, with an OIDC token, that this run may publish
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

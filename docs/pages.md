@@ -8,7 +8,7 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 | Build | `npm run build` (embedded by Go) | `npm run build:web` (`vite build --mode web`, output `frontend/dist-web`) |
 | Data | SQLite file in the user's data folder, through `PadService` | IndexedDB in the browser (`harper-pad` database, key `settings`) |
 | Updates | in-app updater (GitHub releases) | none: a new deploy is picked up on the next load |
-| Offline | always | after the first load, through the service worker `public/sw.js` |
+| Offline | always | after the first load, through the service worker `web/sw.js` |
 
 ## How the two builds are kept apart
 
@@ -16,7 +16,7 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
   On desktop it calls the Wails bindings, imported on demand; on the web it uses IndexedDB. Add new host calls there, with both
   implementations.
 - The web build does not contain the Wails runtime, the generated bindings or the update button (checked in the bundle).
-- `vite.config.js` sets the base path (`/harper-pad/`, or `BASE_PATH`), the output folder, and the Content-Security-Policy. The
+- `frontend/web/` (manifest, service worker, icons) is copied to the site root by the `web-app` plugin in `vite.config.js`, which also adds the matching `<head>` tags; the desktop build gets none of it. `vite.config.js` sets the base path (`/harper-pad/`, or `BASE_PATH`), the output folder, and the Content-Security-Policy. The
   web policy is the desktop policy plus `manifest-src 'self'`, so the page may load its own manifest. Nothing else is loosened.
 - The drafts backend (`ListDrafts`, `SaveDraft`, ...) has no frontend yet. When the drawer is built, give it a web implementation
   in `backend.js` too, or it will not work on Pages.
@@ -41,7 +41,7 @@ phone app picks it up on its next launch (the service worker fetches the page ne
 
 ### Icons
 
-`frontend/public` holds `icon-192.png` and `icon-512.png` (the favicon artwork with rounded corners on a transparent background),
+`frontend/web` holds `icon-192.png` and `icon-512.png` (the favicon artwork with rounded corners on a transparent background),
 `icon-maskable-512.png` (full square, the logo kept inside the middle 80%, for Android's adaptive icons) and
 `apple-touch-icon.png` (180 px, full square and opaque: iOS fills transparency with black and rounds the corners itself). They
 were rendered from `favicon.svg`; re-render them if the logo changes.
