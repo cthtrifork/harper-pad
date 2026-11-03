@@ -12,6 +12,11 @@
   border-radius: 6px;
   background: transparent;
   color: var(--mute);
+  white-space: nowrap;
+}
+
+.wrap .btn:disabled {
+  cursor: default;
 }
 
 .wrap .btn:hover,
@@ -66,12 +71,6 @@
   line-height: 1.5;
   color: var(--mute);
   overflow-wrap: anywhere;
-}
-
-.wrap .row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .wrap .primary {

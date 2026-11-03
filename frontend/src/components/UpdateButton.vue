@@ -7,7 +7,7 @@ import { UpdateService } from "../../bindings/github.com/cthtrifork/harper-pad/i
 const LATEST_RELEASE = "https://github.com/cthtrifork/harper-pad/releases/latest";
 
 const info = ref({ version: "", enabled: false, reason: "" });
-// idle -> checking -> current | available | error; available -> downloading -> ready | error
+// idle -> checking -> current | available | error; available -> downloading -> ready | error; each click on the button takes the next step
 const state = ref("idle");
 const found = ref("");
 const error = ref("");
@@ -24,6 +24,7 @@ async function run(next, work) {
   } catch (err) {
     error.value = String(err?.message || err);
     state.value = "error";
+    open.value = true;
   }
 }
 
@@ -32,6 +33,7 @@ const check = () =>
     const status = await UpdateService.CheckForUpdates();
     found.value = status.version;
     state.value = status.available ? "available" : "current";
+    open.value = !status.available; // an update is offered on the header button itself; only "up to date" needs a message
   });
 
 const download = () =>
@@ -44,6 +46,17 @@ const restart = () =>
   run("ready", async () => {
     await UpdateService.RestartToUpdate();
   });
+
+// One click does the next step. The popover only reports what the header button cannot: checking, up to date, errors, updates off.
+function onClick() {
+  if (!info.value.enabled) open.value = !open.value;
+  else if (state.value === "available") download();
+  else if (state.value === "ready") restart();
+  else if (state.value === "idle") {
+    open.value = true;
+    check();
+  } else open.value = !open.value;
+}
 
 const whatsNew = () => Browser.OpenURL(LATEST_RELEASE).catch(() => {});
 
@@ -76,8 +89,8 @@ onBeforeUnmount(() => {
       class="btn"
       :class="{ open, ready: state === 'ready' }"
       :aria-expanded="open"
-      aria-haspopup="dialog"
-      @click="open = !open"
+      :disabled="state === 'downloading'"
+      @click="onClick"
     >
       <span v-if="busy()" class="spin" aria-hidden="true"></span>
       <span v-else-if="state === 'available'" class="dot" aria-hidden="true"></span>
@@ -93,11 +106,6 @@ onBeforeUnmount(() => {
         <h3>Updates are off here</h3>
         <p>{{ info.reason }}</p>
       </template>
-      <template v-else-if="state === 'idle'">
-        <h3>Harper Pad {{ info.version }}</h3>
-        <p>Updates are only checked when you ask.</p>
-        <button type="button" class="primary" @click="check">Check for updates</button>
-      </template>
       <template v-else-if="state === 'checking'">
         <h3>Checking GitHub releases</h3>
         <p>Looking for a newer version.</p>
@@ -106,23 +114,6 @@ onBeforeUnmount(() => {
         <h3>You are up to date</h3>
         <p>{{ info.version }} is the latest release.</p>
         <button type="button" class="primary" @click="check">Check again</button>
-      </template>
-      <template v-else-if="state === 'available'">
-        <h3>Version {{ found }} is available</h3>
-        <p>You have {{ info.version }}. The download is verified before it is installed.</p>
-        <button type="button" class="primary" @click="download">Download {{ found }}</button>
-      </template>
-      <template v-else-if="state === 'downloading'">
-        <h3>Downloading {{ found }}</h3>
-        <p>Keep working. The app stays as it is until you restart.</p>
-      </template>
-      <template v-else-if="state === 'ready'">
-        <h3>{{ found }} is ready</h3>
-        <p>Restart to finish the update.</p>
-        <div class="row">
-          <button type="button" class="primary" @click="restart">Restart to update</button>
-          <button type="button" class="link" @click="open = false">Later</button>
-        </div>
       </template>
       <template v-else>
         <h3>Could not update</h3>

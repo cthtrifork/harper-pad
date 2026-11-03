@@ -254,9 +254,9 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
       <div class="spec">
         <button class="hp link" type="button">Show more</button>
         <button class="hp link strong" type="button">Undo</button>
-        <button class="hp link" type="button">Later</button>
+        <button class="hp link" type="button">What is new</button>
       </div>
-      <ul><li>Secondary or dismissing actions inside a sentence, toast or popover: Show more, Later, What is new.</li><li><code>.strong</code> (accent, 600) for the one action in a toast, such as Undo.</li></ul>
+      <ul><li>Secondary actions inside a sentence, toast or popover: Show more, What is new. Do not add a "Later" or "Dismiss" link to a popover: Esc, an outside click and the trigger already close it.</li><li><code>.strong</code> (accent, 600) for the one action in a toast, such as Undo.</li></ul>
     </div>
 
     <div>
@@ -295,6 +295,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
           <li>Opens downward; the footer format menu opens upward (<code>.menu.up</code>).</li>
           <li>Closes on Esc, outside click and after choosing.</li>
           <li>Enter: fade and 4px slide, 0.12s.</li>
+          <li>A popover reports, it does not repeat its trigger. If the trigger button can do the next step itself, it does, with no popover in between: the Updates button reads "Update to 1.4.0", then "Restart to update", and each click does that. The popover opens only for what the button cannot say (checking, up to date, an error, updates off) and always ends with a "What is new" link.</li>
         </ul></div>
     </div>
   </div>
