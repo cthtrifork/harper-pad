@@ -18,7 +18,16 @@ onMounted(() => {
 });
 onBeforeUnmount(() => view?.destroy());
 
+// A click on the empty part of the page (below the last line, or beside the column) is not inside CodeMirror's content, so
+// it would not focus anything. Treat it as a click into the document: put the caret at the end and focus.
+function focusEnd() {
+  if (!view) return;
+  view.dispatch({ selection: { anchor: view.state.doc.length }, scrollIntoView: true });
+  view.focus();
+}
+
 defineExpose({
+  focusEnd,
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
 });
@@ -31,6 +40,18 @@ defineExpose({
 <style scoped>
 .editor {
   max-width: 720px;
+  min-height: 100%;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+.editor :deep(.cm-editor) {
+  flex: 1;
+}
+.editor :deep(.cm-scroller) {
+  min-height: 60vh;
+}
+.editor :deep(.cm-content) {
+  min-height: 60vh;
 }
 </style>

@@ -54,7 +54,7 @@ onMounted(async () => {
       <UpdateButton />
     </header>
     <div class="body">
-      <main class="page">
+      <main class="page" @mousedown.self.prevent="editor?.focusEnd()">
         <Editor v-if="harper" ref="editor" :harper="harper" :doc="sample" @result="onResult" @problems="onProblems" />
         <p v-else-if="state === 'loading'" class="mute">Starting Harper...</p>
         <pre v-if="error" class="error">{{ error }}</pre>
@@ -66,7 +66,7 @@ onMounted(async () => {
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
       <span v-if="state === 'ready'" class="mute">setup {{ setupMs }} ms, last check {{ lintMs }} ms</span>
       <span class="spacer"></span>
-      <span class="mute">Go bridge {{ goVersion || "..." }}</span>
+      <span class="mute">Version {{ goVersion || "..." }}</span>
     </footer>
   </div>
 </template>
