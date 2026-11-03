@@ -251,8 +251,6 @@ onBeforeUnmount(() => {
       :is-markdown="isMarkdown"
       :mode="mode"
       :update-button="UpdateButton"
-      :autocorrect="autocorrect"
-      @autocorrect="setAutocorrect"
       @toggle-drawer="toggleDrawer"
       @toggle-problems="toggleProblems"
       @save="drafts.saveFile"
@@ -311,7 +309,7 @@ onBeforeUnmount(() => {
         </Transition>
       </div>
       <Transition name="slide-right">
-        <ProblemsPanel v-if="showProblems && mode !== 'preview'" :problems="problems" :words="personal.words" :ignored="personal.ignored" :fixed="fixed" @fix-all="editor?.fixAll()" @revert="editor?.revert([$event])" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" @remove-word="removeWord" @remove-ignored="stopIgnoring" />
+        <ProblemsPanel v-if="showProblems && mode !== 'preview'" :problems="problems" :words="personal.words" :ignored="personal.ignored" :fixed="fixed" :autocorrect="autocorrect" @autocorrect="setAutocorrect" @fix-all="editor?.fixAll()" @revert="editor?.revert([$event])" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" @remove-word="removeWord" @remove-ignored="stopIgnoring" />
       </Transition>
     </div>
     <StatusBar
@@ -330,6 +328,7 @@ onBeforeUnmount(() => {
       :is-markdown="isMarkdown"
       :suggest-markdown="suggestMarkdown"
       :startup="startup"
+      :autocorrect="autocorrect.on"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
       @dismiss-hint="hintDismissed = true"

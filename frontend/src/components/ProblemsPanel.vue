@@ -1,14 +1,19 @@
 <script setup>
 import { computed, ref } from "vue";
+import { CATEGORIES } from "../lib/autocorrect.js";
 
 const props = defineProps({
+  // Autocorrect: the switch and which kinds of finding may be fixed (see lib/autocorrect.js).
+  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true }) },
   problems: { type: Array, required: true },
   active: { type: Number, default: -1 },
   words: { type: Array, default: () => [] }, // the personal dictionary
   ignored: { type: Array, default: () => [] }, // ignored findings: {hash, label}
   fixed: { type: Array, default: () => [] }, // what autocorrect changed and can still take back: {id, original, replacement}
 });
-defineEmits(["jump", "fix", "remove-word", "remove-ignored", "fix-all", "revert"]);
+const emit = defineEmits(["jump", "fix", "remove-word", "remove-ignored", "fix-all", "revert", "autocorrect"]);
+const setAuto = (change) => emit("autocorrect", { ...props.autocorrect, ...change });
+const choices = ref(false); // the list of what autocorrect may fix is open
 
 const tone = { error: "spelling", warning: "grammar", info: "style" };
 // The chips follow the design: the two kinds people meet most, then everything else.
@@ -56,6 +61,25 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
       <h2>Problems</h2>
       <span class="mute">{{ problems.length }} in this document</span>
     </header>
+    <section class="auto" :class="{ on: autocorrect.on }" aria-label="Autocorrect">
+      <div class="auto-head">
+        <div class="auto-text">
+          <strong>Autocorrect</strong>
+          <span class="mute">{{ autocorrect.on ? "Fixing obvious mistakes as you type." : "Off. Turn on to fix obvious mistakes as you type." }}</span>
+        </div>
+        <button type="button" class="switch" role="switch" aria-label="Autocorrect" :aria-checked="autocorrect.on" @click="setAuto({ on: !autocorrect.on })"></button>
+      </div>
+      <button type="button" class="link" :aria-expanded="choices" @click="choices = !choices">{{ choices ? "Hide choices" : "Choose what to fix" }}</button>
+      <fieldset v-if="choices" class="auto-choices">
+        <legend class="sr-only">What autocorrect may fix</legend>
+        <label v-for="c in CATEGORIES" :key="c.id">
+          <input type="checkbox" :checked="autocorrect[c.id]" @change="setAuto({ [c.id]: $event.target.checked })" />
+          <span>{{ c.label }}</span>
+          <span class="example">{{ c.example }}</span>
+        </label>
+        <p class="mute">Grammar and style always ask you. Code, links and text you did not type are left alone. Ctrl+Z takes a fix back for good.</p>
+      </fieldset>
+    </section>
     <button v-if="safeCount" type="button" class="fix-all" @click="$emit('fix-all')">Fix all safe issues ({{ safeCount }})</button>
     <div class="chips">
       <button v-for="c in chips" :key="c.id" type="button" class="chip" :class="{ on: filter === c.id }" :aria-pressed="filter === c.id" @click="filter = c.id">

@@ -17,6 +17,7 @@ defineProps({
   isMarkdown: { type: Boolean, default: false },
   suggestMarkdown: { type: Boolean, default: false }, // a plain text draft that looks like Markdown
   startup: { type: Boolean, default: true }, // show "Harper ready" and the start-up and check timings (false after the first edit is saved)
+  autocorrect: { type: Boolean, default: false }, // autocorrect is on (its switch is in the Problems panel, so it shows here too)
 });
 const emit = defineEmits(["start-fresh", "format", "dismiss-hint"]);
 
@@ -57,6 +58,7 @@ function fmt(ms) {
          failure always show, and so does the problem count, which says Harper is working. -->
     <span v-if="state !== 'ready' || startup" :class="['state', state]">{{ state === "loading" ? "Starting Harper, you can already type..." : `Harper ${state}` }}</span>
     <span v-if="state === 'ready' && mode !== 'preview'">{{ problemCount }} {{ problemCount === 1 ? "problem" : "problems" }}</span>
+    <span v-if="state === 'ready' && mode !== 'preview'" id="autocorrect-state" :class="autocorrect ? 'state ready' : 'mute'">Autocorrect {{ autocorrect ? "on" : "off" }}</span>
     <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span>
     <span v-if="state === 'ready' && startup" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
     <span v-if="saveError" class="state failed clip" :title="saveError">{{ saveError }}</span>
