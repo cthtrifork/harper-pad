@@ -90,7 +90,7 @@ never run on a real desktop yet.
       `SIGNPATH_ORGANIZATION_ID` (`docs/windows.md`), add the code signing policy section to the README they ask for, and
       check the first signed release (`Get-AuthenticodeSignature`, SmartScreen). Until then the exe is unsigned.
 - [ ] Windows tray icon (`internal/app/tray_other.go` is a no-op there).
-- [ ] Optional later: an installer (Start menu, uninstall entry, bundled WebView2), or winget/Scoop manifests.
+- [ ] Optional later: winget or Scoop manifests.
 
 ## 7. Later / maybe
 

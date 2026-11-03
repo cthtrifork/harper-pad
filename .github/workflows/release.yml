@@ -14,8 +14,6 @@ name: Release
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+*']
-  pull_request: # TEMPORARY: dry-run this workflow on the PR (remove before merging)
-    paths: ['.github/workflows/release.yml', 'build/windows/**', 'scripts/package-windows.sh']
   workflow_dispatch:
   workflow_call:
     inputs:
