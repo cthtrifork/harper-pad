@@ -68,7 +68,7 @@
 
 .drawer input {
   width: 100%;
-  height: 34px;
+  height: 30px;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -133,7 +133,7 @@
   justify-content: space-between;
   gap: 8px;
   min-height: 24px;
-  padding-right: 26px; /* room for the delete button */
+  padding-right: 32px; /* room for the delete button */
 }
 
 .drawer .title {
@@ -226,10 +226,10 @@
 
 .drawer .del {
   position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 24px;
-  height: 24px;
+  top: 9px;
+  right: 5px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;

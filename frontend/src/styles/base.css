@@ -38,3 +38,26 @@ button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Pressed: a filled button darkens a little; the bordered ones are handled with their own rules. */
+.primary:active:not(:disabled),
+.btn.ready:active {
+  filter: brightness(0.92);
+}
+
+/* Busy: the button keeps its width and a spinner replaces the icon. The only thing that loops (design cheat sheet). */
+.spin {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
