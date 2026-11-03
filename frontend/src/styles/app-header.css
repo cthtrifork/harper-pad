@@ -1,0 +1,218 @@
+.bar {
+  height: 48px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.bar .brand {
+  font-weight: 600;
+}
+
+/* Toolbar items keep one line; the folder name is the one thing that gives way (it has its own ellipsis). Below 1240 px the shortcut
+   hints on the buttons are hidden, so the whole bar still fits the default 1100 px window. */
+.bar .bar > :not(.folder, .bar .spacer) {
+  flex: none;
+  white-space: nowrap;
+}
+
+.bar .spacer {
+  flex: 1;
+}
+
+.bar .drawer-btn {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+}
+
+.bar .drawer-btn:hover {
+  border-color: var(--mute);
+}
+
+.bar .drawer-btn.on {
+  border-color: var(--accent);
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.bar .kbd {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.bar .tool {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+}
+
+.bar .tool:hover:not(:disabled) {
+  border-color: var(--mute);
+}
+
+.bar .tool:active:not(:disabled) {
+  background: var(--panel);
+}
+
+.bar .split {
+  position: relative;
+  display: flex;
+}
+
+.bar .split .main {
+  border-radius: 6px 0 0 6px;
+}
+
+.bar .split .arrow {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.bar .tool:disabled {
+  color: var(--mute);
+  cursor: not-allowed;
+}
+
+.bar .sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.bar .file-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.bar .folder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.bar .badge {
+  padding: 3px 8px;
+  border-radius: 11px;
+  background: var(--raised);
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.bar .toggle {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+}
+
+.bar .toggle:hover {
+  border-color: var(--mute);
+}
+
+.bar .toggle.on {
+  border-color: var(--accent);
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.bar .count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Edit / Split / Preview: a small tray with three equal segments; a raised pill under the current one slides to the view you pick. */
+.bar .views {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+}
+
+.bar .thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: 64px;
+  border-radius: 6px;
+  background: var(--raised);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  transition: transform 0.2s var(--ease);
+}
+
+.bar .view {
+  position: relative;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mute);
+  font-size: 13px;
+}
+
+.bar .view:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.bar .view.on {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bar .view:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bar .mute {
+  color: var(--mute);
+}
+
+@media (max-width: 1240px) {
+  .bar .drawer-btn .kbd,
+  .bar .tool .kbd {
+    display: none;
+  }
+}

@@ -1,4 +1,5 @@
 <script setup>
+import "../styles/update-button.css"; // loaded with this component, so the web build never carries it
 import { Browser } from "@wailsio/runtime";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { PadService } from "../../bindings/github.com/cthtrifork/harper-pad/internal/app";
@@ -131,86 +132,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.wrap {
-  position: relative;
-}
-.btn {
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--mute);
-}
-.btn:hover,
-.btn.open {
-  border-color: var(--line);
-  background: var(--raised);
-  color: var(--text);
-}
-.btn.ready {
-  border: 0;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.pop {
-  position: absolute;
-  top: 40px;
-  right: 0;
-  z-index: 10;
-  width: 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-}
-h3 {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.3;
-}
-p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--mute);
-  overflow-wrap: anywhere;
-}
-.row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.primary {
-  align-self: flex-start;
-  height: 30px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
-}
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--c-style);
-}
-</style>

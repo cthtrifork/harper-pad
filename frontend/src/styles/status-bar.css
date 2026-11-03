@@ -1,0 +1,57 @@
+.status .spacer {
+  flex: 1;
+}
+
+.status .fmt {
+  position: relative;
+}
+
+.status .link.plain {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.status {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 6px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12px;
+}
+
+/* A long message (an SQL error can be) shrinks with an ellipsis, with the full text in the tooltip; everything else keeps its size,
+   so the Start fresh link and the version never leave the window. */
+.status > :not(.spacer):not(.clip) {
+  flex: none;
+}
+
+.status > .clip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status .mute {
+  color: var(--mute);
+}
+
+.status .state.ready {
+  color: var(--ok);
+}
+
+.status .state.failed {
+  color: var(--bad);
+}
+
+.status .link {
+  font: inherit;
+  color: var(--accent, #6aa9ff);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}

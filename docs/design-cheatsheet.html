@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Layout: one reading column, each section = a rule on the left + specimens on the right. Tokens are Harper Pad's own (frontend/src/styles/index.css). */
+/* Layout: one reading column, each section = a rule on the left + specimens on the right. Tokens are Harper Pad's own (frontend/src/styles/tokens.css). */
 :root{
   --bg:#f6f7f9; --panel:#eceff3; --raised:#fff; --selected:#dde4ec; --sunken:#eef1f5; --line:#d3d9e0;
   --text:#1a2028; --mute:#566170; --accent:#b36b00; --on-accent:#fff; --ok:#166534; --bad:#b91c1c;
@@ -137,7 +137,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
   <div>
     <h3>Harper Pad · UI and UX</h3>
     <h1>Design cheat sheet</h1>
-    <p class="lede">One page to check against before adding or changing UI. Tokens and values come from <code>frontend/src/styles/index.css</code> and the Vue components. Specimens below are live, so hover, press and tab through them.</p>
+    <p class="lede">One page to check against before adding or changing UI. Tokens and values come from <code>frontend/src/styles/tokens.css</code> and the Vue components. Specimens below are live, so hover, press and tab through them.</p>
   </div>
   <button class="hp secondary themebtn" id="themebtn" type="button">Toggle theme</button>
 </header>
@@ -371,7 +371,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
         <tr><td>View change</td><td class="mono">0.2s</td></tr>
         <tr><td>Task tick</td><td class="mono">0.15s</td></tr></table></div>
       <div class="card"><h3>Rules</h3><ul class="mute" style="margin:8px 0 0;padding-left:18px;font-size:13px;display:flex;flex-direction:column;gap:6px">
-        <li>Animate opacity, transform, colour. Not width or height.</li><li>Nothing loops except a busy spinner.</li><li>The <code>prefers-reduced-motion</code> rule in <code>index.css</code> turns all of it off.</li></ul></div>
+        <li>Animate opacity, transform, colour. Not width or height.</li><li>Nothing loops except a busy spinner.</li><li>The <code>prefers-reduced-motion</code> rule in <code>base.css</code> turns all of it off.</li></ul></div>
     </div>
   </div>
 </section>

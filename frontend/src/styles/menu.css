@@ -1,0 +1,59 @@
+/* The small pop-up menus (Save as, format): shared by the header and the status bar. */
+.menu {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 10;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.menu .item {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.menu .item:hover,
+.menu .item:focus-visible {
+  background: var(--selected);
+}
+
+/* Motion (all of it is switched off by prefers-reduced-motion, see styles/index.css). */
+.pop-enter-active,
+.pop-leave-active {
+  transition:
+    opacity 0.12s var(--ease),
+    transform 0.12s var(--ease);
+}
+
+.pop-enter-from,
+.pop-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.menu.up.pop-enter-from,
+.menu.up.pop-leave-to {
+  transform: translateY(4px);
+}
+
+.menu.up {
+  top: auto;
+  bottom: 24px;
+  left: auto;
+  right: 0;
+}
