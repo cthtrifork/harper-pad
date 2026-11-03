@@ -75,7 +75,7 @@ func openAt(path string) (*Store, error) {
 	db.SetMaxOpenConns(1) // one writer at a time, in order
 	s := &Store{db: db, now: time.Now}
 	if err := s.prepare(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	// The file is private to the user, as the other files in the folder are.
@@ -97,7 +97,7 @@ func (s *Store) prepare() error {
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback()
+		defer func() { _ = tx.Rollback() }() // after a Commit this is a harmless ErrTxDone
 		for _, stmt := range []string{
 			// STRICT makes SQLite enforce the column types (a text in an INTEGER column is an error, not stored).
 			`CREATE TABLE IF NOT EXISTS drafts (

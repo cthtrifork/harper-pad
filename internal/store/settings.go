@@ -8,7 +8,7 @@ func (s *Store) Settings() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[string]string{}
 	for rows.Next() {
 		var k, v string
@@ -27,7 +27,7 @@ func (s *Store) SetSettings(kv map[string]string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // after a Commit this is a harmless ErrTxDone
 	for k, v := range kv {
 		if k == "" {
 			return fmt.Errorf("a setting needs a name")

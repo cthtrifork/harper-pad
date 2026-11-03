@@ -199,7 +199,7 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	if err != nil {
 		return List{}, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var sum Summary
 		var data string
