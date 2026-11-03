@@ -2,7 +2,7 @@
 
 The app can update itself from GitHub Releases. This follows Wails' tutorial
 [Self-Updating Wails App](https://v3.wails.io/tutorials/04-self-update-a-wails-app/) and the Updater guide,
-adapted to this app. Open **Options → App updates** and press **Check for updates…**.
+adapted to this app. Click the version number at the right end of the top bar (`components/UpdateButton.vue`) and press **Check for updates**.
 
 ## What happens
 
@@ -70,7 +70,7 @@ The version is stamped into the binary with `-ldflags "-X github.com/cthtrifork/
 | Tutorial | Here | Why |
 |---|---|---|
 | `wails3 init` scaffold, `currentVersion` constant | existing app, `internal/app.version` via `-ldflags` | already how releases are stamped |
-| "Check for Updates…" **menu item** | button in **Options** | the app has no native menu and is Linux-only; a menu would add window chrome I have not evaluated on GTK4. Easy to add if wanted |
+| "Check for Updates…" **menu item** | version button in the top bar with a small popover | the app has no native menu; the popover works the same on Linux and Windows |
 | `ChecksumAsset: "SHA256SUMS"` | same, plus fail-closed wrapper and a custom asset matcher | see above |
 | optional Ed25519 `PublicKey` | not used | needs a custom provider, see above |
 | optional `CheckInterval` | not used | the app should not phone home unprompted |

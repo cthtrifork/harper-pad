@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 import { PadService } from "../bindings/github.com/cthtrifork/harper-pad/internal/app";
 import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
+import UpdateButton from "./components/UpdateButton.vue";
 import { createLinter } from "./lib/harper.js";
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
@@ -50,6 +51,7 @@ onMounted(async () => {
       <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
         Problems <span class="count">{{ problems.length }}</span>
       </button>
+      <UpdateButton />
     </header>
     <div class="body">
       <main class="page" @mousedown.self.prevent="editor?.focusEnd()">
