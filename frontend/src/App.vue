@@ -124,6 +124,16 @@ function toggleDrawer() {
   }
 }
 
+// On a phone the drafts are a full-width sheet over the editor: picking or creating a draft leaves it, so the text (and the
+// keyboard that comes with focusing it) is not hidden behind the sheet.
+async function pickDraft(action, id) {
+  await action(id);
+  if (narrow.matches && showDrawer.value) {
+    toggleDrawer();
+    nextTick(() => editor.value?.focus());
+  }
+}
+
 function toggleProblems() {
   showProblems.value = !showProblems.value;
   if (showProblems.value && narrow.matches && showDrawer.value) toggleDrawer();
@@ -298,8 +308,8 @@ onBeforeUnmount(() => {
         :current-id="drafts.current.value.id"
         :query="drafts.query.value"
         :toast="drafts.toast.value"
-        @open="drafts.open"
-        @create="drafts.create"
+        @open="(id) => pickDraft(drafts.open, id)"
+        @create="pickDraft(drafts.create)"
         @remove="drafts.remove"
         @search="drafts.setQuery"
         @more="drafts.showMore"
