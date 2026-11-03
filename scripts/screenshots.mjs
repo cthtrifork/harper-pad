@@ -126,6 +126,37 @@ if (filesDir) {
 expect((await page.locator("#drafts-drawer .item .file").allTextContents()).map((t) => t.trim()).join() === "Saved to file: Meeting notes.md", "only the saved draft should name its file in the list");
 await shot("05-draft-saved-to-file");
 
+// The dictionary and the ignored findings. Close the drawer and bring the Problems panel back, write a line with a name Harper does not
+// know and a typo, add the name to the dictionary and ignore the typo (the same actions as in the underline's popover), then open the
+// dictionary list from the panel's footer. Part of the text is selected so the status bar shows its selection count.
+await page.keyboard.press("Control+j");
+await page.waitForSelector("#drafts-drawer", { state: "detached" });
+await page.click(".toggle");
+await page.locator(".cm-content").click(); // the focus was left on the toolbar button
+await page.keyboard.press("Control+End");
+await page.keyboard.press("Enter");
+await page.keyboard.press("Enter");
+await page.keyboard.type("Mikkel will check the build, and the sentense stays as it is. We recieve it on Friday.");
+const popoverAction = async (underline, action, text) => {
+  await page.locator(underline, text ? { hasText: text } : undefined).first().hover();
+  await page.getByRole("button", { name: action }).click();
+};
+await page.waitForSelector(".cm-lintRange-error", { timeout: 15000 });
+await popoverAction(".cm-lintRange-error", "Add to dictionary"); // Mikkel, the first name Harper does not know
+await page.waitForFunction(() => document.querySelector(".foot")?.textContent.includes("Dictionary: 1 word"), null, { timeout: 15000 });
+await popoverAction(".cm-lintRange-error", "Ignore this one", "sentense"); // the other typo, recieve, stays listed
+await page.waitForFunction(() => /Ignored: [1-9]/.test(document.querySelector(".foot")?.textContent ?? ""), null, { timeout: 15000 });
+await page.locator(".cm-content").click(); // the popover took the focus
+await page.keyboard.press("Control+End");
+await page.keyboard.down("Shift");
+for (let i = 0; i < 12; i++) await page.keyboard.press("ArrowLeft");
+await page.keyboard.up("Shift");
+expect((await page.textContent("#selection")) === "Selection: 12 characters", "the status bar should count the 12 selected characters");
+await page.getByRole("button", { name: /^Dictionary:/ }).click();
+await page.waitForSelector(".entries");
+expect((await page.locator(".entries li").allTextContents()).join().includes("Mikkel"), "the dictionary list should hold the added word");
+await shot("06-dictionary-list");
+
 await browser.close();
 if (problems.length) {
   console.error(problems.join("\n"));

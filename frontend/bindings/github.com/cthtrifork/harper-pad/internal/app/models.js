@@ -96,6 +96,23 @@ export class Settings {
              */
             this["ignored"] = "";
         }
+        if (!("ignoredLabels" in $$source)) {
+            /**
+             * IgnoredLabels says what each ignored finding was, by hash (as text, because a hash does not fit a JS number), so the
+             * list can be shown and one entry removed. Harper's export holds hashes only.
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["ignoredLabels"] = {};
+        }
+        if (!("dialect" in $$source)) {
+            /**
+             * Dialect is the English dialect Harper checks for: american, british, australian, canadian or indian.
+             * @member
+             * @type {string}
+             */
+            this["dialect"] = "";
+        }
 
         Object.assign(this, $$source);
     }
@@ -107,9 +124,13 @@ export class Settings {
      */
     static createFrom($$source = {}) {
         const $$createField1_0 = $$createType1;
+        const $$createField3_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("words" in $$parsedSource) {
             $$parsedSource["words"] = $$createField1_0($$parsedSource["words"]);
+        }
+        if ("ignoredLabels" in $$parsedSource) {
+            $$parsedSource["ignoredLabels"] = $$createField3_0($$parsedSource["ignoredLabels"]);
         }
         return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
     }
@@ -177,7 +198,7 @@ export class StartupState {
      * @returns {StartupState}
      */
     static createFrom($$source = {}) {
-        const $$createField1_0 = $$createType2;
+        const $$createField1_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("open" in $$parsedSource) {
             $$parsedSource["open"] = $$createField1_0($$parsedSource["open"]);
@@ -280,4 +301,5 @@ export class UpdateStatus {
 // Private type creation functions
 const $$createType0 = store$0.Draft.createFrom;
 const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = $Create.Nullable($$createType0);
+const $$createType2 = $Create.Map($Create.Any, $Create.Any);
+const $$createType3 = $Create.Nullable($$createType0);

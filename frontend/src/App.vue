@@ -5,7 +5,7 @@ import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import { isWeb, keepData, version } from "./lib/backend.js";
 import { createLinter } from "./lib/harper.js";
-import { loadPersonal, savePersonal } from "./lib/personal.js";
+import { DIALECTS, loadPersonal, noteIgnored, removeIgnored, savePersonal, setDialect, withoutWord } from "./lib/personal.js";
 import { useDrafts } from "./lib/useDrafts.js";
 
 // What main.js asked the backend before mounting (see backend.js startup): the demo banner and the most recent draft.
@@ -31,7 +31,8 @@ const versionLabel = computed(() => {
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
-const personal = ref({ words: 0, ignored: 0 });
+const personal = ref({ words: [], ignored: [], dialect: DIALECTS[0].id });
+const cursor = ref({ line: 1, col: 1, selected: 0 });
 const saveError = ref("");
 const editor = ref(null);
 const showDrawer = ref(false);
@@ -117,14 +118,36 @@ function onProblems(list) {
 }
 
 // Save the dictionary and ignore list after a change. A failure is shown in the status bar; the change still holds for this run.
-async function persist() {
+async function persist(note) {
   try {
+    if (note?.ignoredHash !== undefined) noteIgnored(note.ignoredHash, note.label);
     personal.value = await savePersonal(harper.value);
     saveError.value = "";
   } catch (err) {
     saveError.value = `Could not save settings: ${err?.message || err}`;
   }
 }
+
+// Run a change to Harper's dictionary, ignore list or dialect, save it, and check the text again.
+async function changePersonal(work) {
+  try {
+    await work();
+    await persist();
+    editor.value?.relint();
+  } catch (err) {
+    saveError.value = `Could not change settings: ${err?.message || err}`;
+  }
+}
+
+const pickDialect = (id) => changePersonal(() => setDialect(harper.value, id));
+const stopIgnoring = (hash) => changePersonal(() => removeIgnored(harper.value, hash));
+// Harper cannot drop a word, so this swaps in a new linter without it; the editor checks again with it when it arrives.
+const removeWord = (word) =>
+  changePersonal(async () => {
+    const old = harper.value;
+    harper.value = await withoutWord(old, word, createLinter);
+    old.dispose().catch(() => {});
+  });
 
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
@@ -194,6 +217,13 @@ onBeforeUnmount(() => {
       <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
         Problems <span class="count">{{ problems.length }}</span>
       </button>
+      <label class="dialect">
+        <span class="sr">Language</span>
+        <select :value="personal.dialect" :disabled="state !== 'ready'" @change="pickDialect($event.target.value)">
+          <option v-for="d in DIALECTS" :key="d.id" :value="d.id">{{ d.label }}</option>
+        </select>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
+      </label>
       <component :is="UpdateButton" v-if="UpdateButton" />
     </header>
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
@@ -222,11 +252,12 @@ onBeforeUnmount(() => {
           @result="onResult"
           @problems="onProblems"
           @stats="counts = $event"
+          @cursor="cursor = $event"
           @edited="drafts.edited"
         />
         <pre v-if="error" class="error">{{ error }}</pre>
       </main>
-      <ProblemsPanel v-if="showProblems" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
+      <ProblemsPanel v-if="showProblems" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" @remove-word="removeWord" @remove-ignored="stopIgnoring" />
     </div>
     <footer class="status">
       <span :class="['state', state]">{{ state === "loading" ? "Starting Harper, you can already type..." : `Harper ${state}` }}</span>
@@ -237,6 +268,8 @@ onBeforeUnmount(() => {
       <span v-if="drafts.status.value" id="draft-status" :class="['state', 'clip', drafts.state.value === 'error' ? 'failed' : 'mute']" :title="drafts.status.value">{{ drafts.status.value }}</span>
       <button v-if="drafts.canStartFresh.value" id="start-fresh" type="button" class="link" title="Moves the unreadable database aside (it is kept, not deleted) and starts a new one" @click="drafts.startFresh">Start fresh</button>
       <span class="spacer"></span>
+      <span id="cursor-pos">Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
+      <span v-if="cursor.selected" id="selection">Selection: {{ cursor.selected }} {{ cursor.selected === 1 ? "character" : "characters" }}</span>
       <span v-if="versionLabel" class="mute">{{ versionLabel }}</span>
     </footer>
   </div>
@@ -375,6 +408,42 @@ onBeforeUnmount(() => {
   background: var(--raised);
   color: var(--mute);
   font-size: 12px;
+}
+.dialect {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.dialect select {
+  height: 32px;
+  padding: 0 28px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  appearance: none;
+  cursor: pointer;
+}
+.dialect select:hover:not(:disabled) {
+  border-color: var(--mute);
+}
+.dialect select:disabled {
+  color: var(--mute);
+  cursor: not-allowed;
+}
+.dialect svg {
+  position: absolute;
+  right: 11px;
+  pointer-events: none;
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .toggle {
   height: 32px;

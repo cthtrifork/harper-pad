@@ -37,7 +37,6 @@ Everything below was tested in headless Chromium (the server build) and not in t
 Note: `harper-editor` and `lint-framework` are not on npm (only `harper.js` is), hence CodeMirror 6 rather than a
 vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
-- [ ] Problems panel: filter chips and counts per kind. (The panel, jump-to, first fix and the toolbar toggle exist.)
 - [ ] Turn a whole Harper rule off, not just one finding (needs `organizedLints` and `setLintConfig`); maybe in a settings screen.
 - [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
       source left and the rendered preview right; Preview uses the whole window. The preview is read-only and
@@ -47,10 +46,6 @@ vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 - [ ] Document `format` (`markdown` or `text`): files by extension (`.md`, `.markdown`), drafts store it, default
       markdown for new drafts, unknown files open as text. The status bar "Markdown" label is a menu to switch it.
       A plain-text draft that looks like markdown gets a "Looks like Markdown. Switch?" hint, never an automatic switch.
-- [ ] A way to see and remove dictionary words and ignored findings (the Problems panel only shows the counts).
-- [ ] Dialect/language setting (Harper config), persisted: a picker in the toolbar ("English (US)").
-- [ ] Status bar: cursor position ("Ln 1, Col 24") and the number of selected characters ("Selection: 71 characters"), next to the
-      existing word and character counts.
 - [ ] Dirty state for a document that was opened from a file (see "Save as file" and "Open file" below).
 
 ## 5. Scratch pad drawer (drafts)

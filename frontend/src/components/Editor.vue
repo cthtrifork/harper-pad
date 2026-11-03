@@ -7,7 +7,7 @@ const props = defineProps({
   doc: { type: String, default: "" },
   persist: { type: Function, default: async () => {} },
 });
-const emit = defineEmits(["result", "problems", "stats", "edited"]);
+const emit = defineEmits(["result", "problems", "stats", "cursor", "edited"]);
 const host = ref(null);
 let view = null;
 
@@ -17,8 +17,9 @@ onMounted(() => {
     getHarper: () => props.harper,
     onResult: (r) => emit("result", r),
     onProblems: (list) => emit("problems", list),
-    persist: () => props.persist(),
+    persist: (note) => props.persist(note),
     onStats: (counts) => emit("stats", counts),
+    onCursor: (c) => emit("cursor", c),
     onEdit: () => emit("edited"),
   });
   view.focus();
@@ -41,8 +42,9 @@ function focusEnd() {
 defineExpose({
   focusEnd,
   focus: () => view?.focus(),
+  relint: () => view && relint(view),
   getText: () => view?.state.doc.toString() ?? "",
-  load: (text) => view && loadDocument(view, text, (counts) => emit("stats", counts)),
+  load: (text) => view && loadDocument(view, text, (counts) => emit("stats", counts), (c) => emit("cursor", c)),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
 });
