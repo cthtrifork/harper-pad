@@ -16,6 +16,7 @@ const host = ref(null);
 let view = null;
 
 onMounted(() => {
+  host.value.addEventListener("click", keepFocus);
   view = createEditor(host.value, {
     doc: props.doc,
     mode: { format: props.format, source: props.source },
@@ -57,6 +58,12 @@ function focusEnd() {
   if (!view) return;
   view.dispatch({ selection: { anchor: view.state.doc.length }, scrollIntoView: true });
   view.focus();
+}
+
+// A tap on a phone opens the keyboard only if the editor is focused while the click is being handled. A tap on the blank part of the
+// editor (below the last line, beside the text) can leave it unfocused, so focus it here, at the end of the document.
+function keepFocus() {
+  if (view && !view.hasFocus) focusEnd();
 }
 
 // Edit and Split lay the text out differently (font, line height, width, gutter), so the same pixel scroll offset lands on other
