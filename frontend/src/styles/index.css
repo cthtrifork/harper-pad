@@ -3,6 +3,7 @@
   --panel: #eceff3;
   --raised: #ffffff;
   --selected: #dde4ec;
+  --sunken: #eef1f5;
   --line: #d3d9e0;
   --text: #1a2028;
   --mute: #566170;
@@ -27,6 +28,7 @@
     --panel: #181d23;
     --raised: #1f252d;
     --selected: #2c3745;
+    --sunken: #151a20;
     --line: #2b333d;
     --text: #e8ebef;
     --mute: #9aa5b1;

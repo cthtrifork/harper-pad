@@ -1,7 +1,10 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { forEachDiagnostic, linter } from "@codemirror/lint";
-import { EditorState, StateEffect } from "@codemirror/state";
-import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { markdown } from "@codemirror/lang-markdown";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { EditorView, highlightActiveLine, keymap, lineNumbers, placeholder } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import { lintText } from "./harper.js";
 
 // Harper's lint kinds that are plain misspellings get the error colour; the rest are suggestions about style.
@@ -189,14 +192,72 @@ export function cursorOf(state) {
   };
 }
 
-// The extensions each editor was created with, so loadDocument can build a fresh state with the same behaviour.
-const extensionsOf = new WeakMap();
+// The markdown source view: line numbers, a highlighted current line, and the markup (`#`, `**`, `- [ ]`) dimmed so the words
+// stand out. Plain text gets none of it.
+const markdownStyle = HighlightStyle.define([
+  { tag: [tags.processingInstruction, tags.contentSeparator], color: "var(--mute)" },
+  { tag: tags.heading, fontWeight: "600" },
+  { tag: tags.strong, fontWeight: "700" },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+  { tag: tags.monospace, fontFamily: "var(--font-mono)", fontSize: "0.9em" },
+  { tag: [tags.link, tags.url], color: "var(--c-style)" },
+]);
 
-// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update, and `onStats` the word and character counts at the start and after every edit, and `onCursor` the caret position and selection size at the start and whenever they change. `onEdit` is called after every change the user makes to the text (not when a document is loaded). `persist` saves the dictionary and ignore list after a change.
-export function createEditor(parent, { doc, getHarper, onResult, onProblems, onStats, onCursor, onEdit, persist }) {
+// Split shows the source as the design does: a monospace face, 30 px lines, line numbers and the current line.
+const sourceTheme = EditorView.theme({
+  "&": { fontSize: "15px" },
+  ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "30px" },
+  ".cm-content": { padding: "20px 0" },
+});
+
+const markdownTheme = EditorView.theme({
+  ".cm-gutters": {
+    backgroundColor: "transparent",
+    color: "var(--mute)",
+    border: "0",
+    fontFamily: "var(--font-mono)",
+    fontSize: "12px",
+    marginRight: "14px",
+  },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--accent) 7%, transparent)" },
+  ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--text)" },
+});
+
+// `mode` is { format: "markdown" | "text", source: boolean }; `source` is the Split view's source pane.
+function modeExtensions({ format, source }) {
+  if (format === "text") return [];
+  const base = [markdown(), syntaxHighlighting(markdownStyle)];
+  return source ? [...base, markdownTheme, sourceTheme, lineNumbers(), highlightActiveLine()] : base;
+}
+
+// The extensions each editor was created with, so loadDocument can build a fresh state with the same behaviour. The format
+// ("markdown" or "text") lives in its own compartment, so it can be switched without losing the text or the undo history.
+const extensionsOf = new WeakMap();
+const modeOf = new WeakMap();
+
+// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update, and `onStats` the word and character counts at the start and after every edit, and `onCursor` the caret position and selection size at the start and whenever they change. `onDoc` gets the whole text at the start and after every change (for the preview). `onEdit` is called after every change the user makes to the text (not when a document is loaded). `persist` saves the dictionary and ignore list after a change.
+export function createEditor(
+  parent,
+  {
+    doc,
+    mode: initialMode = { format: "markdown", source: false },
+    getHarper,
+    onResult,
+    onProblems,
+    onStats,
+    onCursor,
+    onDoc,
+    onEdit,
+    persist,
+  },
+) {
   onStats?.(countText(doc));
   onCursor?.(cursorOf(EditorState.create({ doc })));
+  onDoc?.(doc);
+  const mode = new Compartment();
   const extensions = [
+    mode.of(modeExtensions(initialMode)),
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
@@ -206,7 +267,9 @@ export function createEditor(parent, { doc, getHarper, onResult, onProblems, onS
     theme,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) {
-        onStats?.(countText(u.state.doc.toString()));
+        const text = u.state.doc.toString();
+        onStats?.(countText(text));
+        onDoc?.(text);
         onEdit?.();
       }
       if (u.docChanged || u.selectionSet) onCursor?.(cursorOf(u.state));
@@ -215,14 +278,22 @@ export function createEditor(parent, { doc, getHarper, onResult, onProblems, onS
   ];
   const view = new EditorView({ parent, state: EditorState.create({ doc, extensions }) });
   extensionsOf.set(view, extensions);
+  modeOf.set(view, mode);
   return view;
 }
 
+// Switch the format (markdown or text) and whether it is the Split source pane, without touching the document.
+export function setMode(view, mode) {
+  view.dispatch({ effects: modeOf.get(view).reconfigure(modeExtensions(mode)) });
+}
+
 // Replace the whole document, as when another draft is opened. It starts a fresh state, so undo cannot cross into the previous
-// document, and it does not count as an edit. `onStats` and `onCursor` get the new values, because no update is reported for it.
-export function loadDocument(view, text, onStats, onCursor) {
-  view.setState(EditorState.create({ doc: text, extensions: extensionsOf.get(view) }));
+// document, and it does not count as an edit. `onStats`, `onCursor` and `onDoc` get the new values, because no update is reported for it.
+export function loadDocument(view, text, onStats, mode = { format: "markdown", source: false }, onDoc, onCursor) {
+  const extensions = extensionsOf.get(view).map((e, i) => (i === 0 ? modeOf.get(view).of(modeExtensions(mode)) : e));
+  view.setState(EditorState.create({ doc: text, extensions }));
   onStats?.(countText(text));
+  onDoc?.(text);
   onCursor?.(cursorOf(view.state));
   view.focus();
 }

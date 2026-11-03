@@ -1,7 +1,7 @@
 # TODO
 
 Status: the editor (CodeMirror 6 + harper.js), Problems panel, updater, Windows release flow and web build work, and so does the scratch pad
-drawer (autosave, search, delete with undo; SQLite on desktop, IndexedDB in the web build). Markdown preview and file open/save are next.
+drawer (autosave, search, delete with undo; SQLite on desktop, IndexedDB in the web build). Open file is next (save as file works).
 Only open items are listed here; finished work is in the git history.
 
 ## 1. Repo and CI
@@ -38,22 +38,14 @@ Note: `harper-editor` and `lint-framework` are not on npm (only `harper.js` is),
 vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
 - [ ] Turn a whole Harper rule off, not just one finding (needs `organizedLints` and `setLintConfig`); maybe in a settings screen.
-- [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
-      source left and the rendered preview right; Preview uses the whole window. The preview is read-only and
-      follows the editor's scroll ("Scrolls with the editor" in the preview's header). Only shown for markdown (see below).
-      The source pane has line numbers, dimmed markdown marks (`#`, `**`, `- [ ]`) and a highlighted current line
-      (`@codemirror/lang-markdown`); the preview renders task lists as read-only checkboxes and `code` in a mono face.
-- [ ] Document `format` (`markdown` or `text`): files by extension (`.md`, `.markdown`), drafts store it, default
-      markdown for new drafts, unknown files open as text. The status bar "Markdown" label is a menu to switch it.
-      A plain-text draft that looks like markdown gets a "Looks like Markdown. Switch?" hint, never an automatic switch.
+- [ ] Document `format`: files by extension (`.md`, `.markdown` are markdown, unknown files open as text) once "Open file" exists.
+      (Drafts store the format, new drafts are markdown, and the status bar "Markdown" label is a menu to switch it.)
 - [ ] Dirty state for a document that was opened from a file (see "Save as file" and "Open file" below).
 
 ## 5. Scratch pad drawer (drafts)
 
 Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, split, preview, scratch pad drawer).
 
-- [ ] When the Edit / Split / Preview views exist: while the drawer is open only Edit is available (Split and Preview are
-      disabled with a hint).
 - [ ] Show what the document is: in the toolbar its name and folder ("notes.md in ~/Documents") for a file, or a "Draft, not on
       disk" badge for a draft, and the same name in the window title ("notes.md — Harper Pad": the Wails window title on
       desktop, `document.title` on the web). The toolbar has **Open file** (Ctrl+O) and **Save as file** (Ctrl+S) buttons.

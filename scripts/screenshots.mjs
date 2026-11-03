@@ -156,6 +156,36 @@ await page.getByRole("button", { name: /^Dictionary:/ }).click();
 await page.waitForSelector(".entries");
 expect((await page.locator(".entries li").allTextContents()).join().includes("Mikkel"), "the dictionary list should hold the added word");
 await shot("06-dictionary-list");
+await page.getByRole("button", { name: "Back to problems" }).click(); // show the problems again for the next picture
+
+// A markdown draft in the Split view: the source on the left, the rendered preview on the right. The text is inserted in one go,
+// because typing Enter after a list item would continue the list. Split is only available with the scratch pad closed.
+await page.keyboard.press("Control+j"); // the dictionary shot left the drawer closed
+await page.waitForSelector("#drafts-drawer");
+await page.getByRole("button", { name: "New draft" }).click();
+await page.locator(".cm-content").click();
+await page.keyboard.insertText(
+  [
+    "# Release checklist",
+    "",
+    "- [x] Tag v0.1.0 when CI is green",
+    "- [ ] Check the `.desktop` file under KDE Wayland",
+    "- [x] Swap the placeholder icon",
+    "- [ ] Confirm immutable releases are on",
+    "",
+    "Remember to tell **Mikkel** when the RPM is up.",
+  ].join("\n"),
+);
+await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
+await page.keyboard.press("Control+j"); // close the scratch pad
+await page.waitForSelector("#drafts-drawer", { state: "detached" });
+await page.getByRole("button", { name: "Split" }).click();
+await page.waitForSelector(".md h1");
+expect((await page.textContent(".md h1")) === "Release checklist", "the preview should show the heading");
+expect((await page.locator(".md input[type=checkbox]").count()) === 4, "the preview should show four task boxes");
+expect((await page.locator(".md input[type=checkbox]:checked").count()) === 2, "two of the tasks should be ticked");
+expect((await page.locator(".md strong").textContent()) === "Mikkel", "the preview should show the bold name");
+await shot("07-markdown-split");
 
 await browser.close();
 if (problems.length) {
