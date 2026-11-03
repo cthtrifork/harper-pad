@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addRange, categoryOf, DEFAULT_PREFS, isFinished, isSafe, loadPrefs, nonOverlapping, savePrefs, touches } from "./autocorrect.js";
+import {
+  addRange,
+  categoryOf,
+  DEFAULT_PREFS,
+  isFinished,
+  isMarkdownSpacing,
+  isSafe,
+  loadPrefs,
+  nonOverlapping,
+  savePrefs,
+  touches,
+} from "./autocorrect.js";
 
 const finding = (kind, fixes) => ({ kind, fixes: fixes.map((text) => ({ kind: "replace", text })) });
 
@@ -10,6 +21,8 @@ test("only a finding with exactly one suggestion is safe", () => {
   assert.equal(categoryOf(finding("Spelling", ["received", "relieved", "receive"])), null);
   assert.equal(categoryOf(finding("Capitalization", ["I"])), "caps");
   assert.equal(categoryOf(finding("Repetition", ["the"])), "reps");
+  assert.equal(categoryOf(finding("Formatting", [" "])), "spaces");
+  assert.equal(categoryOf(finding("Formatting", ["x"])), null);
 });
 
 test("grammar, style and insert-only fixes are never auto-fixed", () => {
@@ -64,8 +77,8 @@ test("the choices survive a round trip, and bad or missing storage gives the def
   const data = new Map();
   const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
   assert.deepEqual(loadPrefs(storage), DEFAULT_PREFS);
-  savePrefs({ on: true, typos: true, caps: false, reps: true }, storage);
-  assert.deepEqual(loadPrefs(storage), { on: true, typos: true, caps: false, reps: true });
+  savePrefs({ on: true, typos: true, caps: false, reps: true, spaces: true }, storage);
+  assert.deepEqual(loadPrefs(storage), { on: true, typos: true, caps: false, reps: true, spaces: true });
   data.set("harper-pad.autocorrect", "{not json");
   assert.deepEqual(loadPrefs(storage), DEFAULT_PREFS);
   const broken = {
@@ -78,4 +91,12 @@ test("the choices survive a round trip, and bad or missing storage gives the def
   };
   assert.deepEqual(loadPrefs(broken), DEFAULT_PREFS);
   assert.doesNotThrow(() => savePrefs(DEFAULT_PREFS, broken));
+});
+
+test("spaces that are Markdown (line indent, hard line break) are not extra", () => {
+  const text = "one  two\n  indented\nbreak  \nnext";
+  assert.equal(isMarkdownSpacing(text, 3, 5), false); // between words
+  assert.equal(isMarkdownSpacing(text, 9, 11), true); // start of a line
+  assert.equal(isMarkdownSpacing(text, 0, 2), true); // start of the text
+  assert.equal(isMarkdownSpacing(text, 25, 27), true); // end of a line: hard break
 });

@@ -2,7 +2,7 @@ import { isolateHistory } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
 import { Annotation, StateField } from "@codemirror/state";
 import { forEachDiagnostic } from "@codemirror/lint";
-import { addRange, isFinished, nonOverlapping, touches } from "../autocorrect.js";
+import { addRange, isFinished, isSpacing, nonOverlapping, touches } from "../autocorrect.js";
 
 // Autocorrect in the editor. Three things are remembered in the editor state, so that opening another draft (which starts a fresh
 // state) forgets them:
@@ -71,10 +71,13 @@ export function applyFixes(view, items) {
 
 // The findings autocorrect may fix now: safe ones the user has typed, that are finished and are not in code. `found` are the
 // findings of one lint run on `text`; `caret` is where the cursor was.
+// Extra spaces are done once the caret is past them: the word after them may still be on its way.
+const finished = (text, f, caret) => (isSpacing(f.fixes[0]) ? caret > f.to : isFinished(text, f.to, caret));
+
 export function dueFixes(state, text, found, caret) {
   const { touched } = state.field(autoField);
   return found
-    .filter((f) => f.safe && touches(touched, f.from, f.to) && isFinished(text, f.to, caret) && !inCode(state, f.from, f.to))
+    .filter((f) => f.safe && touches(touched, f.from, f.to) && finished(text, f, caret) && !inCode(state, f.from, f.to))
     .map((f) => ({ from: f.from, to: f.to, fix: f.fixes[0], problem: f.problem, kind: f.kind, hash: f.hash }));
 }
 

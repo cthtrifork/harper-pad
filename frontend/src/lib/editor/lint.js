@@ -1,6 +1,6 @@
 import { linter } from "@codemirror/lint";
 import { StateEffect } from "@codemirror/state";
-import { isSafe } from "../autocorrect.js";
+import { isMarkdownSpacing, isSafe, isSpacing } from "../autocorrect.js";
 import { lintText } from "../harper.js";
 import { applyFixes, dueFixes } from "./autocorrect.js";
 
@@ -14,7 +14,17 @@ function severity(kind) {
 // Turn a Harper suggestion into a CodeMirror lint action. The range is the diagnostic's current one, so the fix
 // stays correct after the text before it has been edited.
 function toAction(fix) {
-  const name = fix.kind === "remove" || fix.text === "" ? "Remove" : fix.kind === "insert" ? `Insert "${fix.text}"` : fix.text;
+  // A fix that is only spaces has no visible text, so it needs a name (an empty label is an empty button).
+  const name =
+    fix.kind === "remove" || fix.text === ""
+      ? "Remove"
+      : fix.kind === "insert"
+        ? `Insert "${fix.text}"`
+        : isSpacing(fix)
+          ? fix.text === " "
+            ? "Use one space"
+            : "Use spacing"
+          : fix.text;
   return {
     name,
     apply(view, from, to) {
@@ -69,7 +79,10 @@ export function harperSource(getHarper, onResult, persist, auto) {
       const doc = view.state.doc;
       const text = doc.toString();
       const prefs = auto?.prefs();
-      const found = (await lintText(harper, text)).map((f) => ({ ...f, safe: prefs ? isSafe(f, prefs) : false }));
+      const found = (await lintText(harper, text)).map((f) => ({
+        ...f,
+        safe: prefs ? isSafe(f, prefs) && !(isSpacing(f.fixes[0]) && isMarkdownSpacing(text, f.from, f.to)) : false,
+      }));
       onResult?.({ count: found.length, ms: Math.round(performance.now() - t0) });
       // With autocorrect on, fix what is due. Only if the text is the text that was checked: CodeMirror drops a result for older text
       // anyway, and the fixes' positions would be wrong. The edit makes the linter run again, which reports what is left.

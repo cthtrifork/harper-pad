@@ -9,7 +9,7 @@ const props = defineProps({
   format: { type: String, default: "markdown" }, // "markdown" or "text"
   source: { type: Boolean, default: false }, // the Split view's source pane: monospace, line numbers
   persist: { type: Function, default: async () => {} },
-  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true }) }, // see lib/autocorrect.js
+  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) }, // see lib/autocorrect.js
 });
 const emit = defineEmits(["result", "problems", "stats", "cursor", "edited", "doc", "fixes", "fixed", "user-edit"]);
 const host = ref(null);

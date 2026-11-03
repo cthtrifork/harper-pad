@@ -4,7 +4,7 @@ import { CATEGORIES } from "../lib/autocorrect.js";
 
 const props = defineProps({
   // Autocorrect: the switch and which kinds of finding may be fixed (see lib/autocorrect.js).
-  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true }) },
+  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) },
   problems: { type: Array, required: true },
   active: { type: Number, default: -1 },
   words: { type: Array, default: () => [] }, // the personal dictionary
