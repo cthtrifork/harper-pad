@@ -53,6 +53,7 @@ onBeforeUnmount(() => {
   <header class="bar">
     <span class="brand">Harper Pad</span>
     <button type="button" class="drawer-btn" :class="{ on: showDrawer }" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="emit('toggle-drawer')">
+      <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="2.5" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M6 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
       Scratch pad <span class="kbd">Ctrl+J</span>
     </button>
     <span class="sep" aria-hidden="true"></span>
@@ -96,6 +97,7 @@ onBeforeUnmount(() => {
     </div>
     <span v-if="isMarkdown && mode !== 'preview'" class="sep" aria-hidden="true"></span>
     <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
+      <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="10" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
       Problems <span class="count">{{ problemCount }}</span>
     </button>
     <span v-if="updateButton" class="sep" aria-hidden="true"></span>
