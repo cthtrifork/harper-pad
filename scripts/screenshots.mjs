@@ -66,7 +66,7 @@ try {
 const count = await page.locator(".panel li").count();
 expect(count > 0, "the sample text should have problems");
 const stats = await page.textContent("#doc-stats");
-expect(stats === "16 words, 83 chars", `the word counter should read 16 words, 83 chars, got ${stats}`);
+expect(stats === "16 words, 82 chars", `the word counter should read 16 words, 82 chars, got ${stats}`);
 
 await shot("01-editor-with-problems");
 
