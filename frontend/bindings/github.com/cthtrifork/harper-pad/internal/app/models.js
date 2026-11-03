@@ -159,6 +159,14 @@ export class StartupState {
              */
             this["error"] = "";
         }
+        if (!("home" in $$source)) {
+            /**
+             * Home is the user's home folder, so the page can show "~/Documents" for a file's folder. Empty when unknown (and in the web build).
+             * @member
+             * @type {string}
+             */
+            this["home"] = "";
+        }
 
         Object.assign(this, $$source);
     }

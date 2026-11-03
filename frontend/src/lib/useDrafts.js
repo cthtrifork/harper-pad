@@ -38,6 +38,7 @@ export function useDrafts(editor, drawerOpen) {
   const toast = ref(null); // { message, undo } while the "Draft deleted" bar is showing
   const available = ref(true); // false when the database cannot be opened: the editor still works, nothing is saved
 
+  const home = ref(""); // the user's home folder, from the backend
   const fileState = ref("none"); // none | unknown (linked, not written in this session) | synced | stale (edited since the file was written)
 
   let overwriteOk = false; // set after a save was refused because the file changed outside the app: the next save replaces it
@@ -52,11 +53,13 @@ export function useDrafts(editor, drawerOpen) {
   let toastTimer = null;
 
   const fileName = computed(() => current.value.filePath.split(/[\\/]/).pop());
-  // The folder of the file ("" in the web build, which only knows the name).
+  // The folder of the file, with the home folder shown as "~" ("" in the web build, which only knows the name).
   const fileDir = computed(() => {
     const p = current.value.filePath;
     const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-    return i > 0 ? p.slice(0, i) : "";
+    const dir = i > 0 ? p.slice(0, i) : "";
+    const h = home.value.replace(/[\\/]+$/, "");
+    return h && (dir === h || dir.startsWith(`${h}/`) || dir.startsWith(`${h}\\`)) ? `~${dir.slice(h.length)}` : dir;
   });
 
   const status = computed(() => {
@@ -240,6 +243,7 @@ export function useDrafts(editor, drawerOpen) {
   // draft) when there are none. It is one call to the Go side, so the editor does not wait for several round trips. The list
   // is not part of it: it is fetched when the drawer opens, because listing reads every draft it shows.
   function init(start, fallback = "") {
+    home.value = start.home ?? "";
     list.value = { drafts: [], total: start.total ?? 0 };
     if (start.error) {
       available.value = false;

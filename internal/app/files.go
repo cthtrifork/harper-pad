@@ -42,6 +42,12 @@ func suggestName(title, format string) string {
 
 // pickSavePath asks the user where to save. It returns "" when they cancel. It is a field of the service so tests can replace it.
 func pickSavePath(suggested, dir string) (string, error) {
+	if demo := demoSaveDir(); demo != "" { // the headless demo has no dialog: save to its folder under the suggested name
+		if err := os.MkdirAll(demo, 0o755); err != nil {
+			return "", err
+		}
+		return filepath.Join(demo, suggested), nil
+	}
 	app := application.Get()
 	if app == nil {
 		return "", errors.New("saving to a file needs the desktop app")
