@@ -41,7 +41,8 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 | `internal/app` | `PadService` (the binding the frontend calls), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
 | `internal/store` | The app's database: one SQLite file (pure Go) with the drafts and the settings, see `docs/storage.md` |
 | `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
-| `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; `lib/backend.js` is the only place that talks to Go (desktop) or IndexedDB (web build for GitHub Pages, `docs/pages.md`); generated bindings are committed |
+| `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; `lib/backend.js` is the only place that talks to Go (desktop) or IndexedDB (web build for GitHub Pages, `docs/pages.md`); `lib/editor/` is the CodeMirror editor (`lint`, `theme`, `mode`, `stats`, `problems`); generated bindings are committed |
+| `frontend/src/styles` | Plain CSS, one file per component (`drafts-drawer.css` for `DraftsDrawer.vue`), no `<style>` blocks in components (the exception is `update-button.css`, imported by its lazy component). `index.css` imports them, `tokens.css` holds the design tokens, `menu.css` the pop-up menus the header and status bar share. Start a component's rules from its root class so files cannot collide; add a file rather than growing one, so branches rarely touch the same lines |
 | `Taskfile.yml`, `build/config.yml`, `.devcontainer/`, `scripts/dev.sh` | `wails3 dev` config (server mode), dev container and the `make dev` loop, see `docs/devcontainer.md` |
 | `build/linux` | Desktop file and nfpm packaging (`scripts/package-linux.sh`); the desktop file name equals the application id in `main.go` |
 | `build/windows` | Windows icon, manifest and version info for the exe (`scripts/package-windows.sh`), see `docs/windows.md` |

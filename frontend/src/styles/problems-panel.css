@@ -1,0 +1,211 @@
+.panel {
+  width: 340px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow: auto;
+}
+
+.panel header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel li {
+  padding: 8px 10px 10px;
+  border-radius: 8px;
+}
+
+.panel li:hover {
+  background: var(--raised);
+}
+
+.panel .item {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.panel .head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.panel .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.panel .dot.spelling {
+  background: var(--c-spelling);
+}
+
+.panel .dot.grammar {
+  background: var(--c-grammar);
+}
+
+.panel .dot.style {
+  background: var(--c-style);
+}
+
+.panel .kind {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.panel code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.panel .msg {
+  display: block;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.panel .fixes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.panel .fix {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--accent-tint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.panel .fix:hover {
+  border-color: var(--accent);
+}
+
+.panel .mute {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.panel .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+
+/* Filter chips are toggles (design cheat sheet): the chosen one is shown by fill and an accent border, not by border colour alone. */
+.panel .chip {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.panel .chip:hover {
+  border-color: var(--mute);
+}
+
+.panel .chip.on,
+.panel .chip.on:hover {
+  background: var(--selected);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Text links, as in the cheat sheet: --c-style, underlined. */
+.panel .link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-style);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.panel .foot .link[aria-pressed="true"] {
+  font-weight: 600;
+}
+
+.panel .entries li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel .entries .label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+/* Destructive: --bad text, border turns --bad on hover, never filled at rest. */
+.panel .remove {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--bad);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.panel .remove:hover {
+  border-color: var(--bad);
+  background: var(--raised);
+}
+
+.panel .empty {
+  padding: 0 16px;
+}
+
+.panel .foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
