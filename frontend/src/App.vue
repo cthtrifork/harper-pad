@@ -130,17 +130,20 @@ function toggleProblems() {
   if (showProblems.value && narrow.matches && showDrawer.value) toggleDrawer();
 }
 
-// The editor's text size: Ctrl+plus, Ctrl+minus and Ctrl+0 (Cmd on a Mac) step it and reset it. It is the same on every draft and is
-// kept on this device. CodeMirror measures its lines, so it is asked to measure again after a change.
-const textSize = ref(loadSize());
-applySize(textSize.value);
+// The text size: Ctrl+plus, Ctrl+minus and Ctrl+0 (Cmd on a Mac) step it and reset it. The editor has one, which the Split preview follows;
+// the full Preview view has its own, and the keys change that while it is showing. Both are the same on every draft and are kept on this
+// device. CodeMirror measures its lines, so it is asked to measure again after the editor's changes.
+const textSize = { editor: ref(loadSize("editor")), preview: ref(loadSize("preview")) };
+applySize("editor", textSize.editor.value);
+applySize("preview", textSize.preview.value);
 function resizeText(dir) {
-  const next = stepSize(textSize.value, dir);
-  if (next === textSize.value) return;
-  textSize.value = next;
-  applySize(next);
-  saveSize(next);
-  editor.value?.remeasure();
+  const which = mode.value === "preview" ? "preview" : "editor";
+  const next = stepSize(textSize[which].value, dir);
+  if (next === textSize[which].value) return;
+  textSize[which].value = next;
+  applySize(which, next);
+  saveSize(which, next);
+  if (which === "editor") editor.value?.remeasure();
 }
 
 // Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S saves: to the draft until the text has been saved to a file, then to

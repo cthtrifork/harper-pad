@@ -21,13 +21,17 @@ test("an unknown size steps from the default", () => {
 
 test("the size is remembered; the default and bad values are not stored", () => {
   const s = memory();
-  assert.equal(loadSize(s), DEFAULT_SIZE);
-  saveSize(22, s);
-  assert.equal(loadSize(s), 22);
-  saveSize(DEFAULT_SIZE, s);
+  assert.equal(loadSize("editor", s), DEFAULT_SIZE);
+  saveSize("editor", 22, s);
+  assert.equal(loadSize("editor", s), 22);
+  assert.equal(loadSize("preview", s), DEFAULT_SIZE); // each has its own
+  saveSize("preview", 26, s);
+  assert.equal(loadSize("preview", s), 26);
+  assert.equal(loadSize("editor", s), 22);
+  saveSize("editor", DEFAULT_SIZE, s);
   assert.equal(s.getItem("harper-pad.editor-size"), null);
   s.setItem("harper-pad.editor-size", "99");
-  assert.equal(loadSize(s), DEFAULT_SIZE);
+  assert.equal(loadSize("editor", s), DEFAULT_SIZE);
 });
 
 test("blocked storage falls back to the default", () => {
@@ -42,12 +46,15 @@ test("blocked storage falls back to the default", () => {
       throw new Error("blocked");
     },
   };
-  assert.equal(loadSize(blocked), DEFAULT_SIZE);
-  assert.doesNotThrow(() => saveSize(22, blocked));
+  assert.equal(loadSize("editor", blocked), DEFAULT_SIZE);
+  assert.doesNotThrow(() => saveSize("editor", 22, blocked));
 });
 
 test("applySize sets the property on the page", () => {
   const set = [];
-  applySize(22, { style: { setProperty: (k, v) => set.push([k, v]) } });
-  assert.deepEqual(set, [["--editor-size", "22px"]]);
+  applySize("preview", 26, { style: { setProperty: (k, v) => set.push([k, v]) } });
+  assert.deepEqual(set, [
+    ["--preview-size", "26px"],
+    ["--preview-scale", String(26 / 19)],
+  ]);
 });
