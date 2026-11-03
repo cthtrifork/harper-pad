@@ -6,6 +6,6 @@
 4. Update docs and the README for user-visible changes.
 5. Open a PR using the template.
 
-Standing rules and the layout: [`AGENTS.md`](../AGENTS.md). The spike notes are in [`docs/spike.md`](../docs/spike.md).
+Standing rules and the layout: [`AGENTS.md`](../AGENTS.md).
 
 Report security issues privately to the maintainers rather than in a public issue.

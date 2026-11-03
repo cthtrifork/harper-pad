@@ -6,8 +6,7 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
 ## 1. Spike: finish the open question (blocking everything else)
 
 - [x] Run a release build on Fedora (WebKitGTK 2.x, UA `Version/60.5 Safari/605.1.15`): both binaries reach "ready"
-      and find the 4 expected issues. Recorded in `docs/spike.md` (`url`: setup 589 ms, lint 48 ms; `inlined`:
-      setup 778 ms, lint 55 ms). Memory was not measured.
+      and find the 4 expected issues. Setup 589 ms, lint 48 ms (inlined: 778 ms, 55 ms). Memory was not measured.
 - [x] The `url` flavour works over the native asset scheme (worker and wasm both load).
 - [x] Drop the `inlined` variant and the flavour selector: use `harper.js/slimBinary` only (avoids the 27 MB JS chunk).
 - [x] Lazy-load harper.js after first paint: not needed for the spike, setup is under 1 s. Revisit when the editor
@@ -39,6 +38,10 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
       `RestartToUpdate` exist and are bound; nothing calls them yet).
 
 ## 4. Editor (CodeMirror 6 + harper.js)
+
+Note: `harper-editor` and `lint-framework` are not on npm (only `harper.js` is), hence CodeMirror 6 rather than a
+vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
+
 
 - [ ] Replace the spike textarea with a CodeMirror 6 editor (`@codemirror/view`, `state`, `lint`, markdown or plain text).
 - [ ] `@codemirror/lint` source that calls `WorkerLinter.lint()` (debounced), maps `Lint.span()` to diagnostics and

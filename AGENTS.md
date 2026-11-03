@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Start here. This file is for AI coding agents (and humans) picking up work on **Harper Pad**, a Go + Wails v3
-desktop app: a Harper-checked editor plus a scratch pad drawer. It is at the spike stage (`docs/spike.md`).
+desktop app: a Harper-checked editor plus a scratch pad drawer. It is at the spike stage: the window only lints a textarea.
 
 ## Commands
 

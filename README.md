@@ -4,7 +4,7 @@ A small desktop writing app: a grammar-checked editor ([Harper](https://writewit
 as WebAssembly) and a scratch pad drawer. Go + [Wails v3](https://v3alpha.wails.io/) with a Vue 3 frontend.
 
 Status: **spike**. The window lints a textarea with `harper.js` in a Web Worker to prove the stack works in
-WebKitGTK. The editor and the drawer are not built yet. See [`docs/spike.md`](docs/spike.md).
+WebKitGTK (it does). The editor and the drawer are not built yet.
 
 The project scaffolding (CI, linters, Renovate, release drafting, dev tooling) is borrowed from
 [trivy-dashboard-wail3](https://github.com/cthtrifork/trivy-dashboard-wail3).
