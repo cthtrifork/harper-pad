@@ -2,7 +2,7 @@ name: Dependency scan
 
 # Scans the PR and its base with Trivy (.github/trivy/dependency-scan.tpl lists the findings) and
 # comments the HIGH and CRITICAL vulnerabilities the PR adds and removes. It runs only when a dependency manifest or lockfile
-# changes. The comment is informational; the blocking check is the Trivy job in security.yml. It uses
+# (or this workflow or its template) changes. The comment is informational; the blocking check is the Trivy job in security.yml. It uses
 # a paths filter, so do not mark it as a required check.
 #
 # It scans the repository files only (go.mod, go.sum and the npm lockfile); the report groups the
@@ -20,6 +20,8 @@ on:
       - go.sum
       - frontend/package.json
       - frontend/package-lock.json
+      - .github/trivy/**
+      - .github/workflows/dependency-scan.yml
   # Manual run on any branch: compares it with the default branch and only writes the job summary.
   workflow_dispatch:
 
