@@ -15,8 +15,8 @@ Markdown documents and drafts can also be shown side by side with a rendered pre
 
 ## Status
 
-**Spike.** The window lints a textarea with `harper.js` in a Web Worker, which proves the stack works in WebKitGTK.
-The editor, the drafts drawer and the markdown preview are not built yet; `TODO.md` has the plan.
+The window has a CodeMirror editor checked by `harper.js` (WebAssembly in a Web Worker), a Problems panel with fixes,
+and in-app updates. The drafts drawer and the markdown preview are not built yet; `TODO.md` has the plan.
 
 ## Develop
 
