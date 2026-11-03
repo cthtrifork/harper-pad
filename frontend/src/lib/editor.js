@@ -1,5 +1,5 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { forEachDiagnostic, linter } from "@codemirror/lint";
+import { forceLinting, forEachDiagnostic, linter } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { lintText } from "./harper.js";
@@ -27,9 +27,11 @@ function toAction(fix) {
 
 // The lint source: runs Harper on the whole document (debounced by the linter extension) and maps the findings.
 // onResult gets the finding count and how long Harper took, for the status line.
-function harperSource(harper, onResult) {
+function harperSource(getHarper, onResult) {
   return linter(
     async (view) => {
+      const harper = getHarper();
+      if (!harper) return [];
       const t0 = performance.now();
       const found = await lintText(harper, view.state.doc.toString());
       onResult?.({ count: found.length, ms: Math.round(performance.now() - t0) });
@@ -115,6 +117,11 @@ export function collectProblems(view) {
   return out.sort((a, b) => a.from - b.from);
 }
 
+// Run the lint source again now, e.g. when Harper has just finished loading.
+export function relint(view) {
+  forceLinting(view);
+}
+
 // Select the range of a finding and bring it into view.
 export function jumpTo(view, from, to) {
   view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
@@ -128,8 +135,8 @@ export function applyFix(view, from, to, i) {
   });
 }
 
-// Create the editor in `parent`. `harper` is a WorkerLinter; `onResult` hears about every lint run and `onProblems` gets the current findings after every update.
-export function createEditor(parent, { doc, harper, onResult, onProblems }) {
+// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update.
+export function createEditor(parent, { doc, getHarper, onResult, onProblems }) {
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -138,7 +145,7 @@ export function createEditor(parent, { doc, harper, onResult, onProblems }) {
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
-        harperSource(harper, onResult),
+        harperSource(getHarper, onResult),
         theme,
         EditorView.updateListener.of((u) => onProblems?.(collectProblems(u.view))),
       ],
