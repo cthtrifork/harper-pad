@@ -1,14 +1,8 @@
-// Spike: load harper.js in a Web Worker and lint text. Two binaries are tried so the spike shows which one
-// survives the Wails asset server and WebKitGTK:
-//   - "inlined": the wasm is base64 inside the JS bundle (no extra request, always works, ~27 MB of JS)
-//   - "url": the wasm is a separate hashed asset fetched at runtime (needs application/wasm from the asset server)
-export async function createLinter(flavour) {
-  const [{ WorkerLinter }, bin] = await Promise.all([
-    import("harper.js"),
-    flavour === "url" ? import("harper.js/slimBinary") : import("harper.js/slimBinaryInlined"),
-  ]);
-  const binary = flavour === "url" ? bin.slimBinary : bin.slimBinaryInlined;
-  const linter = new WorkerLinter({ binary });
+// Load harper.js in a Web Worker and lint text. The wasm is a separate hashed asset fetched at runtime (needs
+// application/wasm from the asset server); it works in WebKitGTK, see docs/spike.md.
+export async function createLinter() {
+  const [{ WorkerLinter }, { slimBinary }] = await Promise.all([import("harper.js"), import("harper.js/slimBinary")]);
+  const linter = new WorkerLinter({ binary: slimBinary });
   await linter.setup();
   return linter;
 }

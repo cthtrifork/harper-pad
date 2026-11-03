@@ -2,11 +2,13 @@
 
 Question: does `harper.js` (about 20 MB of WebAssembly, run in a Web Worker) work in the Wails webview?
 
-`frontend/src/lib/harper.js` creates a `WorkerLinter` with one of two binaries, chosen in the UI:
+`frontend/src/lib/harper.js` creates a `WorkerLinter`. The spike compared two binaries; the inlined one was dropped
+after the WebKitGTK result below, so only `harper.js/slimBinary` (separate hashed `.wasm` asset, fetched at runtime)
+remains:
 
 | Binary | How the wasm arrives | Risk |
 |---|---|---|
-| `harper.js/slimBinaryInlined` | base64 inside a ~27 MB JS chunk | none for MIME or paths; larger bundle, slower parse |
+| `harper.js/slimBinaryInlined` (removed) | base64 inside a ~27 MB JS chunk | none for MIME or paths; larger bundle, slower parse |
 | `harper.js/slimBinary` | separate hashed `.wasm` asset, fetched at runtime | needs `application/wasm` and worker loading from the asset server |
 
 ## Results
@@ -26,7 +28,7 @@ Verified on the real target (release build, Fedora, WebKitGTK; UA `AppleWebKit/6
 | `slimBinaryInlined` (base64) | 778 ms | 55 ms |
 
 Both reach `ready` and report the same 4 findings. So Web Worker, wasm compile and the native asset scheme all work;
-the `url` flavour is faster and avoids the 27 MB JS chunk, so the inlined variant can go. Memory use was not measured.
+the `url` flavour is faster and avoids the 27 MB JS chunk, so the inlined variant was removed. Memory use was not measured.
 
 ## Findings so far
 

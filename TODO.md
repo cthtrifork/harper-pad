@@ -9,7 +9,7 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
       and find the 4 expected issues. Recorded in `docs/spike.md` (`url`: setup 589 ms, lint 48 ms; `inlined`:
       setup 778 ms, lint 55 ms). Memory was not measured.
 - [x] The `url` flavour works over the native asset scheme (worker and wasm both load).
-- [ ] Drop the `inlined` variant and the flavour selector: use `harper.js/slimBinary` only (avoids the 27 MB JS chunk).
+- [x] Drop the `inlined` variant and the flavour selector: use `harper.js/slimBinary` only (avoids the 27 MB JS chunk).
 - [x] Lazy-load harper.js after first paint: not needed for the spike, setup is under 1 s. Revisit when the editor
       exists (still show a "checking" state until the worker is ready).
 
