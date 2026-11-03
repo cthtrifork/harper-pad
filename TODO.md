@@ -41,10 +41,11 @@ from trivy-dashboard-wail3 and not yet exercised on GitHub.
 Note: `harper-editor` and `lint-framework` are not on npm (only `harper.js` is), hence CodeMirror 6 rather than a
 vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
-- [ ] Replace the spike textarea with a CodeMirror 6 editor (`@codemirror/view`, `state`, `lint`, markdown or plain text).
-- [ ] `@codemirror/lint` source that calls `WorkerLinter.lint()` (debounced), maps `Lint.span()` to diagnostics and
+- [x] Replace the spike textarea with a CodeMirror 6 editor (plain text for now; markdown highlighting comes with the views).
+- [x] `@codemirror/lint` source that calls `WorkerLinter.lint()` (debounced), maps `Lint.span()` to diagnostics and
       `suggestions()` to "apply" actions via `applySuggestion`; free wasm-backed `Lint` objects.
-- [ ] Suggestion popover on the underlined issue: replacements, "Add to dictionary", "Ignore this rule".
+- [ ] Suggestion popover on the underlined issue: replacements work (CodeMirror's lint tooltip); "Add to dictionary" and
+      "Ignore this rule" are still missing, and the tooltip is only themed with colours.
 - [ ] Problems panel on the right (Edit view only) with filter chips, counts and jump-to. A "Problems" toolbar toggle
       hides it and the editor uses the full width; the count stays on the toggle and in the status bar.
 - [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
