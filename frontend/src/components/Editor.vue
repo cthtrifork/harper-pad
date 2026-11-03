@@ -86,6 +86,7 @@ defineExpose({
   scrollToTop,
   focusEnd,
   focus: () => view?.focus(),
+  remeasure: () => view?.requestMeasure(),
   relint: () => view && relint(view),
   getText: () => view?.state.doc.toString() ?? "",
   load: (text, format = props.format) =>

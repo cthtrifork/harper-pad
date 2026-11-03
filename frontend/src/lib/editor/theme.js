@@ -8,7 +8,7 @@ const underline = (color) => ({
 });
 
 export const theme = EditorView.theme({
-  "&": { color: "var(--text)", backgroundColor: "transparent", fontSize: "19px" },
+  "&": { color: "var(--text)", backgroundColor: "transparent", fontSize: "var(--editor-size, 19px)" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font-doc)", lineHeight: "1.75" },
   ".cm-content": { caretColor: "var(--accent)", padding: "0" },

@@ -54,7 +54,7 @@
 .preview.compact .md {
   max-width: none;
   margin: 0;
-  font-size: 17px;
+  font-size: calc(var(--editor-size, 19px) * 17 / 19);
   line-height: 1.7;
 }
 

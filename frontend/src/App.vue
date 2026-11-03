@@ -9,6 +9,7 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData } from "./lib/backend.js";
+import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { looksLikeMarkdown } from "./lib/markdown.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
@@ -129,6 +130,19 @@ function toggleProblems() {
   if (showProblems.value && narrow.matches && showDrawer.value) toggleDrawer();
 }
 
+// The editor's text size: Ctrl+plus, Ctrl+minus and Ctrl+0 (Cmd on a Mac) step it and reset it. It is the same on every draft and is
+// kept on this device. CodeMirror measures its lines, so it is asked to measure again after a change.
+const textSize = ref(loadSize());
+applySize(textSize.value);
+function resizeText(dir) {
+  const next = stepSize(textSize.value, dir);
+  if (next === textSize.value) return;
+  textSize.value = next;
+  applySize(next);
+  saveSize(next);
+  editor.value?.remeasure();
+}
+
 // Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S saves: to the draft until the text has been saved to a file, then to
 // the file; Ctrl+Shift+S always asks for a file.
 function onKeydown(e) {
@@ -140,6 +154,9 @@ function onKeydown(e) {
   } else if (key === "s") {
     e.preventDefault(); // not the browser's "save page"
     drafts.saveFile(e.shiftKey);
+  } else if (key === "+" || key === "=" || key === "-" || key === "_" || key === "0") {
+    e.preventDefault(); // not the webview's own zoom, which would scale the whole window
+    resizeText(key === "0" ? 0 : key === "-" || key === "_" ? -1 : 1);
   }
 }
 
