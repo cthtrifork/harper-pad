@@ -6,9 +6,12 @@
 // The bindings are imported on demand and only in the desktop build, so the web bundle carries no Wails code.
 
 import { createWebDrafts, DB_NAME, DB_VERSION, upgrade } from "./webDrafts.js";
-import { saveWebFile } from "./webFiles.js";
+import { saveWebFile, sharesFiles } from "./webFiles.js";
 
 export const isWeb = import.meta.env.MODE === "web";
+
+// The web build on a browser without a file picker (iPhone, iPad): Save opens the share sheet.
+export const sharing = isWeb && sharesFiles();
 
 const bindings = isWeb ? undefined : () => import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
 

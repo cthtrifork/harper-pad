@@ -8,7 +8,7 @@ import Preview from "./components/Preview.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData } from "./lib/backend.js";
+import { keepData, sharing } from "./lib/backend.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
@@ -289,6 +289,7 @@ onBeforeUnmount(() => {
       :file-name="drafts.fileName.value"
       :file-dir="drafts.fileDir.value"
       :can-save="drafts.available.value"
+      :sharing="sharing"
       :is-markdown="isMarkdown"
       :mode="mode"
       :update-button="UpdateButton"
