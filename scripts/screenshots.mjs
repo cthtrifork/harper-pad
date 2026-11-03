@@ -32,6 +32,7 @@ const browser = await chromium.launch({ channel: process.env.SCREENSHOT_BROWSER_
 const page = await browser.newPage({ viewport: { width: 1100, height: 760 } }); // the desktop window's size
 const problems = [];
 page.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
+page.on("console", (m) => m.type() === "error" && console.error(`console error: ${m.text()}`));
 const expect = (cond, what) => {
   if (!cond) problems.push(`unexpected: ${what}`);
 };
@@ -45,7 +46,13 @@ const shot = async (name) => {
 
 await page.goto(url);
 await page.waitForSelector(".state.ready", { timeout: 60000 }); // harper.js loads its wasm in a worker
-await page.waitForSelector(".panel li", { timeout: 30000 });
+try {
+  await page.waitForSelector(".panel li", { timeout: 30000 });
+} catch (err) {
+  // Say what the page looked like instead of only timing out.
+  console.error(`no problems listed. Page text:\n${await page.innerText("body")}`);
+  throw err;
+}
 const count = await page.locator(".panel li").count();
 expect(count > 0, "the sample text should have problems");
 
