@@ -216,7 +216,7 @@ await phoneShot("08-mobile-drafts-drawer");
 
 // A new draft with a few mistakes, then Problems as a bottom sheet under the text.
 await phone.getByRole("button", { name: "New draft" }).click();
-if (await phone.locator("#drafts-drawer").count()) await phone.getByRole("button", { name: "Close the drafts list" }).click();
+// On a phone the sheet closes itself after New draft (App.vue pickDraft), so only wait for it to go.
 await phone.waitForSelector("#drafts-drawer", { state: "detached" });
 await phone.locator(".cm-content").click();
 await phone.keyboard.insertText("This are a example of a sentense with with a few mistakes. Harper shuld find them.");

@@ -65,12 +65,15 @@ const webApp = () => {
       }
     },
     transformIndexHtml: () => [
-      { tag: "meta", attrs: { name: "theme-color", content: "#1f2937" }, injectTo: "head" },
+      // `default` keeps the status bar a strip of its own, with text that follows light and dark. black-translucent would draw the page
+      // under it, but its text is always white (reports from the field; Apple does not document it), unreadable on the light header.
+      // viewport-fit=cover (index.html) and the safe-area insets (styles/safe-area.css) still keep the page clear of the notch, the
+      // home indicator and, in landscape, the sides. theme-color follows the header colour (--panel) for Android and Safari's own bar.
+      { tag: "meta", attrs: { name: "theme-color", content: "#eceff3", media: "(prefers-color-scheme: light)" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "theme-color", content: "#181d23", media: "(prefers-color-scheme: dark)" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "mobile-web-app-capable", content: "yes" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "apple-mobile-web-app-capable", content: "yes" }, injectTo: "head" }, // older iOS only knows this one
       { tag: "meta", attrs: { name: "apple-mobile-web-app-title", content: "Harper Pad" }, injectTo: "head" },
-      // `default` keeps the status bar a strip of its own (readable in light and dark); black-translucent would draw the page under it
-      // with white text, unreadable on the light header. The page still pads by the safe-area insets (styles/safe-area.css).
       { tag: "meta", attrs: { name: "apple-mobile-web-app-status-bar-style", content: "default" }, injectTo: "head" },
       { tag: "link", attrs: { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }, injectTo: "head" },
       { tag: "link", attrs: { rel: "manifest", href: `${base}manifest.webmanifest` }, injectTo: "head" },
