@@ -113,7 +113,7 @@ jobs:
           ref: ${{ inputs.sha || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || '' }}
           persist-credentials: false
 
-      - uses: ./.github/actions/linux-build-deps
+      - uses: $/.github/actions/linux-build-deps
         with:
           packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
         timeout-minutes: 10
@@ -159,7 +159,7 @@ jobs:
           fi
           echo "Building on $PRETTY_NAME"
 
-      - uses: ./.github/actions/linux-build-deps
+      - uses: $/.github/actions/linux-build-deps
         with:
           packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
         timeout-minutes: 10

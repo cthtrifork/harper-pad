@@ -85,7 +85,7 @@ jobs:
       pull-requests: read # Release Drafter reads the merged PRs
       id-token: write # sign the provenance attestation
       attestations: write # store the attestations
-    uses: ./.github/workflows/release.yml
+    uses: $/.github/workflows/release.yml
     with:
       tag: ${{ needs.tag.outputs.tag }}
       sha: ${{ github.sha }}
