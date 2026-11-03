@@ -24,8 +24,27 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 ## Deploying
 
 `.github/workflows/pages.yml` builds the web version on every pull request that touches `frontend/`, and deploys it on pushes to
-`main`. One-time setup: Settings > Pages > Build and deployment > Source: **GitHub Actions**. The site is at
-`https://<owner>.github.io/harper-pad/`.
+`main`. The site is at `https://<owner>.github.io/harper-pad/`.
+
+### One-time setup (repository admin)
+
+1. Open the repository on GitHub, then **Settings > Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**. Do not pick "Deploy from a branch".
+3. Merge the pull request that adds `pages.yml` (or run the **Pages** workflow by hand from the Actions tab on `main`: **Run workflow**).
+4. Open the **Pages** workflow run. The `deploy` job prints the site URL, and the same URL appears under Settings > Pages.
+5. If the `deploy` job fails with "Environment protection rules", open Settings > Environments > `github-pages` and allow the `main` branch.
+6. A private repository needs a GitHub plan that includes Pages for private repos. On Free, the repository must be public. Anyone
+   with the URL can open the site, whatever the repository's visibility.
+
+Every later push to `main` that touches `frontend/` redeploys; nothing else to do. A deploy takes about a minute, and an installed
+phone app picks it up on its next launch (the service worker fetches the page network first).
+
+### Icons
+
+`frontend/public` holds `icon-192.png` and `icon-512.png` (the favicon artwork with rounded corners on a transparent background),
+`icon-maskable-512.png` (full square, the logo kept inside the middle 80%, for Android's adaptive icons) and
+`apple-touch-icon.png` (180 px, full square and opaque: iOS fills transparency with black and rounds the corners itself). They
+were rendered from `favicon.svg`; re-render them if the logo changes.
 
 Test locally: `cd frontend && npm run build:web && npx vite preview --mode web`, then open `http://127.0.0.1:4173/harper-pad/`.
 
