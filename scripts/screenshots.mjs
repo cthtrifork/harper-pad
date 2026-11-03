@@ -126,11 +126,6 @@ if (filesDir) {
 expect((await page.locator("#drafts-drawer .item .file").allTextContents()).map((t) => t.trim()).join() === "Saved to file: Meeting notes.md", "only the saved draft should name its file in the list");
 await shot("05-draft-saved-to-file");
 
-// The arrow beside Save offers saving the file somewhere else.
-await page.getByRole("button", { name: "More ways to save" }).click();
-await page.getByRole("menuitem", { name: /Save as file/ }).waitFor();
-await shot("06-save-menu");
-
 await browser.close();
 if (problems.length) {
   console.error(problems.join("\n"));
