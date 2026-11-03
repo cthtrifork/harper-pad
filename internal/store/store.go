@@ -1,63 +1,140 @@
-// Package store reads and writes the app's small JSON files (settings, later drafts) in the user's directories.
+// Package store is the app's database: one SQLite file in the user's data folder that holds the drafts and the settings
+// (the personal dictionary and the ignored findings).
 //
-// Writes are atomic: the data goes to a temporary file in the same folder and is renamed over the target, so a crash or
-// power cut leaves either the old file or the new one, never half of one. A file that cannot be parsed is moved aside
-// as <name>.bad and treated as missing, so a damaged file never stops the app from starting.
+// It uses the pure-Go driver, so there is no cgo. A row of drafts is an id, two timestamps and the draft itself as a JSON
+// blob; the title, excerpt and task preview are worked out from the content when listing, not stored. Settings are
+// key/value text. The journal is SQLite's default rollback journal, so there are no -wal or -shm files beside the
+// database, and a crash leaves the last committed state.
 package store
 
 import (
-	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
-// Save writes v as indented JSON to path, creating the folder (private to the user) if needed.
-func Save(path string, v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*") // created with mode 0600
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name()) // a no-op once the rename has moved it
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+const schemaVersion = 1
+
+var (
+	// ErrNewer is returned by Open when the database was written by a newer version of the app. It is left untouched.
+	ErrNewer = errors.New("the database was created by a newer version of Harper Pad")
+
+	errIntegrity = errors.New("SQLite's integrity check failed")
+)
+
+// Store is the database.
+type Store struct {
+	db  *sql.DB
+	now func() time.Time
 }
 
-// Load reads the JSON file at path into v. A missing file leaves v as it is. A file that is not valid JSON for v is
-// moved to path+".bad" (replacing an older one), v is left as it is, and recovered is true.
-func Load(path string, v any) (recovered bool, err error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+// Open opens (and, on first use, creates) the database at path. A file that is not a database, or fails SQLite's
+// integrity check, is moved aside as <path>.bad-<time> and a fresh database is created, so a damaged file never stops
+// the app. A database from a newer app version is refused with ErrNewer and left alone.
+func Open(path string) (*Store, error) {
+	if strings.ContainsAny(path, "?#") {
+		return nil, fmt.Errorf("the database path %q contains a character SQLite cannot take in a file name", path)
 	}
-	if err != nil {
-		return false, err
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
 	}
-	// Decode into a copy first, so a half-matching file cannot leave v partly filled.
-	if err := json.Unmarshal(data, v); err != nil {
-		if mvErr := os.Rename(path, path+".bad"); mvErr != nil {
-			return true, fmt.Errorf("%s is not valid (%v) and could not be moved aside: %w", path, err, mvErr)
+	st, err := openAt(path)
+	if err != nil && isDamaged(err) {
+		bad := fmt.Sprintf("%s.bad-%d", path, time.Now().Unix())
+		log.Printf("store: %s is damaged (%v); moving it to %s and starting a new database", path, err, bad)
+		if mvErr := os.Rename(path, bad); mvErr != nil {
+			return nil, fmt.Errorf("%s is damaged (%v) and could not be moved aside: %w", path, err, mvErr)
 		}
-		return true, nil
+		_ = os.Remove(path + "-journal")
+		st, err = openAt(path)
 	}
-	return false, nil
+	return st, err
 }
+
+func openAt(path string) (*Store, error) {
+	db, err := sql.Open("sqlite", filepath.ToSlash(path)+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1) // one writer at a time, in order
+	s := &Store{db: db, now: time.Now}
+	if err := s.prepare(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// The file is private to the user, as the other files in the folder are.
+	_ = os.Chmod(path, 0o600)
+	return s, nil
+}
+
+// prepare creates the schema on a new database and checks an existing one.
+func (s *Store) prepare() error {
+	var version int
+	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	switch {
+	case version > schemaVersion:
+		return ErrNewer
+	case version == 0:
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		for _, stmt := range []string{
+			`CREATE TABLE IF NOT EXISTS drafts (
+				id         TEXT PRIMARY KEY,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL,
+				data       TEXT NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS drafts_by_updated ON drafts (updated_at DESC, id DESC)`,
+			`CREATE TABLE IF NOT EXISTS settings (
+				key   TEXT PRIMARY KEY,
+				value TEXT NOT NULL
+			)`,
+			fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion),
+		} {
+			if _, err := tx.Exec(stmt); err != nil {
+				return err
+			}
+		}
+		return tx.Commit()
+	}
+	var check string
+	if err := s.db.QueryRow(`PRAGMA quick_check(1)`).Scan(&check); err != nil {
+		return err
+	}
+	if check != "ok" {
+		return fmt.Errorf("%w: %s", errIntegrity, check)
+	}
+	return nil
+}
+
+// isDamaged reports whether err means the file is not a usable database, as opposed to a problem with the disk or
+// permissions, or a newer database.
+func isDamaged(err error) bool {
+	if errors.Is(err, errIntegrity) {
+		return true
+	}
+	var se *sqlite.Error
+	if errors.As(err, &se) {
+		switch se.Code() & 0xff {
+		case sqlite3.SQLITE_NOTADB, sqlite3.SQLITE_CORRUPT:
+			return true
+		}
+	}
+	return false
+}
+
+// Close closes the database.
+func (s *Store) Close() error { return s.db.Close() }

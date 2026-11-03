@@ -37,8 +37,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 |---|---|
 | `main.go` | Thin entry point: Wails app and window, embeds `frontend/dist` |
 | `internal/app` | `PadService` (the binding the frontend calls), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
-| `internal/store` | Atomic JSON file read/write for settings, see `docs/storage.md` |
-| `internal/drafts` | The drafts database (SQLite, pure Go), see `docs/storage.md` |
+| `internal/store` | The app's database: one SQLite file (pure Go) with the drafts and the settings, see `docs/storage.md` |
 | `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
 | `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; generated bindings are committed |
 | `Taskfile.yml`, `build/config.yml`, `.devcontainer/`, `scripts/dev.sh` | `wails3 dev` config (server mode), dev container and the `make dev` loop, see `docs/devcontainer.md` |

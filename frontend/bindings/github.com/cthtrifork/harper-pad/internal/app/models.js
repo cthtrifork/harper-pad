@@ -8,6 +8,7 @@ import { Create as $Create } from "@wailsio/runtime";
 
 /**
  * Settings is what the app remembers between runs: the personal dictionary and the findings the user chose to ignore.
+ * They are kept in the database (internal/store) as two settings, "words" (a JSON list) and "ignored".
  */
 export class Settings {
     /**

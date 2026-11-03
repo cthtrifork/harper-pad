@@ -13,7 +13,7 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as drafts$0 from "../drafts/models.js";
+import * as store$0 from "../store/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -51,7 +51,7 @@ export function Echo(text) {
 /**
  * GetDraft returns one draft with its full content.
  * @param {string} id
- * @returns {$CancellablePromise<drafts$0.Draft>}
+ * @returns {$CancellablePromise<store$0.Draft>}
  */
 export function GetDraft(id) {
     return $Call.ByID(2153540478, id).then(/** @type {($result: any) => any} */(($result) => {
@@ -73,7 +73,7 @@ export function InstallUpdate() {
  * ListDrafts returns a page of drafts, newest first, with a title, an excerpt and a task preview for each.
  * @param {number} limit
  * @param {number} offset
- * @returns {$CancellablePromise<drafts$0.List>}
+ * @returns {$CancellablePromise<store$0.List>}
  */
 export function ListDrafts(limit, offset) {
     return $Call.ByID(818091701, limit, offset).then(/** @type {($result: any) => any} */(($result) => {
@@ -82,8 +82,9 @@ export function ListDrafts(limit, offset) {
 }
 
 /**
- * LoadSettings returns the saved settings, or empty ones when there are none yet. A damaged file is moved aside
- * (settings.json.bad) and empty settings are returned, so the app still starts.
+ * LoadSettings returns the saved settings, or empty ones when there are none yet. With no data folder it behaves
+ * like a first run. Unusable saved values are ignored (empty settings), so the app still starts; a database that
+ * cannot be opened (for example a newer one) is an error the UI shows.
  * @returns {$CancellablePromise<$models.Settings>}
  */
 export function LoadSettings() {
@@ -103,8 +104,8 @@ export function RestartToUpdate() {
 /**
  * SaveDraft creates a draft (empty id) or updates one, and returns it as stored. Saving a draft whose id is no longer
  * stored brings it back, which is how deleting is undone.
- * @param {drafts$0.Draft} d
- * @returns {$CancellablePromise<drafts$0.Draft>}
+ * @param {store$0.Draft} d
+ * @returns {$CancellablePromise<store$0.Draft>}
  */
 export function SaveDraft(d) {
     return $Call.ByID(4206951671, d).then(/** @type {($result: any) => any} */(($result) => {
@@ -125,7 +126,7 @@ export function SaveSettings($in) {
  * SearchDrafts returns the drafts whose text contains query, newest first.
  * @param {string} query
  * @param {number} limit
- * @returns {$CancellablePromise<drafts$0.List>}
+ * @returns {$CancellablePromise<store$0.List>}
  */
 export function SearchDrafts(query, limit) {
     return $Call.ByID(3792538085, query, limit).then(/** @type {($result: any) => any} */(($result) => {
@@ -153,7 +154,7 @@ export function Version() {
 
 // Private type creation functions
 const $$createType0 = $models.UpdateStatus.createFrom;
-const $$createType1 = drafts$0.Draft.createFrom;
-const $$createType2 = drafts$0.List.createFrom;
+const $$createType1 = store$0.Draft.createFrom;
+const $$createType2 = store$0.List.createFrom;
 const $$createType3 = $models.Settings.createFrom;
 const $$createType4 = $models.UpdateInfo.createFrom;

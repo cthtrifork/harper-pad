@@ -153,7 +153,7 @@ export class Summary {
         }
         if (!("excerpt" in $$source)) {
             /**
-             * Excerpt is the start of the text after the title, on one line.
+             * Excerpt is the start of the text after the title, on one line, without the task lines (they are in Tasks).
              * @member
              * @type {string}
              */

@@ -2,22 +2,14 @@ package app
 
 import (
 	"errors"
-	"path/filepath"
 	"testing"
 
-	"github.com/cthtrifork/harper-pad/internal/drafts"
+	"github.com/cthtrifork/harper-pad/internal/store"
 )
 
-func newDraftService(t *testing.T) *PadService {
-	t.Helper()
-	s := &PadService{dataDir: filepath.Join(t.TempDir(), "harper-pad")}
-	t.Cleanup(func() { _ = s.ServiceShutdown() })
-	return s
-}
-
 func TestDraftsThroughTheService(t *testing.T) {
-	s := newDraftService(t)
-	d, err := s.SaveDraft(drafts.Draft{Content: "# Plan\n- [ ] one\n- [x] two"})
+	s := newTestService(t)
+	d, err := s.SaveDraft(store.Draft{Content: "# Plan\n- [ ] one\n- [x] two"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +26,7 @@ func TestDraftsThroughTheService(t *testing.T) {
 	if err := s.DeleteDraft(d.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetDraft(d.ID); !errors.Is(err, drafts.ErrNotFound) {
+	if _, err := s.GetDraft(d.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("GetDraft after delete = %v", err)
 	}
 	if _, err := s.SaveDraft(d); err != nil { // undo
@@ -43,8 +35,8 @@ func TestDraftsThroughTheService(t *testing.T) {
 }
 
 func TestDraftsSurviveARestart(t *testing.T) {
-	s := newDraftService(t)
-	d, _ := s.SaveDraft(drafts.Draft{Content: "still here"})
+	s := newTestService(t)
+	d, _ := s.SaveDraft(store.Draft{Content: "still here"})
 	if err := s.ServiceShutdown(); err != nil {
 		t.Fatal(err)
 	}

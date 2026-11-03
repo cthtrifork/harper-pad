@@ -1,4 +1,4 @@
-package drafts
+package store
 
 import (
 	"database/sql"
@@ -15,7 +15,7 @@ import (
 
 func open(t *testing.T) (*Store, string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "harper-pad", "drafts.db")
+	path := filepath.Join(t.TempDir(), "harper-pad", "harper-pad.db")
 	s, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -247,7 +247,7 @@ func TestSurvivesReopenAndHasNoSideFiles(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(filepath.Dir(path))
 	if len(entries) != 1 {
-		t.Errorf("the folder holds %v; want only drafts.db (no -wal, -shm or -journal at rest)", entries)
+		t.Errorf("the folder holds %v; want only harper-pad.db (no -wal, -shm or -journal at rest)", entries)
 	}
 	if runtime.GOOS != "windows" {
 		if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
@@ -280,7 +280,7 @@ func TestConcurrentSaves(t *testing.T) {
 }
 
 func TestDamagedFileIsMovedAside(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "drafts.db")
+	path := filepath.Join(t.TempDir(), "harper-pad.db")
 	garbage := []byte(strings.Repeat("this is not a database ", 200))
 	if err := os.WriteFile(path, garbage, 0o600); err != nil {
 		t.Fatal(err)
@@ -303,7 +303,7 @@ func TestDamagedFileIsMovedAside(t *testing.T) {
 }
 
 func TestNewerDatabaseIsRefusedAndLeftAlone(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "drafts.db")
+	path := filepath.Join(t.TempDir(), "harper-pad.db")
 	db, err := sql.Open("sqlite", filepath.ToSlash(path))
 	if err != nil {
 		t.Fatal(err)
@@ -347,7 +347,7 @@ func TestRowsFromAnEarlierShapeStillLoad(t *testing.T) {
 }
 
 func TestRejectsPathsSQLiteCannotTake(t *testing.T) {
-	if _, err := Open(filepath.Join(t.TempDir(), "a?b", "drafts.db")); err == nil {
+	if _, err := Open(filepath.Join(t.TempDir(), "a?b", "harper-pad.db")); err == nil {
 		t.Error("a path with a question mark was accepted")
 	}
 }
