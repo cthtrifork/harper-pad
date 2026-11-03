@@ -1,6 +1,7 @@
 // Saving a draft to a file in the browser (the web build), the counterpart of DraftService.SaveDraftToFile. The File System Access
 // API (Chrome, Edge) lets the page keep a handle to the file, so later saves overwrite it without asking. Elsewhere (Firefox,
-// Safari) the page can only download a copy, so the draft is never linked to a file there and "Save" keeps updating the draft.
+// Safari) the page can only hand over a copy: through the share sheet where the browser has one (iPhone, iPad: Mail, Messages,
+// Save to Files), else as a download. Either way the draft is never linked to a file there and "Save" keeps updating the draft.
 import { summarize } from "./summarize.js";
 
 const TYPES = [
@@ -17,6 +18,24 @@ const fileName = (title, format) => {
       .trim() || "Untitled";
   return `${name}${format === "text" ? ".txt" : ".md"}`;
 };
+
+// True where Save hands the draft to the share sheet: no file picker, but the browser can share files.
+export const sharesFiles = () =>
+  !window.showSaveFilePicker && !!navigator.canShare?.({ files: [new File([""], "a.md", { type: "text/markdown" })] });
+
+// Offers the text to the system share sheet as a file. Returns "shared", "cancelled", or "unsupported" when the browser cannot share files.
+async function share(name, content) {
+  const file = new File([content], name, { type: name.endsWith(".md") ? "text/markdown" : "text/plain" });
+  if (!navigator.canShare?.({ files: [file] })) return "unsupported";
+  try {
+    await navigator.share({ files: [file], title: name });
+    return "shared";
+  } catch (err) {
+    if (err?.name === "AbortError") return "cancelled";
+    if (err?.name === "NotAllowedError") return "unsupported"; // the tap is too old to open the sheet: download instead
+    throw err;
+  }
+}
 
 function download(name, content) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
@@ -37,7 +56,7 @@ export async function saveWebFile(web, getHandle, putHandle, input, saveAs, over
   if (!handle) {
     const name = fileName(summarize(draft.content).title, draft.format);
     if (!window.showSaveFilePicker) {
-      download(name, draft.content);
+      if ((await share(name, draft.content)) === "unsupported") download(name, draft.content);
       return { draft, cancelled: false, conflict: false };
     }
     try {

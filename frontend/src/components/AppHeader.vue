@@ -8,6 +8,8 @@ const VIEWS = [
 ];
 
 defineProps({
+  // Save opens the system share sheet (iPhone, iPad): the button says Share and has the share icon.
+  sharing: { type: Boolean, default: false },
   showDrawer: { type: Boolean, default: false },
   showProblems: { type: Boolean, default: true },
   problemCount: { type: Number, default: 0 },
@@ -75,6 +77,10 @@ onBeforeUnmount(() => {
         </span>
       </Transition>
     </span>
+    <button v-else-if="sharing" type="button" class="tool" aria-label="Share" :disabled="!canSave" @click="emit('save', true)">
+      <svg class="save-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10V2.5M5.5 5 8 2.5 10.5 5M4.5 7H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <span class="label">Share</span>
+    </button>
     <button v-else type="button" class="tool" aria-label="Save as file" :disabled="!canSave" @click="emit('save', true)">
       <svg class="save-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
       <span class="label">Save as file</span> <span class="kbd">Ctrl+Shift+S</span>
