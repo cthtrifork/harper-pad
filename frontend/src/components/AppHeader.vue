@@ -16,7 +16,7 @@ defineProps({
   fileName: { type: String, default: "" },
   fileDir: { type: String, default: "" },
   canSave: { type: Boolean, default: false },
-  // Edit / Split / Preview: markdown only. With the scratch pad open only Edit is available.
+  // Edit / Split / Preview: markdown only. Hidden while the scratch pad is open (only Edit is available then).
   isMarkdown: { type: Boolean, default: false },
   mode: { type: String, default: "edit" },
   // The in-app updater (desktop builds only), rendered at the end of the bar.
@@ -78,8 +78,8 @@ onBeforeUnmount(() => {
     </template>
     <span v-else id="file-badge" class="badge">Draft, not on disk</span>
     <span class="spacer"></span>
-    <span v-if="isMarkdown" class="sep" aria-hidden="true"></span>
-    <div v-if="isMarkdown" class="views" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">
+    <span v-if="isMarkdown && !showDrawer" class="sep" aria-hidden="true"></span>
+    <div v-if="isMarkdown && !showDrawer" class="views" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">
       <span class="thumb" aria-hidden="true"></span>
       <button
         v-for="v in VIEWS"
@@ -88,14 +88,12 @@ onBeforeUnmount(() => {
         class="view"
         :class="{ on: mode === v.id }"
         :aria-pressed="mode === v.id"
-        :disabled="showDrawer && v.id !== 'edit'"
-        :title="showDrawer && v.id !== 'edit' ? 'Close the scratch pad to use this view' : undefined"
         @click="emit('view', v.id)"
       >
         {{ v.label }}
       </button>
     </div>
-    <span v-if="isMarkdown && mode !== 'preview'" class="sep" aria-hidden="true"></span>
+    <span v-if="isMarkdown && !showDrawer && mode !== 'preview'" class="sep" aria-hidden="true"></span>
     <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
       <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="10" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
       Problems <span class="count">{{ problemCount }}</span>
