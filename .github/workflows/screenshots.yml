@@ -1,13 +1,30 @@
 name: Screenshots
 
-# Renders the UI in Chrome against the headless server build (scripts/screenshots.sh) and shows the
-# images in one sticky PR comment that is updated on every push. Screenshots are never committed:
-# docs/screenshots is gitignored. Each image is uploaded as its own unzipped artifact
-# (`archive: false`) so it can be embedded in the comment. Fork PRs (read-only token) get the
-# artifacts on the run page but no comment. It has a paths filter, so do not mark it as a required check.
+# Renders the UI in Chrome against the headless server build (scripts/screenshots.sh).
+# Screenshots are never committed to main: docs/screenshots is gitignored.
+#
+#   pull_request  Upload each image as its own unzipped artifact (`archive: false`) and embed them in
+#                 one sticky PR comment that is updated on every push. Nothing is pushed. Fork PRs
+#                 (read-only token) get the artifacts on the run page but no comment.
+#   push to main  Force-push the images as one commit on top of main to bot/update-screenshots and
+#                 keep one DRAFT PR open from it ("Screenshots preview"). The PR exists only so the
+#                 current images can be browsed in its "Files changed" tab. It is never merged: it is
+#                 a draft, the CI job `no-screenshots` fails on it, and the workflow turns it back into
+#                 a draft if someone marks it ready. Close it and the next run opens a new one.
+#
+# It has a paths filter, so do not mark it as a required check.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - frontend/**
+      - main.go
+      - scripts/screenshots.*
+      - scripts/lib/**
+      - .tool-versions
+      - .github/workflows/screenshots.yml
+  push:
+    branches: [main]
     paths:
       - frontend/**
       - main.go
@@ -34,12 +51,25 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
-      contents: read
-      pull-requests: write # the sticky comment
+      contents: read # main-only pushes use the App token
+      pull-requests: write # the sticky comment (PRs)
     steps:
+      # Push with the GitHub App's token, not GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no
+      # workflows, so CI would never report on the bot commit. The App is the one Renovate uses.
+      - name: Get a GitHub App token
+        id: app-token
+        if: github.event_name != 'pull_request'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          permission-contents: write # push the commit
+          permission-pull-requests: write # open and update the preview PR
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token || github.token }}
+          persist-credentials: ${{ github.event_name != 'pull_request' }} # only the main run pushes # zizmor: ignore[artipacked]
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -62,6 +92,7 @@ jobs:
         run: make screenshots
 
       - name: Upload 01-editor-with-problems
+        if: github.event_name == 'pull_request'
         id: shot-01-editor-with-problems
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -71,20 +102,22 @@ jobs:
           retention-days: 14
 
       - name: Upload 02-fix-applied
+        if: github.event_name == 'pull_request'
         id: shot-02-fix-applied
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: docs/screenshots/02-fix-applied.png
-          archive: false
+          archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload 03-problems-hidden
+        if: github.event_name == 'pull_request'
         id: shot-03-problems-hidden
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: docs/screenshots/03-problems-hidden.png
-          archive: false
+          archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14
 
@@ -133,3 +166,31 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: |
           echo "Rendered \`docs/screenshots\`. This is a fork PR (read-only token), so there is no PR comment: the images are in this run's artifacts." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update the screenshots preview PR
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: bot/update-screenshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -f docs/screenshots # the folder is gitignored
+          if git fetch --quiet origin "$BRANCH" 2>/dev/null &&
+            git diff --cached --quiet "origin/$BRANCH" -- docs/screenshots; then
+            echo "The screenshots preview is up to date." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git commit -m "Screenshots preview (never merge)"
+          # Always rebuilt from the current main, so the branch cannot conflict with it.
+          git push --force origin "$BRANCH"
+          body="Preview of the screenshots rendered on \`main\` (${GITHUB_SHA::7}). **Never merge this PR**: screenshots do not live in the repository. Open *Files changed* to see the images; the branch is rebuilt on every push to \`main\`."
+          pr="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')"
+          if [ -z "$pr" ]; then
+            gh pr create --draft --base main --head "$BRANCH" --title "Screenshots preview (do not merge)" --body "$body"
+          else
+            gh pr edit "$pr" --body "$body"
+            gh pr ready "$pr" --undo || true # a draft cannot be merged
+          fi
+          echo "Screenshots preview PR for \`${BRANCH}\` is up to date." | tee -a "$GITHUB_STEP_SUMMARY"
