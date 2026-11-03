@@ -58,11 +58,8 @@ is always white, which the light header cannot show), and `viewport-fit=cover` w
 indicator and landscape; `100dvh` for the height; `theme-color` for light and dark; no page overscroll; 16 px text fields so iOS does
 not zoom on focus. iOS reads the `<head>` tags when the icon is **added**, so after a change to them, delete the icon and add it again.
 
-On an iPhone with a Dynamic Island the installed app (checked with `black` and with `default`) starts the page below the status bar, but
-iOS fades the first stretch of the page, about 24 pt, so header buttons that start right at the top look blurry; the header is padded
-by that much in the installed app (`--edge-fade` in `styles/safe-area.css`). To see what a device really gives the page, tap the
-footer five times: a readout shows the display mode, the safe-area insets, the sizes and the header position
-(`src/lib/diagnostics.js`); tap it to hide it.
+On an iPhone with a Dynamic Island the installed app starts the page below the status bar, but iOS fades the first stretch of the page, about 24 pt, so header buttons that start right at the top look blurry; the header is padded
+by that much in the installed app (`--edge-fade` in `styles/safe-area.css`).
 
 ## Keeping the data
 

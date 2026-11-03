@@ -65,9 +65,8 @@ const webApp = () => {
       }
     },
     transformIndexHtml: () => [
-      // `default`: the status bar is a strip of its own with text that follows light and dark, and the page starts below it. `black` was
-      // tried on an iPhone and looked the same in the dark scheme (the blur at the top of the header is iOS's, see styles/safe-area.css),
-      // but would be a black strip over the light header. black-translucent is avoided: its text is always white.
+      // `default`: the status bar is a strip of its own with text that follows light and dark, and the page starts below it (`black` would be
+      // a black strip over the light header; black-translucent's text is always white).
       // viewport-fit=cover (index.html) and the safe-area insets (styles/safe-area.css) still keep the page clear of the notch, the
       // home indicator and, in landscape, the sides. theme-color follows the header colour (--panel) for Android and Safari's own bar.
       { tag: "meta", attrs: { name: "theme-color", content: "#eceff3", media: "(prefers-color-scheme: light)" }, injectTo: "head" },
