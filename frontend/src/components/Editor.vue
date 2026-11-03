@@ -1,6 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { applyFix, createEditor, jumpTo, loadDocument, relint, setMode } from "../lib/editor.js";
+import { applyFix, createEditor, jumpTo, loadDocument, relint, setMode } from "../lib/editor/index.js";
 
 const props = defineProps({
   harper: { type: Object, default: null },
@@ -70,26 +70,3 @@ defineExpose({
 <template>
   <div ref="host" class="editor"></div>
 </template>
-
-<style scoped>
-.editor {
-  max-width: 720px;
-  min-height: 100%;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-}
-.editor.wide {
-  max-width: none;
-  margin: 0;
-}
-.editor :deep(.cm-editor) {
-  flex: 1;
-}
-.editor :deep(.cm-scroller) {
-  min-height: 60vh;
-}
-.editor :deep(.cm-content) {
-  min-height: 60vh;
-}
-</style>

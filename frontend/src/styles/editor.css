@@ -1,0 +1,24 @@
+.editor {
+  max-width: 720px;
+  min-height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor.wide {
+  max-width: none;
+  margin: 0;
+}
+
+.editor .cm-editor {
+  flex: 1;
+}
+
+.editor .cm-scroller {
+  min-height: 60vh;
+}
+
+.editor .cm-content {
+  min-height: 60vh;
+}
