@@ -85,6 +85,13 @@ export async function startup() {
   return isWeb ? web.startup() : (await bindings()).Startup();
 }
 
+// Desktop only: move the database aside (as harper-pad.db.bad-<time>, never deleted) and start a new, empty one. Offered when the
+// drafts cannot be read. Returns where the old file went.
+export async function startFresh() {
+  if (isWeb) throw new Error("there is no database file in the web build");
+  return (await bindings()).StartFresh();
+}
+
 // A page of draft summaries, newest first: {drafts, total}. The summaries carry no text.
 export async function listDrafts(limit, offset) {
   return isWeb ? web.list(limit, offset) : (await bindings()).ListDrafts(limit, offset);

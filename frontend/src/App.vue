@@ -177,6 +177,7 @@ onBeforeUnmount(() => {
       <span v-if="state === 'ready'" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
       <span v-if="saveError" class="state failed">{{ saveError }}</span>
       <span v-if="drafts.status.value" id="draft-status" :class="['state', drafts.state.value === 'error' ? 'failed' : 'mute']">{{ drafts.status.value }}</span>
+      <button v-if="drafts.canStartFresh.value" id="start-fresh" type="button" class="link" title="Moves the unreadable database aside (it is kept, not deleted) and starts a new one" @click="drafts.startFresh">Start fresh</button>
       <span class="spacer"></span>
       <span class="mute">Version {{ goVersion || "..." }}</span>
     </footer>
@@ -287,6 +288,15 @@ onBeforeUnmount(() => {
 }
 .state.failed {
   color: var(--bad);
+}
+.link {
+  font: inherit;
+  color: var(--accent, #6aa9ff);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
 }
 .error {
   color: var(--bad);

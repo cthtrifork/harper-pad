@@ -134,6 +134,15 @@ export function SearchDrafts(query, limit) {
 }
 
 /**
+ * StartFresh moves the database aside as harper-pad.db.bad-<time> and starts a new, empty one. The page offers it when the
+ * drafts cannot be read; the old file is kept, never deleted. It returns where the old file went.
+ * @returns {$CancellablePromise<string>}
+ */
+export function StartFresh() {
+    return $Call.ByID(913659077);
+}
+
+/**
  * Startup returns what the page needs to start: the demo banner, the most recent draft and the number of drafts.
  * @returns {$CancellablePromise<$models.StartupState>}
  */

@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/cthtrifork/harper-pad/internal/store"
@@ -50,4 +51,24 @@ func (s *PadService) ServiceShutdown() error {
 	err := s.store.Close()
 	s.store = nil
 	return err
+}
+
+// StartFresh moves the database aside as harper-pad.db.bad-<time> and starts a new, empty one. The page offers it when the
+// drafts cannot be read; the old file is kept, never deleted. It returns where the old file went.
+func (s *PadService) StartFresh() (string, error) {
+	s.smu.Lock()
+	defer s.smu.Unlock()
+	if s.dataDir == "" {
+		return "", errNoDataDir
+	}
+	if s.store != nil {
+		_ = s.store.Close()
+		s.store = nil
+	}
+	path := filepath.Join(s.dataDir, "harper-pad.db")
+	bad, err := store.MoveAside(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil // nothing to move: the next open creates the database
+	}
+	return bad, err
 }

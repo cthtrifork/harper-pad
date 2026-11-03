@@ -56,15 +56,24 @@ func Open(path string) (*Store, error) {
 	}
 	st, err := openAt(path)
 	if err != nil && isDamaged(err) {
-		bad := fmt.Sprintf("%s.bad-%d", path, time.Now().Unix())
-		log.Printf("store: %s is damaged (%v); moving it to %s and starting a new database", path, err, bad)
-		if mvErr := os.Rename(path, bad); mvErr != nil {
+		log.Printf("store: %s is damaged (%v); moving it aside and starting a new database", path, err)
+		if _, mvErr := MoveAside(path); mvErr != nil {
 			return nil, fmt.Errorf("%s is damaged (%v) and could not be moved aside: %w", path, err, mvErr)
 		}
-		_ = os.Remove(path + "-journal")
 		st, err = openAt(path)
 	}
 	return st, err
+}
+
+// MoveAside renames the database at path to <path>.bad-<time> (and removes its leftover journal), so that Open creates a new one
+// there. The old file is kept, not deleted. It returns the new name of the old file.
+func MoveAside(path string) (string, error) {
+	bad := fmt.Sprintf("%s.bad-%d", path, time.Now().Unix())
+	if err := os.Rename(path, bad); err != nil {
+		return "", err
+	}
+	_ = os.Remove(path + "-journal")
+	return bad, nil
 }
 
 func openAt(path string) (*Store, error) {

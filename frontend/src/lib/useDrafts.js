@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { deleteDraft, getDraft, listDrafts, saveDraft, searchDrafts } from "./backend.js";
+import { deleteDraft, getDraft, isWeb, listDrafts, startFresh as moveDatabaseAside, saveDraft, searchDrafts } from "./backend.js";
 
 const SAVE_DELAY_MS = 500; // how long after the last keystroke the draft is saved (the 300 ms lint is separate)
 const SEARCH_DELAY_MS = 200;
@@ -155,6 +155,24 @@ export function useDrafts(editor, drawerOpen) {
     return fallback;
   }
 
+  // For when drafts are unavailable: move the database aside and start a new one. Whatever is in the editor stays and is saved into
+  // the new database; the old file is kept next to it. Desktop only (`canStartFresh`).
+  const canStartFresh = computed(() => !isWeb && !available.value);
+  async function startFresh() {
+    try {
+      await moveDatabaseAside();
+    } catch (err) {
+      error.value = `Could not start fresh: ${message(err)}`;
+      return;
+    }
+    available.value = true;
+    error.value = "";
+    setCurrent({ id: "", createdAt: 0, format: "markdown" });
+    list.value = { drafts: [], total: 0 };
+    state.value = "idle";
+    if ((editor.value?.getText() ?? "").trim() !== "") edited(); // the text in the editor becomes the first draft
+  }
+
   async function open(id) {
     if (id === current.value.id) return;
     await flush();
@@ -256,6 +274,8 @@ export function useDrafts(editor, drawerOpen) {
     query,
     toast,
     available,
+    canStartFresh,
+    startFresh,
     init,
     edited,
     flush,
