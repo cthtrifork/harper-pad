@@ -374,6 +374,7 @@
   font-size: 13px;
   font-weight: 600;
   opacity: 0;
+  pointer-events: none; /* it is positioned over the card, and must not take the click that opens the draft */
 }
 
 .drawer .item.dragging .swipe-bg {
