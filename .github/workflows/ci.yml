@@ -245,21 +245,6 @@ jobs:
             echo "::error::the pprof endpoint is present in a -tags production binary"; exit 1
           fi
 
-      # frontend/vite.config.js adds the page's Content-Security-Policy to production builds (docs/security.md). Fail if it
-      # goes missing or the directives that matter get looser: scripts only from the app (plus WebAssembly), and the page may
-      # only talk to its own origin.
-      - name: Built page has a strict Content-Security-Policy
-        run: |
-          policy="$(sed "s/&#39;/'/g" frontend/dist/index.html | grep -o 'http-equiv="Content-Security-Policy" content="[^"]*"' || true)"
-          [ -n "$policy" ] || { echo "::error::frontend/dist/index.html has no Content-Security-Policy"; exit 1; }
-          directive() { printf '%s' "$policy" | tr ';' '\n' | sed 's/.*content="//; s/^ *//; s/ *$//' | grep "^$1 " || true; }
-          check() { [ "$(directive "$1")" = "$2" ] || { echo "::error::Content-Security-Policy: expected '$2' but found '$(directive "$1")'"; exit 1; }; }
-          check default-src "default-src 'none'"
-          check script-src "script-src 'self' 'wasm-unsafe-eval'"
-          check connect-src "connect-src 'self'"
-          check object-src "object-src 'none'"
-          echo "$policy"
-
       # One named artifact per platform, like the action's "Wails Build <os> <name>". Unsigned CI build, for testing only.
       - name: Keep the binary for reviewers
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

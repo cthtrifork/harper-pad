@@ -24,10 +24,6 @@ no cgo and the Windows build is unchanged. It adds about 4 MB to the exe (v1.61.
 2. **The frontend reaches the data only through `PadService` methods** (`ListDrafts`, `SaveDraft`, `LoadSettings`, ...), through the
    generated Wails bindings. Each method is one specific operation with typed input and output. The app registers no generic data
    service, so nothing can send SQL from JavaScript.
-3. `internal/store/injection_test.go` stores, searches and looks up ten classic injection payloads (`'; DROP TABLE ...`, `' OR '1'='1`, `UNION SELECT`, ...) as draft text, ids and setting keys, and checks that they come back as plain text and that the tables are untouched.
-4. These rules are tests, not just words: `internal/store/boundary_test.go` fails if SQL or a database driver import shows up outside
-   `internal/store`, if `main.go` registers anything but `PadService`, if the frontend contains SQL, or if a binding looks like a
-   generic query (`Exec`, `Query`, `Raw`, ...).
 
 ## Which SQLite package
 

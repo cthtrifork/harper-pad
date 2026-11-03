@@ -13,8 +13,8 @@ protected and how, and what is not.
 
 ## SQL injection
 
-Covered; see [storage](storage.md#rules). Every value is a `?` parameter, all SQL lives in `internal/store`, the frontend can only call
-specific `PadService` methods, and `internal/store/injection_test.go` and `boundary_test.go` check it.
+Covered; see [storage](storage.md#rules). Every value is a `?` parameter, all SQL lives in `internal/store`, and the frontend can only call
+specific `PadService` methods.
 
 ## Cross-site scripting and the Content-Security-Policy
 
@@ -35,8 +35,6 @@ specific `PadService` methods, and `internal/store/injection_test.go` and `bound
   | `worker-src` | `'self' blob:` | Harper runs in a Web Worker |
   | `object-src`, `base-uri`, `form-action` | `'none'` | |
 
-  CI (`ci.yml`, "Built page has a strict Content-Security-Policy") fails if the tag goes missing or `default-src`, `script-src`,
-  `connect-src` or `object-src` change.
 - Limits: a `<meta>` policy cannot set `frame-ancestors` or report violations, and the Web Worker script is a same-origin file, so it
   is covered only if it is created from a `blob:` URL (it is). If a webview ever refuses `'wasm-unsafe-eval'`, Harper will not start
   and the browser console shows the violation; relaxing that one directive is the only fix.
