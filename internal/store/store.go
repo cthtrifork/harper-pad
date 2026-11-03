@@ -93,31 +93,7 @@ func (s *Store) prepare() error {
 	case version > schemaVersion:
 		return ErrNewer
 	case version == 0:
-		tx, err := s.db.Begin()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = tx.Rollback() }() // after a Commit this is a harmless ErrTxDone
-		for _, stmt := range []string{
-			// STRICT makes SQLite enforce the column types (a text in an INTEGER column is an error, not stored).
-			`CREATE TABLE IF NOT EXISTS drafts (
-				id         TEXT PRIMARY KEY,
-				created_at INTEGER NOT NULL,
-				updated_at INTEGER NOT NULL,
-				data       TEXT NOT NULL
-			) STRICT`,
-			`CREATE INDEX IF NOT EXISTS drafts_by_updated ON drafts (updated_at DESC, id DESC)`,
-			`CREATE TABLE IF NOT EXISTS settings (
-				key   TEXT PRIMARY KEY,
-				value TEXT NOT NULL
-			) STRICT, WITHOUT ROWID`,
-			fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion),
-		} {
-			if _, err := tx.Exec(stmt); err != nil {
-				return err
-			}
-		}
-		return tx.Commit()
+		return s.create()
 	}
 	var check string
 	if err := s.db.QueryRow(`PRAGMA quick_check(1)`).Scan(&check); err != nil {
@@ -127,6 +103,45 @@ func (s *Store) prepare() error {
 		return fmt.Errorf("%w: %s", errIntegrity, check)
 	}
 	return nil
+}
+
+// draftColumns are the summary columns of the drafts table, written whenever a draft is saved. The list reads only these, never
+// the text, so listing is quick however large the drafts are.
+const draftColumns = `
+	format      TEXT    NOT NULL DEFAULT 'markdown',
+	title       TEXT    NOT NULL DEFAULT '',
+	excerpt     TEXT    NOT NULL DEFAULT '',
+	tasks       TEXT    NOT NULL DEFAULT '[]',
+	tasks_total INTEGER NOT NULL DEFAULT 0,
+	tasks_done  INTEGER NOT NULL DEFAULT 0`
+
+// create makes the schema in a new database.
+func (s *Store) create() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }() // after a Commit this is a harmless ErrTxDone
+	for _, stmt := range []string{
+		// STRICT makes SQLite enforce the column types (a text in an INTEGER column is an error, not stored).
+		`CREATE TABLE IF NOT EXISTS drafts (
+			id         TEXT PRIMARY KEY,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			data       TEXT NOT NULL,` + draftColumns + `
+		) STRICT`,
+		`CREATE INDEX IF NOT EXISTS drafts_by_updated ON drafts (updated_at DESC, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS settings (
+			key   TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		) STRICT, WITHOUT ROWID`,
+		fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion),
+	} {
+		if _, err := tx.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // isDamaged reports whether err means the file is not a usable database, as opposed to a problem with the disk or

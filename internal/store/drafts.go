@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -121,9 +120,13 @@ func (s *Store) Save(d Draft) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
-	_, err = s.db.Exec(`INSERT INTO drafts (id, created_at, updated_at, data) VALUES (?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
-		d.ID, created, now.UnixMilli(), string(data))
+	sm := summarizeColumns(d.Format, d.Content)
+	_, err = s.db.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, format, title, excerpt, tasks, tasks_total, tasks_done)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data, format = excluded.format,
+			title = excluded.title, excerpt = excluded.excerpt, tasks = excluded.tasks,
+			tasks_total = excluded.tasks_total, tasks_done = excluded.tasks_done`,
+		d.ID, created, now.UnixMilli(), string(data), sm.format, sm.title, sm.excerpt, sm.tasks, sm.total, sm.done)
 	if err != nil {
 		return Draft{}, err
 	}
@@ -194,7 +197,8 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM drafts`+where, args...).Scan(&out.Total); err != nil {
 		return List{}, err
 	}
-	rows, err := s.db.Query(`SELECT id, created_at, updated_at, data FROM drafts`+where+
+	// Only the summary columns are read, never the text (the data column), so this stays quick however large the drafts are.
+	rows, err := s.db.Query(`SELECT id, created_at, updated_at, format, title, excerpt, tasks, tasks_total, tasks_done FROM drafts`+where+
 		` ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if err != nil {
 		return List{}, err
@@ -202,20 +206,34 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var sum Summary
-		var data string
-		if err := rows.Scan(&sum.ID, &sum.CreatedAt, &sum.UpdatedAt, &data); err != nil {
+		var tasks string
+		if err := rows.Scan(&sum.ID, &sum.CreatedAt, &sum.UpdatedAt, &sum.Format, &sum.Title, &sum.Excerpt, &tasks, &sum.TasksTotal, &sum.TasksDone); err != nil {
 			return List{}, err
 		}
-		b, err := decode(data)
-		if err != nil {
-			log.Printf("drafts: skipping %s: %v", sum.ID, err)
-			continue
+		if err := json.Unmarshal([]byte(tasks), &sum.Tasks); err != nil || sum.Tasks == nil {
+			sum.Tasks = []Task{}
 		}
-		sum.Format = b.Format
-		sum.Title, sum.Excerpt, sum.Tasks, sum.TasksTotal, sum.TasksDone = summarize(b.Content)
+		if sum.Title == "" {
+			sum.Title = "Untitled"
+		}
 		out.Drafts = append(out.Drafts, sum)
 	}
 	return out, rows.Err()
+}
+
+// summaryColumns is a draft's summary as it is stored: what summarize works out, ready to write.
+type summaryColumns struct {
+	format, title, excerpt, tasks string
+	total, done                   int
+}
+
+func summarizeColumns(format, content string) summaryColumns {
+	title, excerpt, tasks, total, done := summarize(content)
+	js, err := json.Marshal(tasks)
+	if err != nil {
+		js = []byte("[]")
+	}
+	return summaryColumns{format: format, title: title, excerpt: excerpt, tasks: string(js), total: total, done: done}
 }
 
 // decode reads a stored blob. Older or missing fields get their defaults, so rows written by an earlier version still load.

@@ -337,12 +337,16 @@ func TestRowsFromAnEarlierShapeStillLoad(t *testing.T) {
 	if err != nil || d.Format != FormatMarkdown || d.Content != "old row" {
 		t.Errorf("Get = %+v, %v", d, err)
 	}
-	// A row that is not JSON is skipped in lists instead of breaking them.
-	if _, err := s.db.Exec(`INSERT INTO drafts (id, created_at, updated_at, data) VALUES (?, 2, 2, 'not json')`, strings.Repeat("b", 32)); err != nil {
+	// A row whose text is damaged still lists, from its stored summary: the list never reads the text. Only Get notices.
+	if _, err := s.db.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, title) VALUES (?, 2, 2, 'not json', 'Kept title')`, strings.Repeat("b", 32)); err != nil {
 		t.Fatal(err)
 	}
-	if l, err := s.List(10, 0); err != nil || len(l.Drafts) != 1 {
+	l, err := s.List(10, 0)
+	if err != nil || len(l.Drafts) != 2 || l.Drafts[0].Title != "Kept title" {
 		t.Errorf("List = %+v, %v", l, err)
+	}
+	if _, err := s.Get(strings.Repeat("b", 32)); err == nil {
+		t.Error("Get of a damaged row succeeded")
 	}
 }
 

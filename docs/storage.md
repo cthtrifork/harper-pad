@@ -55,12 +55,20 @@ more widely used and matches Wails.
 ## Schema
 
 ```sql
-drafts   (id TEXT PRIMARY KEY, created_at INTEGER, updated_at INTEGER, data TEXT)   -- data: {"v":1,"format":"markdown","content":"..."}
-settings (key TEXT PRIMARY KEY, value TEXT)                                         -- "words": ["Wails", ...]; "ignored": Harper's export
+drafts   (id TEXT PRIMARY KEY, created_at INTEGER, updated_at INTEGER,
+          data TEXT,                                          -- the draft: {"v":1,"format":"markdown","content":"..."}
+          format TEXT, title TEXT, excerpt TEXT,              -- its summary, written on every save
+          tasks TEXT, tasks_total INTEGER, tasks_done INTEGER)
+settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wails", ...]; "ignored": Harper's export
 ```
 
-- Draft ids are 32 hex characters that sort by creation. Timestamps are Unix milliseconds. Titles, excerpts and the task preview are
-  worked out from the content when listing, not stored.
+- Draft ids are 32 hex characters that sort by creation. Timestamps are Unix milliseconds.
+- **The list never reads the text.** The title, the excerpt and the first three task lines (`tasks` is JSON) with their counts are
+  worked out once, when a draft is saved, and stored in their own columns. Listing selects only those columns, so it stays quick
+  however many drafts there are or how large they are (a test lists 20 drafts of 2 MB and checks that it allocates almost nothing).
+  Opening a draft (`Get`) is what reads its text. Search is the one query that looks into the text: it runs inside SQLite
+  (`json_extract(data, '$.content') LIKE ...`), so the text is scanned there and not copied into Go. If searching gets slow with a
+  very large collection, an FTS5 index can be added alongside the table.
 - Settings are text values; `PadService` decides what they hold. `SetSettings` saves several in one transaction.
 
 ## Durability and safety
