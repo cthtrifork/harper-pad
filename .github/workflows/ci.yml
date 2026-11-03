@@ -1,7 +1,9 @@
 name: CI
 
 # Runs on every pull request and on pushes to main. There is deliberately no
-# paths filter, so "CI / test" can be a required status check.
+# workflow-level paths filter, so "CI / test" can be a required status check. The slow
+# `build` and `windows` jobs are skipped instead (a skipped job counts as passing for a required
+# check) when a pull request changes nothing that goes into a binary; see the `changes` job.
 on:
   pull_request:
   push:
@@ -20,8 +22,40 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
-  # lint, test and build run in parallel: wall time is the slowest job, not their sum.
-  # A trivial failure still shows up in lint first, but no longer holds the others back.
+  # Decides whether a pull request touches anything that ends up in a binary. Pushes to main and manual
+  # runs always build.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # dorny/paths-filter lists the files of a pull request through the API
+    outputs:
+      # Pushes to main and manual runs always build.
+      build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build }}
+    steps:
+      # On pull requests it lists the files through the API (no checkout needed); on pushes and manual
+      # runs the filter is bypassed below.
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            build:
+              - '**/*.go'
+              - go.mod
+              - go.sum
+              - .tool-versions
+              - Makefile
+              - Taskfile.yml
+              - frontend/**
+              - build/**
+              - scripts/package-*
+              - scripts/lib/**
+              - .github/workflows/ci.yml
+              - .github/actions/**
+
   lint:
     name: lint
     runs-on: ubuntu-24.04
@@ -31,8 +65,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - id: go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: .tool-versions
           check-latest: true # newest patch release of the version in .tool-versions, so stdlib fixes are picked up
@@ -44,12 +77,12 @@ jobs:
           node-version-file: .tool-versions
           package-manager-cache: false
 
-      # The Go binary embeds frontend/dist, so the Vue app is built first, with the Node version from
-      # .tool-versions. `make build` below does this itself in the build job.
-      - name: Build frontend
+      # Biome and knip need node_modules, not a bundle: frontend/dist/.gitkeep satisfies go:embed, and the
+      # build job builds the real bundle once.
+      - name: Install frontend dependencies
         run: |
           node --version
-          make frontend
+          cd frontend && npm ci --ignore-scripts --no-audit --no-fund
 
       # Biome lint (see frontend/biome.json), format check and knip (unused exports and dependencies,
       # frontend/knip.json). Run `npm run format` to fix formatting.
@@ -160,14 +193,14 @@ jobs:
           pkg-config --modversion gtk4 webkitgtk-6.0 libsoup-3.0
 
       # No frontend build: frontend/dist/.gitkeep satisfies go:embed, and nothing here reads the bundle.
-      - name: Vet
-        run: make vet
-
+      # `go test` runs its own vet subset; the full `make vet` runs in the build job, which has compiled the same packages.
       - name: Test
         run: make test
 
   build:
     name: build
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -193,27 +226,12 @@ jobs:
           node-version-file: .tool-versions
           package-manager-cache: false
 
-      - id: wails3
-        run: echo "version=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)" >> "$GITHUB_OUTPUT"
-
-      # The wails3 CLI takes about 40 s to compile, so keep the built binary. The key is the Wails version
-      # (the CLI follows go.mod) and the Go version it was built with.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/bin
-          key: wails3-${{ steps.go.outputs.go-version }}-${{ steps.wails3.outputs.version }}
-
-      # wails3 doctor checks the toolchain the way the Wails docs recommend. It exits 0 even with a
-      # missing library, so fail on a missing GTK4/WebKitGTK 6 line or an error ourselves.
-      - name: Wails doctor
+      # Record the toolchain and GUI libraries the run used. A missing library fails the build below, so there is
+      # no separate `wails3 doctor` step.
+      - name: Toolchain versions
         run: |
-          [ -x "$RUNNER_TEMP/bin/wails3" ] || GOBIN="$RUNNER_TEMP/bin" make wails3-install
-          "$RUNNER_TEMP/bin/wails3" doctor | sed 's/\x1b\[[0-9;]*m//g' | tee doctor.txt
-          if grep -E '^\| *(gtk4|webkitgtk-6\.0) .*not installed' doctor.txt; then
-            echo "::error::wails3 doctor reports a missing GUI dependency"; exit 1
-          fi
-          grep -q 'No issues found' doctor.txt || { echo "::error::wails3 doctor found issues"; exit 1; }
-          rm doctor.txt
+          go version
+          pkg-config --modversion gtk4 webkitgtk-6.0 libsoup-3.0
 
       # Proves the GUI binary still links against GTK4/WebKitGTK (cgo), exactly as the release build does.
       # `make build` builds the frontend first and uses the same flags as the release build, so the binary reviewers download is what would ship.
@@ -223,6 +241,10 @@ jobs:
           make build VERSION="ci-${GITHUB_SHA::7}" OUT=dist/harper-pad
           chmod +x dist/harper-pad
           ls -l dist
+
+      # Vet with and without the production tag, reusing the packages the build just compiled.
+      - name: Vet
+        run: make vet
 
       # The Wails MCP server drives the UI and calls PadService without authentication by default.
       - name: Production build contains no MCP server
@@ -258,7 +280,9 @@ jobs:
   # tag, then the same script the release uses to build the exe.
   windows:
     name: windows
-    runs-on: windows-2022
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: windows-latest
     timeout-minutes: 25
     defaults:
       run:
