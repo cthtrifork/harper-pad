@@ -122,6 +122,8 @@ await page.waitForFunction(() => document.querySelectorAll("#drafts-drawer .item
 if (filesDir) {
   expect(readFileSync(path.join(filesDir, "Meeting notes.md"), "utf8").endsWith("Friday."), "the file should not change until Ctrl+S");
 }
+// The list tells the file draft from the plain one: only the saved one names its file.
+expect((await page.locator("#drafts-drawer .item .file").allTextContents()).map((t) => t.trim()).join() === "Saved to file: Meeting notes.md", "only the saved draft should name its file in the list");
 await shot("05-draft-saved-to-file");
 
 await browser.close();
