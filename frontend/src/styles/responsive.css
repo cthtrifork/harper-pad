@@ -133,7 +133,7 @@
     min-height: 40vh;
   }
 
-  /* Status bar: wraps to a second line instead of running off the screen; the timings and selection are not worth the room. */
+  /* Status bar: wraps to a second line instead of running off the screen; the timings, the cursor position and the selection are not worth the room. */
   .status {
     flex-wrap: wrap;
     gap: 4px 12px;
@@ -142,6 +142,7 @@
 
   .status .spacer,
   .status > .mute:not(#draft-status):not(#markdown-hint),
+  #cursor-pos,
   #selection {
     display: none;
   }
