@@ -20,6 +20,24 @@ const personal = ref({ words: 0, ignored: 0 });
 const saveError = ref("");
 const editor = ref(null);
 
+// Start loading Harper now, before the first render, and let the editor appear straight away: you can type while the wasm loads,
+// and the first check runs as soon as it is ready.
+const t0 = performance.now();
+const loading = createLinter().then(async (linter) => {
+  // Load the saved dictionary and ignore list into Harper before its first check, so findings already dealt with never show up.
+  try {
+    personal.value = await loadPersonal(linter);
+  } catch (err) {
+    saveError.value = `Could not load settings: ${err?.message || err}`;
+  }
+  return linter;
+});
+
+// 850 ms -> "850 ms", 1234 ms -> "1.2 s".
+function fmt(ms) {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
 function onResult({ ms }) {
   lintMs.value = ms;
 }
@@ -42,17 +60,10 @@ async function persist() {
 onMounted(async () => {
   PadService.Version().then(
     (v) => (goVersion.value = v),
-    (err) => (goVersion.value = `bridge failed: ${err}`),
+    (err) => (goVersion.value = `unavailable: ${err}`),
   );
   try {
-    const t0 = performance.now();
-    const linter = await createLinter();
-    try {
-      personal.value = await loadPersonal(linter);
-    } catch (err) {
-      saveError.value = `Could not load settings: ${err?.message || err}`;
-    }
-    harper.value = linter;
+    harper.value = await loading;
     setupMs.value = Math.round(performance.now() - t0);
     state.value = "ready";
   } catch (err) {
@@ -74,16 +85,15 @@ onMounted(async () => {
     </header>
     <div class="body">
       <main class="page" @mousedown.self.prevent="editor?.focusEnd()">
-        <Editor v-if="harper" ref="editor" :harper="harper" :doc="sample" :persist="persist" @result="onResult" @problems="onProblems" />
-        <p v-else-if="state === 'loading'" class="mute">Starting Harper...</p>
+        <Editor ref="editor" :harper="harper" :doc="sample" :persist="persist" @result="onResult" @problems="onProblems" />
         <pre v-if="error" class="error">{{ error }}</pre>
       </main>
       <ProblemsPanel v-if="showProblems" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
     </div>
     <footer class="status">
-      <span :class="['state', state]">Harper {{ state }}</span>
+      <span :class="['state', state]">{{ state === "loading" ? "Starting Harper, you can already type..." : `Harper ${state}` }}</span>
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
-      <span v-if="state === 'ready'" class="mute">setup {{ setupMs }} ms, last check {{ lintMs }} ms</span>
+      <span v-if="state === 'ready'" class="mute">started in {{ fmt(setupMs) }}, last check {{ fmt(lintMs) }}</span>
       <span v-if="saveError" class="state failed">{{ saveError }}</span>
       <span class="spacer"></span>
       <span class="mute">Version {{ goVersion || "..." }}</span>

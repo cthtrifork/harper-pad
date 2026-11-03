@@ -2,7 +2,6 @@
 package app
 
 import (
-	"strings"
 	"sync"
 
 	"github.com/cthtrifork/harper-pad/internal/store"
@@ -24,6 +23,3 @@ func NewPadService() *PadService { return &PadService{dataDir: dataDir()} }
 
 // Version reports the build version, so the frontend can show it.
 func (*PadService) Version() string { return version }
-
-// Echo returns its argument trimmed; the spike uses it to prove the Go bridge works next to harper.js.
-func (*PadService) Echo(text string) string { return strings.TrimSpace(text) }

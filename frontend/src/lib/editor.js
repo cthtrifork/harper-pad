@@ -25,8 +25,9 @@ function toAction(fix) {
   };
 }
 
-// Dispatched to make the linter run again without a text change (the dictionary or the ignore list changed).
-const relint = StateEffect.define();
+// Dispatched to make the linter run again without a text change, for example when Harper has just finished loading or the
+// dictionary or the ignore list changed.
+const relintEffect = StateEffect.define();
 
 // Actions that change what Harper remembers: add the word to the dictionary (spelling only), or ignore this one
 // finding in its context. persist() saves the new state; the editor then lints again so the underline goes away.
@@ -37,7 +38,7 @@ function personalActions(harper, f, persist) {
       await work();
       await persist();
     } finally {
-      view.dispatch({ effects: relint.of(null) });
+      relint(view);
     }
   };
   const actions = [];
@@ -52,9 +53,11 @@ function personalActions(harper, f, persist) {
 
 // The lint source: runs Harper on the whole document (debounced by the linter extension) and maps the findings.
 // onResult gets the finding count and how long Harper took, for the status line.
-function harperSource(harper, onResult, persist) {
+function harperSource(getHarper, onResult, persist) {
   return linter(
     async (view) => {
+      const harper = getHarper();
+      if (!harper) return [];
       const t0 = performance.now();
       const found = await lintText(harper, view.state.doc.toString());
       onResult?.({ count: found.length, ms: Math.round(performance.now() - t0) });
@@ -67,7 +70,7 @@ function harperSource(harper, onResult, persist) {
         actions: [...f.fixes.map(toAction), ...personalActions(harper, f, persist)],
       }));
     },
-    { delay: 300, needsRefresh: (update) => update.transactions.some((tr) => tr.effects.some((e) => e.is(relint))) },
+    { delay: 300, needsRefresh: (update) => update.transactions.some((tr) => tr.effects.some((e) => e.is(relintEffect))) },
   );
 }
 
@@ -146,6 +149,12 @@ export function collectProblems(view) {
   return out.sort((a, b) => a.from - b.from);
 }
 
+// Run the lint source again now, e.g. when Harper has just finished loading. CodeMirror's forceLinting does not start
+// a new run (it only brings a scheduled one forward), so the editor asks the linter to refresh with an effect instead.
+export function relint(view) {
+  view.dispatch({ effects: relintEffect.of(null) });
+}
+
 // Select the range of a finding and bring it into view.
 export function jumpTo(view, from, to) {
   view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
@@ -159,8 +168,8 @@ export function applyFix(view, from, to, i) {
   });
 }
 
-// Create the editor in `parent`. `harper` is a WorkerLinter; `onResult` hears about every lint run and `onProblems` gets the current findings after every update.
-export function createEditor(parent, { doc, harper, onResult, onProblems, persist }) {
+// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update. `persist` saves the dictionary and ignore list after a change.
+export function createEditor(parent, { doc, getHarper, onResult, onProblems, persist }) {
   return new EditorView({
     parent,
     state: EditorState.create({
@@ -169,7 +178,7 @@ export function createEditor(parent, { doc, harper, onResult, onProblems, persis
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
-        harperSource(harper, onResult, persist),
+        harperSource(getHarper, onResult, persist),
         theme,
         EditorView.updateListener.of((u) => onProblems?.(collectProblems(u.view))),
       ],

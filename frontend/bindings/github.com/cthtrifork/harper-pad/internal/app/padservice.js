@@ -40,15 +40,6 @@ export function DeleteDraft(id) {
 }
 
 /**
- * Echo returns its argument trimmed; the spike uses it to prove the Go bridge works next to harper.js.
- * @param {string} text
- * @returns {$CancellablePromise<string>}
- */
-export function Echo(text) {
-    return $Call.ByID(3034314080, text);
-}
-
-/**
  * GetDraft returns one draft with its full content.
  * @param {string} id
  * @returns {$CancellablePromise<store$0.Draft>}
