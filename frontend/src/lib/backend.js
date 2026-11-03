@@ -69,9 +69,9 @@ export async function saveSettings(settings) {
   return idbPut("settings", settings);
 }
 
-// The text for the status bar: the build version on desktop, "web" in the browser.
+// The build version for the status bar. Desktop only; the web build has no version number, so the footer shows nothing there.
 export async function version() {
-  return isWeb ? "web" : (await bindings()).Version();
+  return isWeb ? "" : (await bindings()).Version();
 }
 
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
