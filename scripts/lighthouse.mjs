@@ -18,11 +18,12 @@ const CATEGORIES = [
   ["best-practices", "Best Practices"],
   ["seo", "SEO"],
 ];
-// Minimum median score (0-100) per category. First CI run measured: performance 67 (mobile) and 75
-// (desktop), because the 20 MB harper wasm delays the editor (LCP), accessibility 91 before the editor got
-// an accessible name and the "ready" text enough contrast (now 100), best practices and SEO 100. The
-// thresholds sit just under that so they catch a regression; raise them as those are fixed.
-const THRESHOLDS = { performance: 60, accessibility: 95, "best-practices": 95, seo: 95 };
+// Minimum median score (0-100) per category. Measured on CI after Harper started loading after the first paint (#23): performance
+// 99 (mobile) and 100 (desktop), accessibility, best practices and SEO 100. Before that change performance was 73 and 75, because
+// the 20 MB harper wasm was requested before the first paint and Lighthouse's simulated slow network counted it against the LCP.
+// Performance sits at 90, well under today's scores but above that regression, so putting the wasm back in front of the first
+// paint fails this check; the other categories sit just under 100.
+const THRESHOLDS = { performance: 90, accessibility: 95, "best-practices": 95, seo: 95 };
 const METRICS = [
   ["first-contentful-paint", "FCP"],
   ["largest-contentful-paint", "LCP"],
