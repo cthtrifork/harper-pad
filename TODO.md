@@ -81,16 +81,16 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 
 ## 6b. Windows
 
-Release flow and installer: `docs/windows.md`. Built by `release.yml`, tried on a runner, never run on a real desktop yet.
+One release file, `harper-pad_windows_amd64.exe`; see `docs/windows.md`. Built by `release.yml` and started on a runner, but
+never run on a real desktop yet.
 
-- [ ] Try the release on a real Windows 10/11 machine: install, window and fonts, HiDPI, uninstall, then the updater
-      (a newer release replacing the running exe).
-- [ ] Code signing: get a certificate (or use Azure Trusted Signing / SignPath) and sign the exe, installer and
-      uninstaller in `release.yml`; until then SmartScreen warns on first run.
+- [ ] Try the exe on a real Windows 10/11 machine: window, fonts, HiDPI, then the updater (a newer release replacing the
+      running exe).
+- [ ] Code signing with SignPath Foundation: apply, create the project and policy, set `SIGNPATH_API_TOKEN` and
+      `SIGNPATH_ORGANIZATION_ID` (`docs/windows.md`), add the code signing policy section to the README they ask for, and
+      check the first signed release (`Get-AuthenticodeSignature`, SmartScreen). Until then the exe is unsigned.
 - [ ] Windows tray icon (`internal/app/tray_other.go` is a no-op there).
-- [ ] winget and Scoop manifests once the release has settled.
-- [ ] Windows on ARM64 (needs an `arm64` build, a second NSIS binary and the asset names for the updater).
-- [ ] Pin the NSIS version (`NSIS_VERSION` in `release.yml`) through Renovate.
+- [ ] Optional later: an installer (Start menu, uninstall entry, bundled WebView2), or winget/Scoop manifests.
 
 ## 7. Later / maybe
 

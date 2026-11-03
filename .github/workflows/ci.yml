@@ -225,7 +225,7 @@ jobs:
           retention-days: 7
 
   # The Windows build needs no cgo or GUI libraries, so this runs the real thing: vet and test with the production
-  # tag, then the same packaging script the release uses (without the installer, which release.yml builds and tries).
+  # tag, then the same script the release uses to build the exe.
   windows:
     name: windows
     runs-on: windows-2022
@@ -256,9 +256,9 @@ jobs:
           go vet -tags production ./...
           go test -count=1 ./...
 
-      - name: Build the exe and zip
+      - name: Build the exe
         run: |
           CGO_ENABLED=0 go install -tags server github.com/wailsapp/wails/v3/cmd/wails3@"$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
           export PATH="$(go env GOPATH)/bin:$PATH"
           (cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
-          scripts/package-windows.sh "ci-${GITHUB_SHA::7}" dist --no-installer
+          scripts/package-windows.sh "ci-${GITHUB_SHA::7}" dist

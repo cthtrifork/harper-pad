@@ -1,8 +1,8 @@
 name: Release
 
 # Publishes a GitHub release with a Linux amd64 binary, a tarball, a .deb and an .rpm (PGP-signed,
-# with the public key published alongside), a Windows amd64 binary, zip and installer, SHA256SUMS, a CycloneDX SBOM and
-# signed attestations (build provenance for the binaries, archives, packages, installer and SBOM; the SBOM bound to the
+# with the public key published alongside), a Windows amd64 exe (Authenticode-signed once SignPath is set up), SHA256SUMS, a CycloneDX SBOM and
+# signed attestations (build provenance for the binaries, tarball, packages and SBOM; the SBOM bound to the
 # Linux binary). The in-app updater installs the raw binary of its platform and verifies it against SHA256SUMS, so those
 # names are an interface. Three ways to run it:
 #   - the "Tag and release" workflow calls this one (workflow_call) with a new version and the commit
@@ -274,9 +274,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # The Windows files: the raw exe (what the updater installs), a zip and a per-user NSIS installer, made by
-  # scripts/package-windows.sh. The build needs no cgo; it runs on Windows so the installer can be built and the
-  # result tried (installed, started, uninstalled) before anything is published.
+  # The Windows release file: one exe, built by scripts/package-windows.sh. It is also what the in-app updater
+  # installs. The build needs no cgo; it runs on Windows so the exe can be signed, checked and started before anything
+  # is published.
   build-windows:
     name: build windows/amd64
     needs: meta
@@ -304,24 +304,14 @@ jobs:
           node-version-file: .tool-versions
           package-manager-cache: false
 
-      # NSIS builds the installer. The runner image may carry a copy; pin the version we expect.
-      - name: Install NSIS
-        shell: pwsh
-        env:
-          NSIS_VERSION: 3.11.0
-        run: |
-          choco install nsis --version $env:NSIS_VERSION --no-progress -y
-          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Install the wails3 CLI and build the frontend
         run: |
           CGO_ENABLED=0 go install -tags server github.com/wailsapp/wails/v3/cmd/wails3@"$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
           export PATH="$(go env GOPATH)/bin:$PATH"
           wails3 version
-          makensis -VERSION
           (cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
 
-      - name: Build the exe, zip and installer
+      - name: Build the exe
         env:
           VERSION: ${{ needs.meta.outputs.version }}
         run: |
@@ -335,35 +325,63 @@ jobs:
             echo "::error::a development endpoint (MCP or pprof) is present in the Windows release binary"; exit 1
           fi
 
-      # Try what people will do: install per user without prompts, start the app and check it stays up (it loads
-      # WebView2 and the embedded frontend), then uninstall. A crash on start or a broken installer fails the release.
-      - name: Smoke test the installer and the app
-        env:
-          VERSION: ${{ needs.meta.outputs.version }}
-          MSYS_NO_PATHCONV: '1' # Git Bash would rewrite /S and /F as paths
+      # Authenticode signing through SignPath (docs/windows.md). Only for a real release, and only once the repository
+      # has the SignPath variables and secret; until then the release goes out unsigned, with a warning. The signed
+      # exe replaces the unsigned one before anything else uses it, so SHA256SUMS and the attestations cover the signed file.
+      - name: Upload the exe for signing
+        id: unsigned
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-windows-exe
+          path: dist/harper-pad_windows_amd64.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the exe with SignPath
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'harper-pad' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Use the signed exe and check its signature
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
         run: |
-          installer="$(ls dist/${APP}_${VERSION}_windows_amd64_installer.exe)"
-          "$installer" /S
-          dir="$LOCALAPPDATA/Programs/Harper Pad"
-          for i in $(seq 1 30); do [ -f "$dir/harper-pad.exe" ] && break; sleep 2; done
-          ls -la "$dir"
-          [ -f "$dir/harper-pad.exe" ] || { echo "::error::the installer did not install harper-pad.exe"; exit 1; }
-          "$dir/harper-pad.exe" &
+          Copy-Item signed/harper-pad_windows_amd64.exe dist/harper-pad_windows_amd64.exe -Force
+          $sig = Get-AuthenticodeSignature dist/harper-pad_windows_amd64.exe
+          $sig | Format-List Status, StatusMessage, SignerCertificate
+          if ($sig.Status -ne 'Valid') { Write-Error "the signed exe does not have a valid Authenticode signature: $($sig.Status)"; exit 1 }
+
+      - name: Warn when the release is unsigned
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID == ''
+        run: echo "::warning::SIGNPATH_ORGANIZATION_ID is not set, so the Windows exe is not signed and SmartScreen will warn (see docs/windows.md)"
+
+      # Start the exe like a user would and check it stays up for 20 s (it loads WebView2 and the embedded frontend).
+      # A crash on start fails the release.
+      - name: Smoke test, the exe starts and keeps running
+        env:
+          MSYS_NO_PATHCONV: '1' # Git Bash would rewrite /F as a path
+        run: |
+          dist/${APP}_windows_amd64.exe &
           sleep 20
-          if ! tasklist | grep -qi "harper-pad.exe"; then
-            echo "::error::harper-pad.exe is not running 20 s after it was started"; exit 1
+          # tasklist cuts image names at 25 characters, so match the start of the name.
+          if ! tasklist | grep -qi "${APP}_windows"; then
+            echo "::error::${APP}_windows_amd64.exe is not running 20 s after it was started"; exit 1
           fi
-          echo "harper-pad.exe is running"
-          taskkill /F /IM harper-pad.exe
-          sleep 2
-          "$dir/uninstall.exe" /S
-          for i in $(seq 1 30); do [ -f "$dir/harper-pad.exe" ] || break; sleep 2; done
-          [ ! -f "$dir/harper-pad.exe" ] || { echo "::error::the uninstaller left harper-pad.exe behind"; exit 1; }
+          echo "${APP}_windows_amd64.exe is running"
+          taskkill /F /IM ${APP}_windows_amd64.exe
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-files-windows
-          path: dist/
+          path: dist/${{ env.APP }}_windows_amd64.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -401,8 +419,6 @@ jobs:
             dist/*.rpm
             dist/*_linux_amd64
             dist/*_windows_amd64.exe
-            dist/*_windows_amd64.zip
-            dist/*_installer.exe
             dist/*.sbom.cdx.json
 
       # Unlike subject-path, sbom-path takes one literal path (no glob), so resolve it first.
@@ -422,7 +438,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          for f in dist/*_linux_amd64 dist/*_windows_amd64.exe dist/*_windows_amd64.zip dist/*_installer.exe \
+          for f in dist/*_linux_amd64 dist/*_windows_amd64.exe \
                    dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.cdx.json; do
             gh attestation verify "$f" --repo "$REPO" \
               --signer-workflow "$REPO/.github/workflows/release.yml"

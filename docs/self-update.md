@@ -37,9 +37,7 @@ The updater picks assets by name, so the names are an interface. `release.yml` b
 |---|---|---|
 | `harper-pad_linux_amd64` | the updater | the raw binary; the only asset it installs |
 | `harper-pad_<version>_linux_amd64.tar.gz` | people | binary + `README.md` + `LICENSE` |
-| `harper-pad_windows_amd64.exe` | the updater (Windows) | the raw exe; the only Windows asset it installs |
-| `harper-pad_<version>_windows_amd64.zip` | people | exe + `README.md` + `LICENSE`; skipped by the updater |
-| `harper-pad_<version>_windows_amd64_installer.exe` | people | per-user NSIS installer; the `_installer.` in the name keeps the updater from picking it |
+| `harper-pad_windows_amd64.exe` | the updater and people (Windows) | the raw exe, the only Windows asset; signed once SignPath is set up (see [windows](windows.md)) |
 | `SHA256SUMS` | the updater and people | digests of every file in the release; the name must stay fixed |
 
 The release also carries the `.deb`, the `.rpm` and the public key that signed them (see
