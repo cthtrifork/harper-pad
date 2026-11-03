@@ -29,3 +29,26 @@ never run on a real desktop yet.
       check the first signed release (`Get-AuthenticodeSignature`, SmartScreen). Until then the exe is unsigned.
 - [ ] Windows tray icon (`internal/app/tray_other.go` is a no-op there).
 - [ ] Optional later: winget or Scoop manifests.
+
+## 4. Sync (proposal: `docs/sync.md`)
+
+- [ ] **iPhone check for the device-bound key** (decides whether v1.1 hardening goes ahead as written). Chromium was checked
+      (a non-extractable ECDSA P-256 key stored in IndexedDB survived a reload, could not be exported and signed correctly);
+      WebKit and the installed Home Screen app were not. Build a throwaway page (not merged; serve it from a scratch branch on
+      Pages or any HTTPS host) that:
+  1. generates a non-extractable ECDSA P-256 key, stores **only the private `CryptoKey`** in IndexedDB and shows the public JWK;
+  2. after a reload, loads the key, confirms `extractable` is false and `exportKey` throws, signs a fixed message and checks
+     the signature against the JWK (raw `r‖s`, 64 bytes);
+  3. calls `navigator.storage.persist()` and reports the result.
+
+  Run it in Safari and as an installed Home Screen app (add the icon first, then run it from the icon), on the current iOS. Record
+  in `docs/sync.md` whether each step passes, then repeat after the app has been closed for a day, a week, and after an iOS
+  restart, to see whether the key is cleared. If it fails or is cleared often, use the rotation fallback described there.
+- [ ] Local groundwork: tombstones, dirty tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
+      `DB_VERSION` migrations, with tests.
+- [ ] The server (`harper-pad-sync`): enrollment, sync, devices, history, the CLI, tests. Decide whether it lives in this repository
+      (see the open questions in `docs/sync.md`).
+- [ ] The sync module (`lib/sync.js`) with unit tests and an end-to-end test against the real server.
+- [ ] The enrollment and status UI: follow `docs/design-cheatsheet.html`, short eased transitions, reduced motion honoured.
+- [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md`, `architecture.md`, `pages.md`, `AGENTS.md`, and a server
+      operations page.
