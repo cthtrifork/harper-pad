@@ -35,14 +35,21 @@ func main() {
 	// helper) and before Run, as the Wails self-update tutorial prescribes.
 	app.InitUpdater(svc, wails)
 
+	// Match the page's --bg (frontend/src/styles/index.css) so a dark system does not flash white before the page loads.
+	background := application.NewRGB(0xf6, 0xf7, 0xf9)
+	if wails.Env.IsDarkMode() {
+		background = application.NewRGB(0x12, 0x16, 0x1b)
+	}
+
 	window := wails.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:     "Harper Pad",
-		Width:     1100,
-		Height:    760,
-		MinWidth:  600,
-		MinHeight: 400,
-		URL:       "/",
-		Linux:     application.LinuxWindow{Icon: app.WindowIcon},
+		Title:            "Harper Pad",
+		Width:            1100,
+		Height:           760,
+		MinWidth:         600,
+		MinHeight:        400,
+		BackgroundColour: background,
+		URL:              "/",
+		Linux:            application.LinuxWindow{Icon: app.WindowIcon},
 	})
 
 	app.AddTray(wails, window)
