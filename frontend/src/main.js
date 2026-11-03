@@ -2,6 +2,7 @@ import "@fontsource-variable/literata";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { isWeb, startup } from "./lib/backend.js";
+import { installDiagnostics } from "./lib/diagnostics.js";
 import "./styles/index.css";
 
 // Ask the backend what the editor needs (the demo banner and the most recent draft) before mounting, so the first paint already has
@@ -14,3 +15,6 @@ createApp(App, { start }).mount("#app");
 if (isWeb && "serviceWorker" in navigator) {
   navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
 }
+
+// Tap the status bar five times to see how the page is laid out on this device (lib/diagnostics.js).
+if (isWeb) installDiagnostics();
