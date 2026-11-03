@@ -4,7 +4,7 @@ import { Browser } from "@wailsio/runtime";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { UpdateService } from "../../bindings/github.com/cthtrifork/harper-pad/internal/app";
 
-const RELEASES = "https://github.com/cthtrifork/harper-pad/releases/tag/";
+const LATEST_RELEASE = "https://github.com/cthtrifork/harper-pad/releases/latest";
 
 const info = ref({ version: "", enabled: false, reason: "" });
 // idle -> checking -> current | available | error; available -> downloading -> ready | error
@@ -45,7 +45,7 @@ const restart = () =>
     await UpdateService.RestartToUpdate();
   });
 
-const whatsNew = () => Browser.OpenURL(RELEASES + encodeURIComponent(/^v/.test(found.value) ? found.value : `v${found.value}`)).catch(() => {});
+const whatsNew = () => Browser.OpenURL(LATEST_RELEASE).catch(() => {});
 
 function outside(e) {
   if (open.value && root.value && !root.value.contains(e.target)) open.value = false;
@@ -110,10 +110,7 @@ onBeforeUnmount(() => {
       <template v-else-if="state === 'available'">
         <h3>Version {{ found }} is available</h3>
         <p>You have {{ info.version }}. The download is verified before it is installed.</p>
-        <div class="row">
-          <button type="button" class="primary" @click="download">Download {{ found }}</button>
-          <button type="button" class="link" @click="whatsNew">What is new</button>
-        </div>
+        <button type="button" class="primary" @click="download">Download {{ found }}</button>
       </template>
       <template v-else-if="state === 'downloading'">
         <h3>Downloading {{ found }}</h3>
@@ -132,6 +129,7 @@ onBeforeUnmount(() => {
         <p>{{ error }}</p>
         <button type="button" class="primary" @click="check">Try again</button>
       </template>
+      <button type="button" class="link whatsnew" @click="whatsNew">What is new</button>
     </div>
   </div>
 </template>

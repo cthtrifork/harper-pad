@@ -55,7 +55,7 @@ specific service methods.
 | Authentication failures | Not applicable. |
 | Software and data integrity | The updater only installs a release that lists a SHA-256 for the file (it refuses one without), from `api.github.com`. That detects corruption, not a hostile release: see [self-update](self-update.md#security). Releases carry signed attestations, the Linux packages are signed, GitHub Actions are pinned by commit, and the Windows exe is signed once SignPath is set up ([windows](windows.md#code-signing)). |
 | Logging and monitoring | Logs hold paths and errors, never draft text. |
-| Server-side request forgery | The only outbound request is the update check, fixed to GitHub. The "What is new" link is a fixed `github.com` URL with the version URL-encoded. |
+| Server-side request forgery | The only outbound request is the update check, fixed to GitHub. The "What is new" link is a fixed `github.com` URL (the latest release page). |
 
 ## What Wails' own documentation says
 
