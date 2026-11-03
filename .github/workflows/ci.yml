@@ -1,7 +1,9 @@
 name: CI
 
 # Runs on every pull request and on pushes to main. There is deliberately no
-# paths filter, so "CI / test" can be a required status check.
+# workflow-level paths filter, so "CI / test" can be a required status check. The slow
+# `build` and `windows` jobs are skipped instead (a skipped job counts as passing for a required
+# check) when a pull request changes nothing that goes into a binary; see the `changes` job.
 on:
   pull_request:
   push:
@@ -20,6 +22,39 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
+  # Decides whether a pull request touches anything that ends up in a binary. Pushes to main and manual
+  # runs always build. If the file list can't be read, build anyway.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if ! files="$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')"; then
+            echo "::warning::could not list the changed files, building anyway"
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          printf '%s\n' "$files"
+          # Go code, dependencies, toolchain versions, the frontend, packaging and build config, and this workflow.
+          if printf '%s\n' "$files" | grep -Eq '^(.*\.go|go\.(mod|sum)|\.tool-versions|Makefile|Taskfile\.yml|main\.go|frontend/|build/|scripts/(package-.*|lib/.*)|\.github/(workflows/ci\.yml|actions/))'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No file that goes into a binary changed: skipping build and windows."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # lint, test and build run in parallel: wall time is the slowest job, not their sum.
   # A trivial failure still shows up in lint first, but no longer holds the others back.
   lint:
@@ -168,6 +203,8 @@ jobs:
 
   build:
     name: build
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -258,6 +295,8 @@ jobs:
   # tag, then the same script the release uses to build the exe.
   windows:
     name: windows
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: windows-2022
     timeout-minutes: 25
     defaults:
