@@ -72,9 +72,11 @@ const hintDismissed = ref(false);
 // "Harper ready" and the start-up and check timings are for the first moments, to show Harper has loaded and how long it took. They go
 // once the first edit has been saved, and stay away. Where nothing is saved (the database is unavailable) the first edit is the signal.
 const startup = ref(true);
+const typedRef = ref(false); // nothing is reported as saved until the first edit: a draft that has just opened was saved long ago
 let typed = false;
 function onEdited() {
   typed = true;
+  typedRef.value = true;
   drafts.edited();
   if (!drafts.available.value) startup.value = false;
 }
@@ -335,7 +337,7 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="drafts.status.value"
+      :draft-status="typedRef.value || drafts.state.value === 'error' ? drafts.status.value : ''"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"
       :mode="mode"

@@ -2,13 +2,28 @@
   flex: 1;
 }
 
-.status .fmt {
-  position: relative;
+.status .seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
 }
 
-.status .link.plain {
+.status .seg button {
+  font: inherit;
+  color: var(--mute);
+  background: none;
+  border: 0;
+  padding: 2px 10px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.status .seg button.on {
   color: var(--text);
-  text-decoration: none;
+  background: var(--line);
 }
 
 .status {
