@@ -333,7 +333,7 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="typedRef.value || drafts.state.value === 'error' ? drafts.status.value : ''"
+      :draft-status="typedRef || drafts.state.value === 'error' ? drafts.status.value : ''"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"
       :mode="mode"
