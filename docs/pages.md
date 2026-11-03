@@ -24,7 +24,7 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 ## Deploying
 
 `.github/workflows/pages.yml` builds the web version on every pull request that touches `frontend/`, and deploys it on pushes to
-`main`. The site is at `https://<owner>.github.io/harper-pad/`.
+`main`. The site is at `https://<owner>.github.io/harper-pad/`, or at the root of the repository's custom domain if Settings > Pages has one (this repository: `harper.portableinfo.cloud`). The workflow asks the Pages settings which (`actions/configure-pages`) and builds with the matching `BASE_PATH`, so changing the domain needs no code change; it needs a new deploy.
 
 ### One-time setup (repository admin)
 
