@@ -25,16 +25,15 @@ markdown preview and file open/save are next. Only open items are listed here; f
 Note: `harper-editor` and `lint-framework` are not on npm (only `harper.js` is), hence CodeMirror 6 rather than a
 vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 
-- [ ] Suggestion popover on the underlined issue: replacements work (CodeMirror's lint tooltip); "Add to dictionary" and
-      "Ignore this rule" are still missing, and the tooltip is only themed with colours.
 - [ ] Problems panel: filter chips and counts per kind. (The panel, jump-to, first fix and the toolbar toggle exist.)
+- [ ] Turn a whole Harper rule off, not just one finding (needs `organizedLints` and `setLintConfig`); maybe in a settings screen.
 - [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
       source left and the rendered preview right; Preview uses the whole window. The preview is read-only and
       follows the editor's scroll. Only shown for markdown (see below).
 - [ ] Document `format` (`markdown` or `text`): files by extension (`.md`, `.markdown`), drafts store it, default
       markdown for new drafts, unknown files open as text. The status bar "Markdown" label is a menu to switch it.
       A plain-text draft that looks like markdown gets a "Looks like Markdown. Switch?" hint, never an automatic switch.
-- [ ] Add word to a user dictionary and ignore a rule; persist both through `PadService`.
+- [ ] A way to see and remove dictionary words and ignored findings (the Problems panel only shows the counts).
 - [ ] Dialect/language setting (Harper config), persisted.
 - [ ] Open/save files through Wails dialogs (Go side), dirty state. "Save as file" on a draft suggests `.md` or `.txt`.
 - [ ] Light/dark theme from the existing CSS variables.
@@ -45,10 +44,6 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 
 - [ ] Drawer on the left, toggled by Ctrl+J and the first toolbar button. While it is
       open only the Edit view is available (Split and Preview are disabled with a hint).
-- [ ] Drafts are stored by the app, not as files: JSON under the user config dir, atomic write, autosave as you type,
-      tests. Nothing reaches the file system until "Save as file". A draft is `id` (UUID or ULID, not a timestamp: two
-      drafts in one second would collide), `title`, `content`, `format`, `createdAt`, `updatedAt`, all lowercase JSON
-      tags so the frontend can read them.
 - [ ] Debounced save to Go (about 500 ms after the last keystroke, separate from the 300 ms lint), plus a save on blur
       and on window close so the last keystrokes are never lost. Show "Saved" and the last updated time in the status bar.
 - [ ] Recent drafts list: title, last touched, and a preview. Markdown task lines (`- [ ]`, `- [x]`) show as up to

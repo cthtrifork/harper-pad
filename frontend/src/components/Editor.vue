@@ -2,7 +2,11 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { applyFix, createEditor, jumpTo, relint } from "../lib/editor.js";
 
-const props = defineProps({ harper: { type: Object, default: null }, doc: { type: String, default: "" } });
+const props = defineProps({
+  harper: { type: Object, default: null },
+  doc: { type: String, default: "" },
+  persist: { type: Function, default: async () => {} },
+});
 const emit = defineEmits(["result", "problems"]);
 const host = ref(null);
 let view = null;
@@ -13,6 +17,7 @@ onMounted(() => {
     getHarper: () => props.harper,
     onResult: (r) => emit("result", r),
     onProblems: (list) => emit("problems", list),
+    persist: () => props.persist(),
   });
   view.focus();
 });

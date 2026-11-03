@@ -1,5 +1,10 @@
 <script setup>
-defineProps({ problems: { type: Array, required: true }, active: { type: Number, default: -1 } });
+defineProps({
+  problems: { type: Array, required: true },
+  active: { type: Number, default: -1 },
+  words: { type: Number, default: 0 },
+  ignored: { type: Number, default: 0 },
+});
 defineEmits(["jump", "fix"]);
 
 const tone = { error: "spelling", warning: "grammar", info: "style" };
@@ -28,6 +33,10 @@ const tone = { error: "spelling", warning: "grammar", info: "style" };
       </li>
     </ul>
     <p v-else class="empty mute">No problems found.</p>
+    <footer class="foot mute">
+      <span>Dictionary: {{ words }} {{ words === 1 ? "word" : "words" }}</span>
+      <span>Ignored: {{ ignored }}</span>
+    </footer>
   </aside>
 </template>
 
@@ -136,5 +145,12 @@ code {
 }
 .empty {
   padding: 0 16px;
+}
+.foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
 }
 </style>

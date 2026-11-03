@@ -62,7 +62,7 @@ before anything is published. `ci.yml` has a `windows` job (vet, tests and the e
 
 - No tray icon yet (`internal/app/tray_other.go` is a no-op on Windows).
 - The window background follows the system theme, as on Linux.
-- Settings and drafts will live under `%APPDATA%` (the user config dir) when they exist.
+- Settings and drafts live in `%LOCALAPPDATA%\harper-pad\harper-pad.db` (see [storage](storage.md)).
 
 ## Not tested here
 

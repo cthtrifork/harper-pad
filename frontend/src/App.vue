@@ -5,6 +5,7 @@ import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import UpdateButton from "./components/UpdateButton.vue";
 import { createLinter } from "./lib/harper.js";
+import { loadPersonal, savePersonal } from "./lib/personal.js";
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
 const state = ref("loading");
@@ -15,12 +16,22 @@ const problems = ref([]);
 const showProblems = ref(true);
 const goVersion = ref("");
 const harper = ref(null);
+const personal = ref({ words: 0, ignored: 0 });
+const saveError = ref("");
 const editor = ref(null);
 
 // Start loading Harper now, before the first render, and let the editor appear straight away: you can type while the wasm loads,
 // and the first check runs as soon as it is ready.
 const t0 = performance.now();
-const loading = createLinter();
+const loading = createLinter().then(async (linter) => {
+  // Load the saved dictionary and ignore list into Harper before its first check, so findings already dealt with never show up.
+  try {
+    personal.value = await loadPersonal(linter);
+  } catch (err) {
+    saveError.value = `Could not load settings: ${err?.message || err}`;
+  }
+  return linter;
+});
 
 // 850 ms -> "850 ms", 1234 ms -> "1.2 s".
 function fmt(ms) {
@@ -34,6 +45,16 @@ function onResult({ ms }) {
 // The editor emits on every update; only replace the list when it really changed, so the panel does not re-render per keystroke.
 function onProblems(list) {
   if (JSON.stringify(list) !== JSON.stringify(problems.value)) problems.value = list;
+}
+
+// Save the dictionary and ignore list after a change. A failure is shown in the status bar; the change still holds for this run.
+async function persist() {
+  try {
+    personal.value = await savePersonal(harper.value);
+    saveError.value = "";
+  } catch (err) {
+    saveError.value = `Could not save settings: ${err?.message || err}`;
+  }
 }
 
 onMounted(async () => {
@@ -64,15 +85,16 @@ onMounted(async () => {
     </header>
     <div class="body">
       <main class="page" @mousedown.self.prevent="editor?.focusEnd()">
-        <Editor ref="editor" :harper="harper" :doc="sample" @result="onResult" @problems="onProblems" />
+        <Editor ref="editor" :harper="harper" :doc="sample" :persist="persist" @result="onResult" @problems="onProblems" />
         <pre v-if="error" class="error">{{ error }}</pre>
       </main>
-      <ProblemsPanel v-if="showProblems" :problems="problems" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
+      <ProblemsPanel v-if="showProblems" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
     </div>
     <footer class="status">
       <span :class="['state', state]">{{ state === "loading" ? "Starting Harper, you can already type..." : `Harper ${state}` }}</span>
       <span v-if="state === 'ready'">{{ problems.length }} {{ problems.length === 1 ? "problem" : "problems" }}</span>
       <span v-if="state === 'ready'" class="mute">started in {{ fmt(setupMs) }}, last check {{ fmt(lintMs) }}</span>
+      <span v-if="saveError" class="state failed">{{ saveError }}</span>
       <span class="spacer"></span>
       <span class="mute">Version {{ goVersion || "..." }}</span>
     </footer>

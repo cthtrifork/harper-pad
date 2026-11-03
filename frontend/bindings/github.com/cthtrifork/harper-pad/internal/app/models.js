@@ -7,6 +7,58 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * Settings is what the app remembers between runs: the personal dictionary and the findings the user chose to ignore.
+ * They are kept in the database (internal/store) as two settings, "words" (a JSON list) and "ignored".
+ */
+export class Settings {
+    /**
+     * Creates a new Settings instance.
+     * @param {Partial<Settings>} [$$source = {}] - The source object to create the Settings.
+     */
+    constructor($$source = {}) {
+        if (!("version" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["version"] = 0;
+        }
+        if (!("words" in $$source)) {
+            /**
+             * Words is the personal dictionary: words Harper should not flag as misspelled.
+             * @member
+             * @type {string[]}
+             */
+            this["words"] = [];
+        }
+        if (!("ignored" in $$source)) {
+            /**
+             * Ignored is Harper's own export of the ignored findings (a JSON list of hashes, not of the text), kept as it is.
+             * @member
+             * @type {string}
+             */
+            this["ignored"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Settings instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {Settings}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("words" in $$parsedSource) {
+            $$parsedSource["words"] = $$createField1_0($$parsedSource["words"]);
+        }
+        return new Settings(/** @type {Partial<Settings>} */($$parsedSource));
+    }
+}
+
+/**
  * UpdateInfo tells the UI what this build can do about updates.
  */
 export class UpdateInfo {
@@ -96,3 +148,6 @@ export class UpdateStatus {
         return new UpdateStatus(/** @type {Partial<UpdateStatus>} */($$parsedSource));
     }
 }
+
+// Private type creation functions
+const $$createType0 = $Create.Array($Create.Any);

@@ -24,6 +24,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 - After changing an exported `PadService` method or a type it exchanges, run `make bindings` and commit
   `frontend/bindings`; never hand-edit it. `frontend/dist` is untracked build output except `.gitkeep`.
 - Run `make format-frontend lint-frontend` before pushing frontend changes; CI's `lint` job fails on unformatted code.
+- **SQL only in Go.** All SQL lives in `internal/store`; the frontend calls specific `PadService` methods through the generated bindings and never sends SQL. `internal/store/boundary_test.go` enforces it; see `docs/storage.md`.
 - Security model, the page's Content-Security-Policy and the OWASP mapping are in `docs/security.md`. Do not loosen the policy in `frontend/vite.config.js` (CI checks it); never use `v-html` or `innerHTML` with text from drafts, Harper or the network.
 - **Always open a PR** from a new branch off `main`; do not push to `main`.
 - **PR titles are `type(scope)!: summary`** (`feat`, `fix`, `security`, `perf`, `refactor`, `docs`, `test`,
@@ -38,6 +39,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 |---|---|
 | `main.go` | Thin entry point: Wails app and window, embeds `frontend/dist` |
 | `internal/app` | `PadService` (the binding the frontend calls), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
+| `internal/store` | The app's database: one SQLite file (pure Go) with the drafts and the settings, see `docs/storage.md` |
 | `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
 | `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; generated bindings are committed |
 | `Taskfile.yml`, `build/config.yml`, `.devcontainer/`, `scripts/dev.sh` | `wails3 dev` config (server mode), dev container and the `make dev` loop, see `docs/devcontainer.md` |
