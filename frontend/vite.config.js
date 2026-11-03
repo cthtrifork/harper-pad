@@ -1,4 +1,6 @@
-import { writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import wails from "@wailsio/runtime/plugins/vite";
 import { defineConfig } from "vite";
@@ -33,21 +35,62 @@ const POLICY = [
   "form-action 'none'",
 ].join("; ");
 
-const contentSecurityPolicy = () => ({
+// The web build (GitHub Pages, `vite build --mode web`) gets the same policy plus one directive: the page loads its own web app
+// manifest, which `default-src 'none'` would otherwise block. The desktop policy is unchanged.
+const WEB_POLICY = `${POLICY}; manifest-src 'self'`;
+
+const contentSecurityPolicy = (policy) => ({
   name: "content-security-policy",
   apply: "build",
   transformIndexHtml: () => [
-    { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: POLICY }, injectTo: "head-prepend" },
+    { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: policy }, injectTo: "head-prepend" },
   ],
 });
 
-export default defineConfig({
-  server: {
-    host: "127.0.0.1",
-    port: Number(process.env.WAILS_VITE_PORT) || 9245,
-    strictPort: true,
-  },
-  // The harper.js worker is an ES module; the default "iife" worker format cannot code-split it.
-  worker: { format: "es" },
-  plugins: [vue(), wails("./bindings"), contentSecurityPolicy(), keepPlaceholder()],
+// What makes the web build an installable offline app: the manifest, the service worker and the icons in web/, copied to the
+// site root, plus the <head> tags that point at them. The desktop build has none of it (its page would load nothing from them, and
+// its policy has no manifest-src), so desktop dist/ and index.html stay as they were.
+const WEB_DIR = fileURLToPath(new URL("./web", import.meta.url));
+
+const webApp = () => {
+  let base = "/";
+  return {
+    name: "web-app",
+    configResolved: (config) => {
+      base = config.base;
+    },
+    generateBundle() {
+      for (const name of readdirSync(WEB_DIR)) {
+        this.emitFile({ type: "asset", fileName: name, source: readFileSync(path.join(WEB_DIR, name)) });
+      }
+    },
+    transformIndexHtml: () => [
+      { tag: "meta", attrs: { name: "theme-color", content: "#1f2937" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "apple-mobile-web-app-capable", content: "yes" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "apple-mobile-web-app-title", content: "Harper Pad" }, injectTo: "head" },
+      { tag: "link", attrs: { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }, injectTo: "head" },
+      { tag: "link", attrs: { rel: "manifest", href: `${base}manifest.webmanifest` }, injectTo: "head" },
+    ],
+  };
+};
+
+export default defineConfig(({ mode }) => {
+  const web = mode === "web";
+  return {
+    // Pages serves the site from /<repo>/; BASE_PATH overrides it (a custom domain would use "/").
+    base: web ? process.env.BASE_PATH || "/harper-pad/" : "/",
+    // The web build goes to its own folder so it never empties frontend/dist, which the Go side embeds.
+    build: web ? { outDir: "dist-web" } : undefined,
+    server: {
+      host: "127.0.0.1",
+      port: Number(process.env.WAILS_VITE_PORT) || 9245,
+      strictPort: true,
+    },
+    // The harper.js worker is an ES module; the default "iife" worker format cannot code-split it.
+    worker: { format: "es" },
+    // The web build has no Go side: no Wails plugin, and no dist/ placeholder to keep.
+    plugins: web
+      ? [vue(), contentSecurityPolicy(WEB_POLICY), webApp()]
+      : [vue(), wails("./bindings"), contentSecurityPolicy(POLICY), keepPlaceholder()],
+  };
 });
