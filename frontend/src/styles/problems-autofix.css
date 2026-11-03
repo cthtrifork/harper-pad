@@ -1,0 +1,200 @@
+/* The autocorrect parts of the Problems panel (ProblemsPanel.vue): the Fix all safe issues button and the Recently fixed list. */
+.panel .fix-all {
+  height: 32px;
+  margin: 0 16px 12px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.panel .fix-all:hover {
+  filter: brightness(1.08);
+}
+
+.panel .fix-all:active {
+  filter: brightness(0.92);
+}
+
+.panel .recent {
+  margin: 4px 16px 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.panel .recent h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.panel .recent ul {
+  padding: 0;
+  gap: 2px;
+}
+
+.panel .recent li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.panel .recent li:hover {
+  background: none;
+}
+
+.panel .recent code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.panel .recent .undo {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-style);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The Autocorrect card at the top of the panel. Collapsed it is a single row (name, state, switch); the name opens the list of what
+   may be fixed. */
+.panel .auto {
+  margin: 0 16px 10px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+}
+
+.panel .auto.on {
+  border-color: var(--accent);
+}
+
+.panel .auto-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel .auto-toggle {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.panel .auto-toggle:hover {
+  background: var(--sunken);
+}
+
+.panel .auto-toggle .chevron {
+  flex: none;
+  color: var(--mute);
+  transition: transform 0.15s var(--ease);
+}
+
+.panel .auto-toggle[aria-expanded="true"] .chevron {
+  transform: rotate(90deg);
+}
+
+.panel .switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--mute);
+  transition: background-color 0.15s var(--ease);
+}
+
+.panel .switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--raised);
+  box-shadow: var(--shadow-thumb);
+  transition: transform 0.15s var(--ease);
+}
+
+.panel .switch[aria-checked="true"] {
+  background: var(--accent);
+}
+
+.panel .switch[aria-checked="true"]::after {
+  transform: translateX(16px);
+}
+
+.panel .auto-choices {
+  margin: 4px 0 0;
+  padding: 6px 6px 6px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+.panel .auto-choices label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.panel .auto-choices input {
+  accent-color: var(--accent);
+}
+
+.panel .auto-choices .example {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.panel .auto-choices p {
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+
+.panel .auto-choices p:last-child {
+  margin: 6px 0 0;
+}
+
+.panel .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

@@ -1,6 +1,8 @@
 import { linter } from "@codemirror/lint";
 import { StateEffect } from "@codemirror/state";
+import { isSafe } from "../autocorrect.js";
 import { lintText } from "../harper.js";
+import { applyFixes, dueFixes } from "./autocorrect.js";
 
 // Harper's lint kinds that are plain misspellings get the error colour; the rest are suggestions about style.
 function severity(kind) {
@@ -55,14 +57,26 @@ function personalActions(harper, f, persist) {
 
 // The lint source: runs Harper on the whole document (debounced by the linter extension) and maps the findings.
 // onResult gets the finding count and how long Harper took, for the status line.
-export function harperSource(getHarper, onResult, persist) {
+// `auto` is { prefs(), settle() }: the autocorrect choices, and a promise to wait for before linting (Harper being told to ignore
+// fixes that were undone, so the same finding is not fixed again).
+export function harperSource(getHarper, onResult, persist, auto) {
   return linter(
     async (view) => {
       const harper = getHarper();
       if (!harper) return [];
+      await auto?.settle();
       const t0 = performance.now();
-      const found = await lintText(harper, view.state.doc.toString());
+      const doc = view.state.doc;
+      const text = doc.toString();
+      const prefs = auto?.prefs();
+      const found = (await lintText(harper, text)).map((f) => ({ ...f, safe: prefs ? isSafe(f, prefs) : false }));
       onResult?.({ count: found.length, ms: Math.round(performance.now() - t0) });
+      // With autocorrect on, fix what is due. Only if the text is the text that was checked: CodeMirror drops a result for older text
+      // anyway, and the fixes' positions would be wrong. The edit makes the linter run again, which reports what is left.
+      if (prefs?.on && view.state.doc === doc) {
+        const due = dueFixes(view.state, text, found, view.state.selection.main.head);
+        if (due.length && applyFixes(view, due)) return [];
+      }
       return found.map((f) => ({
         from: f.from,
         to: f.to,
@@ -70,6 +84,8 @@ export function harperSource(getHarper, onResult, persist) {
         source: f.kind,
         message: f.message,
         actions: [...f.fixes.map(toAction), ...personalActions(harper, f, persist)],
+        // For "Fix all safe issues": a finding with one clear fix carries it (see autocorrect.js).
+        ...(f.safe ? { safe: true, autofix: { fix: f.fixes[0], problem: f.problem, hash: f.hash } } : {}),
       }));
     },
     { delay: 300, needsRefresh: (update) => update.transactions.some((tr) => tr.effects.some((e) => e.is(relintEffect))) },

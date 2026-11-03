@@ -1,11 +1,13 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AppHeader from "./components/AppHeader.vue";
+import AutofixToast from "./components/AutofixToast.vue";
 import DraftsDrawer from "./components/DraftsDrawer.vue";
 import Editor from "./components/Editor.vue";
 import Preview from "./components/Preview.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
+import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData } from "./lib/backend.js";
 import { createLinter } from "./lib/harper.js";
 import { looksLikeMarkdown } from "./lib/markdown.js";
@@ -36,6 +38,23 @@ const saveError = ref("");
 const editor = ref(null);
 const showDrawer = ref(false);
 const drafts = useDrafts(editor, showDrawer);
+
+// Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
+// goes away on its own, and at once when the user edits the text themselves.
+const autocorrect = ref(loadPrefs());
+const fixed = ref([]);
+const toast = ref(null); // {ids, tick}: the fixes it is about; a new tick restarts its timer
+function setAutocorrect(prefs) {
+  autocorrect.value = prefs;
+  savePrefs(prefs);
+}
+function onFixed(ids) {
+  toast.value = { ids: [...(toast.value?.ids ?? []), ...ids], tick: (toast.value?.tick ?? 0) + 1 };
+}
+function undoToast() {
+  editor.value?.revert(toast.value?.ids ?? []);
+  toast.value = null;
+}
 // The text of the open draft. On a first run the editor is empty, except in demo mode (screenshots), which shows a sample.
 const initialDoc = drafts.init(props.start, demo.value ? sample : "");
 
@@ -207,7 +226,11 @@ watch(
 );
 watch(
   () => drafts.current.value.id,
-  () => (hintDismissed.value = false),
+  () => {
+    hintDismissed.value = false;
+    fixed.value = []; // another draft: nothing autocorrect did applies to it
+    toast.value = null;
+  },
 );
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
@@ -228,6 +251,7 @@ onBeforeUnmount(() => {
       :is-markdown="isMarkdown"
       :mode="mode"
       :update-button="UpdateButton"
+      :autocorrect="autocorrect.on"
       @toggle-drawer="toggleDrawer"
       @toggle-problems="toggleProblems"
       @save="drafts.saveFile"
@@ -264,6 +288,10 @@ onBeforeUnmount(() => {
             :format="format"
             :source="mode === 'split'"
             :persist="persist"
+            :autocorrect="autocorrect"
+            @fixes="fixed = $event"
+            @fixed="onFixed"
+            @user-edit="toast = null"
             @result="onResult"
             @problems="onProblems"
             @stats="counts = $event"
@@ -274,12 +302,15 @@ onBeforeUnmount(() => {
           <pre v-if="error" class="error">{{ error }}</pre>
         </main>
         </div>
+        <Transition name="autofix">
+          <AutofixToast v-if="toast" :count="toast.ids.length" :tick="toast.tick" @undo="undoToast" @close="toast = null" />
+        </Transition>
         <Transition name="grow">
           <Preview v-if="mode !== 'edit'" class="side" :source="source" :scroll="paneScroll" :follow="mode === 'split'" />
         </Transition>
       </div>
       <Transition name="slide-right">
-        <ProblemsPanel v-if="showProblems && mode !== 'preview'" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" @remove-word="removeWord" @remove-ignored="stopIgnoring" />
+        <ProblemsPanel v-if="showProblems && mode !== 'preview'" :problems="problems" :words="personal.words" :ignored="personal.ignored" :fixed="fixed" :autocorrect="autocorrect" @autocorrect="setAutocorrect" @fix-all="editor?.fixAll()" @revert="editor?.revert([$event])" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" @remove-word="removeWord" @remove-ignored="stopIgnoring" />
       </Transition>
     </div>
     <StatusBar
@@ -298,6 +329,8 @@ onBeforeUnmount(() => {
       :is-markdown="isMarkdown"
       :suggest-markdown="suggestMarkdown"
       :startup="startup"
+      :autocorrect="autocorrect.on"
+      @toggle-autocorrect="setAutocorrect({ ...autocorrect, on: !autocorrect.on })"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
       @dismiss-hint="hintDismissed = true"

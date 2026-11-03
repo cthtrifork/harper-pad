@@ -1,7 +1,7 @@
 <script setup>
 import { EditorView } from "@codemirror/view";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { applyFix, createEditor, jumpTo, loadDocument, relint, setMode } from "../lib/editor/index.js";
+import { applyFix, createEditor, fixAllSafe, jumpTo, loadDocument, relint, revertFixes, setMode } from "../lib/editor/index.js";
 
 const props = defineProps({
   harper: { type: Object, default: null },
@@ -9,8 +9,9 @@ const props = defineProps({
   format: { type: String, default: "markdown" }, // "markdown" or "text"
   source: { type: Boolean, default: false }, // the Split view's source pane: monospace, line numbers
   persist: { type: Function, default: async () => {} },
+  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true }) }, // see lib/autocorrect.js
 });
-const emit = defineEmits(["result", "problems", "stats", "cursor", "edited", "doc"]);
+const emit = defineEmits(["result", "problems", "stats", "cursor", "edited", "doc", "fixes", "fixed", "user-edit"]);
 const host = ref(null);
 let view = null;
 
@@ -26,9 +27,19 @@ onMounted(() => {
     onCursor: (c) => emit("cursor", c),
     onDoc: (text) => emit("doc", text),
     onEdit: () => emit("edited"),
+    getAutocorrect: () => props.autocorrect,
+    onFixes: (list) => emit("fixes", list),
+    onFixed: (ids) => emit("fixed", ids),
+    onUserEdit: () => emit("user-edit"),
   });
   view.focus();
 });
+// A change to the autocorrect choices changes which findings are safe and whether they are fixed: check again.
+watch(
+  () => props.autocorrect,
+  () => view && relint(view),
+  { deep: true },
+);
 // Harper arrives after the editor: run the first check as soon as it does.
 watch(
   () => props.harper,
@@ -82,6 +93,8 @@ defineExpose({
     ),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
+  fixAll: () => (view ? fixAllSafe(view) : 0),
+  revert: (ids) => (view ? revertFixes(view, ids) : 0),
 });
 </script>
 
