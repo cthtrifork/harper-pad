@@ -1,9 +1,10 @@
 name: Release
 
 # Publishes a GitHub release with a Linux amd64 binary, a tarball, a .deb and an .rpm (PGP-signed,
-# with the public key published alongside), SHA256SUMS, a CycloneDX SBOM and signed attestations
-# (build provenance for the binary, tarball, packages and SBOM; the SBOM bound to the binary). The
-# in-app updater installs the raw binary and verifies it against SHA256SUMS, so those names are an interface. Three ways to run it:
+# with the public key published alongside), a Windows amd64 exe (Authenticode-signed once SignPath is set up), SHA256SUMS, a CycloneDX SBOM and
+# signed attestations (build provenance for the binaries, tarball, packages and SBOM; the SBOM bound to the
+# Linux binary). The in-app updater installs the raw binary of its platform and verifies it against SHA256SUMS, so those
+# names are an interface. Three ways to run it:
 #   - the "Tag and release" workflow calls this one (workflow_call) with a new version and the commit
 #     to release. This is the normal route. The tag does not exist yet: the release is published with
 #     that commit as its target, and GitHub creates the tag then.
@@ -127,6 +128,12 @@ jobs:
 
       - name: Vet and test
         run: make vet test
+
+      # The Windows build needs no cgo, so the Linux runner can prove it still compiles (the Windows job below builds it).
+      - name: Vet (windows/amd64)
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet -tags production ./...
 
       - name: govulncheck
         env:
@@ -252,26 +259,133 @@ jobs:
           output: ${{ runner.temp }}/sbom.cdx.json
           skip-dirs: frontend/node_modules,dist
 
+      # SHA256SUMS is written by the publish job, once the Linux and Windows files are together.
       - name: Add SBOM to the release files
         env:
           VERSION: ${{ needs.meta.outputs.version }}
-        run: |
-          cp "$RUNNER_TEMP/sbom.cdx.json" "dist/${APP}_${VERSION}.sbom.cdx.json"
-          # SHA256SUMS lists every asset, so regenerate it with the SBOM included.
-          (cd dist && sha256sum "${APP}_linux_amd64" "${APP}_${VERSION}_linux_amd64.tar.gz" \
-            "${APP}_${VERSION}_amd64.deb" "${APP}_${VERSION}_x86_64.rpm" \
-            "${APP}_${VERSION}.sbom.cdx.json" $(ls "${APP}-release-key.asc" 2>/dev/null) > SHA256SUMS)
+        run: cp "$RUNNER_TEMP/sbom.cdx.json" "dist/${APP}_${VERSION}.sbom.cdx.json"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-files
+          name: release-files-linux
           path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  # The Windows release file: one exe, built by scripts/package-windows.sh. It is also what the in-app updater
+  # installs. The build needs no cgo; it runs on Windows so the exe can be signed, checked and started before anything
+  # is published.
+  build-windows:
+    name: build windows/amd64
+    needs: meta
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # When called with a commit, build exactly that; with only a tag, that tag; otherwise the ref that triggered the run.
+          ref: ${{ inputs.sha || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || '' }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: ${{ needs.meta.outputs.publish != 'true' }} # off when publishing: a restored cache could poison the release; on for dry runs # zizmor: ignore[cache-poisoning]
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      - name: Install the wails3 CLI and build the frontend
+        run: |
+          CGO_ENABLED=0 go install -tags server github.com/wailsapp/wails/v3/cmd/wails3@"$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          wails3 version
+          (cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
+
+      - name: Build the exe
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          scripts/package-windows.sh "$VERSION" dist
+
+      # The MCP server and the pprof endpoint are development tools without authentication (docs/mcp.md, docs/pprof.md).
+      - name: Release binary contains no development endpoint
+        run: |
+          if grep -aqF "MCP server started" dist/${APP}_windows_amd64.exe || grep -aqF "pprof endpoint started" dist/${APP}_windows_amd64.exe; then
+            echo "::error::a development endpoint (MCP or pprof) is present in the Windows release binary"; exit 1
+          fi
+
+      # Authenticode signing through SignPath (docs/windows.md). Only for a real release, and only once the repository
+      # has the SignPath variables and secret; until then the release goes out unsigned, with a warning. The signed
+      # exe replaces the unsigned one before anything else uses it, so SHA256SUMS and the attestations cover the signed file.
+      - name: Upload the exe for signing
+        id: unsigned
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-windows-exe
+          path: dist/harper-pad_windows_amd64.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the exe with SignPath
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'harper-pad' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Use the signed exe and check its signature
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        run: |
+          Copy-Item signed/harper-pad_windows_amd64.exe dist/harper-pad_windows_amd64.exe -Force
+          $sig = Get-AuthenticodeSignature dist/harper-pad_windows_amd64.exe
+          $sig | Format-List Status, StatusMessage, SignerCertificate
+          if ($sig.Status -ne 'Valid') { Write-Error "the signed exe does not have a valid Authenticode signature: $($sig.Status)"; exit 1 }
+
+      - name: Warn when the release is unsigned
+        if: needs.meta.outputs.publish == 'true' && vars.SIGNPATH_ORGANIZATION_ID == ''
+        run: echo "::warning::SIGNPATH_ORGANIZATION_ID is not set, so the Windows exe is not signed and SmartScreen will warn (see docs/windows.md)"
+
+      # Start the exe like a user would and check it stays up for 20 s (it loads WebView2 and the embedded frontend).
+      # A crash on start fails the release.
+      - name: Smoke test, the exe starts and keeps running
+        env:
+          MSYS_NO_PATHCONV: '1' # Git Bash would rewrite /F as a path
+        run: |
+          dist/${APP}_windows_amd64.exe &
+          sleep 20
+          # tasklist cuts image names at 25 characters, so match the start of the name.
+          if ! tasklist | grep -qi "${APP}_windows"; then
+            echo "::error::${APP}_windows_amd64.exe is not running 20 s after it was started"; exit 1
+          fi
+          echo "${APP}_windows_amd64.exe is running"
+          taskkill /F /IM ${APP}_windows_amd64.exe
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-files-windows
+          path: dist/${{ env.APP }}_windows_amd64.exe
           if-no-files-found: error
           retention-days: 14
 
   publish:
     name: publish release
-    needs: [meta, checks, build]
+    needs: [meta, checks, build, build-windows]
     if: needs.meta.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -283,8 +397,16 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-files
+          pattern: release-files-*
+          merge-multiple: true
           path: dist
+
+      # SHA256SUMS lists every asset, Linux and Windows. The updater looks it up by this fixed name.
+      - name: Write SHA256SUMS
+        run: |
+          cd dist
+          sha256sum $(ls | grep -vx SHA256SUMS | sort) > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -294,6 +416,7 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/*_linux_amd64
+            dist/*_windows_amd64.exe
             dist/*.sbom.cdx.json
 
       # Unlike subject-path, sbom-path takes one literal path (no glob), so resolve it first.
@@ -313,7 +436,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          for f in dist/*_linux_amd64 dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.cdx.json; do
+          for f in dist/*_linux_amd64 dist/*_windows_amd64.exe \
+                   dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.cdx.json; do
             gh attestation verify "$f" --repo "$REPO" \
               --signer-workflow "$REPO/.github/workflows/release.yml"
           done

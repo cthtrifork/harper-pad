@@ -19,8 +19,8 @@ The workflow then:
 
 1. refuses to run anywhere but `main`;
 2. works out the version (the `tag` input, otherwise Release Drafter's) and stops if a git tag of that name already exists (see *Retrying* for an existing tag);
-3. calls `release.yml` with that version and the commit it started on (the head of `main`). That commit is built, and **no tag exists yet**: `release.yml` re-runs vet, tests and `govulncheck` (in a `checks` job beside the binary build, not before it), builds the binary, and publishes the
-   release (the draft Release Drafter wrote for that version, with the assets attached; publishing sets the release's target to the built commit and GitHub creates the tag there) (binary, tarball, signed `.deb` and `.rpm`, public key, CycloneDX SBOM, `SHA256SUMS`) and signed attestations. See [self-update](self-update.md) for why those assets
+3. calls `release.yml` with that version and the commit it started on (the head of `main`). That commit is built, and **no tag exists yet**: `release.yml` re-runs vet, tests and `govulncheck` (in a `checks` job beside the binary build, not before it), builds the Linux binary and, on a Windows runner, the Windows exe (see [windows](windows.md)), and publishes the
+   release (the draft Release Drafter wrote for that version, with the assets attached; publishing sets the release's target to the built commit and GitHub creates the tag there) (Linux binary, tarball, signed `.deb` and `.rpm`, public key, Windows exe, CycloneDX SBOM, `SHA256SUMS`) and signed attestations. See [self-update](self-update.md) for why those assets
    have the names they do.
 
 ## Release notes
@@ -81,6 +81,14 @@ The packages are built from the Ubuntu 24.04 binary, so the Fedora package needs
 WebKitGTK 6 and a glibc that new. Try it locally with a built binary: `make wails3-install` then
 `scripts/package-linux.sh <binary> v1.2.3 dist` (set `PKG_SIGNING_KEY_FILE` and `NFPM_PASSPHRASE` to sign).
 
+## Windows file
+
+`build windows/amd64` in `release.yml` runs `scripts/package-windows.sh` on a `windows-2022` runner: a cgo-free build
+(`GOOS=windows`, `-H windowsgui`, version resources and icon from `build/windows`). For a real release it then signs the
+exe through SignPath when the repository is set up for it, and checks the signature. It starts the exe and checks it is
+still running after 20 seconds, so a release whose exe dies on start is not published. CI's `windows` job runs vet, the
+tests and the exe build on every pull request. See [windows](windows.md) for the SignPath setup and what is not covered.
+
 ## Retrying
 
 The tag is only created when the release is published, at the very end, so a release that failed (a flaky step, a
@@ -121,7 +129,7 @@ each other that way. The alternative is a personal access token or a GitHub App,
 
 ## Verifying a release
 
-The release job signs a SLSA build-provenance attestation for the binary, tarball and SBOM, and an SBOM attestation for
+The release job signs a SLSA build-provenance attestation for the binaries, tarball, packages and SBOM, and an SBOM attestation for
 the binary, then verifies them itself before creating the release. To check a download by hand:
 
 ```sh

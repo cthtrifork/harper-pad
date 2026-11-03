@@ -90,6 +90,19 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 - [ ] Decide on self-update vs. image updates: on bootc `/usr` is read-only, so the in-app updater cannot replace the
       packaged binary (`selfupdate.Installable` should report it); likely disable it for the image install.
 
+## 6b. Windows
+
+One release file, `harper-pad_windows_amd64.exe`; see `docs/windows.md`. Built by `release.yml` and started on a runner, but
+never run on a real desktop yet.
+
+- [ ] Try the exe on a real Windows 10/11 machine: window, fonts, HiDPI, then the updater (a newer release replacing the
+      running exe).
+- [ ] Code signing with SignPath Foundation: apply, create the project and policy, set `SIGNPATH_API_TOKEN` and
+      `SIGNPATH_ORGANIZATION_ID` (`docs/windows.md`), add the code signing policy section to the README they ask for, and
+      check the first signed release (`Get-AuthenticodeSignature`, SmartScreen). Until then the exe is unsigned.
+- [ ] Windows tray icon (`internal/app/tray_other.go` is a no-op there).
+- [ ] Optional later: winget or Scoop manifests.
+
 ## 7. Later / maybe
 
 - [ ] Global shortcut or tray action to open a fresh scratch note.

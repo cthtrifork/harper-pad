@@ -37,7 +37,8 @@ The updater picks assets by name, so the names are an interface. `release.yml` b
 |---|---|---|
 | `harper-pad_linux_amd64` | the updater | the raw binary; the only asset it installs |
 | `harper-pad_<version>_linux_amd64.tar.gz` | people | binary + `README.md` + `LICENSE` |
-| `SHA256SUMS` | the updater and people | digests of both files above; the name must stay fixed |
+| `harper-pad_windows_amd64.exe` | the updater and people (Windows) | the raw exe, the only Windows asset; signed once SignPath is set up (see [windows](windows.md)) |
+| `SHA256SUMS` | the updater and people | digests of every file in the release; the name must stay fixed |
 
 The release also carries the `.deb`, the `.rpm` and the public key that signed them (see
 [releasing](releasing.md#packages)). `SHA256SUMS` lists those too, but the updater never installs them: it skips

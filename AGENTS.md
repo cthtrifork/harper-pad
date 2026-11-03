@@ -41,6 +41,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 | `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; generated bindings are committed |
 | `Taskfile.yml`, `build/config.yml`, `.devcontainer/`, `scripts/dev.sh` | `wails3 dev` config (server mode), dev container and the `make dev` loop, see `docs/devcontainer.md` |
 | `build/linux` | Desktop file and nfpm packaging (`scripts/package-linux.sh`); the desktop file name equals the application id in `main.go` |
+| `build/windows` | Windows icon, manifest and version info for the exe (`scripts/package-windows.sh`), see `docs/windows.md` |
 | `.github` | Workflows (`ci`, `security`, `release`, `tag-release`, `actions-lint`, `pr-title`, `release-drafter`, `renovate`, `update-branches`, `trivy-cache`), linters, Renovate |
 
 - Wails' MCP server (`-tags mcp`) and the pprof endpoint (`-tags pprof`) are development only: `mcp_guard.go` and `pprof_guard.go` reject them with `production`, and CI greps the release binary. See `docs/mcp.md`, `docs/pprof.md`.

@@ -1,6 +1,6 @@
 # Harper Pad
 
-A small desktop writing app for Linux. Go + [Wails v3](https://v3alpha.wails.io/) with a Vue 3 frontend.
+A small desktop writing app for Linux and Windows. Go + [Wails v3](https://v3alpha.wails.io/) with a Vue 3 frontend.
 
 ## What it solves
 

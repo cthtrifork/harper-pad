@@ -63,6 +63,30 @@ func TestMatchAsset(t *testing.T) {
 	}
 }
 
+// The release carries Linux and Windows files side by side. Each platform must pick its own raw binary and never
+// the zip, the installer, the packages or the other platform's binary.
+func TestMatchAssetWindows(t *testing.T) {
+	assets := []github.ReleaseAsset{
+		{Name: "harper-pad_v0.2.0_windows_amd64_installer.exe"},
+		{Name: "harper-pad_v0.2.0_windows_amd64.zip"},
+		{Name: "harper-pad_v0.2.0_linux_amd64.tar.gz"},
+		{Name: "harper-pad_v0.2.0_amd64.deb"},
+		{Name: "SHA256SUMS"},
+		{Name: "harper-pad_windows_amd64.exe"},
+		{Name: "harper-pad_linux_amd64"},
+	}
+	if got := MatchAsset(updater.CheckRequest{Platform: "windows", Arch: "amd64"}, assets); got != 5 {
+		t.Errorf("windows picked index %d, want the raw exe at 5", got)
+	}
+	if got := MatchAsset(updater.CheckRequest{Platform: "linux", Arch: "amd64"}, assets); got != 6 {
+		t.Errorf("linux picked index %d, want the raw binary at 6", got)
+	}
+	// Without the raw exe the installer and the zip must not be picked as a fallback.
+	if got := MatchAsset(updater.CheckRequest{Platform: "windows", Arch: "amd64"}, assets[:5]); got != -1 {
+		t.Errorf("an installer-and-zip-only release matched %d", got)
+	}
+}
+
 // fakeGitHub serves one release in the shape of the GitHub REST API.
 type fakeGitHub struct {
 	*httptest.Server
@@ -279,7 +303,7 @@ func TestInstallable(t *testing.T) {
 		t.Errorf("AppImage in a writable directory rejected: %v", err)
 	}
 
-	if os.Geteuid() != 0 { // root ignores directory permissions
+	if os.Geteuid() != 0 && runtime.GOOS != "windows" { // root ignores directory permissions, and chmod does not make a directory read-only on Windows
 		t.Setenv("APPIMAGE", "")
 		ro := t.TempDir()
 		if err := os.Chmod(ro, 0o555); err != nil {
