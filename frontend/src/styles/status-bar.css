@@ -2,13 +2,22 @@
   flex: 1;
 }
 
-.status .fmt {
-  position: relative;
+.status .fmt-btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 11px;
+  min-width: 30px;
+  padding: 3px 8px;
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
-.status .link.plain {
-  color: var(--text);
-  text-decoration: none;
+.status .fmt-btn:hover {
+  background: var(--line);
 }
 
 .status {

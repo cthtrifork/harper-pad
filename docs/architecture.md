@@ -44,7 +44,7 @@ and `pprof`, which `production` rejects.
   status bar statistics and the problems list.
 - `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
   on disk, and the list the drawer shows.
-- `Preview.vue` renders markdown for the Split and Preview views (`lib/markdown.js`); text from drafts or Harper never goes
+- `Preview.vue` renders markdown for the Split and Preview views (`marked` parses it); text from drafts or Harper never goes
   through `v-html` or `innerHTML`.
 - Styles are plain CSS, one file per component, in `frontend/src/styles`.
 

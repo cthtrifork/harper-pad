@@ -188,7 +188,7 @@
   }
 
   .status .spacer,
-  .status > .mute:not(#draft-status):not(#markdown-hint),
+  .status > .mute:not(#draft-status),
   #cursor-pos,
   #autocorrect-state,
   #selection {
