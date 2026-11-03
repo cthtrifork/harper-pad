@@ -14,7 +14,7 @@
   padding-right: max(16px, env(safe-area-inset-right));
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .bar {
     height: auto;
     padding-top: calc(8px + env(safe-area-inset-top));
