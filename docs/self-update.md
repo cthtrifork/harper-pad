@@ -2,15 +2,15 @@
 
 The app can update itself from GitHub Releases. This follows Wails' tutorial
 [Self-Updating Wails App](https://v3.wails.io/tutorials/04-self-update-a-wails-app/) and the Updater guide,
-adapted to this app. Click the version number at the right end of the top bar (`components/UpdateButton.vue`): that checks for updates.
+adapted to this app. Click the version number at the right end of the top bar (`components/UpdateButton.vue`): the first click checks for updates and opens a popover. The button keeps showing the version; an orange dot appears when an update is found or ready, and a spinner while checking or downloading.
 
 ## What happens
 
-1. Clicking the version asks the GitHub API for the latest release of `cthtrifork/harper-pad`. It only
-   looks; the button then becomes **Update to vX.Y.Z** if the release is newer, or a popover says you are up to date.
-2. Clicking **Update to vX.Y.Z** fetches the binary and checks it against `SHA256SUMS` from the same release. Nothing is
-   installed if it does not match. The button becomes **Restart to update**.
-3. Clicking **Restart to update** swaps the running binary for the new one and relaunches. The binary re-executes itself in a
+1. The first click on the version asks the GitHub API for the latest release of `cthtrifork/harper-pad`. It only
+   looks; the popover then offers **Download vX.Y.Z** if the release is newer, or says you are up to date.
+2. **Download** fetches the binary and checks it against `SHA256SUMS` from the same release. Nothing is
+   installed if it does not match. The popover then offers **Restart to update**.
+3. **Restart to update** swaps the running binary for the new one and relaunches. The binary re-executes itself in a
    helper mode for the swap, so no separate helper executable is shipped.
 
 Every step runs only when you click it: there is no background polling (`CheckInterval` is unset), so the app contacts
@@ -69,7 +69,7 @@ The version is stamped into the binary with `-ldflags "-X github.com/cthtrifork/
 | Tutorial | Here | Why |
 |---|---|---|
 | `wails3 init` scaffold, `currentVersion` constant | existing app, `internal/app.version` via `-ldflags` | already how releases are stamped |
-| "Check for Updates…" **menu item** | version button in the top bar that takes the next step on each click, with a popover for status and errors | the app has no native menu; the popover works the same on Linux and Windows |
+| "Check for Updates…" **menu item** | version button in the top bar with a small popover, and an orange dot or spinner on the button for progress | the app has no native menu; the popover works the same on Linux and Windows |
 | `ChecksumAsset: "SHA256SUMS"` | same, plus fail-closed wrapper and a custom asset matcher | see above |
 | optional Ed25519 `PublicKey` | not used | needs a custom provider, see above |
 | optional `CheckInterval` | not used | the app should not phone home unprompted |

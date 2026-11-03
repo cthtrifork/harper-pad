@@ -295,7 +295,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
           <li>Opens downward; the footer format menu opens upward (<code>.menu.up</code>).</li>
           <li>Closes on Esc, outside click and after choosing.</li>
           <li>Enter: fade and 4px slide, 0.12s.</li>
-          <li>A popover reports, it does not repeat its trigger. If the trigger button can do the next step itself, it does, with no popover in between: the Updates button reads "Update to 1.4.0", then "Restart to update", and each click does that. The popover opens only for what the button cannot say (checking, up to date, an error, updates off) and always ends with a "What is new" link.</li>
+          <li>A popover has one job and no dismiss link: Esc, an outside click and the trigger already close it. The Updates button keeps its text (the version) and shows state with an accent icon: a dot when an update is found or ready, a spinner while checking or downloading. The popover holds the one primary action at the bottom right and always has a "What is new" link at the bottom left.</li>
         </ul></div>
     </div>
   </div>

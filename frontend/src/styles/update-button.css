@@ -12,11 +12,6 @@
   border-radius: 6px;
   background: transparent;
   color: var(--mute);
-  white-space: nowrap;
-}
-
-.wrap .btn:disabled {
-  cursor: default;
 }
 
 .wrap .btn:hover,
@@ -26,18 +21,15 @@
   color: var(--text);
 }
 
-.wrap .btn.ready {
-  border: 0;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
-}
-
 .wrap .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+.wrap .spin {
+  color: var(--accent);
 }
 
 .wrap .pop {
@@ -74,7 +66,6 @@
 }
 
 .wrap .primary {
-  align-self: flex-start;
   min-height: 30px;
   padding: 4px 12px;
   text-align: left;
@@ -92,6 +83,9 @@
   color: var(--c-style);
 }
 
-.wrap .whatsnew {
-  align-self: flex-start;
+.wrap .foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
