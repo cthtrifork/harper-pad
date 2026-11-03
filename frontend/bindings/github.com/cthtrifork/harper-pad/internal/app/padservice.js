@@ -134,12 +134,22 @@ export function SearchDrafts(query, limit) {
 }
 
 /**
+ * Startup returns what the page needs to start: the demo banner, the most recent draft and the number of drafts.
+ * @returns {$CancellablePromise<$models.StartupState>}
+ */
+export function Startup() {
+    return $Call.ByID(3746126598).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType4($result);
+    }));
+}
+
+/**
  * UpdateInfo reports the running version and whether it can update itself.
  * @returns {$CancellablePromise<$models.UpdateInfo>}
  */
 export function UpdateInfo() {
     return $Call.ByID(4196675356).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -156,4 +166,5 @@ const $$createType0 = $models.UpdateStatus.createFrom;
 const $$createType1 = store$0.Draft.createFrom;
 const $$createType2 = store$0.List.createFrom;
 const $$createType3 = $models.Settings.createFrom;
-const $$createType4 = $models.UpdateInfo.createFrom;
+const $$createType4 = $models.StartupState.createFrom;
+const $$createType5 = $models.UpdateInfo.createFrom;

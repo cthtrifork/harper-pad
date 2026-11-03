@@ -5,6 +5,8 @@
 //
 // The bindings are imported on demand and only in the desktop build, so the web bundle carries no Wails code.
 
+import { createWebDrafts, DB_NAME, DB_VERSION, upgrade } from "./webDrafts.js";
+
 export const isWeb = import.meta.env.MODE === "web";
 
 const bindings = isWeb ? undefined : async () => (await import("../../bindings/github.com/cthtrifork/harper-pad/internal/app")).PadService;
@@ -13,13 +15,12 @@ const emptySettings = () => ({ version: 1, words: [], ignored: "" });
 
 // --- Browser storage (web build) ---------------------------------------------------------------------------------------------
 
-const DB_NAME = "harper-pad";
 const STORE = "kv";
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => upgrade(req.result);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -72,9 +73,39 @@ export async function version() {
   return isWeb ? "web" : (await bindings()).Version();
 }
 
-// Banner text in a desktop development build's demo mode; empty otherwise.
-export async function demoMode() {
-  return isWeb ? "" : (await bindings()).DemoMode();
+// --- Drafts ------------------------------------------------------------------------------------------------------------------
+// The same operations on both builds: PadService's drafts methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).
+
+const web = isWeb ? createWebDrafts(openDb) : undefined;
+
+// Everything the page needs before it shows the editor, in one call: {demo, open, total, error}. `demo` is the banner text in a
+// desktop development build's demo mode (empty otherwise), `open` the most recent draft with its text (or null), `total` how many
+// drafts there are, and `error` why drafts are unavailable (empty when they are).
+export async function startup() {
+  return isWeb ? web.startup() : (await bindings()).Startup();
+}
+
+// A page of draft summaries, newest first: {drafts, total}. The summaries carry no text.
+export async function listDrafts(limit, offset) {
+  return isWeb ? web.list(limit, offset) : (await bindings()).ListDrafts(limit, offset);
+}
+
+// The drafts whose text contains `query`, newest first: {drafts, total}.
+export async function searchDrafts(query, limit) {
+  return isWeb ? web.search(query, limit) : (await bindings()).SearchDrafts(query, limit);
+}
+
+export async function getDraft(id) {
+  return isWeb ? web.get(id) : (await bindings()).GetDraft(id);
+}
+
+// Creates a draft (empty id) or updates one, and returns it as stored. Saving an id that is no longer stored brings it back.
+export async function saveDraft(draft) {
+  return isWeb ? web.save(draft) : (await bindings()).SaveDraft(draft);
+}
+
+export async function deleteDraft(id) {
+  return isWeb ? web.remove(id) : (await bindings()).DeleteDraft(id);
 }
 
 // Ask the browser not to evict this site's data when storage runs low. Safari grants it to an installed (Add to Home Screen) app.

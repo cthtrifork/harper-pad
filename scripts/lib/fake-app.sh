@@ -13,6 +13,7 @@ fake_app_start() {
   HARPER_PAD_DEMO=1 \
     XDG_CACHE_HOME="$dir/cache" \
     XDG_CONFIG_HOME="$dir/config" \
+    XDG_DATA_HOME="$dir/data" \
     WAILS_SERVER_HOST=127.0.0.1 \
     WAILS_SERVER_PORT="$port" \
     "$dir/app" >"$dir/app.log" 2>&1 &

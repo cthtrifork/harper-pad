@@ -1,7 +1,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { forEachDiagnostic, linter } from "@codemirror/lint";
 import { EditorState, StateEffect } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { lintText } from "./harper.js";
 
 // Harper's lint kinds that are plain misspellings get the error colour; the rest are suggestions about style.
@@ -124,6 +124,7 @@ const theme = EditorView.theme({
     fontWeight: "600",
     cursor: "pointer",
   },
+  ".cm-placeholder": { color: "var(--mute)" },
   ".cm-diagnosticAction.cm-action-quiet": {
     backgroundColor: "transparent",
     color: "var(--text)",
@@ -173,25 +174,37 @@ export function countText(text) {
   return { words: (text.match(/\S+/g) ?? []).length, chars: [...text].length };
 }
 
-// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update, and `onStats` the word and character counts at the start and after every edit. `persist` saves the dictionary and ignore list after a change.
-export function createEditor(parent, { doc, getHarper, onResult, onProblems, onStats, persist }) {
+// The extensions each editor was created with, so loadDocument can build a fresh state with the same behaviour.
+const extensionsOf = new WeakMap();
+
+// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading; `onResult` hears about every lint run and `onProblems` gets the current findings after every update, and `onStats` the word and character counts at the start and after every edit. `onEdit` is called after every change the user makes to the text (not when a document is loaded). `persist` saves the dictionary and ignore list after a change.
+export function createEditor(parent, { doc, getHarper, onResult, onProblems, onStats, onEdit, persist }) {
   onStats?.(countText(doc));
-  return new EditorView({
-    parent,
-    state: EditorState.create({
-      doc,
-      extensions: [
-        history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
-        EditorView.lineWrapping,
-        EditorView.contentAttributes.of({ "aria-label": "Document" }), // the textbox needs an accessible name
-        harperSource(getHarper, onResult, persist),
-        theme,
-        EditorView.updateListener.of((u) => {
-          if (u.docChanged) onStats?.(countText(u.state.doc.toString()));
-          onProblems?.(collectProblems(u.view));
-        }),
-      ],
+  const extensions = [
+    history(),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    EditorView.lineWrapping,
+    EditorView.contentAttributes.of({ "aria-label": "Document" }), // the textbox needs an accessible name
+    placeholder("Start writing. Harper checks as you type, and nothing leaves this computer."),
+    harperSource(getHarper, onResult, persist),
+    theme,
+    EditorView.updateListener.of((u) => {
+      if (u.docChanged) {
+        onStats?.(countText(u.state.doc.toString()));
+        onEdit?.();
+      }
+      onProblems?.(collectProblems(u.view));
     }),
-  });
+  ];
+  const view = new EditorView({ parent, state: EditorState.create({ doc, extensions }) });
+  extensionsOf.set(view, extensions);
+  return view;
+}
+
+// Replace the whole document, as when another draft is opened. It starts a fresh state, so undo cannot cross into the previous
+// document, and it does not count as an edit. `onStats` gets the new counts, because no update is reported for it.
+export function loadDocument(view, text, onStats) {
+  view.setState(EditorState.create({ doc: text, extensions: extensionsOf.get(view) }));
+  onStats?.(countText(text));
+  view.focus();
 }

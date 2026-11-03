@@ -9,6 +9,7 @@ export {
 
 export {
     Settings,
+    StartupState,
     UpdateInfo,
     UpdateStatus
 } from "./models.js";

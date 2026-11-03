@@ -1,10 +1,15 @@
 <script setup>
-import { defineAsyncComponent, onMounted, ref } from "vue";
+import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import DraftsDrawer from "./components/DraftsDrawer.vue";
 import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
-import { demoMode, keepData, version } from "./lib/backend.js";
+import { keepData, version } from "./lib/backend.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, savePersonal } from "./lib/personal.js";
+import { useDrafts } from "./lib/useDrafts.js";
+
+// What main.js asked the backend before mounting (see backend.js startup): the demo banner and the most recent draft.
+const props = defineProps({ start: { type: Object, required: true } });
 
 // The in-app updater only exists in the desktop build; the web build loads the latest deploy and carries none of its code.
 const UpdateButton = import.meta.env.MODE === "web" ? null : defineAsyncComponent(() => import("./components/UpdateButton.vue"));
@@ -17,18 +22,35 @@ const lintMs = ref(0);
 const problems = ref([]);
 const showProblems = ref(true);
 const goVersion = ref("");
-const demo = ref(""); // banner text in demo mode (development builds only); the timings are then fixed
+const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
 const personal = ref({ words: 0, ignored: 0 });
 const saveError = ref("");
 const editor = ref(null);
+const showDrawer = ref(false);
+const drafts = useDrafts(editor, showDrawer);
+// The text of the open draft. On a first run the editor is empty, except in demo mode (screenshots), which shows a sample.
+const initialDoc = drafts.init(props.start, demo.value ? sample : "");
+
+function toggleDrawer() {
+  showDrawer.value = !showDrawer.value;
+  if (showDrawer.value) drafts.refreshList();
+}
+
+// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts.
+function onKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") {
+    e.preventDefault();
+    toggleDrawer();
+  }
+}
 
 // Show the editor first, then load Harper: you can type while the wasm loads, and the first check runs as soon as it is ready.
-// Harper's 20 MB wasm is fetched after the first paint and not before it, so it never competes with the page for the first
-// frame (Lighthouse counts every request in flight before the largest contentful paint against it). The wait is one frame; the
-// timer is a fallback for a window that is hidden at start, where the browser does not run animation frames.
-const afterFirstPaint = () =>
+// Harper's 20 MB wasm is fetched after the editor has been painted and not before it, so it never competes with the page for the
+// first frame (Lighthouse counts every request in flight before the largest contentful paint against it). The wait is one frame;
+// the timer is a fallback for a window that is hidden at start, where the browser does not run animation frames.
+const afterNextPaint = () =>
   new Promise((resolve) => {
     const timer = setTimeout(resolve, 300);
     requestAnimationFrame(() =>
@@ -39,17 +61,17 @@ const afterFirstPaint = () =>
     );
   });
 const t0 = performance.now();
-const loading = afterFirstPaint()
-  .then(() => createLinter())
-  .then(async (linter) => {
-    // Load the saved dictionary and ignore list into Harper before its first check, so findings already dealt with never show up.
-    try {
-      personal.value = await loadPersonal(linter);
-    } catch (err) {
-      saveError.value = `Could not load settings: ${err?.message || err}`;
-    }
-    return linter;
-  });
+async function loadHarper() {
+  await afterNextPaint();
+  const linter = await createLinter();
+  // Load the saved dictionary and ignore list into Harper before its first check, so findings already dealt with never show up.
+  try {
+    personal.value = await loadPersonal(linter);
+  } catch (err) {
+    saveError.value = `Could not load settings: ${err?.message || err}`;
+  }
+  return linter;
+}
 
 // 850 ms -> "850 ms", 1234 ms -> "1.2 s".
 function fmt(ms) {
@@ -80,17 +102,16 @@ async function persist() {
 }
 
 onMounted(async () => {
-  demoMode().then(
-    (text) => (demo.value = text),
-    () => {},
-  );
+  window.addEventListener("keydown", onKeydown);
+  drafts.attach();
   version().then(
     (v) => (goVersion.value = v),
     (err) => (goVersion.value = `unavailable: ${err}`),
   );
   keepData();
+  await nextTick(); // the editor is in the page now; Harper starts loading after it has been painted
   try {
-    harper.value = await loading;
+    harper.value = await loadHarper();
     setupMs.value = Math.round(performance.now() - t0);
     state.value = "ready";
   } catch (err) {
@@ -98,12 +119,19 @@ onMounted(async () => {
     error.value = String(err?.stack || err);
   }
 });
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKeydown);
+  drafts.detach();
+});
 </script>
 
 <template>
   <div class="app">
     <header class="bar">
       <span class="brand">Harper Pad</span>
+      <button type="button" class="drawer-btn" :class="{ on: showDrawer }" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="toggleDrawer">
+        Scratch pad <span class="kbd">Ctrl+J</span>
+      </button>
       <span class="spacer"></span>
       <button type="button" class="toggle" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="showProblems = !showProblems">
         Problems <span class="count">{{ problems.length }}</span>
@@ -112,8 +140,32 @@ onMounted(async () => {
     </header>
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
     <div class="body">
+      <DraftsDrawer
+        v-if="showDrawer"
+        :drafts="drafts.list.value.drafts"
+        :total="drafts.list.value.total"
+        :current-id="drafts.current.value.id"
+        :query="drafts.query.value"
+        :toast="drafts.toast.value"
+        @open="drafts.open"
+        @create="drafts.create"
+        @remove="drafts.remove"
+        @search="drafts.setQuery"
+        @more="drafts.showMore"
+        @undo="drafts.undo"
+        @close="toggleDrawer"
+      />
       <main class="page" @mousedown.self.prevent="editor?.focusEnd()">
-        <Editor ref="editor" :harper="harper" :doc="sample" :persist="persist" @result="onResult" @problems="onProblems" @stats="counts = $event" />
+        <Editor
+          ref="editor"
+          :harper="harper"
+          :doc="initialDoc"
+          :persist="persist"
+          @result="onResult"
+          @problems="onProblems"
+          @stats="counts = $event"
+          @edited="drafts.edited"
+        />
         <pre v-if="error" class="error">{{ error }}</pre>
       </main>
       <ProblemsPanel v-if="showProblems" :problems="problems" :words="personal.words" :ignored="personal.ignored" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" />
@@ -124,6 +176,7 @@ onMounted(async () => {
       <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span>
       <span v-if="state === 'ready'" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
       <span v-if="saveError" class="state failed">{{ saveError }}</span>
+      <span v-if="drafts.status.value" id="draft-status" :class="['state', drafts.state.value === 'error' ? 'failed' : 'mute']">{{ drafts.status.value }}</span>
       <span class="spacer"></span>
       <span class="mute">Version {{ goVersion || "..." }}</span>
     </footer>
@@ -151,6 +204,24 @@ onMounted(async () => {
 }
 .spacer {
   flex: 1;
+}
+.drawer-btn {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+}
+.drawer-btn.on {
+  border-color: var(--accent);
+}
+.kbd {
+  color: var(--mute);
+  font-size: 12px;
 }
 .toggle {
   height: 32px;
