@@ -48,7 +48,7 @@ sed "s/0\.0\.0/$numeric/g" build/windows/info.json > "$work/info.json"
 wails3 generate syso -arch amd64 \
   -icon build/windows/icon.ico \
   -manifest build/windows/wails.exe.manifest \
-  -info "$work/info.json" \
+  -info "$(native "$work")/info.json" \
   -out "$(native "$root")/wails_windows_amd64.syso"
 
 # CGO is off: the Windows build talks to WebView2 without C code. -H windowsgui keeps a console window from opening.
