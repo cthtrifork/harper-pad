@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cthtrifork/harper-pad/internal/store"
 )
@@ -18,6 +19,7 @@ func TestStartupOpensTheMostRecentDraft(t *testing.T) {
 	if _, err := s.Drafts.SaveDraft(store.Draft{Content: "older"}); err != nil {
 		t.Fatal(err)
 	}
+	time.Sleep(2 * time.Millisecond) // drafts are ordered by their millisecond timestamp; do not tie
 	newest, err := s.Drafts.SaveDraft(store.Draft{Content: "newest draft\nwith two lines"})
 	if err != nil {
 		t.Fatal(err)
