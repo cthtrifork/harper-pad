@@ -41,12 +41,16 @@ vendored Svelte editor. The wasm adds about 20 MB to the binary (8 MB gzipped).
 - [ ] Turn a whole Harper rule off, not just one finding (needs `organizedLints` and `setLintConfig`); maybe in a settings screen.
 - [ ] View switch Edit / Split / Preview, available whenever the scratch pad is closed. Split shows the markdown
       source left and the rendered preview right; Preview uses the whole window. The preview is read-only and
-      follows the editor's scroll. Only shown for markdown (see below).
+      follows the editor's scroll ("Scrolls with the editor" in the preview's header). Only shown for markdown (see below).
+      The source pane has line numbers, dimmed markdown marks (`#`, `**`, `- [ ]`) and a highlighted current line
+      (`@codemirror/lang-markdown`); the preview renders task lists as read-only checkboxes and `code` in a mono face.
 - [ ] Document `format` (`markdown` or `text`): files by extension (`.md`, `.markdown`), drafts store it, default
       markdown for new drafts, unknown files open as text. The status bar "Markdown" label is a menu to switch it.
       A plain-text draft that looks like markdown gets a "Looks like Markdown. Switch?" hint, never an automatic switch.
 - [ ] A way to see and remove dictionary words and ignored findings (the Problems panel only shows the counts).
-- [ ] Dialect/language setting (Harper config), persisted.
+- [ ] Dialect/language setting (Harper config), persisted: a picker in the toolbar ("English (US)").
+- [ ] Status bar: cursor position ("Ln 1, Col 24") and the number of selected characters ("Selection: 71 characters"), next to the
+      existing word and character counts.
 - [ ] Dirty state for a document that was opened from a file (see "Save as file" and "Open file" below).
 
 ## 5. Scratch pad drawer (drafts)
@@ -55,13 +59,17 @@ Design: the UI mockups in the "Harper Pad UI" canvas (editor, problems hidden, s
 
 - [ ] When the Edit / Split / Preview views exist: while the drawer is open only Edit is available (Split and Preview are
       disabled with a hint).
+- [ ] Show what the document is: in the toolbar its name and folder ("notes.md in ~/Documents") for a file, or a "Draft, not on
+      disk" badge for a draft, and the same name in the window title ("notes.md — Harper Pad": the Wails window title on
+      desktop, `document.title` on the web). The toolbar has **Open file** (Ctrl+O) and **Save as file** (Ctrl+S) buttons.
 - [ ] "Save as file" and "Open file": on desktop through the Go service (`application.Get().Dialog.SaveFile()` / `OpenFile()` with
       a filename and filters, `.md` or `.txt` from the draft's format), in the web build through the browser's file picker and
       download. Report results inline, not with info dialogs. Once it exists, the drawer's hint should say "Nothing is written to
       your files until you choose Save as file".
 - [ ] Export and import all drafts as one JSON file, as a manual backup. It matters most for the web build, where the browser
       can evict its storage, and it is also the only way to move drafts between the web app and the desktop app.
-- [ ] "Send to editor" and "Add to scratch pad" for the current selection.
+- [ ] "Send to editor" and "Add to scratch pad" for the current selection (a small button that appears over the selection in
+      the editor).
 - [ ] Search on desktop folds the case of ASCII letters only (SQLite's `LIKE`; the web build folds every letter). An FTS5 index
       (`unicode61`) would fix that and keep search quick on a very large collection.
 
