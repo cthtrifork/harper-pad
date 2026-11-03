@@ -26,4 +26,22 @@
     padding-left: max(12px, env(safe-area-inset-left));
     padding-right: max(12px, env(safe-area-inset-right));
   }
+
+  /* Turned sideways, the notch or the Dynamic Island takes a strip at one edge (the left one, or the right one the other way round).
+     The text, the scratch pad and the problems sheet keep clear of it; their own backgrounds still reach the edge. */
+  .pane {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  .drawer,
+  .panel {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .banner {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
 }
