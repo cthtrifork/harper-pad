@@ -167,6 +167,36 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload 08-mobile-drafts-drawer
+        if: github.event_name == 'pull_request'
+        id: shot-08-mobile-drafts-drawer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: docs/screenshots/08-mobile-drafts-drawer.png
+          archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload 09-mobile-problems
+        if: github.event_name == 'pull_request'
+        id: shot-09-mobile-problems
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: docs/screenshots/09-mobile-problems.png
+          archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload 10-mobile-markdown-split
+        if: github.event_name == 'pull_request'
+        id: shot-10-mobile-markdown-split
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: docs/screenshots/10-mobile-markdown-split.png
+          archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build the screenshots comment
         id: comment-body
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository

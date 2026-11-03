@@ -1,0 +1,148 @@
+/* Phones and narrow windows (design cheat sheet: touch targets are in touch.css). Below 720 px there is room for one pane, so:
+   the header wraps into rows, the scratch pad and the problems become sheets over the page instead of columns beside it, Split
+   stacks the source above the preview, and the status bar keeps only what fits. Loaded last so it can override the desktop rules. */
+@media (max-width: 720px) {
+  .app {
+    height: 100dvh;
+  }
+
+  .body {
+    position: relative;
+    flex-direction: column;
+  }
+
+  /* Header: row 1 brand, scratch pad, problems; row 2 save and the file; row 3 the views, as one full-width segmented control. */
+  .bar {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .bar .sep,
+  .bar .kbd,
+  .bar .folder {
+    display: none;
+  }
+
+  .bar .brand {
+    order: 1;
+  }
+
+  .bar .spacer {
+    order: 2;
+  }
+
+  .bar .drawer-btn {
+    order: 3;
+  }
+
+  .bar .toggle {
+    order: 4;
+  }
+
+  .bar .split,
+  .bar > .tool {
+    order: 5;
+  }
+
+  .bar .file-name,
+  .bar .badge {
+    order: 6;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bar .views {
+    order: 7;
+    flex-basis: 100%;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .bar .thumb {
+    width: calc((100% - 4px) / 3);
+  }
+
+  .bar .view {
+    min-height: 36px;
+  }
+
+  /* The update popup and the menus never run off the screen. */
+  .bar .menu {
+    max-width: calc(100vw - 24px);
+  }
+
+  /* Scratch pad: a full-width sheet over the page; you pick a draft and leave, and closing it returns to the text. */
+  .drawer {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    width: auto;
+    border: 0;
+  }
+
+  /* Problems: the lower part of the screen, so the text stays in view and a tapped problem can be seen. In Split it takes the
+     preview's place (the preview comes back when it is closed). */
+  .panel {
+    width: auto;
+    height: 45%;
+    flex: none;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .body.has-panel .page.split .side {
+    display: none;
+  }
+
+  /* The page itself: a smaller gutter; Split stacks. */
+  .pane {
+    padding: 16px 16px 24px;
+  }
+
+  .page {
+    min-height: 0;
+  }
+
+  .page.split {
+    flex-direction: column;
+  }
+
+  .page.split .col {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .page.split .col,
+  .page.split .side {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .slide-left-enter-from,
+  .slide-left-leave-to,
+  .slide-right-enter-from,
+  .slide-right-leave-to {
+    transform: translateY(16px);
+  }
+
+  .editor .cm-scroller,
+  .editor .cm-content {
+    min-height: 40vh;
+  }
+
+  /* Status bar: wraps to a second line instead of running off the screen; the timings and selection are not worth the room. */
+  .status {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 6px 12px;
+  }
+
+  .status .spacer,
+  .status > .mute:not(#draft-status):not(#markdown-hint),
+  #selection {
+    display: none;
+  }
+}

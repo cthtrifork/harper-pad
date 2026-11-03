@@ -216,3 +216,13 @@
     display: none;
   }
 }
+
+/* The small panel icon on the drawer buttons: the shaded side is the side the drawer opens on. */
+.bar .icon {
+  flex: none;
+  color: var(--mute);
+}
+
+.bar .on .icon {
+  color: var(--accent);
+}
