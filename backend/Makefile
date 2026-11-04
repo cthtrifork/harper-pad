@@ -2,8 +2,6 @@ SHELL := /bin/sh
 
 # podman compose where podman exists, docker compose otherwise. Override with COMPOSE="docker compose".
 COMPOSE ?= $(shell command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose")
-# The container engine behind it, for the one place that needs it directly (copying the certificates out of the volume).
-ENGINE ?= $(firstword $(COMPOSE))
 E2E_FILE := test/e2e/compose.yaml
 export COMPOSE E2E_FILE
 
@@ -36,10 +34,11 @@ E2E_CERTS := $(CURDIR)/.e2e-certs
 E2E_PG_PORT ?= 15432
 export E2E_PG_PORT
 
-e2e-certs: ## Copy the stack's throwaway certificates out of its volume into .e2e-certs/
+E2E_CERT_FILES := ca.crt client.crt client.key admin.crt admin.key wrongcn.crt wrongcn.key
+
+e2e-certs: ## Copy the running stack's throwaway certificates into .e2e-certs/ (the stack must be up)
 	rm -rf $(E2E_CERTS) && mkdir -p $(E2E_CERTS)
-	$(ENGINE) run --rm --user 0:0 -v harper-pad-e2e_pgcerts:/certs:ro -v $(E2E_CERTS):/out:z --entrypoint /bin/sh \
-		mirror.gcr.io/library/postgres:17 -c 'cp /certs/ca.crt /certs/client.crt /certs/client.key /certs/admin.crt /certs/admin.key /certs/wrongcn.crt /certs/wrongcn.key /out/ && chmod 644 /out/*'
+	for f in $(E2E_CERT_FILES); do $(COMPOSE) -f $(E2E_FILE) exec -T postgres cat /certs/$$f > $(E2E_CERTS)/$$f || exit 1; done
 
 test-db: ## Run all tests with PostgreSQL from the stack (TLS and client certificates); the stack is removed afterwards
 	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres
