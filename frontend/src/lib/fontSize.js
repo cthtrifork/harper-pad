@@ -2,9 +2,11 @@
 // There are two, "editor" and "preview". The page reads each from a CSS property (--editor-size in px, and --editor-scale, the same as
 // a plain number next to 19) so the editor, the Split source and the Split preview scale together from the editor's size, while the
 // full Preview view has its own.
+import { scoped } from "./scope.js";
+
 export const SIZES = [16, 19, 22, 26];
 export const DEFAULT_SIZE = 19;
-const key = (which) => `harper-pad.${which}-size`;
+const key = (which) => scoped(`harper-pad.${which}-size`);
 
 export function loadSize(which = "editor", storage = globalThis.localStorage) {
   try {
