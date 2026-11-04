@@ -429,23 +429,37 @@ jobs:
             type=raw,value=${{ needs.meta.outputs.version }}
             type=raw,value=latest,enable=${{ needs.meta.outputs.prerelease == 'false' }}
           labels: |
-            org.opencontainers.image.title=Harper Pad sync (${{ matrix.name }})
             org.opencontainers.image.version=${{ needs.meta.outputs.version }}
             org.opencontainers.image.revision=${{ needs.meta.outputs.sha }}
 
+      # Retried: pushing both images at once can trip GitHub's secondary rate limit, which ghcr.io reports as
+      # a 403, and a retry only repeats what the builder still has cached. No registry cache is used (a cache
+      # must never reach a release). BuildKit attaches a SLSA provenance and an SBOM attestation to the image
+      # in the registry; mode=max records the build args, none of which is secret (the login is not one).
       - name: Build and push
         id: push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: backend
-          file: backend/Containerfile.${{ matrix.name }}
-          platforms: linux/amd64
-          push: true
-          # BuildKit attaches a SLSA provenance and an SBOM attestation to the image in the registry.
-          provenance: mode=max
-          sbom: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          LABELS: ${{ steps.meta.outputs.labels }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          SHA: ${{ needs.meta.outputs.sha }}
+          NAME: ${{ matrix.name }}
+        run: |
+          args=()
+          while IFS= read -r t; do [ -n "$t" ] && args+=(--tag "$t"); done <<<"$TAGS"
+          while IFS= read -r l; do [ -n "$l" ] && args+=(--label "$l"); done <<<"$LABELS"
+          for attempt in 1 2 3; do
+            if docker buildx build backend --file "backend/Containerfile.${NAME}" --platform linux/amd64 \
+                 --push --sbom=true --provenance=mode=max \
+                 --build-arg "GIT_SHA=${SHA}" --build-arg "APP_VERSION=${VERSION}" \
+                 --metadata-file "$RUNNER_TEMP/metadata.json" "${args[@]}"; then
+              echo "digest=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::Attempt $attempt failed"
+            sleep $((attempt * 30))
+          done
+          exit 1
 
       - name: Attest image provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
