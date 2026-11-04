@@ -49,7 +49,7 @@ never run on a real desktop yet.
   restart, to see whether the key is cleared. If it fails or is cleared often, use the rotation fallback described there.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
-- [ ] The server: `harper-pad-sync` (enrollment, sync, devices), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
+- [ ] The server: `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
       devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), two container
       images, and tests. The Kubernetes manifests are not kept in this repository; write them in the cluster's GitOps repository from
       the "Deploying the server" section of `docs/sync.md`: CloudNativePG `Cluster`, cert-manager certificates (database clients and
