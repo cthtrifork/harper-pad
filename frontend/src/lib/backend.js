@@ -5,7 +5,7 @@
 //
 // The bindings are imported on demand and only in the desktop build, so the web bundle carries no Wails code.
 
-import { createWebDrafts, DB_NAME, DB_VERSION, upgrade } from "./webDrafts.js";
+import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
 export const isWeb = import.meta.env.MODE === "web";
@@ -21,14 +21,7 @@ const emptySettings = () => ({ version: 1, words: [], ignored: "" });
 
 const STORE = "kv";
 
-function openDb() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => upgrade(req.result);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+const openDb = () => openDatabase();
 
 async function idbGet(key) {
   const db = await openDb();
