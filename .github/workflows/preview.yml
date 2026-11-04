@@ -1,0 +1,113 @@
+name: Preview
+
+# Opt-in preview of a pull request: add the `preview` label and the web version of the branch is published to
+# <site>/pr-<number>/ (https://harper.portableinfo.cloud/pr-123/), and a sticky comment links it. Every push to the branch updates it.
+# Removing the label, or closing or merging the pull request, deletes it. The site and the other previews are not touched.
+# See docs/pages.md for the setup, and for why a preview gets its own storage names.
+#
+# Only for branches of this repository: a pull request from a fork has a read-only token and cannot publish. Adding a label needs
+# triage access, which is the opt-in. The workflow file that runs is the one on the pull request's branch.
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false # a clean-up must never be cancelled by a push
+
+jobs:
+  publish:
+    name: publish
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.action != 'closed' && github.event.action != 'unlabeled'
+      && contains(github.event.pull_request.labels.*.name, 'preview')
+      && (github.event.action != 'labeled' || github.event.label.name == 'preview')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # pushes the gh-pages branch
+      pages: read # configure-pages: the site's address, custom domain or not
+      pull-requests: write # the sticky comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      - id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      # The base path /pr-<number>/ is what tells the frontend it is a preview (src/lib/scope.js, web/sw.js): its own IndexedDB,
+      # localStorage keys and service-worker cache, so it never touches the real dictionary on the same origin.
+      - name: Build the web version for this pull request
+        working-directory: frontend
+        env:
+          BASE_PATH: /pr-${{ github.event.pull_request.number }}/
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build:web
+
+      - name: Publish to gh-pages
+        env:
+          PAGES_REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          PR: ${{ github.event.pull_request.number }}
+        run: scripts/pages-publish.sh preview "$PR" frontend/dist-web
+
+      - name: Comment the link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.pages.outputs.base_url }}/pr-${{ github.event.pull_request.number }}/
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          marker='<!-- harper-pad-preview -->'
+          body="$marker"$'\n'"**Preview** of $SHA: $URL"$'\n\n'"Pages takes about a minute to publish it. It is removed when the \`preview\` label is removed or the pull request is closed. It shares the site's address but keeps its own dictionary and drafts."
+          id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
+
+  remove:
+    name: remove
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && (github.event.action == 'closed'
+      || (github.event.action == 'unlabeled' && github.event.label.name == 'preview'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # pushes the gh-pages branch
+      pull-requests: write # the sticky comment
+    steps:
+      # Only the script is needed, nothing is built.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Remove pr-<number>/ from gh-pages
+        env:
+          PAGES_REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          PR: ${{ github.event.pull_request.number }}
+        run: scripts/pages-publish.sh remove "$PR"
+
+      - name: Update the comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- harper-pad-preview -->'
+          body="$marker"$'\n'"**Preview** removed."
+          id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+          fi

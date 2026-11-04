@@ -23,21 +23,41 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 
 ## Deploying
 
-`.github/workflows/pages.yml` builds the web version on every pull request that touches `frontend/`, and deploys it on pushes to
-`main`. The site is at `https://<owner>.github.io/harper-pad/`, or at the root of the repository's custom domain if Settings > Pages has one (this repository: `harper.portableinfo.cloud`). The workflow asks the Pages settings which (`actions/configure-pages`) and builds with the matching `BASE_PATH`, so changing the domain needs no code change; it needs a new deploy.
+`.github/workflows/pages.yml` builds the web version on every pull request that touches `frontend/`, and on pushes to `main` publishes
+it to the root of the `gh-pages` branch with `scripts/pages-publish.sh`, which GitHub Pages serves. The site is at
+`https://<owner>.github.io/harper-pad/`, or at the root of the repository's custom domain if Settings > Pages has one (this repository: `harper.portableinfo.cloud`). The workflow asks the Pages settings which (`actions/configure-pages`) and builds with the matching `BASE_PATH`, so changing the domain needs no code change; it needs a new deploy.
 
 ### One-time setup (repository admin)
 
 1. Open the repository on GitHub, then **Settings > Pages**.
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**. Do not pick "Deploy from a branch".
-3. Merge the pull request that adds `pages.yml` (or run the **Pages** workflow by hand from the Actions tab on `main`: **Run workflow**).
-4. Open the **Pages** workflow run. The `deploy` job prints the site URL, and the same URL appears under Settings > Pages.
-5. If the `deploy` job fails with "Environment protection rules", open Settings > Environments > `github-pages` and allow the `main` branch.
-6. A private repository needs a GitHub plan that includes Pages for private repos. On Free, the repository must be public. Anyone
+2. Under **Build and deployment**, set **Source** to **Deploy from a branch**, branch `gh-pages`, folder `/ (root)`. The branch does not
+   exist until the first deploy: run the **Pages** workflow by hand from the Actions tab on `main` (**Run workflow**) first, then set the source.
+   (Previews need this source: the **GitHub Actions** source can only publish one whole site at a time.)
+3. Keep the custom domain in the same page. GitHub commits a `CNAME` file to `gh-pages`; the scripts leave it alone.
+4. Create a label called `preview` (Pull requests > Labels).
+5. A private repository needs a GitHub plan that includes Pages for private repos. On Free, the repository must be public. Anyone
    with the URL can open the site, whatever the repository's visibility.
 
 Every later push to `main` that touches `frontend/` redeploys; nothing else to do. A deploy takes about a minute, and an installed
 phone app picks it up on its next launch (the service worker fetches the page network first).
+
+### Previews of a pull request
+
+Add the `preview` label to a pull request and `.github/workflows/preview.yml` builds that branch with `BASE_PATH=/pr-<number>/`,
+publishes it to `pr-<number>/` on `gh-pages`, and posts one sticky comment with the link
+(`https://harper.portableinfo.cloud/pr-123/`). Each push to the branch updates it. Removing the label, or closing or merging the pull
+request, deletes the folder. Without the label nothing is published.
+
+- **Same origin as the real site.** IndexedDB, localStorage and Cache Storage are shared by every path of an origin, so a preview would
+  read and write the real dictionary and drafts. The frontend therefore derives a scope from the base path (`src/lib/scope.js`; `web/sw.js`
+  does the same for its cache): on `/pr-<n>/` the database is `harper-pad.pr-<n>`, localStorage keys end in `.pr-<n>`, and the cache is
+  `harper-pad-pr-<n>-v1`. Production names do not change. Any new browser storage must go through `scoped()`.
+- **Branches of this repository only.** A pull request from a fork has a read-only token and is skipped. Adding the label needs triage
+  access. The workflow file that runs is the one on the pull request's branch, so anyone who can push a branch here can publish to
+  the site's domain; that is the same trust as write access to the repository.
+- **`gh-pages` is a build output.** Nothing on it is edited by hand. It keeps its history (each deploy is a commit); if it grows too large,
+  delete the branch and run **Pages** again, which recreates it (open previews come back on their next push).
+- The site deploy keeps `pr-*/`, `CNAME` and `.nojekyll`, and replaces everything else.
 
 ### Icons
 

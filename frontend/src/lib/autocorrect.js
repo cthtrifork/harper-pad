@@ -88,7 +88,9 @@ export function nonOverlapping(items) {
   return out;
 }
 
-const KEY = "harper-pad.autocorrect";
+import { scoped } from "./scope.js";
+
+const KEY = scoped("harper-pad.autocorrect");
 
 // The choices are kept in the browser storage the webview already has, on both builds. It can be unavailable (private window, blocked
 // storage), so every access is guarded and the defaults apply.

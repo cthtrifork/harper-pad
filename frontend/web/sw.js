@@ -3,14 +3,19 @@
 //   - Hashed files under assets/ (scripts, fonts, the Harper wasm) never change for a given name: cache first.
 //   - The page itself and the manifest and icons: network first, so a new deploy shows up on the next load; the
 //     cached copy is used when offline.
-const CACHE = "harper-pad-v1";
+//   - A pull-request preview lives at /pr-<number>/ on the same origin as production and so shares its Cache Storage: each gets its own
+//     cache name, and a worker only ever deletes the caches of its own site.
+const PREVIEW = /\/(pr-\d+)\/$/.exec(self.registration.scope)?.[1] ?? "";
+const CACHE = PREVIEW ? `harper-pad-${PREVIEW}-v1` : "harper-pad-v1";
+const isOwn = (key) =>
+  PREVIEW ? key.startsWith(`harper-pad-${PREVIEW}-`) : key.startsWith("harper-pad-") && !/^harper-pad-pr-\d+-/.test(key);
 
 self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      for (const key of await caches.keys()) if (key !== CACHE) await caches.delete(key);
+      for (const key of await caches.keys()) if (key !== CACHE && isOwn(key)) await caches.delete(key);
       await self.clients.claim();
     })(),
   );

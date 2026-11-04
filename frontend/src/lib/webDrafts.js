@@ -1,9 +1,10 @@
 // The drafts in the browser (the web build, which has no Go side): the same operations as DraftService's methods, kept in
 // IndexedDB. A draft's text and its summary are two records in one transaction, so listing reads only the small summaries and
 // never the text, as the desktop database does. IDs, limits and messages match internal/store.
+import { scoped } from "./scope.js";
 import { summarize } from "./summarize.js";
 
-export const DB_NAME = "harper-pad";
+export const DB_NAME = scoped("harper-pad");
 export const DB_VERSION = 2; // 1 had only the key/value store used for settings
 
 const MAX_CONTENT_BYTES = 5 << 20;

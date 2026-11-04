@@ -1,20 +1,23 @@
 name: Pages
 
-# Builds the web version of the frontend (`vite build --mode web`, see docs/pages.md) and deploys it to GitHub Pages
-# on every push to main. Pull requests only build it, so a broken web build is caught before merge. The site is
-# https://<owner>.github.io/harper-pad/, or the repository's custom domain (Settings > Pages) at its root; the build reads
+# Builds the web version of the frontend (`vite build --mode web`, see docs/pages.md) and publishes it to the root of the gh-pages
+# branch on every push to main. Pull requests only build it, so a broken web build is caught before merge. Opt-in previews of a pull
+# request go to pr-<number>/ on the same branch (preview.yml); this workflow leaves them alone.
+# The site is https://<owner>.github.io/harper-pad/, or the repository's custom domain (Settings > Pages) at its root; the build reads
 # which one from the Pages settings (configure-pages), so nothing here names a domain.
 #
-# One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions.
+# One-time setup: Settings > Pages > Build and deployment > Source: Deploy from a branch, branch gh-pages, folder / (root).
 on:
   pull_request:
     paths:
       - frontend/**
+      - scripts/pages-publish.sh
       - .github/workflows/pages.yml
   push:
     branches: [main]
     paths:
       - frontend/**
+      - scripts/pages-publish.sh
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -54,9 +57,13 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build:web
 
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name != 'pull_request'
         with:
+          name: site
           path: frontend/dist-web
+          if-no-files-found: error
+          retention-days: 1
 
   deploy:
     name: deploy
@@ -65,11 +72,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      pages: write # actions/deploy-pages publishes the uploaded artifact to GitHub Pages
-      id-token: write # deploy-pages proves to Pages, with an OIDC token, that this run may publish
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write # pushes the gh-pages branch
+    # No concurrency group on purpose: a queued job that is replaced by a newer one could be a clean-up. The script retries its push when
+    # preview.yml pushed first, and the two only ever change their own folders.
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: site
+
+      - name: Publish to the root of gh-pages
+        env:
+          PAGES_REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: scripts/pages-publish.sh site site
