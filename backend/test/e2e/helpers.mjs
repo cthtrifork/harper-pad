@@ -44,8 +44,9 @@ export function newDevice(browser) {
   return browser.newContext({ ignoreHTTPSErrors: true });
 }
 
-// TODO: insert an invite row straight into PostgreSQL, with the same SHA-256 token hash the service uses, through
-// `$COMPOSE -f test/e2e/compose.yaml exec -T postgres psql`. The admin UI is not used: it sits behind Cloudflare Access.
+// TODO: insert an invite row straight into PostgreSQL, with the same SHA-256 token hash the service uses, bound to the default
+// client account (`client_id`) and with a short expiry, through `$COMPOSE -f test/e2e/compose.yaml exec -T postgres psql`. The
+// admin UI is not used: it sits behind Cloudflare Access, and the admin app has no authentication of its own to skip.
 export async function insertInvite(_token, _deviceName) {
   throw new Error("insertInvite is not implemented yet");
 }

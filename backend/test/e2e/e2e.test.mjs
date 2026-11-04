@@ -37,9 +37,15 @@ describe("the stack", () => {
 });
 
 describe("sync", () => {
-  test.todo("enrollment: device A pastes an invite URL and gets a token; the same invite fails the second time");
-  test.todo("create and sync: a draft made on A is in PostgreSQL, and device B, enrolled with its own invite, pulls it");
-  test.todo("update: an edit on A reaches B as a plain update, with no conflicted copy");
-  test.todo("lose the server: wipe the database, restart the sync service, re-enroll, and the drafts are rebuilt without conflicted copies");
-  test.todo("later: an offline edit on both devices makes a local conflicted copy; a revoked token shows Sign in again and keeps the drafts");
+  // The checks follow docs/sync.md, "End-to-end test". Every request carries a DPoP proof from the page's own key, so the checks
+  // exercise the proof as well as the sync logic.
+  test.todo("enrollment: device A pastes an invite URL and gets a token bound to its key; the same invite fails the second time");
+  test.todo("save pushes: a draft made on A is in PostgreSQL shortly after the save");
+  test.todo(
+    "Sync all and opening a note: B, enrolled with its own invite, has the draft; an edit on A reaches B when B opens the note as a plain update with no conflicted copy; a draft created on A after B enrolled appears on B after Sync all",
+  );
+  test.todo("lose the server: wipe the database, restart the sync service, re-enroll both devices, and Sync all rebuilds the drafts without conflicted copies");
+  test.todo(
+    "later: an offline edit on both devices makes a local conflicted copy; a revoked token shows Sign in again and keeps the drafts; with a second client account, neither account sees the other's drafts or devices",
+  );
 });
