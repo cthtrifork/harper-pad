@@ -57,8 +57,8 @@ make e2e     # build the web app, start the stack, run the test, remove the stac
 PostgreSQL in the stack runs the production login: TLS required, and a client certificate whose common name is the role, no password.
 `certs.sh` makes a throwaway ECDSA CA and the certificates inside the postgres container, PostgreSQL requires TLS 1.3, `harper-pad-sync` connects with the libpq
 variables (`PGSSLMODE=verify-full`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`), and the test checks that TLS without a certificate,
-a certificate with another common name and a plain connection are all refused. What it still does not check is CloudNativePG's own
-`pg_hba` defaults, cert-manager issuing and renewing, and the NetworkPolicy.
+a certificate with another common name and a plain connection are all refused. What it still does not check is cert-manager issuing
+and renewing, and the NetworkPolicy.
 
 `podman compose` is only a front end: it needs a provider, `podman-compose` (`pip install --user podman-compose`) or
 `docker-compose`. The stack has been run with podman 5.8 and podman-compose 1.6; `docker compose` has not been tried.

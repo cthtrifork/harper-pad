@@ -50,7 +50,7 @@ never run on a real desktop yet.
       images, and tests. The Kubernetes manifests are not kept in this repository; write them in the cluster's GitOps repository from
       the "Deploying the server" section of `docs/sync.md`: CloudNativePG `Cluster`, cert-manager certificates (database clients and
       the sync domain), the ingress route and middlewares for the sync API, NetworkPolicies, the admin pod with its `cloudflared`
-      sidecar. Verify the CloudNativePG `pg_hba` certificate setup on a real cluster.
+      sidecar.
 - [ ] The sync module (`lib/sync.js`) with unit tests.
 - [ ] The end-to-end test (`docs/sync.md`, "End-to-end test"): a compose stack with PostgreSQL, `harper-pad-sync` built from
       `backend/Containerfile.sync`, and Caddy providing https (`app.localhost` serves the web build, `sync.localhost` proxies to the
