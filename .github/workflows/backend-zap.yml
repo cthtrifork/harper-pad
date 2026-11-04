@@ -77,10 +77,15 @@ jobs:
 
       - name: Upload to code scanning
         if: hashFiles('zap-out/zap.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
-        with:
-          sarif_file: zap-out/zap.sarif
-          category: zap-sync-backend
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.ref }}
+        run: |
+          # The REST endpoint takes the gzipped, base64 encoded file. The commit is the one that ran, not the pull request's merge commit.
+          gzip -c zap-out/zap.sarif | base64 -w0 > zap-out/zap.sarif.gz.b64
+          gh api -X POST "repos/$GITHUB_REPOSITORY/code-scanning/sarifs" \
+            -f commit_sha="$GITHUB_SHA" -f ref="$REF" -f tool_name="OWASP ZAP" \
+            -F sarif=@zap-out/zap.sarif.gz.b64 --jq '.id'
 
       # One comment per pull request, updated in place on each run. Not for forks: their token is read-only.
       - name: Comment on the pull request

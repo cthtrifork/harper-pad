@@ -4,12 +4,13 @@
 # repository's Security tab (not as a line in the diff). Rules marked FAIL in rules.tsv are "error", the rest "warning" or "note".
 set -eu
 report=$1 rules=$2 out=$3
+ignore_ids=$(awk -F'\t' '!/^#/ && $2=="IGNORE" {printf "%s ", $1}' "$rules")
 fail_ids=$(awk -F'\t' '!/^#/ && $2=="FAIL" {printf "%s ", $1}' "$rules")
 
-jq --arg fail " $fail_ids" '
+jq --arg fail " $fail_ids" --arg ignore " $ignore_ids" '
   def level: .pluginid as $id | if ($fail | contains(" " + $id + " ")) then "error"
              elif (.riskcode | tonumber) >= 1 then "warning" else "note" end;
-  [.site[]?.alerts[]?] as $alerts
+  [.site[]?.alerts[]? | .pluginid as $id | select($ignore | contains(" " + $id + " ") | not)] as $alerts
   | {
     "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
     version: "2.1.0",
