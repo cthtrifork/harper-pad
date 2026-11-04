@@ -20,6 +20,23 @@ export function upgrade(db) {
   }
 }
 
+// Opens the database at DB_VERSION, creating or upgrading it. When the stored database is already newer (another build of the app on the
+// same origin migrated it, for instance a preview of a branch), the browser refuses with a VersionError; this build then opens it as it
+// is, which works as long as the newer migrations only added things (the usual case). `idb` is the IDBFactory, a parameter for the tests.
+export function openDatabase(idb = indexedDB) {
+  return new Promise((resolve, reject) => {
+    const req = idb.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => upgrade(req.result);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => {
+      if (req.error?.name !== "VersionError") return reject(req.error);
+      const current = idb.open(DB_NAME);
+      current.onsuccess = () => resolve(current.result);
+      current.onerror = () => reject(current.error);
+    };
+  });
+}
+
 // 32 hex characters that sort by creation: 6 bytes of the time in milliseconds, then 10 random bytes.
 function newId(now) {
   const b = new Uint8Array(16);
