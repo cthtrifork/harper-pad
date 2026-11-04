@@ -62,7 +62,7 @@ What losing the whole server costs:
 |---|---|---|
 | Server | A new Go service, `harper-pad-sync`, in a container, behind a reverse proxy | Small, one static binary; reuses the app's validation limits and habits |
 | Database | PostgreSQL on an internal network, authenticated with **client certificates** (mTLS), no passwords | The sync service and the admin UI each get their own certificate and a least-privilege role |
-| Admin | A separate tiny Go + HTMX container, **not exposed to the internet**, for enrollment URLs and device management | Keeps administration out of the public API; its database role cannot read notes |
+| Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port and no login code to write; keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
 | Hosting | The user's own domain over HTTPS, behind a reverse proxy that terminates TLS | iOS needs a trusted certificate for service workers and `fetch` from the web app |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
 | Users | One | No account table or sharing rules |
@@ -82,7 +82,9 @@ flowchart LR
     pwa["iPhone Home Screen app (PWA)<br/>IndexedDB"]
   end
   pages["GitHub Pages<br/>static app code only,<br/>no user data"]
-  operator(["Operator<br/>private access only"])
+  operator(["Operator<br/>browser"])
+  idp["OIDC identity provider<br/>with MFA"]
+  cf["Cloudflare<br/>Access (OIDC login)<br/>and Tunnel"]
 
   subgraph host["Your server (containers)"]
     direction LR
@@ -90,9 +92,10 @@ flowchart LR
       proxy["Reverse proxy<br/>TLS for sync.example.com"]
       api["harper-pad-sync<br/>Go sync API<br/>enroll, sync, devices<br/>(also on the internal network)"]
     end
-    subgraph internal["Internal network: not reachable from the internet"]
+    subgraph internal["Internal network: no published ports"]
       pg[("PostgreSQL<br/>TLS + client-certificate auth")]
-      admin["harper-pad-admin<br/>Go + HTMX<br/>enrollment URLs, devices<br/>no published port"]
+      admin["harper-pad-admin<br/>Go + HTMX<br/>enrollment URLs, devices<br/>verifies the Access token"]
+      cfd["cloudflared<br/>outbound connection only"]
     end
   end
 
@@ -102,14 +105,18 @@ flowchart LR
   proxy --> api
   api -->|"mTLS, role harper_sync"| pg
   admin -->|"mTLS, role harper_admin"| pg
-  operator -->|"VPN, LAN or SSH tunnel"| admin
+  operator -->|"https://admin.example.com"| cf
+  cf <-->|"OIDC login"| idp
+  cfd <-->|"outbound tunnel, no inbound port"| cf
+  cfd -->|"HTTP, internal network"| admin
 ```
 
 | Component | Runs as | Reachable from | Does |
 |---|---|---|---|
 | Reverse proxy | Container (Caddy, nginx or similar) | The internet, port 443 | Terminates TLS for the domain and forwards to the sync service |
 | `harper-pad-sync` | Go container | The proxy only | The API: enroll, sync, devices. Attached to the edge and the internal network |
-| `harper-pad-admin` | Go + HTMX container | The operator's private network only; **no published port** | Creates enrollment URLs, lists, renames and revokes devices |
+| `harper-pad-admin` | Go + HTMX container | Cloudflare Tunnel only, behind Cloudflare Access (OIDC login); **no published port** | Creates enrollment URLs, lists, renames and revokes devices |
+| `cloudflared` | Container, internal network | Makes an outbound-only connection to Cloudflare; no inbound port | Carries admin UI requests from Cloudflare to `harper-pad-admin` |
 | PostgreSQL | Container | The internal network only | All server state; accepts only TLS connections with a valid client certificate |
 | GitHub Pages | Static hosting | The internet | Serves the web app's code; holds no user data |
 
@@ -131,27 +138,61 @@ PostgreSQL publishes no port outside the internal network.
 
 ### The admin UI
 
-A small Go server rendering HTML with HTMX, in its own container so the public API carries no administration code. It is
-reachable only from the operator's private network (a VPN, the LAN, or an SSH tunnel to a loopback port) and is not routed by
-the reverse proxy. Because anything on that network can still reach it, it has its own protections: it requires a login (open
-question below), every state-changing request carries a CSRF token and is checked for a same-origin `Origin` header, and its
-pages set the same strict Content-Security-Policy as the app (no inline scripts). It reads the sync service's public address from
-its configuration, which is how it builds enrollment URLs.
+A small Go server rendering HTML with HTMX, in its own container so the public API carries no administration code. It publishes no
+port and the reverse proxy does not route to it. It is reached through a **Cloudflare Tunnel**: a `cloudflared` container on the
+internal network makes an outbound-only connection to Cloudflare, so the host opens no inbound port for it, and a **Cloudflare
+Access** application in front of the tunnel makes the operator sign in with an OIDC identity provider before any request reaches
+the origin. The sync API is not behind Cloudflare in this design; only the admin UI is.
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
-agent, rename, and revoke. History restore and `purge-plaintext` need access to notes, so they stay out of the admin UI, in a
-break-glass CLI of the sync binary that runs on the server host with the sync role (`podman exec`).
+agent, rename, and revoke. It reads the sync service's public address from its configuration, which is how it builds enrollment
+URLs, and keeps an audit log of who did what. History restore and `purge-plaintext` need access to notes, so they stay out of the
+admin UI, in a break-glass CLI of the sync binary that runs on the server host with the sync role (`podman exec`).
+
+#### Login: Cloudflare Access with OIDC
+
+- **Access application** for `admin.example.com`, with the OIDC identity provider added as its login method (MFA is enforced at the
+  identity provider). The policy allows only the operator's identity (an email, or a group at the provider), and the session is
+  short, for example a few hours.
+- **The admin app does not trust that a request came through Access.** On every request it verifies the
+  `Cf-Access-Jwt-Assertion` header: the RS256 signature against the team's signing keys (the JWKS at
+  `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, cached and refreshed when an unknown `kid` appears), `iss` equal to
+  the team domain, `aud` equal to this application's AUD tag, `exp`, and the `email` claim in the configured allowlist. It ignores
+  the plain `Cf-Access-Authenticated-User-Email` header, which anything that can reach the container could forge. A request
+  without a valid token gets a 403, so a misrouted request or something else on the internal network cannot use the admin UI.
+- **Still needed inside the app:** a CSRF token on every state-changing request and an `Origin` check against the admin host
+  (the session is a cookie), and the same strict Content-Security-Policy as the app (no inline scripts).
+- **Alternative:** skip Access and make the admin app an OIDC client itself (authorization code flow with PKCE and its own session
+  cookie) behind the tunnel. That removes the dependency on Cloudflare for authentication, at the cost of login code in the app.
+  The design uses Access plus token verification because it has no login code to write or get wrong.
+
+#### What this trusts
+
+- **Cloudflare terminates TLS for the admin host,** so it can see admin traffic, including the enrollment URL shown on the page.
+  The invite is single use and expires in 15 minutes, and the device it enrolls appears in the device list, so a stolen invite is
+  noticed, but not prevented.
+- **Admin access is the ability to enroll a device, and in v1 a device can read every note.** That the admin's database role cannot
+  read notes does not make a compromised admin UI harmless. Whoever controls the operator's identity provider account, the
+  Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
+  the Cloudflare account are part of the security of the notes. Mitigations in this design: the "new device enrolled" notice on
+  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), the audit log, and in v2 a new device also needs the
+  passphrase or recovery key. A further option is to require approval of a new device on an already-enrolled one (open question).
 
 ### Enrolling a device
 
 ```mermaid
 sequenceDiagram
   actor Op as Operator
+  participant CF as Cloudflare Access + Tunnel
   participant Admin as Admin UI (internal)
   participant DB as PostgreSQL
   participant Dev as Device
   participant API as Sync API (public HTTPS)
-  Op->>Admin: New enrollment URL (device name)
+  Op->>CF: Open admin.example.com (OIDC login with MFA)
+  CF->>Admin: Request with the Access token (JWT)
+  Admin->>Admin: Verify the JWT and the operator's email
+  Op->>CF: New enrollment URL (device name)
+  CF->>Admin: Request with the Access token
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
   Op->>Dev: Paste in Settings, Sync, Add this device
@@ -412,7 +453,7 @@ This is a bearer-token model with transport security and no content encryption.
 | Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; version history to undo damage; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Database access | TLS and client certificates only, no passwords; the database is on an internal network with no published port; each service has its own role with least privilege ([Database access](#database-access)). |
-| Admin UI | Not routed from the internet; reachable only on the operator's private network; login, CSRF tokens, same-origin checks, strict CSP. Its role cannot read notes, so compromising it yields invites and devices, not content. |
+| Admin UI | No published port; reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login and MFA at the identity provider; the app verifies the Access token on every request; CSRF tokens, same-origin checks, strict CSP, an audit log. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1), so the identity provider and Cloudflare accounts are part of the trust chain. See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
@@ -425,9 +466,9 @@ see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees size
 
 ## Deploying the server
 
-Four containers on one host, on two container networks (for example with podman): the **edge** network holds the reverse proxy and
-the sync service, and the **internal** network holds the sync service, the admin UI and PostgreSQL. Only the proxy publishes a port
-(443). The sync service runs the schema migrations at start and refuses to run without a database certificate and a `PUBLIC_URL`
+Five containers on one host, on two container networks (for example with podman): the **edge** network holds the reverse proxy and
+the sync service, and the **internal** network holds the sync service, the admin UI, `cloudflared` and PostgreSQL. Only the proxy publishes a port
+(443); `cloudflared` only dials out to Cloudflare. The sync service runs the schema migrations at start and refuses to run without a database certificate and a `PUBLIC_URL`
 that is `https:`. It trusts `X-Forwarded-Proto` only from the proxy's address.
 
 PostgreSQL holds all state. Backing it up (`pg_dump` on a schedule, or WAL archiving) is **recommended but not required for the
@@ -468,8 +509,9 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
   time or needs a setting at run time.
 - **Where the server code lives:** in this repository (shares the validation constants) or its own. In this repository is simpler
   for v1; the release workflow would then need two more artifacts (the sync and admin container images).
-- **How the admin UI authenticates the operator:** a password or passkey of its own, mTLS from the operator's browser, or an
-  identity-aware proxy in front of it. It must not rely on "it is on the private network" alone.
+- **Which OIDC provider** signs the operator in, and whether to also allow only specific devices or networks in the Access policy.
+- **Approval of new devices:** whether enrollment should additionally need a confirmation on an already-enrolled device, so that
+  admin access alone cannot add a device that reads the notes.
 - **Issuing and rotating the database certificates:** a small private CA kept offline, or the host's existing PKI; and how the
   containers pick up a renewed certificate without a long outage.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start

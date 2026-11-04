@@ -50,7 +50,7 @@ never run on a real desktop yet.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
 - [ ] The server: `harper-pad-sync` (enrollment, sync, devices, history, break-glass CLI), the `harper-pad-admin` Go + HTMX
-      container (enrollment URLs, devices), PostgreSQL roles and client certificates, container images and a compose or quadlet
+      container (enrollment URLs, devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), PostgreSQL roles and client certificates, container images and a compose or quadlet
       setup on two networks, tests. Decide whether it lives in this repository
       (see the open questions in `docs/sync.md`).
 - [ ] The sync module (`lib/sync.js`) with unit tests and an end-to-end test against the real server.
