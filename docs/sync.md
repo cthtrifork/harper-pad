@@ -145,18 +145,10 @@ drafts, so devices never compare clocks (they only test two states for equality)
 ### Database access
 
 No workload has a database password. PostgreSQL requires TLS and a client certificate for every connection, and the clients
-verify the server certificate (`sslmode=verify-full`, with the cluster's server CA mounted in each pod).
-
-- **Certificates:** cert-manager issues one `Certificate` per role (usage `client auth`, common name equal to the role name) from
-  an issuer whose CA is given to the cluster as `spec.certificates.clientCASecret`. With a custom client CA the cluster no longer
-  holds the signing key, so the `kubectl cnpg certificate` helper cannot be used and cert-manager is the issuer. Each pod mounts
-  its certificate Secret as a volume, and the app reads the files once at start (pgx does not reload them). Renewal is handled by
-  [Stakater Reloader](https://github.com/stakater/Reloader): the Deployments carry its annotation for the certificate Secrets, and
-  it does a rolling restart when cert-manager renews one, so the app has no reload code.
-- **Authentication rules:** `spec.postgresql.pg_hba` requires `cert` for these roles over `hostssl`, and the roles have no
-  password, and the certificate's common name equals the role name.
-- **Network:** a NetworkPolicy lets only the sync pods and the admin pods reach port 5432 (plus what the
-  operator itself needs).
+verify the server certificate (`sslmode=verify-full`). cert-manager issues one certificate per role (common name equal to the
+role name, from the CA given to the cluster as `spec.certificates.clientCASecret`), `pg_hba` requires `cert` over `hostssl`, and
+a NetworkPolicy lets only the sync and admin pods reach port 5432. The app reads the certificate files once at start; Stakater
+Reloader restarts the pods when cert-manager renews them, so there is no reload code. This is deployed and working.
 
 | Role | Used by | Allowed |
 |---|---|---|
@@ -690,8 +682,8 @@ Everything runs in one Kubernetes namespace, `harper-pad`, described by manifest
 GitOps repository, not in this one (this section is their specification):
 
 - **PostgreSQL:** a CloudNativePG `Cluster` with one instance to start (one user, and devices can rebuild the server, so high
-  availability is not needed), the client CA and `pg_hba` settings above, and the certificates from cert-manager. The design makes
-  no provision for backing it up or restoring it: every device holds a full copy, and a new empty server is repopulated by Sync all.
+  availability is not needed), certificate authentication as above. No backup or restore: every device holds a full copy, and a new
+  empty server is repopulated by Sync all.
 - **Migrations:** the sync service applies them itself at start, under its own role, taking a PostgreSQL advisory lock so that
   only one pod migrates if there is ever more than one replica. It refuses to start if the database has a newer schema than it
   knows. The admin service starts only against a schema it recognises, and does not migrate.
