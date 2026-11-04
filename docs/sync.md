@@ -157,7 +157,9 @@ A small Go server rendering HTML with HTMX, in its own pod so the public API car
 identity provider before any request reaches the pod. The sync API is not behind Cloudflare; the cluster's ingress serves it.
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
-agent, rename, and revoke. It reads the sync service's public address from its configuration, which is how it builds enrollment
+agent, rename, and revoke.
+There are three pages: Devices, Enrollment and Audit log. A mockup in the app's own design tokens, light and dark, is in
+[`admin-ui-mockup.html`](admin-ui-mockup.html); open it in a browser. It reads the sync service's public address from its configuration, which is how it builds enrollment
 URLs, and keeps an audit log of who did what. It has no feature that reads or writes notes, which is why its database role has no access to them.
 
 #### Login: Cloudflare Access with OIDC
