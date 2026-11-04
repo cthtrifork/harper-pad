@@ -1,0 +1,14 @@
+# e2e stack only. Caddy's own CA signs these names; the test runs Chromium with ignoreHTTPSErrors, so no root certificate
+# has to be trusted. The page and the API are different https origins, as in production.
+
+https://app.localhost {
+	tls internal
+	root * /srv/app
+	try_files {path} /index.html
+	file_server
+}
+
+https://sync.localhost {
+	tls internal
+	reverse_proxy sync:8080
+}

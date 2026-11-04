@@ -1,0 +1,13 @@
+# harper-pad-sync. Build context is backend/ (the e2e compose file sets it). Scaffold: not yet built here.
+FROM mirror.gcr.io/library/golang:1.26-trixie AS build
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/harper-pad-sync ./cmd/harper-pad-sync
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/harper-pad-sync /harper-pad-sync
+USER nonroot:nonroot
+EXPOSE 8080
+ENTRYPOINT ["/harper-pad-sync"]

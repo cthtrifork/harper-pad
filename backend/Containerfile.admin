@@ -1,0 +1,13 @@
+# harper-pad-admin. Build context is backend/. Scaffold: not yet built here.
+FROM mirror.gcr.io/library/golang:1.26-trixie AS build
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/harper-pad-admin ./cmd/harper-pad-admin
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/harper-pad-admin /harper-pad-admin
+USER nonroot:nonroot
+EXPOSE 8081
+ENTRYPOINT ["/harper-pad-admin"]
