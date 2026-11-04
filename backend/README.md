@@ -11,10 +11,10 @@ manifests are not kept in this repository.
 | Path | What |
 |---|---|
 | `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
-| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool; all SQL and `migrations/` later), and `syncapi`, `admin`, `auth`, `protocol`, `pgtls`: empty packages with a package comment each |
+| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool; all SQL and `migrations/` later), `pgtls` (reloads the PostgreSQL client certificate when cert-manager renews it), and `syncapi`, `admin`, `auth`, `protocol`: empty packages with a package comment each |
 | `Containerfile.sync`, `Containerfile.admin` | Container images; the build context is this directory |
 | `testdata/protocol/` | Fixtures for the protocol (empty) |
-| `test/e2e/` | The end-to-end stack (`compose.yaml`, `Caddyfile`) and the Playwright test |
+| `test/e2e/` | The end-to-end stack (`compose.yaml`, `Caddyfile`, `certs.sh`) and the Playwright test |
 
 ## Running in Kubernetes
 
@@ -53,6 +53,12 @@ make e2e     # build the web app, start the stack, run the test, remove the stac
 `make e2e` needs Node 22+, Playwright (`PLAYWRIGHT_DIR`, a global `playwright-core`, or `E2E_BROWSER_PATH` for a Chromium binary) and
 `podman compose` or `docker compose`. The stack serves the web build at `https://app.localhost:18443` and the sync service at
 `https://sync.localhost:18443` (set `E2E_PORT` to use another host port) with certificates from Caddy's own CA; the test ignores certificate errors.
+
+PostgreSQL in the stack runs the production login: TLS required, and a client certificate whose common name is the role, no password.
+`certs.sh` makes a throwaway CA and the certificates inside the postgres container, `harper-pad-sync` connects with the libpq
+variables (`PGSSLMODE=verify-full`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`), and the test checks that TLS without a certificate,
+a certificate with another common name and a plain connection are all refused. What it still does not check is CloudNativePG's own
+`pg_hba` defaults, cert-manager issuing and renewing, and the NetworkPolicy; `internal/pgtls` has a unit test for the reload.
 
 `podman compose` is only a front end: it needs a provider, `podman-compose` (`pip install --user podman-compose`) or
 `docker-compose`. The stack has been run with podman 5.8 and podman-compose 1.6; `docker compose` has not been tried.

@@ -3,6 +3,7 @@ SHELL := /bin/sh
 # podman compose where podman exists, docker compose otherwise. Override with COMPOSE="docker compose".
 COMPOSE ?= $(shell command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose")
 E2E_FILE := test/e2e/compose.yaml
+export COMPOSE E2E_FILE
 
 # CI sets PLAYWRIGHT_VERSION and the e2e target installs that playwright-core into .playwright/. Locally leave it unset and use
 # PLAYWRIGHT_DIR, a global playwright-core or E2E_BROWSER_PATH (see README.md).

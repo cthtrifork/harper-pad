@@ -5,13 +5,37 @@
 #   https://sync.localhost:${E2E_PORT:-18443}  harper-pad-sync, through Caddy
 name: harper-pad-e2e
 
+volumes:
+  pgcerts:
+
 services:
   postgres:
     image: mirror.gcr.io/library/postgres:17
+    # First makes the CA, the server certificate and the client certificates into the pgcerts volume (certs.sh, run as root), then
+    # starts the image's own entrypoint, which drops to the postgres user. TLS is required, and pg_hba.conf (made by certs.sh) lets
+    # the role in only with a client certificate whose common name is the role, as the CloudNativePG cluster does (docs/sync.md,
+    # "Database access"). The password only satisfies the image's init script; no login uses it.
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "/certs.sh && exec docker-entrypoint.sh \"$$@\"", "sh"]
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
+      - -c
+      - ssl_ca_file=/certs/ca.crt
+      - -c
+      - hba_file=/certs/pg_hba.conf
     environment:
       POSTGRES_DB: harper
       POSTGRES_USER: harper_sync
       POSTGRES_PASSWORD: e2e-only
+    volumes:
+      - ./certs.sh:/certs.sh:ro,z
+      - pgcerts:/certs
     # The data is thrown away with the stack, so keep it in memory.
     tmpfs:
       - /var/lib/postgresql/data
@@ -22,6 +46,8 @@ services:
       retries: 30
 
   sync:
+    # podman-compose starts services without waiting for depends_on conditions, so a start before the certificates exist is retried.
+    restart: on-failure
     build:
       context: ../..
       dockerfile: Containerfile.sync
@@ -29,8 +55,17 @@ services:
       LISTEN_ADDR: ":8080"
       PUBLIC_URL: https://sync.localhost:${E2E_PORT:-18443}
       CORS_ALLOWED_ORIGINS: https://app.localhost:${E2E_PORT:-18443}
-      # Password authentication here; mTLS to PostgreSQL is checked on a real cluster, not in this stack.
-      DATABASE_URL: postgres://harper_sync:e2e-only@postgres:5432/harper?sslmode=disable
+      # Client-certificate login with no password, configured the way the cluster does it: the libpq variables.
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: harper
+      PGUSER: harper_sync
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: /certs/ca.crt
+      PGSSLCERT: /certs/client.crt
+      PGSSLKEY: /certs/client.key
+    volumes:
+      - pgcerts:/certs:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,6 +1,6 @@
 // Shared bits of the end-to-end test: where the stack listens, how to start Chromium, and the helpers the real checks
 // will use. Scaffold: only the browser launch is implemented.
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -54,4 +54,29 @@ export async function insertInvite(_token, _deviceName) {
 // TODO: wipe the database and restart the sync service, for the "lose the server" check.
 export async function wipeServer() {
   throw new Error("wipeServer is not implemented yet");
+}
+
+// Runs a command in a service of the compose stack and resolves with its exit code and output, whatever the code is. COMPOSE and
+// E2E_FILE come from the Makefile (`podman compose` or `docker compose`).
+export function compose(service, args) {
+  const [cmd, ...base] = (process.env.COMPOSE || "docker compose").split(" ");
+  const file = process.env.E2E_FILE || "test/e2e/compose.yaml";
+  const r = spawnSync(cmd, [...base, "-f", file, "exec", "-T", service, ...args], { encoding: "utf8" });
+  return { code: r.status, out: `${r.stdout}${r.stderr}` };
+}
+
+// Waits until the sync service is ready. podman-compose does not wait for depends_on conditions, so the service may still be
+// restarting (it exits until the certificates exist) when the stack comes up.
+export async function waitForSync(browser, seconds = 90) {
+  const device = await newDevice(browser);
+  try {
+    for (let i = 0; i < seconds; i++) {
+      const res = await device.request.get(`${SYNC_URL}/readyz`).catch(() => null);
+      if (res?.ok()) return;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    throw new Error(`the sync service was not ready after ${seconds} s`);
+  } finally {
+    await device.close();
+  }
 }
