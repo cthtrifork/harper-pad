@@ -16,13 +16,13 @@
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font-ui);padding:32px 24px 48px}
 .sprite{position:absolute}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.win{max-width:1040px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.win{max-width:1040px;min-height:calc(100vh - 80px);margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .bar{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--raised);border-bottom:1px solid var(--line)}
 .brand{font-family:var(--font-doc);font-weight:700;font-size:17px}
 .brand span{color:var(--mute);font-weight:500}
 .who{color:var(--mute);font-size:12px;min-width:1px}
 .acct{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:11px;border:1px solid var(--line);background:var(--sunken);color:var(--text);font-size:12px;font-weight:600}
-.page{padding:20px;display:flex;flex-direction:column;gap:16px}
+.page{width:100%;max-width:760px;margin:0 auto;padding:28px 24px 32px;display:flex;flex-direction:column;gap:16px}
 .stack{display:flex;flex-direction:column;gap:16px}
 .head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
 h2{font-family:var(--font-doc);font-size:20px;margin:0}
@@ -71,3 +71,19 @@ input[aria-invalid="true"]{border-color:var(--bad)}
 .htmx-added{opacity:0}
 .htmx-swapping{opacity:0}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* Phones: the window fills the screen, the form and the actions stack, targets are 44px and inputs 16px (iOS zooms smaller ones). */
+@media (max-width:600px){
+  body{padding:0}
+  .win{max-width:none;min-height:100vh;border:0;border-radius:0}
+  .bar{padding:12px 16px;padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+  .page{padding:16px;padding-bottom:max(24px,env(safe-area-inset-bottom));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+  .inl{flex-direction:column;align-items:stretch}
+  .inl input{min-width:0;font-size:16px}
+  .item .main{flex:1 1 calc(100% - 24px)}
+  .item .hp{flex:1;justify-content:center}
+  .url{flex-direction:column;align-items:stretch}
+  .url .hp{justify-content:center}
+  .url code{white-space:normal;overflow-wrap:anywhere}
+}
+@media (pointer:coarse){.hp,.inl input{min-height:44px}}
