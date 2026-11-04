@@ -2,7 +2,7 @@
 
 The optional sync service for Harper Pad: `harper-pad-sync` (the API) and `harper-pad-admin` (Go + HTMX, for enrollment URLs
 and devices), on PostgreSQL. The design is in [`docs/sync.md`](../docs/sync.md). **Nothing here works yet beyond the health
-endpoints and the admin pages (on stub data)**: this directory is the layout, the stub commands and the end-to-end stack, to be filled in following the build order
+endpoints and the admin pages, which run against a PostgreSQL you set up yourself (below)**: this directory is the layout, the stub commands and the end-to-end stack, to be filled in following the build order
 in that document.
 
 This is its own Go module (`github.com/cthtrifork/harper-pad/backend`) and shares no code with the desktop app. The Kubernetes
@@ -11,8 +11,8 @@ manifests are not kept in this repository.
 | Path | What |
 |---|---|
 | `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
-| `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; one page: add a device, pending URLs, devices; no inline script or style, same-origin and CSRF checks). The CSS is one file per concern in `web/static` (`tokens`, `base`, `controls`, `list`, `card`, `motion`, `phone`, linked in that order from `layout.html`; `phone.css` last because it overrides). It reaches the database only through the `Store` interface; a stub (`ErrNotImplemented`, the default) and an in-memory demo implementation stand in until the PostgreSQL one exists |
-| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool; all SQL and `migrations/` later), and `syncapi`, `admin`, `auth`, `protocol`: empty packages with a package comment each |
+| `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; one page: add a device, pending URLs, devices; no inline script or style, same-origin and CSRF checks). The CSS is one file per concern in `web/static` (`tokens`, `base`, `controls`, `list`, `card`, `motion`, `phone`, linked in that order from `layout.html`; `phone.css` last because it overrides). It reaches the database only through the `Store` interface, implemented on PostgreSQL by `store.Admin` |
+| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool, the admin queries in `admin.go`, and `migrations/` with the schema from `docs/sync.md`), and `syncapi`, `admin`, `auth`, `protocol`: empty packages with a package comment each |
 | `Containerfile.sync`, `Containerfile.admin` | Container images; the build context is this directory |
 | `testdata/protocol/` | Fixtures for the protocol (empty) |
 | `test/e2e/` | The end-to-end stack (`compose.yaml`, `Caddyfile`, `certs.sh`) and the Playwright test |
@@ -26,7 +26,6 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 | `LISTEN_ADDR` | Default `:9000` (sync) and `127.0.0.1:9001` (admin, loopback: only its cloudflared sidecar reaches it) |
 | `PUBLIC_URL` | Sync only, required, must be `https:` or the service refuses to start |
 | `SYNC_PUBLIC_URL` | Admin only, required, `https:`: the sync service's public address, which enrollment URLs (`<it>/join#<token>`) are built from |
-| `ADMIN_DEMO` | Admin only. `true` serves seeded in-memory data instead of the database stub, to look at the UI. Never set it in a deployment |
 | `METRICS_ADDR` | Where `/metrics` is served, on its own listener so it is never on the public route. Default `:9102` (sync); admin has none unless set, because its pod accepts no traffic except from its own sidecar |
 | `DATABASE_URL` | Optional. When unset, the standard libpq variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`) are read, which is how the cluster does client-certificate login |
 
@@ -49,7 +48,7 @@ itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and th
 ```sh
 make help    # list the targets
 make build   # build both commands into ./bin
-make test    # go test ./...
+make test    # go test ./... (the store tests are skipped unless TEST_DATABASE_URL is set, see below)
 make e2e     # build the web app, start the stack, run the test, remove the stack
 ```
 
@@ -65,6 +64,29 @@ and renewing, and the NetworkPolicy.
 
 `podman compose` is only a front end: it needs a provider, `podman-compose` (`pip install --user podman-compose`) or
 `docker-compose`. The stack has been run with podman 5.8 and podman-compose 1.6; `docker compose` has not been tried.
+
+## Trying the admin UI
+
+The admin pages run on PostgreSQL, so to look at them, start a scratch one, apply the schema and seed three devices
+(`testdata/admin-seed.sql`). The sync service does not apply migrations yet, so this does it by hand; the admin connects as
+`harper_admin`, so the database enforces its grants (no access to notes):
+
+```sh
+podman run -d --name hp-pg -e POSTGRES_PASSWORD=dev -p 127.0.0.1:5432:5432 postgres:17
+podman exec hp-pg psql -U postgres -c "CREATE DATABASE trial" -c "CREATE ROLE harper_admin LOGIN PASSWORD 'dev'"
+podman exec -i hp-pg psql -U postgres -d trial -v ON_ERROR_STOP=1 < internal/store/migrations/0001_init.sql
+podman exec -i hp-pg psql -U postgres -d trial -v ON_ERROR_STOP=1 < testdata/admin-seed.sql
+
+DATABASE_URL='postgres://harper_admin:dev@127.0.0.1:5432/trial?sslmode=disable' \
+  SYNC_PUBLIC_URL=https://sync.example.test go run ./cmd/harper-pad-admin serve   # http://127.0.0.1:9001
+```
+
+## Tests
+
+`make test` runs everything. The handler tests use an in-memory store. The store tests need PostgreSQL and are skipped without
+`TEST_DATABASE_URL`, a **superuser** URL of a scratch server (for example `postgres://postgres:dev@127.0.0.1:5432/postgres?sslmode=disable`
+from the container above): each test creates its own database from `migrations/` and drops it, and runs the store as the real
+`harper_admin` role, so a test also proves what that role cannot do. CI runs them against a PostgreSQL service container.
 
 ## Images
 

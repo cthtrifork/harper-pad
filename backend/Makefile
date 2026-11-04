@@ -21,7 +21,7 @@ help: ## List the targets
 build: ## Build both commands into ./bin
 	CGO_ENABLED=0 go build -trimpath -o bin/ ./cmd/...
 
-test: ## Run the unit tests (the store tests will need a PostgreSQL)
+test: ## Run the tests (the store tests need TEST_DATABASE_URL, see README.md)
 	go test -count=1 ./...
 
 vet: ## go vet
