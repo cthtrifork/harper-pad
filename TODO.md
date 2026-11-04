@@ -49,7 +49,9 @@ never run on a real desktop yet.
   restart, to see whether the key is cleared. If it fails or is cleared often, use the rotation fallback described there.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
-- [ ] The server (`harper-pad-sync`): enrollment, sync, devices, history, the CLI, tests. Decide whether it lives in this repository
+- [ ] The server: `harper-pad-sync` (enrollment, sync, devices, history, break-glass CLI), the `harper-pad-admin` Go + HTMX
+      container (enrollment URLs, devices), PostgreSQL roles and client certificates, container images and a compose or quadlet
+      setup on two networks, tests. Decide whether it lives in this repository
       (see the open questions in `docs/sync.md`).
 - [ ] The sync module (`lib/sync.js`) with unit tests and an end-to-end test against the real server.
 - [ ] A "lose the server" test in the end-to-end suite: sync two devices, wipe the server's database, re-enroll, and check that

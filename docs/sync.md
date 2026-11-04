@@ -15,7 +15,7 @@ Goals:
   rebuilds it ([The client is the source of truth](#the-client-is-the-source-of-truth)).
 - Off by default. A user who never turns it on has no network use beyond today's update check, and the security page's
   "no server" statement stays true for them.
-- Small to run: one Go binary with one SQLite file, on the user's own domain.
+- Small to run: a Go sync service, a tiny Go + HTMX admin container and PostgreSQL, on the user's own domain.
 
 Non-goals for v1:
 
@@ -51,7 +51,7 @@ What losing the whole server costs:
 | Lost | Effect |
 |---|---|
 | Drafts | Nothing: rebuilt from the devices |
-| Devices and tokens | Every device shows "Sign in again". Run `invite` once per device; local data is untouched |
+| Devices and tokens | Every device shows "Sign in again". Create one enrollment URL per device in the admin UI; local data is untouched |
 | Version history | Older versions from before the loss cannot be restored. This is the one real loss, and the reason to back the server up anyway |
 | Tombstones | A draft deleted on one device while another was offline can **reappear** when that other device re-uploads. Harmless and rare: delete it again |
 | v2 key bag | Re-uploaded from a device's local copy ([v2](#v2-end-to-end-encryption)) |
@@ -60,7 +60,9 @@ What losing the whole server costs:
 
 | Decision | Choice | Why |
 |---|---|---|
-| Server | A new Go binary, `harper-pad-sync`, with SQLite (`modernc.org/sqlite`, as the app uses) | One file to run and back up; reuses the app's driver and validation habits |
+| Server | A new Go service, `harper-pad-sync`, in a container, behind a reverse proxy | Small, one static binary; reuses the app's validation limits and habits |
+| Database | PostgreSQL on an internal network, authenticated with **client certificates** (mTLS), no passwords | The sync service and the admin UI each get their own certificate and a least-privilege role |
+| Admin | A separate tiny Go + HTMX container, **not exposed to the internet**, for enrollment URLs and device management | Keeps administration out of the public API; its database role cannot read notes |
 | Hosting | The user's own domain over HTTPS, behind a reverse proxy that terminates TLS | iOS needs a trusted certificate for service workers and `fetch` from the web app |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
 | Users | One | No account table or sharing rules |
@@ -73,20 +75,97 @@ What losing the whole server costs:
 
 ## Overview
 
+```mermaid
+flowchart LR
+  subgraph clients["Devices: source of truth, each with a full local copy"]
+    desktop["Desktop app<br/>Wails + Vue<br/>local SQLite"]
+    pwa["iPhone Home Screen app (PWA)<br/>IndexedDB"]
+  end
+  pages["GitHub Pages<br/>static app code only,<br/>no user data"]
+  operator(["Operator<br/>private access only"])
+
+  subgraph host["Your server (containers)"]
+    direction LR
+    subgraph edge["Edge network: internet-facing"]
+      proxy["Reverse proxy<br/>TLS for sync.example.com"]
+      api["harper-pad-sync<br/>Go sync API<br/>enroll, sync, devices<br/>(also on the internal network)"]
+    end
+    subgraph internal["Internal network: not reachable from the internet"]
+      pg[("PostgreSQL<br/>TLS + client-certificate auth")]
+      admin["harper-pad-admin<br/>Go + HTMX<br/>enrollment URLs, devices<br/>no published port"]
+    end
+  end
+
+  pwa -. "loads the app" .-> pages
+  desktop -->|"HTTPS + bearer token"| proxy
+  pwa -->|"HTTPS + bearer token<br/>CORS: Pages origin only"| proxy
+  proxy --> api
+  api -->|"mTLS, role harper_sync"| pg
+  admin -->|"mTLS, role harper_admin"| pg
+  operator -->|"VPN, LAN or SSH tunnel"| admin
 ```
- desktop app (Wails)  ─┐                              ┌─ docs, devices, invites
-                       ├── HTTPS, Bearer token ──►  harper-pad-sync  ── SQLite file
- web app (Pages, iPhone)┘                              └─ CLI: invite, devices, revoke
-```
+
+| Component | Runs as | Reachable from | Does |
+|---|---|---|---|
+| Reverse proxy | Container (Caddy, nginx or similar) | The internet, port 443 | Terminates TLS for the domain and forwards to the sync service |
+| `harper-pad-sync` | Go container | The proxy only | The API: enroll, sync, devices. Attached to the edge and the internal network |
+| `harper-pad-admin` | Go + HTMX container | The operator's private network only; **no published port** | Creates enrollment URLs, lists, renames and revokes devices |
+| PostgreSQL | Container | The internal network only | All server state; accepts only TLS connections with a valid client certificate |
+| GitHub Pages | Static hosting | The internet | Serves the web app's code; holds no user data |
 
 Each device keeps its own full copy (SQLite on desktop, IndexedDB in the browser) and works without the server. The sync module
 pushes local changes and pulls remote ones. The server is the only place versions are assigned, so devices never compare clocks.
+
+### Database access
+
+Neither container has a database password. PostgreSQL requires TLS and a client certificate for every connection
+(`hostssl ... cert clientcert=verify-full` in `pg_hba.conf`, with the certificate's common name equal to the role name), and the
+clients verify the server certificate (`sslmode=verify-full`). The certificates come from a private CA, are mounted into each
+container as secrets, are short-lived (for example 90 days) and are replaced by restarting the container with new ones.
+PostgreSQL publishes no port outside the internal network.
+
+| Role | Used by | Allowed |
+|---|---|---|
+| `harper_sync` | `harper-pad-sync` | Read and write `docs`, `history`, `meta` (and the key bag in v2); `devices`: select, insert, update (last-seen); `invites`: select, update (spend) |
+| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs` or `history`**, so a compromised admin UI cannot read notes |
+
+### The admin UI
+
+A small Go server rendering HTML with HTMX, in its own container so the public API carries no administration code. It is
+reachable only from the operator's private network (a VPN, the LAN, or an SSH tunnel to a loopback port) and is not routed by
+the reverse proxy. Because anything on that network can still reach it, it has its own protections: it requires a login (open
+question below), every state-changing request carries a CSRF token and is checked for a same-origin `Origin` header, and its
+pages set the same strict Content-Security-Policy as the app (no inline scripts). It reads the sync service's public address from
+its configuration, which is how it builds enrollment URLs.
+
+What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
+agent, rename, and revoke. History restore and `purge-plaintext` need access to notes, so they stay out of the admin UI, in a
+break-glass CLI of the sync binary that runs on the server host with the sync role (`podman exec`).
+
+### Enrolling a device
+
+```mermaid
+sequenceDiagram
+  actor Op as Operator
+  participant Admin as Admin UI (internal)
+  participant DB as PostgreSQL
+  participant Dev as Device
+  participant API as Sync API (public HTTPS)
+  Op->>Admin: New enrollment URL (device name)
+  Admin->>DB: INSERT invite (token hash, expires in 15 min)
+  Admin-->>Op: https://sync.example.com/join#35;token (shown once)
+  Op->>Dev: Paste in Settings, Sync, Add this device
+  Dev->>API: POST /enroll {invite, deviceName}
+  API->>DB: Spend invite, INSERT device (token hash)
+  API-->>Dev: device token
+  Dev->>API: GET and POST /sync with the bearer token
+```
 
 ## Enrollment
 
 Every device, including the first, enrolls the same way.
 
-1. On the server, the operator runs `harper-pad-sync invite`. It prints `https://sync.example.com/join#<token>`. The token is 256
+1. In the admin UI the operator picks **New enrollment URL**. It shows `https://sync.example.com/join#<token>` once. The token is 256
    random bits, valid for about 15 minutes and for one use, and is stored only as a hash. It is in the URL **fragment** so it is not
    sent in the request line and not written to access logs.
 2. On the device: Settings, Sync, **Add this device**, then paste the URL. The URL carries the server address and the token, so
@@ -135,7 +214,7 @@ Two different attackers need different answers, and the design treats them separ
 **v1 (cheap, covers both):**
 
 - **Version history on the server** ([History](#history)), so overwritten or deleted drafts can be restored.
-- **A device list** with name, created, last-seen, and the user agent; **Sign out other devices**; revoke from the CLI.
+- **A device list** with name, created, last-seen, and the user agent; **Sign out other devices**; revoke from the admin UI.
 - **A notice** (a banner on the next open of each device) when a device enrolls or is revoked.
 - **30-day idle expiry**, above.
 
@@ -192,26 +271,27 @@ Everything else stays on the device: the personal dictionary, the ignore list, t
 Draft ids are already 16 bytes (6 of time, 10 random) as 32 hex characters (`internal/store/drafts.go`, `newID`), so devices
 can create drafts offline without colliding.
 
-### Server schema (sketch)
+### Server schema (sketch, PostgreSQL)
 
 ```sql
-docs     (id TEXT PRIMARY KEY, version INTEGER NOT NULL, created_at INTEGER, updated_at INTEGER,
-          deleted INTEGER NOT NULL DEFAULT 0, data TEXT)           -- data: opaque string, the draft blob
-history  (id TEXT, version INTEGER, updated_at INTEGER, deleted INTEGER, data TEXT, PRIMARY KEY (id, version))
-devices  (id TEXT PRIMARY KEY, name TEXT, user_agent TEXT, token_hash BLOB UNIQUE, created_at INTEGER, last_seen INTEGER,
+docs     (id TEXT PRIMARY KEY, version BIGINT NOT NULL, created_at BIGINT, updated_at BIGINT,
+          deleted BOOLEAN NOT NULL DEFAULT FALSE, data TEXT)       -- data: opaque string, the draft blob
+history  (id TEXT, version BIGINT, updated_at BIGINT, deleted BOOLEAN, data TEXT, PRIMARY KEY (id, version))
+devices  (id TEXT PRIMARY KEY, name TEXT, user_agent TEXT, token_hash BYTEA UNIQUE, created_at BIGINT, last_seen BIGINT,
           public_key TEXT)                                         -- public_key (JWK) is empty until the v1.1 device-bound key
-invites  (token_hash BLOB PRIMARY KEY, expires_at INTEGER, used INTEGER NOT NULL DEFAULT 0)
-meta     (key TEXT PRIMARY KEY, value TEXT)                        -- schema version, and the change counter
+invites  (token_hash BYTEA PRIMARY KEY, expires_at BIGINT, used BOOLEAN NOT NULL DEFAULT FALSE)
+meta     (key TEXT PRIMARY KEY, value TEXT)                        -- schema version and the serverId
+-- plus one sequence, the change counter
 ```
 
-`version` comes from one counter that increases on every accepted change anywhere. A client's cursor is the highest counter value
+`version` comes from one PostgreSQL sequence that increases on every accepted change anywhere (taken in the same transaction as the write). A client's cursor is the highest counter value
 it has seen, so `since=<cursor>` returns everything newer, including deletions (`deleted = 1`).
 
 ### History
 
 Every accepted change to a doc also writes the previous state to `history`, so an attacker's (or a bug's) overwrite or deletion can
 be undone. Keep the last 20 versions of each doc or 90 days, whichever keeps more, and never prune the latest state or a
-tombstone. The CLI restores one (`harper-pad-sync restore <id> [--version n]`); an in-app restore is a later addition. This is the
+tombstone. The break-glass CLI on the server host restores one (`harper-pad-sync restore <id> [--version n]`); an in-app restore is a later addition. This is the
 one measure that helps against every kind of compromise, including a live one, which is why it is in v1.
 
 The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `?` parameters.
@@ -289,7 +369,7 @@ notices either and re-uploads what the server lacks.
   that diverged (an edit made while the server was gone) produce one conflicted copy, as usual. In v2 the data is encrypted with
   fresh nonces, so the server cannot compare content: it answers `conflict`, and the client decrypts the server's copy, finds it
   equal to its own, and adopts the version without making a conflicted copy.
-- **What the operator does.** Start the new server, run `harper-pad-sync invite`, paste the URL on each device. Nothing else.
+- **What the operator does.** Start the new server and database, create an enrollment URL in the admin UI for each device, and paste it on that device. Nothing else.
 - **Cost.** The whole data set is uploaded once. With the 5 MB per-draft limit and a personal collection this is small, but it is
   chunked and resumable, so a phone that is suspended partway carries on later.
 
@@ -329,8 +409,10 @@ This is a bearer-token model with transport security and no content encryption.
 |---|---|
 | Transport | HTTPS only, on a certificate iOS trusts. The client refuses an `http:` server. |
 | Who can read the data | The server and whoever controls it, since content is not encrypted in v1. Protect it with disk encryption, a locked-down host, backups that are protected like the live file, and no request bodies in logs. The settings screen says this plainly. |
-| Stolen device token | Revoke that device from another device or the CLI; 30-day idle expiry; version history to undo damage; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
+| Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; version history to undo damage; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
+| Database access | TLS and client certificates only, no passwords; the database is on an internal network with no published port; each service has its own role with least privilege ([Database access](#database-access)). |
+| Admin UI | Not routed from the internet; reachable only on the operator's private network; login, CSRF tokens, same-origin checks, strict CSP. Its role cannot read notes, so compromising it yields invites and devices, not content. |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
@@ -343,14 +425,18 @@ see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees size
 
 ## Deploying the server
 
-One binary, a data directory, and a reverse proxy (Caddy, nginx or similar) that terminates TLS for the domain and proxies to the
-binary on a local port. The binary refuses to run an unauthenticated listener on a public interface without TLS in front (it
-checks `X-Forwarded-Proto` or an explicit `--behind-proxy` flag). The SQLite file is the only state. Backing it up is **recommended
-but not required for the notes' safety**, because every device holds a full copy and can rebuild the server; a backup preserves what
-devices do not have: version history, tombstones and the device list. It is backed up like any
-other file; it uses the same rollback journal setup as [storage](storage.md#practices-in-use), so a copy at rest is one file.
+Four containers on one host, on two container networks (for example with podman): the **edge** network holds the reverse proxy and
+the sync service, and the **internal** network holds the sync service, the admin UI and PostgreSQL. Only the proxy publishes a port
+(443). The sync service runs the schema migrations at start and refuses to run without a database certificate and a `PUBLIC_URL`
+that is `https:`. It trusts `X-Forwarded-Proto` only from the proxy's address.
 
-CLI: `harper-pad-sync serve`, `invite`, `devices`, `revoke <id>`.
+PostgreSQL holds all state. Backing it up (`pg_dump` on a schedule, or WAL archiving) is **recommended but not required for the
+notes' safety**, because every device holds a full copy and can rebuild the server; a backup preserves what devices do not have:
+version history, tombstones and the device list. Restoring an older backup is handled by the client
+([Rebuilding](#rebuilding-a-lost-or-restored-server)).
+
+Commands: `harper-pad-sync serve`, `migrate`, and the break-glass `restore <id> [--version n]` and `purge-plaintext`;
+`harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not on the command line.
 
 ## Build order
 
@@ -358,7 +444,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 
 1. **Local groundwork.** Tombstones, dirty tracking, the apply-remote store method, both migrations, with tests for the Go store and
    the web store.
-2. **The server.** Enrollment, sync, devices, the CLI, tests (including conflicts, deletes and the limits).
+2. **The server.** Enrollment, sync, devices, the admin container, the break-glass CLI, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
 3. **The sync module** (`lib/sync.js`), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
    with Node's runner against fixtures, and an end-to-end test against the real server.
 4. **UI:** the enrollment and status screens, the device list and the status bar state.
@@ -380,8 +466,12 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 
 - **The desktop webview origin** for the CORS allowlist, and whether the embedded page's CSP can name the sync origin at build
   time or needs a setting at run time.
-- **Where the server code lives:** in this repository (shares the validation constants and the driver) or its own. In this
-  repository is simpler for v1; the release workflow would then need a second artifact.
+- **Where the server code lives:** in this repository (shares the validation constants) or its own. In this repository is simpler
+  for v1; the release workflow would then need two more artifacts (the sync and admin container images).
+- **How the admin UI authenticates the operator:** a password or passkey of its own, mTLS from the operator's browser, or an
+  identity-aware proxy in front of it. It must not rely on "it is on the private network" alone.
+- **Issuing and rotating the database certificates:** a small private CA kept offline, or the host's existing PKI; and how the
+  containers pick up a renewed certificate without a long outage.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
   with forever; one user does not delete enough to matter.
 - **Whether a non-extractable key works in the installed iPhone app,** and how often iOS clears it. Test plan in `TODO.md`.
@@ -390,7 +480,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 ## v2: end-to-end encryption
 
 Status: proposal, after v1 and the v1.1 device key. Goal: **the server stores only ciphertext**, so a compromised server, a stolen
-backup of its SQLite file or a copied device token reveals no draft text. This does not need a new kind of server: it still stores
+backup of its database or a copied device token reveals no draft text. This does not need a new kind of server: it still stores
 and returns opaque `data` strings by id and version.
 
 ### What the server sees afterwards
