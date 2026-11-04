@@ -318,6 +318,21 @@ The server checks, as RFC 9449 section 4.3 lists: exactly one proof; `typ`, `alg
 and that the `jwk` is the key stored on the token's device row, compared by JWK thumbprint. A token copied without the key is then
 useless.
 
+**What differs from RFC 9449.** The proof is the RFC's. What is around it is simpler, because DPoP is the proof part of an OAuth
+setup and this design has no OAuth server:
+
+| RFC 9449 | This design | Why |
+|---|---|---|
+| The access token comes from an OAuth authorization server's token endpoint | `POST /enroll` issues it, with an invite as the grant | One service issues and checks its own tokens |
+| The token is usually a **JWT** with `cnf.jkt`, the key's thumbprint | An **opaque random token**; the key binding is stored on the `devices` row | Revocation and the account need a database lookup anyway, so a JWT would add signing-key management and no benefit |
+| Short-lived access tokens, renewed with a refresh token bound to the key | One long-lived token, no refresh | A refresh flow brings races between tabs, the service worker and iOS suspensions for the same protection |
+| Optional server-supplied `DPoP-Nonce`, with a retry on `use_dpop_nonce` | A timestamp window of about 60 seconds plus the `jti` replay cache | No extra round trip and no nonce state |
+| Defined error responses (`WWW-Authenticate: DPoP error="invalid_dpop_proof"`) | A plain 401 | Nothing outside this app reads them |
+
+Nothing outside the app consumes the standard: there is no second service, third-party client or identity provider that expects an
+OAuth server. It would be worth going literal if that changes. The client already sends literal DPoP proofs, so the move (JWT
+access tokens with `cnf.jkt`, nonces, refresh tokens) would be a **server-side change only**.
+
 Where the private key lives:
 
 | Build | Key storage |
