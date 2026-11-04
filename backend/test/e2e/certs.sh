@@ -11,11 +11,17 @@ set -eu
 [ -e /certs/pg_hba.conf ] && exit 0
 work=/certs/.work
 rm -rf "$work" && mkdir "$work" && cd "$work"
-openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=e2e-ca" -keyout ca.key -out ca.crt 2>/dev/null
+# ECDSA P-256 keys; the CA may only sign end-entity certificates (pathlen 0) and the others cannot sign anything.
+key() { openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$1"; }
 
-issue() { # name common-name usage [san]
-	openssl req -newkey rsa:2048 -nodes -subj "/CN=$2" -keyout "$1.key" -out "$1.csr" 2>/dev/null
-	printf 'extendedKeyUsage=%s\n%s\n' "$3" "${4:+subjectAltName=$4}" >"$1.ext"
+key ca.key
+openssl req -x509 -new -key ca.key -days 1 -subj "/CN=e2e-ca" -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+	-addext "keyUsage=critical,keyCertSign,cRLSign" -out ca.crt
+
+issue() { # name common-name extended-key-usage [subjectAltName]
+	key "$1.key"
+	openssl req -new -key "$1.key" -subj "/CN=$2" -out "$1.csr"
+	printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=%s\n%s\n' "$3" "${4:+subjectAltName=$4}" >"$1.ext"
 	openssl x509 -req -in "$1.csr" -CA ca.crt -CAkey ca.key -CAcreateserial -days 1 -extfile "$1.ext" -out "$1.crt" 2>/dev/null
 }
 issue server postgres serverAuth DNS:postgres

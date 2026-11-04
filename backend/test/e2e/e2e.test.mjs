@@ -74,6 +74,11 @@ describe("PostgreSQL client-certificate login (docs/sync.md, \"Database access\"
     assert.notEqual(r.code, 0, r.out);
   });
 
+  test("TLS 1.2 is refused: the server needs 1.3", () => {
+    const r = psql("sslmode=verify-full sslrootcert=/certs/ca.crt sslcert=/certs/client.crt sslkey=/tmp/client.key ssl_max_protocol_version=TLSv1.2");
+    assert.notEqual(r.code, 0, r.out);
+  });
+
   test("a connection without TLS is refused", () => {
     const r = psql("sslmode=disable");
     assert.notEqual(r.code, 0, r.out);

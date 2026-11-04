@@ -1,5 +1,6 @@
-# e2e stack only. Caddy's own CA signs these names; the test runs Chromium with ignoreHTTPSErrors, so no root certificate
-# has to be trusted. The page and the API are different https origins, as in production.
+# e2e stack only. Caddy's own local CA signs these names (`tls internal`); the test reads its root from the running container and
+# makes Chromium trust that key alone (helpers.mjs), so the certificates are really checked. The page and the API are different
+# https origins, as in production.
 
 https://app.localhost {
 	tls internal

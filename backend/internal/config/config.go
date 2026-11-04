@@ -12,7 +12,7 @@ type Common struct {
 	// ListenAddr is LISTEN_ADDR, a host:port for net.Listen.
 	ListenAddr string
 	// DatabaseURL is DATABASE_URL, or empty: the standard libpq variables (PGHOST, PGSSLCERT, ...) are then read by the driver,
-	// which is how the cluster configures client-certificate login (see internal/pgtls for the renewal).
+	// which is how the cluster configures client-certificate login.
 	DatabaseURL string
 	// MetricsAddr is METRICS_ADDR, where /metrics is served on its own listener; empty turns metrics off.
 	MetricsAddr string

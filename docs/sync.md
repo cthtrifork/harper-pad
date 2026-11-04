@@ -149,8 +149,9 @@ verify the server certificate (`sslmode=verify-full`, with the cluster's server 
 - **Certificates:** cert-manager issues one `Certificate` per role (usage `client auth`, common name equal to the role name) from
   an issuer whose CA is given to the cluster as `spec.certificates.clientCASecret`. With a custom client CA the cluster no longer
   holds the signing key, so the `kubectl cnpg certificate` helper cannot be used and cert-manager is the issuer. Each pod mounts
-  its certificate Secret as a volume (not a `subPath`, so renewals reach the pod), and the app re-reads the files for new
-  connections, so renewal needs no restart.
+  its certificate Secret as a volume, and the app reads the files once at start (pgx does not reload them). Renewal is handled by
+  [Stakater Reloader](https://github.com/stakater/Reloader): the Deployments carry its annotation for the certificate Secrets, and
+  it does a rolling restart when cert-manager renews one, so the app has no reload code.
 - **Authentication rules:** `spec.postgresql.pg_hba` requires `cert` for these roles over `hostssl`, and the roles have no
   password. The exact entries, their order relative to CloudNativePG's own defaults, and whether the common name must equal the
   role (otherwise a `pg_ident` map) are to be confirmed against the operator version in use; they are not verified here.
@@ -741,8 +742,9 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
   `https://app.localhost:18443`, a static file server for the web build, and `https://sync.localhost:18443`, a reverse proxy to
   `harper-pad-sync`. Because the page and the API are on different https origins, as in production, CORS, the CSP `connect-src`
   and the client's "https only" rule are all exercised. `PUBLIC_URL` is `https://sync.localhost:18443` (the port is `E2E_PORT`), so the service's guard stays
-  strict and there is no development exception. Playwright runs with `ignoreHTTPSErrors`, so the browser does not need Caddy's root
-  certificate. (Chromium resolves `*.localhost` to loopback by itself; confirm this, and that Caddy issues for these names, when
+  strict and there is no development exception. Certificates are really checked (no `ignoreHTTPSErrors`, which would also hide a broken
+  chain and break service workers): the test reads Caddy's intermediate certificate from the running container and starts Chromium
+  with `--ignore-certificate-errors-spki-list` set to that key's hash, so only chains from Caddy's CA are accepted. (Chromium resolves `*.localhost` to loopback by itself; confirm this, and that Caddy issues for these names, when
   the stack is built.)
 - **The devices:** the web build, built for the root path and mounted into Caddy, and two Chromium contexts, each with its own
   IndexedDB, acting as device A and device B. There is no frontend container and no `vite preview`.
@@ -763,11 +765,11 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
   test is where the build-time setting for the sync origin is first exercised.
 - **Where it runs:** CI follows the pattern of `scripts/screenshots.sh` and its workflow (a pinned `playwright-core` driving
   the runner's Chrome); locally it is a `make` target.
-- **Database login:** the compose PostgreSQL requires TLS and a client certificate whose common name is the role, from a
+- **Database login:** the compose PostgreSQL requires TLS 1.3 and a client certificate whose common name is the role, from a
   throwaway CA made by `certs.sh`; the sync service logs in with the libpq variables and `verify-full`, and the test checks that
   TLS without a certificate, a certificate with another common name and a plain connection are refused.
 - **What it does not prove:** CloudNativePG's own `pg_hba` defaults and `pg_ident` handling (checked on a real cluster, see the
-  open questions), certificate renewal by cert-manager (the reload has a unit test), the real ingress and its certificate,
+  open questions), certificate renewal by cert-manager and the Reloader restart, the real ingress and its certificate,
   Cloudflare and Access, and Safari or WebKit behaviour.
 
 ## Build order

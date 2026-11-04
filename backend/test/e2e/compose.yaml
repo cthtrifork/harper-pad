@@ -28,6 +28,8 @@ services:
       - -c
       - ssl_ca_file=/certs/ca.crt
       - -c
+      - ssl_min_protocol_version=TLSv1.3
+      - -c
       - hba_file=/certs/pg_hba.conf
     environment:
       POSTGRES_DB: harper
@@ -40,14 +42,13 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U harper_sync -d harper"]
+      # Over TCP: the init script runs a temporary server that listens on the socket only, so a socket check reports ready too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U harper_sync -d harper"]
       interval: 2s
       timeout: 3s
       retries: 30
 
   sync:
-    # podman-compose starts services without waiting for depends_on conditions, so a start before the certificates exist is retried.
-    restart: on-failure
     build:
       context: ../..
       dockerfile: Containerfile.sync

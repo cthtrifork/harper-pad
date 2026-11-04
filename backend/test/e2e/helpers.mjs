@@ -1,6 +1,7 @@
 // Shared bits of the end-to-end test: where the stack listens, how to start Chromium, and the helpers the real checks
 // will use. Scaffold: only the browser launch is implemented.
 import { execSync, spawnSync } from "node:child_process";
+import { X509Certificate, createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -31,17 +32,36 @@ function loadPlaywright() {
   throw new Error("Playwright not found: set PLAYWRIGHT_DIR or install playwright-core globally");
 }
 
+// Caddy signs the two sites with its own local CA (`tls internal`). Instead of ignoring every certificate error, which would also
+// hide a broken chain, a wrong name or an expired certificate (and makes service workers fail), Chromium is told to accept
+// chains that contain Caddy's CA key and nothing else: --ignore-certificate-errors-spki-list takes the SHA-256 of a public key in
+// the chain. Caddy sends the leaf and its intermediate but not the root, so the intermediate's key is the one to give. It is read
+// from the running Caddy.
+function caddyCaSpkiHash() {
+  for (let i = 0; i < 30; i++) {
+    const r = compose("caddy", ["cat", "/data/caddy/pki/authorities/local/intermediate.crt"]);
+    if (r.code === 0 && r.out.includes("BEGIN CERTIFICATE")) {
+      const spki = new X509Certificate(r.out.trim()).publicKey.export({ type: "spki", format: "der" });
+      return createHash("sha256").update(spki).digest("base64");
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+  }
+  throw new Error("could not read Caddy's intermediate certificate");
+}
+
 // E2E_BROWSER_PATH points at a Chromium or Chrome binary; E2E_BROWSER_CHANNEL (for example "chrome") picks an installed one.
 export async function launch() {
   const { chromium } = loadPlaywright();
   const executablePath = process.env.E2E_BROWSER_PATH || undefined;
   const channel = process.env.E2E_BROWSER_CHANNEL || undefined;
-  return chromium.launch({ executablePath, channel, args: executablePath ? ["--no-sandbox"] : [] });
+  const args = [`--ignore-certificate-errors-spki-list=${caddyCaSpkiHash()}`];
+  if (executablePath) args.push("--no-sandbox");
+  return chromium.launch({ executablePath, channel, args });
 }
 
-// One browser context is one device: its own IndexedDB and storage. Caddy's certificates are not trusted, hence ignoreHTTPSErrors.
+// One browser context is one device: its own IndexedDB and storage. Certificates are checked: only Caddy's CA is trusted (see launch).
 export function newDevice(browser) {
-  return browser.newContext({ ignoreHTTPSErrors: true });
+  return browser.newContext();
 }
 
 // TODO: insert an invite row straight into PostgreSQL, with the same SHA-256 token hash the service uses, bound to the default
@@ -65,15 +85,16 @@ export function compose(service, args) {
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
 
-// Waits until the sync service is ready. podman-compose does not wait for depends_on conditions, so the service may still be
-// restarting (it exits until the certificates exist) when the stack comes up.
-export async function waitForSync(browser, seconds = 90) {
+// Waits until the sync service answers through Caddy: it starts as soon as PostgreSQL is healthy, which can be a moment after
+// the stack reports up.
+export async function waitForSync(browser, seconds = 60) {
   const device = await newDevice(browser);
+  const page = await device.newPage();
   try {
     for (let i = 0; i < seconds; i++) {
-      const res = await device.request.get(`${SYNC_URL}/readyz`).catch(() => null);
+      const res = await page.goto(`${SYNC_URL}/readyz`).catch(() => null);
       if (res?.ok()) return;
-      await new Promise((r) => setTimeout(r, 1000));
+      await page.waitForTimeout(1000);
     }
     throw new Error(`the sync service was not ready after ${seconds} s`);
   } finally {
