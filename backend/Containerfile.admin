@@ -9,6 +9,15 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/harper-pad-admin ./cmd/harper-pad-admin
 
 FROM gcr.io/distroless/static-debian12:nonroot
+# Set by the release (and backend-image.yml); empty in a plain local build.
+ARG GIT_SHA=""
+ARG APP_VERSION=""
+LABEL org.opencontainers.image.title="Harper Pad admin" \
+      org.opencontainers.image.description="Harper Pad admin service: manages sync accounts and enrollment." \
+      org.opencontainers.image.source="https://github.com/cthtrifork/harper-pad" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.version="${APP_VERSION}"
 COPY --from=build /out/harper-pad-admin /harper-pad-admin
 USER 65532:65532
 EXPOSE 9001
