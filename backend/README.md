@@ -62,7 +62,7 @@ make e2e     # build the web app, start the stack, run the test, remove the stac
 `.github/workflows/backend-image.yml` builds both Containerfiles on every change under `backend/` (and weekly), scans the image
 with Trivy (a CRITICAL finding with a fix fails; HIGH ones are listed in the job summary) and starts it to check `/healthz`.
 Nothing is published from there. `release.yml` publishes `ghcr.io/cthtrifork/harper-pad-sync` and `harper-pad-admin` for
-`linux/amd64` and `linux/arm64` when a version is cut ("Tag and release", see [releasing](../docs/releasing.md)), tagged `1.2.3`, `v1.2.3`
+`linux/amd64` when a version is cut ("Tag and release", see [releasing](../docs/releasing.md)), tagged `1.2.3`, `v1.2.3`
 and, for a final release, `latest`, with SBOM and provenance attestations; the job summary lists each image's digest, which is what the
 cluster pins. The packages
 are private by default (Settings, or the package page, to make them public; otherwise the cluster needs an `imagePullSecret`).
