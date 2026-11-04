@@ -59,10 +59,10 @@ What losing the whole server costs:
 
 | Decision | Choice | Why |
 |---|---|---|
-| Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment, reached through a `cloudflared` sidecar in its pod | Small, one static binary; reuses the app's validation limits and habits |
+| Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment behind a ClusterIP Service, exposed by the cluster's existing **Traefik** | Small, one static binary; reuses the app's validation limits and habits |
 | Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service, the admin UI and the migration job each get their own certificate and a least-privilege role |
 | Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port and no login code to write; keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
-| Hosting | Kubernetes. Both hostnames (the sync API on the user's own domain, and the admin UI) are served by **Cloudflare Tunnels** whose `cloudflared` runs as a sidecar in each pod. No Ingress, no LoadBalancer | Cloudflare's edge presents a certificate iOS trusts, and nothing in the cluster is reachable from outside. The cost is that Cloudflare terminates TLS and sees the traffic ([what this trusts](#what-this-trusts)) |
+| Hosting | Kubernetes. The sync API is served by **Traefik** on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([what this trusts](#what-this-trusts)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
 | Users | One | No account table or sharing rules |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
@@ -83,49 +83,52 @@ flowchart LR
   pages["GitHub Pages<br/>static app code only,<br/>no user data"]
   operator(["Operator<br/>browser"])
   idp["OIDC identity provider<br/>with MFA"]
-  cf["Cloudflare<br/>TLS for both hostnames<br/>Access (OIDC) on the admin hostname only"]
+  cf["Cloudflare<br/>Tunnel + Access (OIDC)<br/>admin hostname only"]
 
-  subgraph k8s["Kubernetes namespace harper-pad: default-deny NetworkPolicies, no Ingress, no LoadBalancer"]
-    subgraph apipod["Pod harper-pad-sync"]
-      cfd1["cloudflared sidecar<br/>API tunnel"]
-      api["sync API<br/>listens on 127.0.0.1"]
+  subgraph cluster["Kubernetes cluster"]
+    traefik["Traefik (existing)<br/>TLS for sync.example.com<br/>rate limit, body size limit"]
+    cm["cert-manager<br/>Let's Encrypt certificate for the sync domain<br/>and the database client certificates"]
+    subgraph ns["Namespace harper-pad: default-deny NetworkPolicies"]
+      subgraph apipod["Pod harper-pad-sync"]
+        api["sync API<br/>ClusterIP Service,<br/>reachable only from Traefik"]
+      end
+      subgraph adminpod["Pod harper-pad-admin"]
+        cfd["cloudflared sidecar<br/>outbound tunnel"]
+        admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>verifies the Access token"]
+      end
+      job["Job: migrate<br/>role harper_owner"]
+      subgraph cnpg["CloudNativePG cluster"]
+        pg[("PostgreSQL<br/>TLS + client-certificate auth")]
+      end
     end
-    subgraph adminpod["Pod harper-pad-admin"]
-      cfd2["cloudflared sidecar<br/>admin tunnel"]
-      admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>verifies the Access token"]
-    end
-    job["Job: migrate<br/>role harper_owner"]
-    subgraph cnpg["CloudNativePG cluster"]
-      pg[("PostgreSQL<br/>TLS + client-certificate auth")]
-    end
-    cm["cert-manager<br/>issues and renews<br/>the client certificates"]
   end
 
   pwa -. "loads the app" .-> pages
-  desktop -->|"https://sync.example.com<br/>bearer token"| cf
-  pwa -->|"https://sync.example.com<br/>bearer token, CORS: Pages origin"| cf
-  cf <-->|"outbound tunnel"| cfd1
-  cfd1 -->|"localhost"| api
+  desktop -->|"https://sync.example.com<br/>bearer token"| traefik
+  pwa -->|"https://sync.example.com<br/>bearer token, CORS: Pages origin"| traefik
+  traefik -->|"HTTP"| api
+  cm -. "TLS certificate" .-> traefik
   operator -->|"https://admin.example.com"| cf
   cf <-->|"OIDC login"| idp
-  cf <-->|"outbound tunnel"| cfd2
-  cfd2 -->|"localhost"| admin
+  cf <-->|"outbound tunnel"| cfd
+  cfd -->|"localhost"| admin
   api -->|"mTLS, role harper_sync"| pg
   admin -->|"mTLS, role harper_admin"| pg
   job -->|"mTLS, role harper_owner"| pg
-  cm -. "client certificate Secrets" .-> api
-  cm -. "client certificate Secrets" .-> admin
-  cm -. "client certificate Secrets" .-> job
+  cm -. "client certificates" .-> api
+  cm -. "client certificates" .-> admin
+  cm -. "client certificates" .-> job
 ```
 
 | Component | Runs as | Reachable from | Does |
 |---|---|---|---|
-| `harper-pad-sync` | Deployment; the pod also runs a `cloudflared` sidecar for the API tunnel | The API hostname through Cloudflare, and nothing else: it listens on 127.0.0.1, so only the sidecar can connect | The API: enroll, sync, devices |
-| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar for the admin tunnel | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1 | Creates enrollment URLs, lists, renames and revokes devices |
+| Traefik | The cluster's existing ingress controller | The internet, port 443 | Terminates TLS for the sync domain with the cert-manager certificate, applies rate-limit and body-size middlewares, forwards to the sync Service |
+| `harper-pad-sync` | Deployment and ClusterIP Service | Traefik only (NetworkPolicy) | The API: enroll, sync, devices |
+| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices |
 | `migrate` | Job | Nothing | Applies the schema migrations with the owner role |
 | PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the three workloads above (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
-| cert-manager | Cluster add-on | Nothing | Issues and renews the database client certificates |
-| Cloudflare | External | The internet | Terminates TLS for both hostnames, carries the tunnels, runs Access on the admin hostname |
+| cert-manager | Cluster add-on | Nothing | Issues the sync domain's TLS certificate and the database client certificates |
+| Cloudflare | External | The internet | Carries the admin tunnel and runs Access on the admin hostname. Not in the sync path |
 | GitHub Pages | Static hosting | The internet | Serves the web app's code; holds no user data |
 
 Each device keeps its own full copy (SQLite on desktop, IndexedDB in the browser) and works without the server. The sync module
@@ -159,7 +162,7 @@ A small Go server rendering HTML with HTMX, in its own pod so the public API car
 127.0.0.1, has no Service reachable from outside, and nothing routes to it except its own sidecar. It is reached through a
 **Cloudflare Tunnel**: a `cloudflared` sidecar in the same pod makes an outbound-only connection to Cloudflare and forwards to
 `http://localhost:<port>`, and a **Cloudflare Access** application in front of the tunnel makes the operator sign in with an OIDC
-identity provider before any request reaches the pod. The sync API has its own pod and tunnel (below) and is not behind Access.
+identity provider before any request reaches the pod. The sync API is not behind Cloudflare; Traefik serves it.
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
 agent, rename, and revoke. It reads the sync service's public address from its configuration, which is how it builds enrollment
@@ -184,14 +187,11 @@ URLs, and keeps an audit log of who did what. It has no feature that reads or wr
 
 #### What this trusts
 
-- **Cloudflare terminates TLS for both hostnames,** so it can see all the traffic: the admin pages, including the enrollment URL
-  shown on the page, and, **in v1, every sync request and response, which contains the text of the notes**. In v2 it sees only
-  ciphertext. This is the cost of having no Ingress. If it is not acceptable for v1, serve the API through an Ingress with
-  cert-manager and Let's Encrypt instead, and keep Cloudflare for the admin UI only. The enrollment invite is single use and
-  expires in 15 minutes, and the device it enrolls appears in the device list, so a stolen invite is noticed, but not prevented.
-- **The API hostname has no Access policy:** devices authenticate with bearer tokens, and the web app cannot do an interactive
-  login. Cloudflare features that challenge scripts (Bot Fight Mode, managed challenges) must be off or skipped for that hostname,
-  because the clients are scripts. Cloudflare rate-limiting rules on it are welcome in addition to the app's own limits.
+- **Cloudflare terminates TLS for the admin hostname,** so it can see the admin pages, including the enrollment URL shown on
+  the page. It is **not** in the sync path: note text and sync tokens go from the device to Traefik, never through Cloudflare. The
+  enrollment invite is single use and expires in 15 minutes, and the device it enrolls appears in the device list, so a stolen
+  invite is noticed, but not prevented. If the domain's DNS is on Cloudflare, set the sync hostname to **DNS only** (not proxied),
+  or its traffic would pass through Cloudflare after all.
 - **Admin access is the ability to enroll a device, and in v1 a device can read every note.** That the admin's database role cannot
   read notes does not make a compromised admin UI harmless. Whoever controls the operator's identity provider account, the
   Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
@@ -208,7 +208,8 @@ sequenceDiagram
   participant Admin as Admin UI (pod, localhost)
   participant DB as PostgreSQL
   participant Dev as Device
-  participant API as Sync API (via Cloudflare Tunnel)
+  participant TR as Traefik
+  participant API as Sync API
   Op->>CF: Open admin.example.com (OIDC login with MFA)
   CF->>Admin: Request with the Access token (JWT)
   Admin->>Admin: Verify the JWT and the operator's email
@@ -217,11 +218,12 @@ sequenceDiagram
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
   Op->>Dev: Paste in Settings, Sync, Add this device
-  Dev->>CF: POST /enroll {invite, deviceName}
-  CF->>API: through the API tunnel
+  Dev->>TR: POST /enroll {invite, deviceName}
+  TR->>API: forward
   API->>DB: Spend invite, INSERT device (token hash)
-  API-->>Dev: device token (back through Cloudflare)
-  Dev->>API: GET and POST /sync with the bearer token (via Cloudflare)
+  API-->>Dev: device token
+  Dev->>TR: GET and POST /sync with the bearer token
+  TR->>API: forward
 ```
 
 ## Enrollment
@@ -460,12 +462,12 @@ This is a bearer-token model with transport security and no content encryption.
 
 | Concern | Handling |
 |---|---|
-| Transport | HTTPS only, on Cloudflare's edge certificate for the API hostname, which iOS trusts. The client refuses an `http:` server. Inside the pod the sidecar reaches the app over loopback. |
-| Who can read the data | The server and its operator, and, in v1, **Cloudflare**, which terminates TLS for the API hostname; content is not encrypted until v2. Protect the cluster with encrypted volumes and tight access to the namespace, protect backups like the live data, and keep request bodies out of logs. The settings screen says this plainly. |
+| Transport | HTTPS only, on a Let's Encrypt certificate (cert-manager) for the sync domain, terminated at Traefik, with HTTP redirected and HSTS set. The client refuses an `http:` server. |
+| Who can read the data | The server and its operator; content is not encrypted until v2. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, protect backups like the live data, and keep request bodies out of logs (Traefik access logs must not include bodies). The settings screen says this plainly. |
 | Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the three workloads by NetworkPolicy; separate roles for migrations, sync and admin with least privilege ([Database access](#database-access)). |
-| Cluster | Default-deny NetworkPolicies, no Ingress or LoadBalancer, apps listening on loopback only, hardened pods, no Kubernetes API token, images pinned by digest. |
+| Cluster | Default-deny NetworkPolicies; the sync pods reachable only from Traefik; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider; the app verifies the Access token on every request; CSRF tokens, same-origin checks, strict CSP, an audit log. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1), so the identity provider and Cloudflare accounts are part of the trust chain. See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
@@ -489,24 +491,33 @@ they live):
   older backup is handled by the client ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
 - **`migrate`:** a Job, run on each release before the Deployments roll out, using the owner role. The sync service refuses to
   start if the schema version is not the one it expects.
-- **`harper-pad-sync` and `harper-pad-admin`:** one Deployment each, one replica to start. Each pod has the app container and a
-  `cloudflared` sidecar (a native sidecar container where the cluster supports them, so the tunnel is up before the app and
-  outlives it). Each service has **its own tunnel**, and its token is a Kubernetes Secret passed as `TUNNEL_TOKEN`, so a leaked
-  token exposes one hostname, not both. The tunnels are remotely managed: the hostname maps to `http://localhost:<port>` in
-  Cloudflare. Several replicas would each run a sidecar connecting to the same tunnel, but the in-memory rate limiter and, from
-  v1.1, the proof nonce cache are per pod, so move them to PostgreSQL before scaling out.
-- **Sidecar versus a separate `cloudflared` Deployment:** Cloudflare's own Kubernetes guide runs `cloudflared` as a separate
-  Deployment pointing at Services. The sidecar is chosen here so the app can listen on loopback only, which means no Service and
-  no other pod can reach the API or the admin UI. The cost is that the two scale and restart together.
-- **NetworkPolicies:** default deny for ingress and egress in the namespace, then allow DNS, the three workloads to PostgreSQL
-  on 5432, the `cloudflared` sidecars out to Cloudflare (the tunnel ports Cloudflare documents), and the admin pod out to the
-  Access team domain on 443 for the signing keys. The cluster's network plugin has to enforce NetworkPolicy.
+- **`harper-pad-sync`:** a Deployment (one replica to start) and a ClusterIP Service, with a single container. Traefik routes
+  the sync domain to the Service (an `IngressRoute`, or a standard Ingress), with the TLS certificate from a cert-manager
+  `Certificate` (Let's Encrypt) and these middlewares: redirect HTTP to HTTPS, HSTS and standard security headers, a rate limit
+  per client IP, and a request body cap slightly above the largest allowed request. CORS stays in the app, with its explicit
+  allowlist. The app takes the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but Traefik connect to
+  it. The in-memory rate limiter and, from v1.1, the proof nonce cache are per pod, so move them to PostgreSQL before running
+  more than one replica.
+- **`harper-pad-admin`:** a Deployment (one replica) with **no Service**. The pod has the app container, listening on
+  127.0.0.1, and a `cloudflared` sidecar (a native sidecar container where the cluster supports them, so the tunnel is up before
+  the app and outlives it). The tunnel token is a Kubernetes Secret passed as `TUNNEL_TOKEN`; the tunnel is remotely managed and
+  maps the admin hostname to `http://localhost:<port>` in Cloudflare. Cloudflare's own Kubernetes guide runs `cloudflared` as a
+  separate Deployment pointing at Services; the sidecar is chosen so the admin app can listen on loopback only, which means no
+  other pod can reach it. The cost is that the two scale and restart together.
+- **NetworkPolicies:** default deny for ingress and egress in the namespace, then allow:
+  - DNS, and the three workloads to PostgreSQL on 5432;
+  - ingress to the sync pods from the Traefik pods only, and none to the admin pod;
+  - the admin pod out to Cloudflare for the tunnel (the ports Cloudflare documents) and to the Access team domain on 443 for the
+    signing keys;
+  - nothing else out of the sync pods.
+
+  The cluster's network plugin has to enforce NetworkPolicy.
 - **Pod hardening:** non-root, read-only root filesystem, all capabilities dropped, the runtime-default seccomp profile, no
   Kubernetes API token (`automountServiceAccountToken: false`, because neither app talks to the Kubernetes API), resource limits, and
   images pinned by digest.
-- **Configuration:** `PUBLIC_URL` must be `https:` or the service refuses to start. Behind the sidecar the app sees plain HTTP on
-  loopback, so it takes the scheme from this setting and not from a forwarded header. The admin pod also gets the Access team
-  domain, the application's AUD tag and the operator email allowlist.
+- **Configuration:** `PUBLIC_URL` must be `https:` or the service refuses to start. Traefik terminates TLS, so the app sees plain
+  HTTP and takes the scheme from this setting, not from a forwarded header. The admin pod also gets the Access team domain, the
+  application's AUD tag and the operator email allowlist.
 - **Health:** a liveness endpoint, and a readiness endpoint that checks the database connection.
 
 Commands: `harper-pad-sync serve` and `migrate`; `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not
@@ -548,8 +559,8 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - **The exact CloudNativePG settings** for certificate authentication of application roles: the `pg_hba` entries and their order, and
   whether the certificate's common name must equal the role name (otherwise a `pg_ident` map). Check against the operator version
   in use and test before relying on it.
-- **Whether Cloudflare may see v1 traffic.** Terminating TLS at Cloudflare means it can read note text until v2. If not, use an
-  Ingress with cert-manager for the API hostname.
+- **How Traefik is exposed to the internet** (a port forward, a LoadBalancer, or behind something else) and whether the sync
+  domain's DNS is on Cloudflare, in which case the sync record must be DNS only.
 - **Where the Kubernetes manifests live:** in this repository under `backend/deploy/`, or in the cluster's own GitOps repository.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
   with forever; one user does not delete enough to matter.
