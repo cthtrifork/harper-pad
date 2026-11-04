@@ -40,7 +40,7 @@ conflict with them, they win.
 3. **Sync never changes what the user is working on.** A pull never overwrites a draft that has unsent edits. In a conflict the
    local text keeps its id and the other version becomes a "conflicted copy" ([Conflicts](#conflicts)), so the open editor never
    changes under the user.
-4. **The server cannot destroy local data.** Revoking a device, an expired or invalid token, a server reset and "Sign out" all
+4. **The server cannot destroy local data.** Revoking a device, an invalid token, a server reset and "Sign out" all
    leave the local drafts in place; sync just stops.
 5. **Any device can rebuild the server.** See [Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server).
 6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll), tombstones and the cursor
@@ -68,7 +68,7 @@ What losing the whole server costs:
 | Users | One | No account table or sharing rules |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
-| Stolen-token hardening | v1: a device list with last-seen and a 30-day idle expiry, revoking in the admin UI. v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
+| Stolen-token hardening | v1: a device list with last-seen, and revoking in the admin UI. v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None in v1 (TLS only); end-to-end in v2 | Keeps the first version small; see [v2](#v2-end-to-end-encryption) |
 | Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
 | Source of truth | The device. The server can be rebuilt from any device | A supporting system must not be able to lose or destroy notes; see [the principles](#the-client-is-the-source-of-truth) |
@@ -249,7 +249,9 @@ After enrollment every request carries `Authorization: Bearer <device token>`.
 - There is no refresh token. The server is the only verifier, so it can check every token and revoke immediately; short-lived
   tokens would add rotation, reuse detection and cross-tab races without improving anything, because the web build stores both
   tokens in the same place (IndexedDB).
-- A token unused for 30 days is treated as expired, so forgotten devices clean themselves up.
+- A token does not expire. It works until the device is revoked in the admin UI, and `last_seen` shows dormant devices so they can be
+  revoked by hand. An automatic idle expiry was considered and dropped: it does not stop a token that is being used, and it would
+  sign out a phone that is opened rarely.
 - On a 401 the client stops syncing and shows "Sign in again", which goes back to **Add this device** with a new invite. This also
   covers iOS clearing a Home Screen app's storage.
 - A bearer header, not a cookie, so a page on another site cannot make the browser attach credentials (no CSRF).
@@ -264,14 +266,13 @@ Two different attackers need different answers, and the design treats them separ
 
 | Attacker | What they have | What helps |
 |---|---|---|
-| **Copies the token** (a backup, a disk image, a dump of IndexedDB) but does not keep the device | The bearer token | A device-bound key (v1.1); revocation; idle expiry |
+| **Copies the token** (a backup, a disk image, a dump of IndexedDB) but does not keep the device | The bearer token | A device-bound key (v1.1); revocation |
 | **Uses the unlocked device** (or script running in the page) | The token, the key, and the drafts themselves | Revocation and the strict CSP. Nothing else can stop a legitimate client being used, and its edits and deletions sync to the other devices; there is no server-side undo in v1 (see [Later](#later)) |
 
 **v1 (cheap, covers both):**
 
 - **A device list** with name, created, last-seen, and the user agent, in the admin UI, where a device is also revoked.
 - **A notice** (a banner on the next open of each device) when a device enrolls or is revoked.
-- **30-day idle expiry**, above.
 
 **v1.1: a device-bound signing key (proof of possession, in the style of DPoP, RFC 9449).**
 
@@ -299,7 +300,7 @@ Details that are easy to get wrong:
 - **WebCrypto's ECDSA signature is raw `r‖s` (64 bytes for P-256), not DER.** Go's `ecdsa.VerifyASN1` will reject it; the server must
   split it into two 32-byte integers and call `ecdsa.Verify`.
 - **Losing the key means re-enrolling.** If the browser or iOS clears storage, the proof fails and the client shows "Sign in
-  again", the same recovery as an expired token. Call `navigator.storage.persist()` (`keepData()`) as the app already does.
+  again", the same recovery as a revoked token. Call `navigator.storage.persist()` (`keepData()`) as the app already does.
 - **Fallback during rollout:** a device enrolled without a key (v1) keeps working with the bearer token alone until the operator
   turns on `--require-proof`. The client re-enrolls to get a key.
 - **Limits:** it does not stop script running in the page, or someone using the unlocked device, because both can ask the key to
@@ -525,7 +526,7 @@ This is a bearer-token model with transport security and no content encryption.
 |---|---|
 | Transport | HTTPS only, on a Let's Encrypt certificate (cert-manager) for the sync domain, terminated at the cluster's ingress, with HTTP redirected and HSTS set. The client refuses an `http:` server. |
 | Who can read the data | The server and its operator; content is not encrypted until v2. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, protect backups like the live data, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
-| Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
+| Stolen device token | Revoke that device in the admin UI; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles for sync and admin, the admin one with least privilege ([Database access](#database-access)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from the ingress controller; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
@@ -638,7 +639,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 4. **UI:** the enrollment and status screens, the device list and the status bar state.
 5. **Docs and policy:** the changes below, and the CSP change.
 6. **Hardening (v1.1):** the device-bound signing key, after the iPhone check in `TODO.md` passes. The device
-   list and idle expiry are in steps 2 and 4, not here.
+   list is in steps 2 and 4, not here.
 7. **v2:** end-to-end encryption ([v2](#v2-end-to-end-encryption)), after v1 is in use. It is independent of step 6.
 
 ## Documentation changes

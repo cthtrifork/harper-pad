@@ -52,10 +52,8 @@ td .sub{display:block;color:var(--mute);font-size:12px}
 td.act{text-align:right;white-space:nowrap}
 .mono{font-family:var(--font-mono);font-size:12px}
 .st{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;font-size:12px;font-weight:600;border:1px solid transparent}
-.st.ok{background:var(--ok-tint);color:var(--ok)}
 .st.warn{background:var(--accent-tint);color:var(--text);border-color:var(--accent)}
 .st.warn svg{color:var(--accent)}
-.st.bad{background:var(--bad-tint);color:var(--bad)}
 .foot{color:var(--mute);font-size:12px}
 .field{display:flex;flex-direction:column;gap:6px;max-width:360px}
 .field label{font-size:12px;color:var(--mute)}
@@ -72,9 +70,7 @@ td.act{text-align:right;white-space:nowrap}
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5"/></symbol>
   <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.4"/></symbol>
-  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
   <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
   <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="7" height="8" rx="1.2"/><path d="M3.5 10.5v-7a1 1 0 0 1 1-1h6"/></symbol>
   <symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.5l6 10.5H2z"/><path d="M8 7v3M8 11.8v.1"/></symbol>
@@ -101,25 +97,22 @@ td.act{text-align:right;white-space:nowrap}
       <button class="hp primary" type="button"><svg><use href="#i-plus"/></svg>New enrollment URL</button>
     </div>
     <div class="tiles">
-      <div class="tile"><span class="l">Devices</span><span class="v">3</span><span class="n">2 active, 1 expired</span></div>
+      <div class="tile"><span class="l">Devices</span><span class="v">3</span><span class="n">enrolled</span></div>
       <div class="tile"><span class="l">Pending enrollment URLs</span><span class="v">0</span><span class="n">URLs expire after 15 minutes</span></div>
       <div class="tile"><span class="l">Last sync</span><span class="v">2 min ago</span><span class="n">Desktop</span></div>
     </div>
     <table>
-      <thead><tr><th>Device</th><th>Enrolled</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Device</th><th>Enrolled</th><th>Last seen</th><th></th></tr></thead>
       <tbody>
         <tr><td>Desktop<span class="sub">Harper Pad 0.9 · Linux</span></td><td>12 Oct 2026</td><td>2 min ago</td>
-          <td><span class="st ok"><svg><use href="#i-check"/></svg>Active</span></td>
           <td class="act"><button class="hp quiet" type="button">Rename</button> <button class="hp danger" type="button">Revoke</button></td></tr>
         <tr><td>iPhone<span class="sub">Safari · Home Screen app</span></td><td>28 Oct 2026</td><td>Yesterday, 21:14</td>
-          <td><span class="st ok"><svg><use href="#i-check"/></svg>Active</span></td>
           <td class="act"><button class="hp quiet" type="button">Rename</button> <button class="hp danger" type="button">Revoke</button></td></tr>
         <tr><td>Old laptop<span class="sub">Chromium · Windows</span></td><td>3 Sep 2026</td><td>28 Sep 2026 (37 days ago)</td>
-          <td><span class="st bad"><svg><use href="#i-x"/></svg>Expired</span></td>
           <td class="act"><button class="hp quiet" type="button">Rename</button> <button class="hp danger" type="button">Revoke</button></td></tr>
       </tbody>
     </table>
-    <p class="foot">A device is signed out 30 days after it was last seen. Its drafts stay on the device.</p>
+    <p class="foot">Revoking a device signs it out at its next sync. Its drafts stay on the device.</p>
   </div>
 </div>
 </section>
