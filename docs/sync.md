@@ -724,7 +724,7 @@ GitOps repository, not in this one (this section is their specification):
   availability is not needed), the client CA and `pg_hba` settings above, and the certificates from cert-manager. CloudNativePG's
   scheduled backups to object storage are **recommended but not required for the notes' safety**, because every device holds a
   full copy and can rebuild the server; a backup preserves what devices do not have: tombstones and the device list. Restoring an
-  older backup is handled by the client ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
+  older backup is handled by the client ([Restoring or replacing the server](#restoring-or-replacing-the-server)).
 - **Migrations:** the sync service applies them itself at start, under its own role, taking a PostgreSQL advisory lock so that
   only one pod migrates if there is ever more than one replica. It refuses to start if the database has a newer schema than it
   knows. The admin service starts only against a schema it recognises, and does not migrate.
@@ -964,7 +964,7 @@ phone with many drafts, and it runs in chunks that can be resumed.
 - **Server-side version history,** if wanted: keep the previous versions of each doc and a way to restore one. v1 has none, because
   a restore has to read and write notes, and putting that in the admin UI would give the internet-reachable admin role access to
   them. It would be a command on the server host with the sync role. Until then, the operator's database backups are the only
-  older copies, and restoring one is handled by the client ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
+  older copies, and restoring one is handled by the client ([Restoring or replacing the server](#restoring-or-replacing-the-server)).
 - **Syncing settings,** if wanted: the dictionary (a set union) and the ignore list (the newer replaces the older) are the candidates.
   They need their own table, validation and merge rules, which is why v1 leaves them out.
 - **More client accounts.** The schema already carries `client_id`; what is missing is an admin action to create an account, an
