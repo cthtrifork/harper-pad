@@ -169,14 +169,14 @@ func (h *Handler) deviceEdit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deviceRename(w http.ResponseWriter, r *http.Request) {
-	name, err := cleanName(r.PostFormValue("name"))
+	name, problem := cleanName(r.PostFormValue("name"))
 	p := h.base(r)
-	if err != nil {
+	if problem != "" {
 		d, ok := h.findDevice(w, r)
 		if !ok {
 			return
 		}
-		p.EditDev, p.NameError = d, err.Error()
+		p.EditDev, p.NameError = d, problem
 		p.EditDev.Name = strings.TrimSpace(r.PostFormValue("name"))
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.fragment(w, "device-edit", p)
@@ -207,10 +207,10 @@ func (h *Handler) inviteCreate(w http.ResponseWriter, r *http.Request) {
 	p := h.base(r)
 	p.Form = strings.TrimSpace(r.PostFormValue("name"))
 	status := http.StatusOK
-	name, err := cleanName(r.PostFormValue("name"))
+	name, problem := cleanName(r.PostFormValue("name"))
 	switch {
-	case err != nil:
-		p.NameError, status = err.Error(), http.StatusUnprocessableEntity
+	case problem != "":
+		p.NameError, status = problem, http.StatusUnprocessableEntity
 	default:
 		accts, aerr := h.store.Accounts(r.Context())
 		if aerr != nil {
@@ -352,17 +352,18 @@ func (h *Handler) execute(w http.ResponseWriter, t *template.Template, name stri
 }
 
 // cleanName trims a device name and checks it: not empty, at most maxNameLen characters, valid UTF-8, no control characters.
-func cleanName(s string) (string, error) {
+// A rule it breaks comes back as a sentence for the user (not an error value: it is shown on the page, not logged).
+func cleanName(s string) (name, problem string) {
 	s = strings.TrimSpace(s)
 	switch {
 	case s == "":
-		return "", errors.New("Enter a name.")
+		return "", "Enter a name."
 	case !utf8.ValidString(s) || strings.ContainsFunc(s, func(r rune) bool { return r < ' ' || r == 0x7f }):
-		return "", errors.New("Use plain text only.")
+		return "", "Use plain text only."
 	case utf8.RuneCountInString(s) > maxNameLen:
-		return "", fmt.Errorf("Use at most %d characters.", maxNameLen)
+		return "", fmt.Sprintf("Use at most %d characters.", maxNameLen)
 	}
-	return s, nil
+	return s, ""
 }
 
 // lastSeen is the "Last seen" cell: relative while recent, a date with the age once it is old.
