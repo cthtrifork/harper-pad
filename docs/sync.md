@@ -167,8 +167,8 @@ What it does: **create an enrollment URL** (the one action that needs to be easy
 agent, rename and revoke.
 It is **one page**: a name field with **Add device** at the top, which shows the new enrollment URL inline (once, with Copy and a
 countdown), then the pending URLs (each with Cancel) and the device list (each with Rename and Revoke). There is no navigation, no
-tiles and no table, so it works at phone width too. A mockup in the app's own design tokens, light and dark, is in
-[`admin-ui-mockup.html`](admin-ui-mockup.html); open it in a browser. It reads the sync service's public address from its configuration, which is how it builds enrollment
+tiles and no table, so it works at phone width too. It uses the app's own design tokens, light and dark, and its markup and
+styles are in `backend/internal/admin/web`; run it with `ADMIN_DEMO=true` to see it. It reads the sync service's public address from its configuration, which is how it builds enrollment
 URLs. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
 account, so **Add device** has no account selector, and the admin app refuses to create an invite if it finds more than
 one client account, until a selector exists.

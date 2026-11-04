@@ -30,7 +30,7 @@ func (stubStore) CreateInvite(context.Context, string, time.Duration) (string, I
 }
 func (stubStore) CancelInvite(context.Context, string) error { return ErrNotImplemented }
 
-// demoStore keeps the data in memory and starts with three devices, as in docs/admin-ui-mockup.html. It is for looking at and
+// demoStore keeps the data in memory and starts with three devices. It is for looking at and
 // testing the UI (ADMIN_DEMO=true), never for a deployment: nothing is persisted and nothing enrolls.
 type demoStore struct {
 	mu      sync.Mutex
