@@ -45,6 +45,8 @@ specific service methods.
 
 ## The other OWASP Top 10 areas (2021 names)
 
+The sync backend is also scanned with OWASP ZAP in CI ([`backend/README.md`](../backend/README.md#security-scan)).
+
 | Area | State |
 |---|---|
 | Broken access control | No users. In the release app the bindings are reachable only from the app's own window. The dev/CI server mode (`-tags server`, not in releases) serves the same calls over HTTP on localhost; Wails 3.1.0 guards it: `/wails/runtime` takes only POSTs from its own origin (`Origin` and `Sec-Fetch-Site` are checked), the WebSocket is same-origin unless `WebSocketOriginPatterns` or `WebSocketAllowAllOrigins` say otherwise, and a loopback bind rejects an unexpected `Host` header (DNS rebinding). So a web page open in the user's browser cannot call the bindings. What it does not have is authentication: a non-browser client on the same machine (no `Origin`, no `Sec-Fetch-Site`) is allowed, so run server mode only on a machine you trust, and never set `WebSocketAllowAllOrigins`. |
