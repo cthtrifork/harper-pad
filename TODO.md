@@ -58,12 +58,16 @@ never run on a real desktop yet.
 - [ ] The sync module (`lib/sync.js`) with unit tests.
 - [ ] The end-to-end test (`docs/sync.md`, "End-to-end test"): a compose stack with PostgreSQL, `harper-pad-sync` built from
       `backend/Containerfile.sync`, and Caddy providing https (`app.localhost` serves the web build, `sync.localhost` proxies to the
-      service), and a Playwright script with two browser contexts as devices. Checks: enrollment (and a spent invite), create and
-      sync, a plain update, and the lose-the-server rebuild below. Needs the build-time sync origin for the CSP.
-- [ ] A "lose the server" test in the end-to-end suite: sync two devices, wipe the server's database, re-enroll, and check that
-      the server is rebuilt with identical drafts and no conflicted copies; then restore an older backup and check the same,
-      and that a draft deleted elsewhere while a device was offline can reappear (documented), but nothing else is lost.
-- [ ] The enrollment and status UI: follow `docs/design-cheatsheet.html`, short eased transitions, reduced motion honoured.
+      service), and a Playwright script with two browser contexts as devices. Checks: enrollment (and a spent invite), save pushes,
+      Sync all and opening a note, a plain update, the lose-the-server rebuild and the restore-an-older-backup case below. Needs the build-time sync origin for the CSP.
+- [ ] Restore tests in the end-to-end suite: wipe the server's database, re-enroll both devices and check that Sync all rebuilds
+      identical drafts with no conflicted copies; then take a `pg_dump` midway, let device B create a draft afterwards, restore
+      the dump, sign out all devices, re-enroll, and check that the draft reaches the server and device A. A draft deleted
+      elsewhere while a device was offline can reappear (documented), but nothing else is lost.
+- [ ] The enrollment and status UI, and the **Sync all** button in the drafts drawer (progress line, one-line summary, undoable
+      removals, a "Newer on the server" marker on a note): follow `docs/design-cheatsheet.html`, short eased transitions, reduced
+      motion honoured.
+- [ ] Admin UI: **Sign out all devices** (the first step after a restore).
 - [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md`, `architecture.md`, `pages.md`, `AGENTS.md`, and a server
       operations page.
 - [ ] v2, end-to-end encryption (`docs/sync.md`, "v2"): after v1 is in use. `lib/crypto.js` with shared test vectors, the

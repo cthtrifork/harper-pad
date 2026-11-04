@@ -10,7 +10,7 @@ get the matching changes (see [Documentation changes](#documentation-changes)).
 Goals:
 
 - The same drafts on the desktop app and the web app (the iPhone Home Screen app is the web build).
-- Works offline: editing never waits for the network, and changes made offline are sent when the app next syncs.
+- Works offline: editing never waits for the network, and changes made offline are sent by the next save or by **Sync all**.
 - **The device is the source of truth and the server is a supporting system.** If the whole backend is lost, syncing from a device
   rebuilds it ([The client is the source of truth](#the-client-is-the-source-of-truth)).
 - Off by default. A user who never turns it on has no network use beyond today's update check, and the security page's
@@ -45,8 +45,9 @@ conflict with them, they win.
    changes under the user.
 4. **The server cannot destroy local data.** Revoking a device, an invalid token, a server reset and "Sign out" all
    leave the local drafts in place; sync just stops.
-5. **Any device can rebuild the server.** See [Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server).
-6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll), tombstones and the cursor
+5. **Any device can rebuild the server,** with no special client code: **Sync all** reconciles in both directions. See
+   [Restoring or replacing the server](#restoring-or-replacing-the-server).
+6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll) and tombstones
    are the only such things; in v2 the key bag is also kept on each device.
 
 What losing the whole server costs:
@@ -73,6 +74,7 @@ What losing the whole server costs:
 | Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
 | Stolen-token hardening | v1: a device list with last-seen, and revoking in the admin UI. v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None in v1 (TLS only); end-to-end in v2 | Keeps the first version small; see [v2](#v2-end-to-end-encryption) |
+| Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; any restore or loss is healed by the same Sync all |
 | Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
 | Source of truth | The device. The server can be rebuilt from any device | A supporting system must not be able to lose or destroy notes; see [the principles](#the-client-is-the-source-of-truth) |
 
@@ -120,15 +122,17 @@ flowchart LR
 
 | Component | Runs as | Reachable from | Does |
 |---|---|---|---|
-| `harper-pad-sync` | Deployment and ClusterIP Service | The cluster's ingress only (NetworkPolicy) | The API: enroll, sync, devices |
-| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices |
+| `harper-pad-sync` | Deployment and ClusterIP Service | The cluster's ingress only (NetworkPolicy) | The API: enroll, list, get and put drafts |
+| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices, and signs out all devices |
 | PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the sync and admin pods (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
 | cert-manager | Cluster add-on | Nothing | Issues the database client certificates and the sync domain's TLS certificate |
 | Cloudflare | External | The internet | Carries the admin tunnel and runs Access on the admin hostname. Not in the sync path |
 | GitHub Pages | Static hosting | The internet | Serves the web app's code; holds no user data |
 
 Each device keeps its own full copy (SQLite on desktop, IndexedDB in the browser) and works without the server. The sync module
-pushes local changes and pulls remote ones. The server is the only place versions are assigned, so devices never compare clocks.
+pushes a draft when it is saved, checks the server when a note is opened, and reconciles everything on **Sync all**. The server is
+plain storage with compare-and-set: it assigns a version to each draft and never merges, copies or orders anything across
+drafts, so devices never compare clocks (they only test two states for equality).
 
 ### Database access
 
@@ -160,7 +164,8 @@ A small Go server rendering HTML with HTMX, in its own pod so the public API car
 identity provider before any request reaches the pod. The sync API is not behind Cloudflare; the cluster's ingress serves it.
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
-agent, rename, and revoke.
+agent, rename, revoke, and **sign out all devices** (the first step after restoring a backup, see
+[Restoring or replacing the server](#restoring-or-replacing-the-server)).
 There are three pages: Devices, Enrollment and Audit log. A mockup in the app's own design tokens, light and dark, is in
 [`admin-ui-mockup.html`](admin-ui-mockup.html); open it in a browser. It reads the sync service's public address from its configuration, which is how it builds enrollment
 URLs, and keeps an audit log of who did what. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
@@ -219,7 +224,7 @@ sequenceDiagram
   Dev->>API: POST /enroll {invite, deviceName}
   API->>DB: Spend invite, INSERT device (token hash)
   API-->>Dev: device token
-  Dev->>API: GET and POST /sync with the bearer token
+  Dev->>API: Sync all with the bearer token (GET /docs, PUT /docs/{id})
 ```
 
 ## Enrollment
@@ -336,11 +341,9 @@ can create drafts offline without colliding.
 ### Server schema (PostgreSQL)
 
 ```sql
-CREATE SEQUENCE change_seq;                       -- the one change counter for the whole server
-
 CREATE TABLE meta (
   key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL                             -- 'schema_version', 'server_id', (v2) 'encrypted'
+  value TEXT NOT NULL                             -- 'schema_version', (v2) 'encrypted'
 );
 
 CREATE TABLE clients (                            -- client accounts: one row in v1, inserted by the first migration
@@ -352,14 +355,13 @@ CREATE TABLE clients (                            -- client accounts: one row in
 CREATE TABLE docs (
   client_id  BIGINT  NOT NULL REFERENCES clients (id),
   id         TEXT    NOT NULL CHECK (id ~ '^[0-9a-f]{32}$'),
-  version    BIGINT  NOT NULL,                    -- change_seq value at the last accepted change
+  version    BIGINT  NOT NULL,                    -- per-draft counter: 1 on creation, +1 on each accepted write; only for compare-and-set
   created_at BIGINT  NOT NULL,                    -- the device's timestamps, Unix ms, as in the app
   updated_at BIGINT  NOT NULL,
   deleted    BOOLEAN NOT NULL DEFAULT FALSE,      -- a tombstone; data is cleared when this is set
   data       TEXT    NOT NULL DEFAULT '' CHECK (octet_length(data) <= 8388608),
   PRIMARY KEY (client_id, id)
 );
-CREATE UNIQUE INDEX docs_version_idx ON docs (client_id, version);
 
 CREATE TABLE devices (
   id         TEXT   PRIMARY KEY,
@@ -388,7 +390,7 @@ CREATE TABLE audit (
   client_id BIGINT REFERENCES clients (id),       -- NULL for actions that belong to no account
   at        BIGINT NOT NULL,
   actor     TEXT   NOT NULL,
-  action    TEXT   NOT NULL,                      -- 'invite.create', 'device.rename', 'device.revoke'
+  action    TEXT   NOT NULL,                      -- 'invite.create', 'device.rename', 'device.revoke', 'device.signout_all'
   detail    TEXT   NOT NULL DEFAULT ''
 );
 
@@ -417,17 +419,12 @@ How it is used:
 - **The client account comes from the token, never from the request.** The server looks the bearer token up in `devices` and takes
   `client_id` from that row. The protocol has no `client_id` field, so a device cannot name another account, and every query on
   `docs`, `devices`, `invites` and `keybag` has `client_id = <the device's>` in its `WHERE`. Devices never see the id.
-- **The cursor.** `version` comes from `change_seq`, which increases on every accepted change anywhere; because it is global, a
-  device's cursor skips over other accounts' changes harmlessly. The cursor is the highest version a device has seen, so a pull is
-  one indexed query: `WHERE client_id = $1 AND version > $2 ORDER BY version LIMIT $3`, which includes deletions
-  (`deleted = TRUE`).
-- **Writes are serialized.** A sequence hands out numbers before commit, so two concurrent pushes could commit out of order, and a
-  client that had already read the higher number would never see the lower one. Every push transaction therefore starts with
-  `pg_advisory_xact_lock` keyed on the client account (with a fixed namespace so it cannot collide with the migration lock), so
-  the next number for that account is allocated only after the previous push has committed. Accounts do not block each other, and
-  for one account this costs nothing.
-- **A push is one transaction:** take the lock, lock the doc's row, compare `base_version`, take `nextval('change_seq')`, then
-  upsert.
+- **Listing is one indexed query on the primary key:** `SELECT id, version, updated_at, deleted FROM docs WHERE client_id = $1 AND
+  id > $2 ORDER BY id LIMIT $3`. Ids sort by creation, so it pages cleanly, and it carries no text.
+- **A write is one transaction with compare-and-set:** lock the draft's row (`SELECT ... FOR UPDATE`), check that its version and
+  `updated_at` equal the request's `base` (an id the server does not have is `base` 0 and is inserted), then write with
+  `version + 1`. A mismatch changes nothing and returns the current row, which is the 409. There is no global counter and no
+  cursor, so there is no commit-order problem and no advisory lock for writes; the row lock is enough.
 - **Tombstones clear the text,** so a deleted note's content is not kept on the server. They are kept forever.
 - **Spending an invite is one statement,** so two devices cannot use it at once:
   `UPDATE invites SET used_at = $now WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $now RETURNING client_id, device_name`;
@@ -444,87 +441,234 @@ The server validates what the app validates: drafts at most 5 MB of valid UTF-8,
 
 ## Protocol
 
-JSON over HTTPS. Every route except `/enroll` needs the bearer token.
+JSON over HTTPS. Every route except `/enroll` needs the bearer token. The server is plain storage with compare-and-set: it
+assigns each draft a version, and it never merges, never makes copies and has no change feed. All the sync logic is in the device.
 
 | Route | Purpose |
 |---|---|
 | `POST /enroll` | `{invite, deviceName}` returns `{deviceToken}`. Spends the invite. |
-| `GET /sync?since=<cursor>&limit=<n>` | `{changes: [...], cursor, more}`: docs changed after the cursor, deletions included. |
-| `POST /sync` | `{changes: [{id, baseVersion, deleted, data, ...}]}` returns, per change, `ok` with the new version, or `conflict` with the server's current copy. |
-| `GET /devices`, `PATCH /devices/<id>`, `DELETE /devices/<id>` | List, rename, revoke. |
+| `GET /docs?after=<id>&limit=<n>` | The state of every draft of the client account, **without text**: `[{id, version, updatedAt, deleted}]`, in id order and paged. Tombstones are included. |
+| `GET /docs/<id>` | One draft with its text: `{id, version, createdAt, updatedAt, deleted, data}`, or 404 if the server has no such id. The `ETag` is the draft's `updatedAt` and `deleted`; `If-None-Match` returns 304 when they match. |
+| `PUT /docs/<id>` | `{base: {version, updatedAt}, createdAt, updatedAt, deleted, data}`. Accepted only if the stored draft matches `base` (version 0 for an id the server does not have). 200 returns `{version}`; otherwise 409 returns the server's current copy. A deletion is `deleted: true` with empty `data`. |
 
-A change is accepted only if `baseVersion` equals the server's current version for that id (0 for a new one). Otherwise the server
-answers `conflict` and includes its copy. A deletion is a change with `deleted: true`.
+- **A draft's state is the pair `(updatedAt, deleted)`.** `updatedAt` is set by the device that saved the draft, so it survives a
+  server restore, and two equal states are the same text. The device records the state it last synced for each draft, and "the
+  server changed" means the server's state differs from that record. Only equality is tested, never order, so device clocks do not
+  matter.
+- **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed, because after
+  a restore the numbers can fork (the same number can name two different texts). That is why `base` carries `updatedAt` too.
+- **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
 
-**Rebuilding.** Two rules let a device re-upload everything to an empty or older server without conflicts:
+### When sync happens
 
-- Every response carries the server's `serverId`, a random id made when its database is created. The client stores it with its
-  cursor ([Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server)).
-- A push with `baseVersion` 0 for an id the server already has is accepted when the data is **identical** (the answer is `ok`
-  with the current version) or when the pushed `updatedAt` is **newer** than the server's (the server's old state is replaced). Otherwise it is a `conflict`. A normal new draft never hits this, because ids are unique.
+There is no timer, no focus pull and no change feed. Sync happens at four moments, and all of them use the same decision table
+([Conflicts](#conflicts)).
+
+| Moment | What it does |
+|---|---|
+| **Save** | About 2 seconds after typing stops, the device pushes that one draft (`PUT`). Offline or on an error the draft stays *changed* and is sent by the next save or by Sync all. |
+| **Delete** | The tombstone is pushed after the app's undo window, so a delete that is undone never reaches the server. |
+| **Opening a note** | The local text shows at once. In the background the device asks for the draft with `If-None-Match`. If the server has a newer state, the draft is unchanged here and the user has not typed, it is swapped in with a short "Updated from the server" notice. Otherwise the local text is left alone and the note gets a "Newer on the server" marker, to be settled by Sync all or the next save. A tombstone or a 404 changes nothing while the note is open. |
+| **Sync all** | A button in the drafts drawer. It lists the state of every draft on the server and reconciles both ways. It also runs once after a device enrolls and when the app starts. |
+
+A sync never blocks typing. The status bar shows "Synced", "Syncing", "N pending", "Offline" or "Sign in again". Sync all shows a
+progress line and ends with a one-line summary such as "3 uploaded, 2 downloaded, 1 conflicted copy, 1 removed"; removals can be
+undone with the app's delete-undo. A run is **idempotent**: it recomputes every decision from stored state, so an interrupted run
+(a phone suspended partway) is just a partial one and the next run carries on. iOS has no background sync, which is why nothing
+depends on one.
+
+**Saving a draft:**
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant D as Device
+  participant S as Sync API
+  participant DB as PostgreSQL
+  U->>D: Type in a draft
+  D->>D: Save locally (the draft is now changed)
+  Note over D: about 2 seconds without typing
+  D->>S: PUT /docs/{id} with base state and text
+  S->>DB: Write if the stored state still matches base (version + 1)
+  alt base matches
+    DB-->>S: new version
+    S-->>D: 200 with the new version
+    D->>D: Record the synced state (the draft is unchanged again)
+  else somebody else changed it
+    S-->>D: 409 with the server's current copy
+    D->>D: Apply the conflict rules (same text adopts, different text makes a Conflicted copy)
+    D->>S: PUT the local text on top of the server's version
+    D->>S: PUT the Conflicted copy as a new draft
+  else offline or an error
+    D->>D: Keep the draft changed, the next save or Sync all retries
+  end
+```
+
+**Opening a note:**
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant D as Device
+  participant S as Sync API
+  U->>D: Open a note
+  D-->>U: Show the local text at once
+  D->>S: GET /docs/{id} with If-None-Match (state of the last sync)
+  alt unchanged on the server
+    S-->>D: 304
+  else newer on the server
+    S-->>D: 200 with the newer text
+    alt the draft is unchanged here and the user has not typed
+      D->>D: Apply it without touching its timestamps
+      D-->>U: The text swaps in with an Updated from the server notice
+    else the user already typed, or the draft is changed
+      D-->>U: Keep the local text and mark Newer on the server
+      Note over D,S: Sync all or the next save settles it
+    end
+  else the server has a tombstone or no copy
+    S-->>D: 200 deleted, or 404
+    Note over D: Nothing changes while the note is open
+  end
+  opt offline or an error
+    D-->>U: The local text stays, nothing is shown
+  end
+```
+
+**Sync all:**
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant D as Device
+  participant S as Sync API
+  U->>D: Press Sync all (or the app starts, or a device just enrolled)
+  D->>S: GET /docs (states without text, paged by id)
+  S-->>D: id, version, updatedAt and deleted for every draft
+  D->>D: Compare every draft with the state recorded at the last sync
+  loop every draft that needs work
+    alt changed here and unchanged there, or missing there
+      D->>S: PUT /docs/{id} (upload)
+    else newer there, or missing here
+      D->>S: GET /docs/{id}
+      S-->>D: the draft
+      D->>D: Save it without touching its timestamps
+    else changed on both sides with different text
+      D->>S: GET /docs/{id}
+      D->>D: Save the server version as a Conflicted copy
+      D->>S: PUT the local text on top, and PUT the copy as a new draft
+    else deleted there and unchanged here
+      D->>D: Remove it, with undo
+    else deleted here and unchanged there
+      D->>S: PUT a tombstone
+    end
+  end
+  D-->>U: Summary: 3 uploaded, 2 downloaded, 1 conflicted copy, 1 removed
+```
 
 ### Conflicts
 
 A conflict is settled **on the device**, by comparing, and only when it is not clearly just an update. For each draft the device
-compares three things: its own text now, the text as it was at the last sync (`synced_hash`, below), and the server's current
-version.
+compares its own text now, the state it recorded at the last sync (`synced_hash` and the synced state, below) and the server's
+current state. The same table applies to a save that comes back 409, to opening a note (where only the "newer there" row can apply
+on its own) and to Sync all.
 
 | This device | The server | What happens |
 |---|---|---|
-| Unchanged since the last sync | A newer version | **Plain update:** apply it. No copy. |
-| Changed | Unchanged since the last sync | **Plain update:** push it. No copy. |
-| Changed | Changed, with the same text and format | Adopt the server's version number. No copy. |
+| Unchanged since the last sync | Unchanged since the last sync | Nothing. |
+| Unchanged | A different, newer state | **Plain update:** download and apply it. No copy. |
+| Changed | Unchanged | **Plain update:** upload it. No copy. |
+| Changed | Changed, with the same text and format | Adopt the server's state. No copy. |
 | Changed | Changed, with different text | **Conflict:** make a copy (below). |
-| Changed | Deleted | The edit survives and the draft is restored, as "undo delete" does today. No copy. |
-| Unchanged | Deleted | Apply the deletion. |
+| Changed | Deleted (tombstone) | The edit survives: upload it again. No copy. |
+| Unchanged | Deleted (tombstone) | Remove it here, with undo. |
+| Deleted here (tombstone pending) | Unchanged | Upload the tombstone. |
+| Deleted here | Edited elsewhere | The edit survives: download it and drop the local tombstone. |
+| Has it | Has no copy and no tombstone | Upload it (absence is not deletion). |
+| Does not have it | Has it, and there is no local tombstone | Download it. |
 
 "Changed" means the text's hash differs from `synced_hash`, not that the draft was touched, so typing something and then undoing it
-is unchanged, and a newer remote version applies as a plain update.
+is unchanged, and a newer server version applies as a plain update. Nothing in the table replaces changed text: a draft with unsent
+edits is only ever uploaded, or kept next to the server's version as a copy.
 
 **The copy is created locally.** The server's different version is saved on this device as a **new draft** whose first line is
 prefixed with "Conflicted copy" and the time. The device's own text keeps its id, because it is what the user may have open and be
 typing in ([the principles](#the-client-is-the-source-of-truth), rule 3). The device then pushes its own text on top of the server's
 version. The copy is an ordinary draft: it syncs like any other, so other devices receive the text under the original id and the copy
-as a new draft. Nothing is lost, and the user decides which to keep and deletes the other.
-
-A pull never overwrites a draft that has unsent edits: that draft is pushed first and goes through the table above if the server
-disagrees. The server never makes copies and never merges text.
+as a new draft. Nothing is lost, and the user decides which to keep and deletes the other. The server never makes copies and never
+merges text.
 
 ### First sync
 
-When a device enrolls it **merges**: it uploads its local drafts as new docs and pulls the remote ones. Merge cannot overwrite
-anything, because ids are unique, and there is no "replace local with the server's" choice, because the server must not be able to
-discard what a device holds ([the principles](#the-client-is-the-source-of-truth), rule 4). A user who wants a clean device deletes
-the drafts on it first, which is an ordinary delete.
+When a device enrolls it runs **Sync all** once. That merges: it uploads the drafts the server lacks and downloads the ones the
+device lacks. Merge cannot overwrite anything, because ids are unique, and there is no "replace local with the server's" choice,
+because the server must not be able to discard what a device holds ([the principles](#the-client-is-the-source-of-truth), rule 4).
+A user who wants a clean device deletes the drafts on it first, which is an ordinary delete.
 
-### Rebuilding a lost or restored server
+### Restoring or replacing the server
 
-The server can lose state in two ways: it is **replaced by an empty one**, or **restored from an older backup**. The client
-notices either and re-uploads what the server lacks.
+Every device holds a full copy and Sync all reconciles in both directions, so a lost or restored server needs **no special client
+code**: no server id, no cursor, no reset. The client does not even have to notice. What follows is what happens, and what the
+operator does.
 
-- **Detecting it.** The client stores the `serverId` it last saw and its cursor. A different `serverId` (a new database), or a
-  cursor higher than the server's change counter (an older backup), means the server's state no longer matches. A token the new
-  server does not know is a 401, so devices first show "Sign in again" and re-enroll with a fresh invite; the first sync after
-  that takes the same path.
-- **Resetting the sync state.** The client keeps all drafts, clears every `synced_hash` (so every draft counts as changed) and sets `server_version` to 0, sets the
-  cursor to 0, drops pending tombstones (a delete that the lost server never saw is moot), and stores the new `serverId`. Then
-  it runs a normal sync: the push uploads everything, in resumable chunks, keeping each draft's own `created_at` and `updated_at`.
-- **Several devices.** The first device to sync repopulates the server. Each later device pushes the same ids with `baseVersion` 0;
-  the push rules in [Protocol](#protocol) make identical content a no-op, so they converge without conflicted copies. Devices
-  that diverged (an edit made while the server was gone) produce one conflicted copy, as usual. In v2 the data is encrypted with
-  fresh nonces, so the server cannot compare content: it answers `conflict`, and the client decrypts the server's copy, finds it
-  equal to its own, and adopts the version without making a conflicted copy.
-- **Client accounts.** Devices never hold their `client_id` (it comes from their token), so a rebuilt server's new account id
-  changes nothing for them.
-- **What the operator does.** Start the new server and database, create an enrollment URL in the admin UI for each device, and paste it on that device. Nothing else.
-- **Cost.** The whole data set is uploaded once. With the 5 MB per-draft limit and a personal collection this is small, but it is
-  chunked and resumable, so a phone that is suspended partway carries on later.
+- **The server is replaced by an empty database.** Every token is gone, so each device gets a 401 and shows "Sign in again". The
+  operator creates an enrollment URL per device; enrolling runs Sync all, and every local draft is "has it, the server has no copy",
+  so it is uploaded. The second device to sync meets the first one's uploads: the same id arrives with the same text, so it is
+  adopted without a copy (a different text gives one Conflicted copy). In v2 the server cannot compare ciphertext, so the `PUT`
+  comes back 409, and the device decrypts the server's copy, finds it equal and adopts it.
+- **The server is restored from an older backup.** This is the case a cursor-based design gets wrong. A draft that exists only on
+  device B (created after the backup) is found by Sync all because the server lacks it, so it is uploaded, and A receives it on its
+  next Sync all. Nothing has to detect the restore.
+- **Tokens.** Devices enrolled after the backup have no row and get a 401; they re-enroll. Devices **revoked after the backup come
+  back to life**, because their rows are restored. That is a security problem, so signing out all devices is the first step.
+- **Smaller losses.** A draft deleted after the backup can reappear when a device that still has it uploads it (delete it again),
+  and the audit log since the backup is gone. In v2 a device uploads its local key bag first when the server has none or an older
+  one (compare-and-set on its version), so a passphrase change or key rotation after the backup is not lost.
+- **Point-in-time recovery makes this small.** CloudNativePG can archive WAL to object storage and recover to a chosen moment, so
+  a restore loses minutes and not a day. It is a backup setting, recommended but not required, and the backups must live outside the
+  cluster.
 
-### When it runs
+**What the operator does:**
 
-On start, when the page becomes visible or the window regains focus, about 2 seconds after a save (debounced), and on a timer while
-the app is open. iOS has no background sync, so a change made offline waits for the next time the app opens. A sync never blocks
-typing; the status bar shows only "Synced", "Syncing", "Offline" or "Sign in again".
+1. Scale the sync service to zero, restore the database (a CloudNativePG recovery, or point in time), and start the service again.
+2. In the admin UI choose **Sign out all devices**. It deletes every device row, so a device that was revoked stays revoked.
+3. Create an enrollment URL for each device and paste it on that device. Enrolling runs Sync all, which rebuilds the server.
+4. Check the drafts on one device, and press **Sync all** on the others.
+
+**Restoring a backup that is missing a draft:**
+
+```mermaid
+sequenceDiagram
+  actor Op as Operator
+  participant Admin as Admin UI
+  participant DB as PostgreSQL (restored, older)
+  participant A as Device A
+  participant B as Device B
+  participant S as Sync API
+  Note over DB: The backup was taken before device B created draft X and synced it
+  Op->>DB: Restore the backup
+  Op->>Admin: Sign out all devices
+  Admin->>DB: Delete every device row
+  A->>S: Any request with its old token
+  S-->>A: 401
+  A-->>A: Show Sign in again (the drafts stay)
+  Op->>Admin: New enrollment URL for A
+  Op->>A: Paste the URL
+  A->>S: POST /enroll
+  S-->>A: new device token
+  A->>S: Sync all
+  S-->>A: states of the restored drafts (X is not among them)
+  A->>S: PUT every draft the server lacks or has in a different state
+  Op->>B: New enrollment URL, paste it
+  B->>S: POST /enroll, then Sync all
+  S-->>B: states, including what A uploaded
+  B->>S: PUT X (the server lacks it)
+  B->>S: GET the drafts only A had, and apply them
+  Note over A,B: A receives X on its next Sync all. No device had to detect the restore.
+```
+
+Devices never hold their `client_id` (it comes from their token), so a rebuilt server's new account id changes nothing for them.
+After an empty restore the whole data set is uploaded once per device; with the 5 MB per-draft limit and a personal collection
+that is small, and an interrupted run simply resumes on the next Sync all.
 
 ## Changes to local storage
 
@@ -532,18 +676,17 @@ The groundwork, and the riskiest part, because it touches both storage engines. 
 
 - **Tombstones.** `DeleteDraft` is a hard delete today (`DELETE FROM drafts`), so a deletion cannot be sent. Keep a small record of
   deleted ids that are pending upload, and remove it once the server has acknowledged it.
-- **Per-draft sync state:** `server_version` (the version last seen) and `synced_hash` (a hash of the text and format at the last
-  sync). A draft is dirty when its current hash differs from `synced_hash`. Both are local columns; neither is sent.
+- **Per-draft sync state:** `synced_hash` (a hash of the text and format at the last sync), `synced_updated_at` and
+  `synced_deleted` (the server's state for the draft at the last sync) and `server_version` (the base of the next write). A
+  draft is *changed* when its current hash differs from `synced_hash`; the server *changed* when its state differs from the
+  synced pair. All of these are local columns; none is sent.
 - **A way to apply remote changes without rewriting them.** `Store.Save` always sets `updated_at` to now and recomputes the
   summary, which is right for typing but wrong for applying a pulled draft, whose timestamps must be kept and which must not be
-  marked dirty; it sets `synced_hash` to the applied text. Add a separate store method for it, with the same validation.
+  marked changed; it sets the synced state to what was applied. Add a separate store method for it, with the same validation.
 - **Migrations.** SQLite `PRAGMA user_version` 2 to 3, and `DB_VERSION` for IndexedDB, both upgrading an old database in place
   and refusing a newer one as they do now. Update the shared fixtures so the Go and the frontend tests keep checking the same
   cases.
-- **Rebuild support.** The device also stores the `serverId` it last saw, and a "reset sync state" operation that sets every draft
-  changed (empty `synced_hash`) with `server_version` 0, clears pending tombstones and zeroes the cursor
-  ([Rebuilding](#rebuilding-a-lost-or-restored-server)). Pulling must skip any draft with `dirty` set.
-- **Device-local sync settings** (server URL, device token, cursor, `serverId`, device name) are kept apart from the app's own settings and are
+- **Device-local sync settings** (server URL, device token, device name) are kept apart from the app's own settings and are
   never uploaded. On desktop that is a separate table or key set; in the browser a separate IndexedDB key.
 - New host calls go through `backend.js` with both implementations, as [pages](pages.md) requires. New Go service methods mean
   running `make bindings`.
@@ -631,9 +774,9 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
   The compose file avoids features only Docker has, so `podman compose` and `docker compose` both run it; the `make` target uses
   whichever is installed.
 - **HTTPS with Caddy:** Caddy serves two sites with its internal CA (`tls internal`) on a high port, so a rootless runtime can bind it:
-  `https://app.localhost:8443`, a static file server for the web build, and `https://sync.localhost:8443`, a reverse proxy to
+  `https://app.localhost:18443`, a static file server for the web build, and `https://sync.localhost:18443`, a reverse proxy to
   `harper-pad-sync`. Because the page and the API are on different https origins, as in production, CORS, the CSP `connect-src`
-  and the client's "https only" rule are all exercised. `PUBLIC_URL` is `https://sync.localhost:8443`, so the service's guard stays
+  and the client's "https only" rule are all exercised. `PUBLIC_URL` is `https://sync.localhost:18443` (the port is `E2E_PORT`), so the service's guard stays
   strict and there is no development exception. Playwright runs with `ignoreHTTPSErrors`, so the browser does not need Caddy's root
   certificate. (Chromium resolves `*.localhost` to loopback by itself; confirm this, and that Caddy issues for these names, when
   the stack is built.)
@@ -644,12 +787,17 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
   tests. The admin UI gets its own small test later, with a locally signed Access token and a fake key set.
 - **Checks, in this order:**
   1. **Enrollment:** device A pastes an invite URL and gets a token; using the same invite again fails.
-  2. **Create and sync:** a draft made on A is in PostgreSQL, and device B, enrolled with its own invite, pulls it.
-  3. **Update:** an edit on A reaches B as a plain update, with no "Conflicted copy" draft.
-  4. **Lose the server:** wipe the database, restart the sync service, re-enroll, and check the drafts are rebuilt with no conflicted
-     copies ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
-  5. **Later:** an offline edit on both devices makes a local conflicted copy, and a revoked token shows "Sign in again" while the local
-     drafts stay; with a second client account, neither account sees the other's drafts or devices.
+  2. **Save pushes:** a draft made on A is in PostgreSQL shortly after the save.
+  3. **Sync all and opening a note:** device B, enrolled with its own invite (which runs Sync all), has the draft. An edit on A
+     reaches B when B opens the note, as a plain update with no "Conflicted copy". A draft created on A after B enrolled appears on
+     B after Sync all.
+  4. **Lose the server:** wipe the database, restart the sync service, re-enroll both devices, and check that Sync all rebuilds the
+     drafts with no conflicted copies ([Restoring or replacing the server](#restoring-or-replacing-the-server)).
+  5. **Restore an older backup:** take a `pg_dump` midway, let B create a draft after it, restore the dump, sign out all devices,
+     re-enroll, and check that the draft reaches the server and A, with no conflicted copies. This is the case a cursor-based
+     design would miss.
+  6. **Later:** an offline edit on both devices makes a local conflicted copy, and a revoked token shows "Sign in again" while the
+     local drafts stay; with a second client account, neither account sees the other's drafts or devices.
 - **Settings it needs:** the page origin in the CORS allowlist and the sync origin in the web build's CSP `connect-src`, so this
   test is where the build-time setting for the sync origin is first exercised.
 - **Where it runs:** CI follows the pattern of `scripts/screenshots.sh` and its workflow (a pinned `playwright-core` driving
@@ -709,7 +857,7 @@ and returns opaque `data` strings by id and version.
 |---|---|
 | Doc ids, versions, created and updated times, the deleted flag, the size of each blob, request times and the client's IP | Draft text and format |
 
-The ids and times stay in the clear because the cursor and conflict handling need them. Sizes leak roughly how long a draft
+The ids and times stay in the clear because listing and conflict handling need them. Sizes leak roughly how long a draft
 is. There is **no feature loss from hiding the text**: search already runs on each device's local copy, never on the server.
 
 ### Keys
@@ -809,7 +957,7 @@ phone with many drafts, and it runs in chunks that can be resumed.
 - **Device pairing** as a third unlock method: an enrolled device wraps the DK to the new device's public key (ECDH P-256, in
   WebCrypto) through the server, after the user confirms a fingerprint on both. It avoids typing the passphrase on a phone but
   needs both devices online; leave it for after the first v2 release.
-- **Whether to encrypt the id and times.** Not planned; it would break the cursor and conflict handling.
+- **Whether to encrypt the id and times.** Not planned; it would break listing and conflict handling.
 
 ## Later
 
