@@ -98,7 +98,7 @@ that the role gets a permission error on notes and on everything beyond its gran
 `.github/workflows/backend-zap.yml` runs the OWASP ZAP full scan (spider, passive and active rules) against `harper-pad-sync` in the
 end-to-end stack on every change under `backend/` and weekly. `test/zap/rules.tsv` marks the OWASP Top 10 classes the service
 controls itself (injection, path traversal and file inclusion, SSRF, error disclosure, missing security headers) as FAIL; other
-findings go to the job summary and the `zap-report` artifact without failing the job. Locally: `make e2e-up`, then run
+findings do not fail the job. Every alert is an annotation on the run (an error for FAIL rules, a warning otherwise), a table in the job summary and, on pull requests from this repository, one comment that each run updates (`test/zap/report.sh`); the full reports are the `zap-report` artifact. Locally: `make e2e-up`, then run
 `zap-full-scan.py -t http://sync:8080 -c rules/rules.tsv` from the ZAP image on the `harper-pad-e2e_default` network, with
 `test/zap` mounted at `/zap/wrk/rules`. A scanner cannot see logic flaws in the sync protocol, so this complements the protocol tests
 and does not replace them; once the API has an OpenAPI description, switch to `zap-api-scan.py`.
