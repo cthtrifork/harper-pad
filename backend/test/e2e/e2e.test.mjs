@@ -1,7 +1,7 @@
 // End-to-end test (docs/sync.md, "End-to-end test"). Run with `make e2e` from backend/, which builds the web app, starts the
 // compose stack, runs this file and removes the stack.
 //
-// Scaffold: the two smoke checks run against the stub service; the real checks are listed as todo.
+// Scaffold: the three smoke checks run against the stub service; the real checks are listed as todo.
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { APP_URL, launch, newDevice, SYNC_URL } from "./helpers.mjs";
@@ -23,6 +23,14 @@ describe("the stack", () => {
     const res = await page.goto(`${SYNC_URL}/healthz`);
     assert.equal(res?.status(), 200);
     assert.match(await page.textContent("body"), /ok/);
+    await device.close();
+  });
+
+  test("readiness: the sync service reaches PostgreSQL", async () => {
+    const device = await newDevice(browser);
+    const page = await device.newPage();
+    const res = await page.goto(`${SYNC_URL}/readyz`);
+    assert.equal(res?.status(), 200);
     await device.close();
   });
 

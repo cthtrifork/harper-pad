@@ -1,13 +1,16 @@
-# harper-pad-sync. Build context is backend/ (the e2e compose file sets it). Scaffold: not yet built here.
-FROM mirror.gcr.io/library/golang:1.26-trixie AS build
+# harper-pad-sync. Build context is backend/. Multi-arch: the build stage always runs on the build host's own platform and
+# cross-compiles, so no emulation is needed for arm64.
+FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26-trixie AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
-COPY go.mod go.sum* ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/harper-pad-sync ./cmd/harper-pad-sync
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/harper-pad-sync ./cmd/harper-pad-sync
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/harper-pad-sync /harper-pad-sync
-USER nonroot:nonroot
-EXPOSE 8080
+USER 65532:65532
+EXPOSE 9000
 ENTRYPOINT ["/harper-pad-sync"]
+CMD ["serve"]

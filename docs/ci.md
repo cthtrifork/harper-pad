@@ -47,6 +47,8 @@ Sources:
 
 `e2e` runs the end-to-end test of the sync backend (`make -C backend e2e`, see [sync](sync.md#end-to-end-test)): a compose stack with PostgreSQL, the sync service and Caddy, driven by Playwright with two browser contexts. The runner's own `docker compose` runs the stack (the backend Makefile prefers podman, so the job sets `COMPOSE`), the runner's Chrome is the browser, and only the pinned `playwright-core` package is installed, as in `screenshots.yml`. On a failure the Makefile prints the last lines of the compose logs before it removes the stack.
 
+`backend-image.yml` builds the two backend images (`backend/Containerfile.sync` and `.admin`) for amd64 and arm64 on pull requests that touch `backend/`, and on a push to `main` also publishes them to `ghcr.io/<owner>/harper-pad-sync` and `-admin` as `sha-<commit>` with SBOM and provenance attestations, writing each digest to the job summary (the cluster pins by digest; see [backend/README.md](../backend/README.md#images)).
+
 The other workflows are separate and filter by path on their own: `pages.yml`, `lighthouse.yml` and `screenshots.yml` on the frontend and the headless build, `dependency-scan.yml` on the Go and npm manifests (the backend's included), `renovate.yml` on its config, `actions-lint.yml` on `.github/`. `security.yml` filters the same way inside the workflow: `govulncheck` for the app, `govulncheck (backend)` for the backend module and `npm audit` each run only when their part changed (a schedule or a push to `main` runs all of them), and the Trivy filesystem scan runs whenever the workflow does.
 
 ## Lint and format checks

@@ -1,33 +1,44 @@
 // Command harper-pad-sync is the sync API of Harper Pad (docs/sync.md).
 //
-// Scaffold: it only answers GET /healthz so the end-to-end stack can start. Enrollment, sync and the database come
-// later, in the order given in the build order of docs/sync.md.
+// Scaffold: it serves /healthz (liveness) and /readyz (readiness, a PostgreSQL round trip) and nothing else yet. It is run as
+// `harper-pad-sync serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
 package main
 
 import (
-	"log"
+	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
-	"time"
+
+	"github.com/cthtrifork/harper-pad/backend/internal/config"
+	"github.com/cthtrifork/harper-pad/backend/internal/server"
+	"github.com/cthtrifork/harper-pad/backend/internal/store"
 )
 
 func main() {
-	addr := os.Getenv("LISTEN_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:8080"
+	if err := run(os.Args[1:]); err != nil {
+		slog.Error("harper-pad-sync", "err", err)
+		os.Exit(1)
 	}
+}
 
+func run(args []string) error {
+	if len(args) > 1 || (len(args) == 1 && args[0] != "serve") {
+		return fmt.Errorf("usage: harper-pad-sync [serve]")
+	}
+	cfg, err := config.LoadSync()
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	health := server.NewHealth(db)
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("ok\n"))
-	})
-
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	log.Printf("harper-pad-sync (scaffold) listening on %s", addr)
-	log.Fatal(srv.ListenAndServe())
+	health.Register(mux)
+	return server.Run(cfg.ListenAddr, mux, health)
 }
