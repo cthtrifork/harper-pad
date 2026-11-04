@@ -29,7 +29,7 @@ type client struct {
 func newClient(t *testing.T, s Store) *client {
 	t.Helper()
 	c := &client{t: t, h: New(s, Config{SyncURL: "https://sync.example.test/", Now: func() time.Time { return t0 }})}
-	rec := c.do("GET", "/devices", nil, nil)
+	rec := c.do("GET", "/", nil, nil)
 	for _, ck := range rec.Result().Cookies() {
 		if ck.Name == csrfCookie {
 			c.token = ck.Value
@@ -80,12 +80,12 @@ func TestTemplatesParse(t *testing.T) { New(NewStubStore(), Config{}) } // New p
 
 func TestDevicesPage(t *testing.T) {
 	c := newClient(t, demo())
-	rec := c.do("GET", "/devices", nil, nil)
+	rec := c.do("GET", "/", nil, nil)
 	if rec.Code != 200 {
 		t.Fatalf("status %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Desktop", "iPhone", "Old laptop", "2 min ago", "Yesterday, 09:00", "37 days ago", "Account: default", "X-CSRF-Token"} {
+	for _, want := range []string{"Desktop", "iPhone", "Old laptop", "2 min ago", "Yesterday, 09:00", "37 days ago", "Account: default", "X-CSRF-Token", `action="/invites"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)
 		}
@@ -99,15 +99,15 @@ func TestDevicesPage(t *testing.T) {
 	}
 }
 
-func TestStaticAndRedirect(t *testing.T) {
+func TestStatic(t *testing.T) {
 	c := newClient(t, demo())
 	for _, p := range []string{"/static/htmx.min.js", "/static/admin.css", "/static/admin.js"} {
 		if rec := c.do("GET", p, nil, nil); rec.Code != 200 || rec.Body.Len() == 0 {
 			t.Errorf("%s: %d", p, rec.Code)
 		}
 	}
-	if rec := c.do("GET", "/", nil, nil); rec.Code != 303 || rec.Header().Get("Location") != "/devices" {
-		t.Errorf("/ -> %d %q", rec.Code, rec.Header().Get("Location"))
+	if rec := c.do("GET", "/enroll", nil, nil); rec.Code != 404 {
+		t.Errorf("the old /enroll page should be gone: %d", rec.Code)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestStateChangesNeedSameOriginAndToken(t *testing.T) {
 	if rec := c.do("DELETE", "/devices/d1", nil, map[string]string{"Sec-Fetch-Site": "", "Origin": "https://admin.example.test"}); rec.Code != 200 {
 		t.Errorf("same Origin without Sec-Fetch-Site: %d", rec.Code)
 	}
-	if rec := c.do("GET", "/devices", nil, nil); strings.Contains(rec.Body.String(), "Desktop") {
+	if rec := c.do("GET", "/", nil, nil); strings.Contains(rec.Body.String(), "Desktop") {
 		t.Error("the allowed request did not revoke, or a refused one did")
 	}
 }
@@ -143,7 +143,7 @@ func TestRename(t *testing.T) {
 	}
 	rec := c.do("PUT", "/devices/d2", url.Values{"name": {"  Anna's <phone> "}}, nil)
 	body := rec.Body.String()
-	if rec.Code != 200 || !strings.Contains(body, "Anna&#39;s &lt;phone&gt;") || !strings.Contains(body, `id="tiles"`) || !strings.Contains(body, "hx-swap-oob") {
+	if rec.Code != 200 || !strings.Contains(body, "Anna&#39;s &lt;phone&gt;") || strings.Contains(body, "<html") {
 		t.Errorf("rename: %d %s", rec.Code, body)
 	}
 	for _, bad := range []string{"", "   ", strings.Repeat("x", 65), "a\x00b"} {
@@ -162,7 +162,7 @@ func TestRevoke(t *testing.T) {
 	c := newClient(t, demo())
 	rec := c.do("DELETE", "/devices/d3", nil, nil)
 	body := rec.Body.String()
-	if rec.Code != 200 || strings.Contains(body, "Old laptop") || !strings.Contains(body, `id="devices-list"`) || !strings.Contains(body, `id="tiles"`) {
+	if rec.Code != 200 || strings.Contains(body, "Old laptop") || !strings.Contains(body, `id="devices-list"`) {
 		t.Errorf("revoke: %d %s", rec.Code, body)
 	}
 	if rec := c.do("DELETE", "/devices/d3", nil, nil); rec.Code != 200 {
@@ -171,14 +171,14 @@ func TestRevoke(t *testing.T) {
 	for _, id := range []string{"d1", "d2"} {
 		c.do("DELETE", "/devices/"+id, nil, nil)
 	}
-	if rec := c.do("GET", "/devices", nil, nil); !strings.Contains(rec.Body.String(), "No devices yet") {
+	if rec := c.do("GET", "/", nil, nil); !strings.Contains(rec.Body.String(), "No devices yet") {
 		t.Error("no empty state")
 	}
 }
 
 func TestEnrollment(t *testing.T) {
 	c := newClient(t, demo())
-	rec := c.do("POST", "/enroll", url.Values{"name": {"iPhone 2"}}, nil)
+	rec := c.do("POST", "/invites", url.Values{"name": {"iPhone 2"}}, nil)
 	body := rec.Body.String()
 	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("create: %d %v", rec.Code, rec.Header())
@@ -191,40 +191,40 @@ func TestEnrollment(t *testing.T) {
 	// The URL is shown once: neither the pending list nor a reload has the token.
 	i := strings.Index(body, "/join#")
 	token := body[i+len("/join#") : i+len("/join#")+43]
-	page := c.do("GET", "/enroll", nil, nil).Body.String()
+	page := c.do("GET", "/", nil, nil).Body.String()
 	if strings.Contains(page, token) || !strings.Contains(page, "iPhone 2") {
 		t.Error("pending list leaks the token or lost the invite")
 	}
 
 	// Without htmx the same form posts a normal page.
-	full := c.do("POST", "/enroll", url.Values{"name": {"Laptop"}, "csrf": {c.token}}, map[string]string{"HX-Request": "", "X-CSRF-Token": ""})
+	full := c.do("POST", "/invites", url.Values{"name": {"Laptop"}, "csrf": {c.token}}, map[string]string{"HX-Request": "", "X-CSRF-Token": ""})
 	if full.Code != 200 || !strings.Contains(full.Body.String(), "<!doctype html>") || !strings.Contains(full.Body.String(), "/join#") {
 		t.Errorf("plain post: %d", full.Code)
 	}
 
-	if rec := c.do("POST", "/enroll", url.Values{"name": {" "}}, nil); rec.Code != 422 || strings.Contains(rec.Body.String(), "/join#") {
+	if rec := c.do("POST", "/invites", url.Values{"name": {" "}}, nil); rec.Code != 422 || strings.Contains(rec.Body.String(), "/join#") {
 		t.Errorf("empty name: %d", rec.Code)
 	}
 }
 
 func TestCancelInvite(t *testing.T) {
 	c := newClient(t, demo())
-	c.do("POST", "/enroll", url.Values{"name": {"Temp"}}, nil)
-	page := c.do("GET", "/enroll", nil, nil).Body.String()
+	c.do("POST", "/invites", url.Values{"name": {"Temp"}}, nil)
+	page := c.do("GET", "/", nil, nil).Body.String()
 	i := strings.Index(page, `hx-delete="/invites/`)
 	if i < 0 {
 		t.Fatal("no cancel button")
 	}
 	path := page[i+len(`hx-delete="`) : i+len(`hx-delete="`)+strings.Index(page[i+len(`hx-delete="`):], `"`)]
 	rec := c.do("DELETE", path, nil, nil)
-	if rec.Code != 200 || strings.Contains(rec.Body.String(), "Temp") || !strings.Contains(rec.Body.String(), "No pending") {
+	if rec.Code != 200 || strings.Contains(rec.Body.String(), "Temp") || strings.Contains(rec.Body.String(), "iPhone") {
 		t.Errorf("cancel: %d %s", rec.Code, rec.Body)
 	}
 }
 
 func TestRefusesInviteWithSeveralAccounts(t *testing.T) {
 	c := newClient(t, twoAccounts{demo()})
-	rec := c.do("POST", "/enroll", url.Values{"name": {"x"}}, nil)
+	rec := c.do("POST", "/invites", url.Values{"name": {"x"}}, nil)
 	if rec.Code != 409 || strings.Contains(rec.Body.String(), "/join#") {
 		t.Errorf("%d %s", rec.Code, rec.Body)
 	}
@@ -232,7 +232,7 @@ func TestRefusesInviteWithSeveralAccounts(t *testing.T) {
 
 func TestStubStoreSaysNotBuilt(t *testing.T) {
 	c := newClient(t, NewStubStore())
-	rec := c.do("GET", "/devices", nil, nil)
+	rec := c.do("GET", "/", nil, nil)
 	if rec.Code != 501 || !strings.Contains(rec.Body.String(), "not built yet") {
 		t.Errorf("%d %s", rec.Code, rec.Body)
 	}

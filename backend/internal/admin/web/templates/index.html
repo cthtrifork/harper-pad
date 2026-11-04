@@ -1,0 +1,12 @@
+{{define "content"}}
+<form class="inl" method="post" action="/invites" hx-post="/invites" hx-target="#result" hx-swap="innerHTML">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label class="sr" for="name">Device name</label>
+  <input id="name" name="name" value="{{.Form}}" maxlength="64" required autocomplete="off" placeholder="Name the new device, e.g. iPhone 2"{{if .NameError}} aria-invalid="true"{{end}}>
+  <button class="hp primary" type="submit"><svg><use href="#i-plus"/></svg>Add device</button>
+</form>
+<div id="result" aria-live="polite">{{template "invite-result" .}}</div>
+{{template "pending" .}}
+{{template "devices-list" .}}
+<p class="foot">Add device creates a single-use enrollment URL, valid for 15 minutes. Revoking a device signs it out at its next sync; its drafts stay on the device.</p>
+{{end}}

@@ -23,6 +23,8 @@ const (
 	InviteTTL = 15 * time.Minute
 	// maxNameLen bounds a device name; the app shows it in a list and the server stores it as text.
 	maxNameLen = 64
+	// idleAfter is when a device that has not synced shows a grey dot instead of a green one.
+	idleAfter = 14 * 24 * time.Hour
 )
 
 // Config is what the handler needs besides a Store.
@@ -48,7 +50,7 @@ func New(store Store, cfg Config) http.Handler {
 	}
 	cfg.SyncURL = strings.TrimRight(cfg.SyncURL, "/")
 	h := &Handler{store: store, cfg: cfg, pages: map[string]*template.Template{}}
-	for _, page := range []string{"devices", "enroll", "error"} {
+	for _, page := range []string{"index", "error"} {
 		h.pages[page] = template.Must(template.New("layout.html").Funcs(h.funcs()).
 			ParseFS(webFS, "web/templates/layout.html", "web/templates/fragments.html", "web/templates/"+page+".html"))
 	}
@@ -59,14 +61,12 @@ func New(store Store, cfg Config) http.Handler {
 	}
 	h.mux = http.NewServeMux()
 	h.mux.Handle("GET /static/", cached(http.StripPrefix("/static/", http.FileServerFS(static))))
-	h.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/devices", http.StatusSeeOther) })
-	h.mux.HandleFunc("GET /devices", h.devices)
+	h.mux.HandleFunc("GET /{$}", h.index)
 	h.mux.HandleFunc("GET /devices/{id}", h.deviceRow)
 	h.mux.HandleFunc("GET /devices/{id}/edit", h.deviceEdit)
 	h.mux.HandleFunc("PUT /devices/{id}", h.deviceRename)
 	h.mux.HandleFunc("DELETE /devices/{id}", h.deviceRevoke)
-	h.mux.HandleFunc("GET /enroll", h.enroll)
-	h.mux.HandleFunc("POST /enroll", h.enrollCreate)
+	h.mux.HandleFunc("POST /invites", h.inviteCreate)
 	h.mux.HandleFunc("DELETE /invites/{id}", h.inviteCancel)
 	return protect(h.mux)
 }
@@ -84,33 +84,22 @@ func (h *Handler) funcs() template.FuncMap {
 		"lastSeen":  func(t time.Time) string { return lastSeen(h.cfg.Now(), t) },
 		"countdown": func(t time.Time) string { return countdown(h.cfg.Now(), t) },
 		"millis":    func(t time.Time) int64 { return t.UnixMilli() },
+		"idle":      func(t time.Time) bool { return t.IsZero() || h.cfg.Now().Sub(t) > idleAfter },
 	}
 }
 
 // ---- view models ----
 
 type page struct {
-	Nav       string // "devices" or "enroll"
 	CSRF      string
 	Account   string
-	Title     string
 	Devices   []Device
-	Tiles     tiles
 	Pending   []Invite
 	Error     string // a message for the user
-	Notice    string
-	Form      string // device name typed into the enrollment form
+	Form      string // device name typed into the form
 	Result    *result
 	EditDev   Device
 	NameError string
-}
-
-type tiles struct {
-	Devices  int
-	Pending  int
-	LastSeen time.Time
-	LastName string
-	HasSeen  bool
 }
 
 type result struct {
@@ -129,30 +118,34 @@ func tokenOf(r *http.Request) string { s, _ := r.Context().Value(ctxToken{}).(st
 
 // ---- handlers ----
 
-func (h *Handler) devices(w http.ResponseWriter, r *http.Request) {
-	p, ok := h.devicesPage(w, r)
+func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
+	p, ok := h.listPage(w, r)
 	if !ok {
 		return
 	}
-	h.render(w, "devices", p)
+	h.render(w, "index", p)
 }
 
-func (h *Handler) devicesPage(w http.ResponseWriter, r *http.Request) (page, bool) {
-	p := h.base(r, "devices", "Devices")
+func (h *Handler) listPage(w http.ResponseWriter, r *http.Request) (page, bool) {
+	p := h.base(r)
+	return p, h.fill(w, r, &p)
+}
+
+// fill loads everything the page shows: the devices, the pending invites and the account name.
+func (h *Handler) fill(w http.ResponseWriter, r *http.Request, p *page) bool {
 	devs, err := h.store.Devices(r.Context())
 	if err != nil {
 		h.fail(w, r, err)
-		return p, false
+		return false
 	}
 	pending, err := h.store.PendingInvites(r.Context(), h.cfg.Now())
 	if err != nil {
 		h.fail(w, r, err)
-		return p, false
+		return false
 	}
 	p.Devices, p.Pending = devs, pending
-	p.Tiles = makeTiles(devs, pending)
 	p.Account = h.accountName(r.Context())
-	return p, true
+	return true
 }
 
 func (h *Handler) deviceRow(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +153,7 @@ func (h *Handler) deviceRow(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := h.base(r, "devices", "")
+	p := h.base(r)
 	p.EditDev = d
 	h.fragment(w, "device-row", p)
 }
@@ -170,14 +163,14 @@ func (h *Handler) deviceEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := h.base(r, "devices", "")
+	p := h.base(r)
 	p.EditDev = d
 	h.fragment(w, "device-edit", p)
 }
 
 func (h *Handler) deviceRename(w http.ResponseWriter, r *http.Request) {
 	name, err := cleanName(r.PostFormValue("name"))
-	p := h.base(r, "devices", "")
+	p := h.base(r)
 	if err != nil {
 		d, ok := h.findDevice(w, r)
 		if !ok {
@@ -195,7 +188,7 @@ func (h *Handler) deviceRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.EditDev = d
-	h.renderOOBTiles(w, r, p, "device-row")
+	h.fragment(w, "device-row", p)
 }
 
 func (h *Handler) deviceRevoke(w http.ResponseWriter, r *http.Request) {
@@ -203,35 +196,15 @@ func (h *Handler) deviceRevoke(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err) // an already revoked device just refreshes the list
 		return
 	}
-	p, ok := h.devicesPage(w, r)
+	p, ok := h.listPage(w, r)
 	if !ok {
 		return
 	}
-	h.renderOOBTiles(w, r, p, "devices-list")
+	h.fragment(w, "devices-list", p)
 }
 
-func (h *Handler) enroll(w http.ResponseWriter, r *http.Request) {
-	p := h.base(r, "enroll", "New enrollment URL")
-	if !h.enrollPage(w, r, &p) {
-		return
-	}
-	h.render(w, "enroll", p)
-}
-
-// enrollPage fills in the pending list and the account name.
-func (h *Handler) enrollPage(w http.ResponseWriter, r *http.Request, p *page) bool {
-	pending, err := h.store.PendingInvites(r.Context(), h.cfg.Now())
-	if err != nil {
-		h.fail(w, r, err)
-		return false
-	}
-	p.Pending = pending
-	p.Account = h.accountName(r.Context())
-	return true
-}
-
-func (h *Handler) enrollCreate(w http.ResponseWriter, r *http.Request) {
-	p := h.base(r, "enroll", "New enrollment URL")
+func (h *Handler) inviteCreate(w http.ResponseWriter, r *http.Request) {
+	p := h.base(r)
 	p.Form = strings.TrimSpace(r.PostFormValue("name"))
 	status := http.StatusOK
 	name, err := cleanName(r.PostFormValue("name"))
@@ -256,16 +229,16 @@ func (h *Handler) enrollCreate(w http.ResponseWriter, r *http.Request) {
 		p.Result = &result{URL: h.cfg.SyncURL + "/join#" + token, DeviceName: name, ExpiresAt: inv.ExpiresAt}
 		p.Form = ""
 	}
-	if !h.enrollPage(w, r, &p) {
+	if !h.fill(w, r, &p) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store") // the page holds the one-time URL
 	w.WriteHeader(status)
 	if isHTMX(r) {
-		h.fragments(w, p, "enroll-result", "pending-oob")
+		h.fragments(w, p, "invite-result", "pending-oob")
 		return
 	}
-	h.render(w, "enroll", p)
+	h.render(w, "index", p)
 }
 
 func (h *Handler) inviteCancel(w http.ResponseWriter, r *http.Request) {
@@ -273,8 +246,8 @@ func (h *Handler) inviteCancel(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	p := h.base(r, "enroll", "")
-	if !h.enrollPage(w, r, &p) {
+	p := h.base(r)
+	if !h.fill(w, r, &p) {
 		return
 	}
 	h.fragment(w, "pending", p)
@@ -284,8 +257,8 @@ func (h *Handler) inviteCancel(w http.ResponseWriter, r *http.Request) {
 
 func isHTMX(r *http.Request) bool { return r.Header.Get("HX-Request") == "true" }
 
-func (h *Handler) base(r *http.Request, nav, title string) page {
-	return page{Nav: nav, Title: title, CSRF: tokenOf(r), Account: "default"}
+func (h *Handler) base(r *http.Request) page {
+	return page{CSRF: tokenOf(r)}
 }
 
 // accountName is for the header badge; a failure here is not worth failing the page for.
@@ -326,7 +299,7 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	default:
 		slog.Error("admin request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	}
-	p := h.base(r, "", "Error")
+	p := h.base(r)
 	p.Error = msg
 	w.Header().Set("Cache-Control", "no-store")
 	if isHTMX(r) {
@@ -350,34 +323,20 @@ func (h *Handler) render(w http.ResponseWriter, name string, p page) {
 
 func (h *Handler) fragment(w http.ResponseWriter, name string, p page) {
 	w.Header().Set("Cache-Control", "no-store")
-	h.execute(w, h.pages["devices"], name, p)
+	h.execute(w, h.pages["index"], name, p)
 }
 
 // fragments renders several named templates one after the other (a main fragment plus out-of-band ones).
 func (h *Handler) fragments(w http.ResponseWriter, p page, names ...string) {
 	var buf bytes.Buffer
 	for _, n := range names {
-		if err := h.pages["devices"].ExecuteTemplate(&buf, n, p); err != nil {
+		if err := h.pages["index"].ExecuteTemplate(&buf, n, p); err != nil {
 			slog.Error("admin template", "name", n, "err", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 			return
 		}
 	}
 	_, _ = w.Write(buf.Bytes())
-}
-
-func (h *Handler) renderOOBTiles(w http.ResponseWriter, r *http.Request, p page, main string) {
-	if main == "device-row" {
-		// A rename can change the "last sync" tile's device name, so refresh the tiles too.
-		pp, ok := h.devicesPage(w, r)
-		if !ok {
-			return
-		}
-		pp.EditDev = p.EditDev
-		p = pp
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	h.fragments(w, p, main, "tiles-oob")
 }
 
 // execute renders into a buffer first, so a template error is a clean 500 and not a half page.
@@ -392,16 +351,6 @@ func (h *Handler) execute(w http.ResponseWriter, t *template.Template, name stri
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
 	_, _ = w.Write(buf.Bytes())
-}
-
-func makeTiles(devs []Device, pending []Invite) tiles {
-	t := tiles{Devices: len(devs), Pending: len(pending)}
-	for _, d := range devs {
-		if !d.LastSeen.IsZero() && d.LastSeen.After(t.LastSeen) {
-			t.LastSeen, t.LastName, t.HasSeen = d.LastSeen, d.Name, true
-		}
-	}
-	return t
 }
 
 // cleanName trims a device name and checks it: not empty, at most maxNameLen characters, valid UTF-8, no control characters.

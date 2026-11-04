@@ -1,75 +1,56 @@
-{{/* Fragments htmx swaps in. Each is also rendered inside a full page, so the markup has a single source. */}}
+{{/* Fragments htmx swaps in. Each is also rendered inside the full page, so the markup has a single source. */}}
 
 {{define "flash"}}<div class="note bad"><svg><use href="#i-alert"/></svg><span>{{.Error}}</span></div>{{end}}
 
-{{define "tiles-inner"}}
-  <div class="tile"><span class="l">Devices</span><span class="v">{{.Tiles.Devices}}</span><span class="n">enrolled</span></div>
-  <div class="tile"><span class="l">Pending enrollment URLs</span><span class="v">{{.Tiles.Pending}}</span><span class="n">URLs expire after 15 minutes</span></div>
-  <div class="tile"><span class="l">Last sync</span>
-    {{if .Tiles.HasSeen}}<span class="v">{{lastSeen .Tiles.LastSeen}}</span><span class="n">{{.Tiles.LastName}}</span>
-    {{else}}<span class="v">never</span><span class="n">no device has synced yet</span>{{end}}</div>
-{{end}}
-{{define "tiles"}}<div id="tiles" class="tiles">{{template "tiles-inner" .}}</div>{{end}}
-{{define "tiles-oob"}}<div id="tiles" class="tiles" hx-swap-oob="true">{{template "tiles-inner" .}}</div>{{end}}
-
-{{define "devices-list"}}<div id="devices-list">
-{{if .Devices}}<div class="tablewrap"><table>
-  <thead><tr><th>Device</th><th>Enrolled</th><th>Last seen</th><th><span class="sr">Actions</span></th></tr></thead>
-  <tbody>{{range .Devices}}{{template "row" .}}{{end}}</tbody>
-</table></div>
-{{else}}<p class="empty">No devices yet. <a href="/enroll">Create an enrollment URL</a> to add the first one.</p>{{end}}
-</div>{{end}}
-
-{{define "row"}}<tr id="dev-{{.ID}}">
-  <td>{{.Name}}{{with .UserAgent}}<span class="sub">{{.}}</span>{{end}}</td>
-  <td>{{date .CreatedAt}}</td>
-  <td>{{lastSeen .LastSeen}}</td>
-  <td class="act">
-    <button class="hp quiet" type="button" hx-get="/devices/{{.ID}}/edit" hx-target="closest tr" hx-swap="outerHTML">Rename</button>
-    <button class="hp danger" type="button" hx-delete="/devices/{{.ID}}" hx-target="#devices-list" hx-swap="outerHTML"
-      hx-confirm="Revoke {{.Name}}? It is signed out at its next sync. Its drafts stay on the device.">Revoke</button>
-  </td>
-</tr>{{end}}
-{{define "device-row"}}{{template "row" .EditDev}}{{end}}
-
-{{define "device-edit"}}<tr id="dev-{{.EditDev.ID}}">
-  <td colspan="4">
-    <form class="inline" hx-put="/devices/{{.EditDev.ID}}" hx-target="closest tr" hx-swap="outerHTML">
-      <label class="sr" for="rename-{{.EditDev.ID}}">Device name</label>
-      <input id="rename-{{.EditDev.ID}}" name="name" value="{{.EditDev.Name}}" maxlength="64" required autocomplete="off" autofocus{{if .NameError}} aria-invalid="true"{{end}}>
-      <button class="hp primary" type="submit">Save</button>
-      <button class="hp quiet" type="button" hx-get="/devices/{{.EditDev.ID}}" hx-target="closest tr" hx-swap="outerHTML">Cancel</button>
-      {{with .NameError}}<span class="err" role="alert">{{.}}</span>{{end}}
-    </form>
-  </td>
-</tr>{{end}}
-
-{{define "pending-inner"}}
-{{if .Pending}}<div class="tablewrap"><table>
-  <thead><tr><th>For</th><th>Expires</th><th><span class="sr">Actions</span></th></tr></thead>
-  <tbody>{{range .Pending}}<tr>
-    <td>{{.DeviceName}}</td>
-    <td><span data-expires="{{millis .ExpiresAt}}">{{countdown .ExpiresAt}}</span></td>
-    <td class="act"><button class="hp danger" type="button" hx-delete="/invites/{{.ID}}" hx-target="#pending" hx-swap="outerHTML">Cancel</button></td>
-  </tr>{{end}}</tbody>
-</table></div>
-{{else}}<p class="empty">No pending enrollment URLs.</p>{{end}}
-{{end}}
-{{define "pending"}}<div id="pending">{{template "pending-inner" .}}</div>{{end}}
-{{define "pending-oob"}}<div id="pending" hx-swap-oob="true">{{template "pending-inner" .}}</div>{{end}}
-
-{{define "enroll-result"}}
-{{with .NameError}}<p id="name-error" class="err" role="alert">{{.}}</p>{{end}}
+{{define "invite-result"}}
+{{with .NameError}}<p class="err" role="alert">{{.}}</p>{{end}}
 {{if .Error}}{{template "flash" .}}{{end}}
 {{with .Result}}<div class="card">
   <div class="head">
-    <strong>Enrollment URL for “{{.DeviceName}}”</strong>
-    <span class="st warn"><svg><use href="#i-clock"/></svg>Expires <span data-expires="{{millis .ExpiresAt}}">{{countdown .ExpiresAt}}</span></span>
+    <strong>Paste this into Settings → Sync → Add this device</strong>
+    <span class="st warn"><svg><use href="#i-clock"/></svg><span>Expires <span data-expires="{{millis .ExpiresAt}}">{{countdown .ExpiresAt}}</span></span></span>
   </div>
   <div class="url">
     <code id="enroll-url">{{.URL}}</code>
     <button class="hp secondary" type="button" data-copy="enroll-url"><svg><use href="#i-copy"/></svg><span>Copy</span></button>
   </div>
-  <div class="note"><svg><use href="#i-alert"/></svg><span>This is shown once and cannot be recovered. Anyone with it can enroll a device that reads your notes. Paste it into <b>Settings → Sync → Add this device</b>, then close this page.</span></div>
+  <div class="note"><svg><use href="#i-alert"/></svg><span>For “{{.DeviceName}}”. Shown once and cannot be recovered. Anyone with it can enroll a device that reads your notes.</span></div>
 </div>{{end}}
 {{end}}
+
+{{define "pending-inner"}}{{if .Pending}}
+<h2 class="sect">Pending enrollment URLs</h2>
+<div class="list">{{range .Pending}}
+  <div class="item">
+    <span class="dot pending"></span>
+    <div class="main">{{.DeviceName}}<span class="sub">enrollment URL, <span data-expires="{{millis .ExpiresAt}}">{{countdown .ExpiresAt}}</span></span></div>
+    <button class="hp danger" type="button" hx-delete="/invites/{{.ID}}" hx-target="#pending" hx-swap="outerHTML">Cancel</button>
+  </div>{{end}}
+</div>{{end}}{{end}}
+{{define "pending"}}<div id="pending" class="stack">{{template "pending-inner" .}}</div>{{end}}
+{{define "pending-oob"}}<div id="pending" class="stack" hx-swap-oob="true">{{template "pending-inner" .}}</div>{{end}}
+
+{{define "devices-list"}}<div id="devices-list" class="stack">
+{{if .Devices}}<h2 class="sect">Devices</h2>
+<div class="list">{{range .Devices}}{{template "row" .}}{{end}}</div>
+{{else}}<p class="empty">No devices yet. Name one above and choose Add device.</p>{{end}}
+</div>{{end}}
+
+{{define "row"}}<div class="item" id="dev-{{.ID}}">
+  <span class="dot{{if idle .LastSeen}} old{{end}}"></span>
+  <div class="main">{{.Name}}<span class="sub">{{lastSeen .LastSeen}}{{with .UserAgent}} · {{.}}{{end}}</span></div>
+  <button class="hp quiet" type="button" hx-get="/devices/{{.ID}}/edit" hx-target="closest .item" hx-swap="outerHTML">Rename</button>
+  <button class="hp danger" type="button" hx-delete="/devices/{{.ID}}" hx-target="#devices-list" hx-swap="outerHTML"
+    hx-confirm="Revoke {{.Name}}? It is signed out at its next sync. Its drafts stay on the device.">Revoke</button>
+</div>{{end}}
+{{define "device-row"}}{{template "row" .EditDev}}{{end}}
+
+{{define "device-edit"}}<div class="item" id="dev-{{.EditDev.ID}}">
+  <form class="inl" hx-put="/devices/{{.EditDev.ID}}" hx-target="closest .item" hx-swap="outerHTML">
+    <label class="sr" for="rename-{{.EditDev.ID}}">Device name</label>
+    <input id="rename-{{.EditDev.ID}}" name="name" value="{{.EditDev.Name}}" maxlength="64" required autocomplete="off" autofocus{{if .NameError}} aria-invalid="true"{{end}}>
+    <button class="hp primary" type="submit">Save</button>
+    <button class="hp quiet" type="button" hx-get="/devices/{{.EditDev.ID}}" hx-target="closest .item" hx-swap="outerHTML">Cancel</button>
+  </form>
+  {{with .NameError}}<span class="err" role="alert">{{.}}</span>{{end}}
+</div>{{end}}

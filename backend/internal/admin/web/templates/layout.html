@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true,"includeIndicatorStyles":false,"historyCacheSize":0}'>
-<title>{{with .Title}}{{.}} · {{end}}Harper Pad admin</title>
+<title>Harper Pad admin</title>
 <link rel="stylesheet" href="/static/admin.css">
 <script src="/static/htmx.min.js" defer></script>
 <script src="/static/admin.js" defer></script>
@@ -20,11 +20,7 @@
 <div class="win">
   <header class="bar">
     <div class="brand">Harper Pad <span>admin</span></div>
-    <nav class="seg" aria-label="Section" hx-boost="true">
-      <a href="/devices"{{if eq .Nav "devices"}} aria-current="page"{{end}}>Devices</a>
-      <a href="/enroll"{{if eq .Nav "enroll"}} aria-current="page"{{end}}>Enrollment</a>
-    </nav>
-    <div class="who">{{with .Account}}<span class="acct">Account: {{.}}</span>{{end}}</div>
+    {{with .Account}}<span class="acct">Account: {{.}}</span>{{end}}
   </header>
   <main class="page">
     <div id="flash" role="alert" aria-live="polite"></div>

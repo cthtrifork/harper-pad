@@ -11,7 +11,7 @@ manifests are not kept in this repository.
 | Path | What |
 |---|---|
 | `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
-| `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; no inline script or style, same-origin and CSRF checks). It reaches the database only through the `Store` interface; a stub (`ErrNotImplemented`, the default) and an in-memory demo implementation stand in until the PostgreSQL one exists |
+| `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; one page: add a device, pending URLs, devices; no inline script or style, same-origin and CSRF checks). It reaches the database only through the `Store` interface; a stub (`ErrNotImplemented`, the default) and an in-memory demo implementation stand in until the PostgreSQL one exists |
 | `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool; all SQL and `migrations/` later), and `syncapi`, `admin`, `auth`, `protocol`: empty packages with a package comment each |
 | `Containerfile.sync`, `Containerfile.admin` | Container images; the build context is this directory |
 | `testdata/protocol/` | Fixtures for the protocol (empty) |

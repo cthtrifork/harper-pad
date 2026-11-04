@@ -165,10 +165,12 @@ identity provider before any request reaches the pod. The sync API is not behind
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
 agent, rename and revoke.
-There are two pages: Devices and Enrollment. A mockup in the app's own design tokens, light and dark, is in
+It is **one page**: a name field with **Add device** at the top, which shows the new enrollment URL inline (once, with Copy and a
+countdown), then the pending URLs (each with Cancel) and the device list (each with Rename and Revoke). There is no navigation, no
+tiles and no table, so it works at phone width too. A mockup in the app's own design tokens, light and dark, is in
 [`admin-ui-mockup.html`](admin-ui-mockup.html); open it in a browser. It reads the sync service's public address from its configuration, which is how it builds enrollment
 URLs. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
-account, so **New enrollment URL** has no account selector, and the admin app refuses to create an invite if it finds more than
+account, so **Add device** has no account selector, and the admin app refuses to create an invite if it finds more than
 one client account, until a selector exists.
 
 #### Login: Cloudflare Access with OIDC
@@ -216,7 +218,7 @@ sequenceDiagram
   participant API as Sync API
   Op->>CF: Open admin.example.com (OIDC login with MFA)
   CF->>Admin: Forward the request (Cloudflare has already authenticated the operator)
-  Op->>CF: New enrollment URL (device name)
+  Op->>CF: Add device (device name)
   CF->>Admin: Forward the request
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
@@ -231,7 +233,7 @@ sequenceDiagram
 
 Every device, including the first, enrolls the same way.
 
-1. In the admin UI the operator picks **New enrollment URL**. It shows `https://sync.example.com/join#<token>` once. The token is 256
+1. In the admin UI the operator names the device and picks **Add device**. It shows `https://sync.example.com/join#<token>` once. The token is 256
    random bits, valid for about 15 minutes and for one use, and is stored only as a hash. It is in the URL **fragment** so it is not
    sent in the request line and not written to access logs. The invite belongs to a client account (the only one in v1), and the
    device it enrolls is bound to that account for good.
@@ -457,8 +459,8 @@ How it is used:
   periodic delete removes expired invites.
 - **Revoking a device deletes its row.** The "new device added" banner comes from `created_at`.
 - **v1 has one client account,** inserted by the first migration (`name` `default`). Nothing creates another: there is no endpoint
-  for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector in
-  **New enrollment URL**, and per-account operators (see Later).
+  for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector next to
+  the device name, and per-account operators (see Later).
 - **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
 - **The 8 MiB check** is a backstop. The app enforces the 5 MB draft limit, and a base64 envelope (the encryption option) would be larger than the plaintext.
 
@@ -733,7 +735,7 @@ it follows `scripts/screenshots.sh`).
   (no `ignoreHTTPSErrors`, which would hide a broken chain and break service workers).
 - **Devices and invites:** two Chromium contexts, each with its own IndexedDB, act as devices A and B. The test inserts invite
   rows into PostgreSQL itself (same SHA-256 token hash, bound to the default `client_id`) instead of going through the admin UI,
-  which sits behind Access. The admin UI gets its own plain HTTP test later.
+  which sits behind Access. The admin UI has its own Go handler tests (`backend/internal/admin`) and no end-to-end test yet.
 - **Checks, in order:**
   1. **Enrollment:** A pastes an invite URL and gets a token; reusing the invite fails.
   2. **Save pushes:** a draft made on A is in PostgreSQL shortly after the save.
@@ -897,7 +899,7 @@ phone with many drafts, and it runs in chunks that can be resumed.
 - **Syncing settings,** if wanted: the dictionary (a set union) and the ignore list (the newer replaces the older) are the candidates.
   They need their own table, validation and merge rules, which is why v1 leaves them out.
 - **More client accounts.** The schema already carries `client_id`; what is missing is an admin action to create an account, an
-  account selector in **New enrollment URL**, per-account operators (which would need the app to learn who is signed in, something v1 deliberately does not do), quotas, and the
+  account selector next to the device name, per-account operators (which would need the app to learn who is signed in, something v1 deliberately does not do), quotas, and the
   isolation checks above.
 - **Sharing between client accounts,** with OIDC and short-lived tokens with refresh. This is a different feature from more accounts.
 - **Merging text** with a CRDT such as Yjs (it has a CodeMirror 6 binding) if two-device simultaneous edits become common.
