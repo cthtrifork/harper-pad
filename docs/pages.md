@@ -95,3 +95,11 @@ Browser data belongs to one site in one browser on one device.
 - A different address (a renamed repo or owner, a custom domain) starts with empty storage.
 
 There is no export or import yet. The dictionary is small, but if it matters, add one before relying on the web version.
+
+### Changing the schema
+
+The web database has a version (`DB_VERSION` in `frontend/src/lib/webDrafts.js`) and `upgrade()` creates what is missing. A build that finds
+the database at a **newer** version than its own (an older tab, an installed app that has not updated yet, or another build on the same
+origin) opens it as it is, instead of failing: the browser would otherwise refuse with a `VersionError`. That is only safe if migrations
+stay backwards compatible, so add stores, indexes and fields; do not rename, remove or change the meaning of existing ones. A change
+that older builds cannot work with needs a new database name instead.
