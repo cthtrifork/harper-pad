@@ -48,10 +48,13 @@ publishes it to `pr-<number>/` on `gh-pages`, and posts one sticky comment with 
 (`https://harper.portableinfo.cloud/pr-123/`). Each push to the branch updates it. Removing the label, or closing or merging the pull
 request, deletes the folder. Without the label nothing is published.
 
-- **Same origin as the real site.** IndexedDB, localStorage and Cache Storage are shared by every path of an origin, so a preview would
-  read and write the real dictionary and drafts. The frontend therefore derives a scope from the base path (`src/lib/scope.js`; `web/sw.js`
-  does the same for its cache): on `/pr-<n>/` the database is `harper-pad.pr-<n>`, localStorage keys end in `.pr-<n>`, and the cache is
-  `harper-pad-pr-<n>-v1`. Production names do not change. Any new browser storage must go through `scoped()`.
+- **Same origin as the real site.** IndexedDB, localStorage and Cache Storage are shared by every path of an origin. The IndexedDB database
+  (`harper-pad`, the dictionary and drafts) is deliberately shared, so a preview opens with the real data. That means a preview that
+  changes the schema (`DB_VERSION` in `webDrafts.js`) upgrades the real database, and the released site then fails to open it: do not
+  bump the version in a branch you preview against real data. The presentation settings and the cache are scoped, so a preview cannot
+  change the real site's look or cached files: the frontend derives a scope from the base path (`src/lib/scope.js`; `web/sw.js` does the
+  same for its cache), and on `/pr-<n>/` localStorage keys end in `.pr-<n>` and the cache is `harper-pad-pr-<n>-v1`. Production names do
+  not change. New localStorage keys should go through `scoped()`.
 - **Branches of this repository only.** A pull request from a fork has a read-only token and is skipped. Adding the label needs triage
   access. The workflow file that runs is the one on the pull request's branch, so anyone who can push a branch here can publish to
   the site's domain; that is the same trust as write access to the repository.

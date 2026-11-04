@@ -1,6 +1,6 @@
 // Pull-request previews (docs/pages.md) are served from the production origin under /pr-<number>/. Browser storage is per origin, so
-// without this a preview would read and write the real dictionary and drafts. A preview gets its own names for everything it stores;
-// production (any other base path) keeps the plain names, so existing data stays where it is.
+// without this a preview would change the real site's localStorage settings. A preview gets its own localStorage keys; production (any
+// other base path) keeps the plain names. The IndexedDB database (dictionary, drafts) is NOT scoped: a preview works on the real data.
 const match = /^\/(pr-\d+)\/$/.exec(import.meta.env?.BASE_URL ?? "/");
 
 export const PREVIEW = match ? match[1] : "";
