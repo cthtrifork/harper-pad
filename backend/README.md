@@ -48,7 +48,8 @@ itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and th
 ```sh
 make help    # list the targets
 make build   # build both commands into ./bin
-make test    # go test ./... (the store tests are skipped unless TEST_DATABASE_URL is set, see below)
+make test    # go test ./... (the store tests are skipped without the PostgreSQL stack)
+make test-db # the same, with PostgreSQL from the e2e stack, so the store tests run
 make e2e     # build the web app, start the stack, run the test, remove the stack
 ```
 
@@ -67,26 +68,30 @@ and renewing, and the NetworkPolicy.
 
 ## Trying the admin UI
 
-The admin pages run on PostgreSQL, so to look at them, start a scratch one, apply the schema and seed three devices
-(`testdata/admin-seed.sql`). The sync service does not apply migrations yet, so this does it by hand; the admin connects as
-`harper_admin`, so the database enforces its grants (no access to notes):
+The admin pages run on PostgreSQL, and the end-to-end stack already has one with the production login (TLS 1.3, client certificate,
+no password): the admin container connects as `harper_admin` with its own certificate, so the database enforces its grants (no
+access to notes). The stack applies `internal/store/migrations/0001_init.sql` on first start, because the sync service has no
+migration runner yet.
 
 ```sh
-podman run -d --name hp-pg -e POSTGRES_PASSWORD=dev -p 127.0.0.1:5432:5432 postgres:17
-podman exec hp-pg psql -U postgres -c "CREATE DATABASE trial" -c "CREATE ROLE harper_admin LOGIN PASSWORD 'dev'"
-podman exec -i hp-pg psql -U postgres -d trial -v ON_ERROR_STOP=1 < internal/store/migrations/0001_init.sql
-podman exec -i hp-pg psql -U postgres -d trial -v ON_ERROR_STOP=1 < testdata/admin-seed.sql
-
-DATABASE_URL='postgres://harper_admin:dev@127.0.0.1:5432/trial?sslmode=disable' \
-  SYNC_PUBLIC_URL=https://sync.example.test go run ./cmd/harper-pad-admin serve   # http://127.0.0.1:9001
+make admin-up     # PostgreSQL and the admin UI, built from Containerfile.admin: http://127.0.0.1:19001
+make admin-seed   # three devices (testdata/admin-seed.sql); run it again for more
+make admin-down   # stop and delete the data
 ```
+
+Ports are `E2E_ADMIN_PORT` (default 19001) and `E2E_PG_PORT` (PostgreSQL on loopback, default 15432). To run the admin from source
+against the same stack, copy the certificates out with `make e2e-certs` and set the libpq variables the cluster uses
+(`PGHOST=localhost PGPORT=15432 PGDATABASE=harper PGUSER=harper_admin PGSSLMODE=verify-full PGSSLROOTCERT=.e2e-certs/ca.crt
+PGSSLCERT=.e2e-certs/admin.crt PGSSLKEY=.e2e-certs/admin.key SYNC_PUBLIC_URL=https://sync.example.test`).
 
 ## Tests
 
-`make test` runs everything. The handler tests use an in-memory store. The store tests need PostgreSQL and are skipped without
-`TEST_DATABASE_URL`, a **superuser** URL of a scratch server (for example `postgres://postgres:dev@127.0.0.1:5432/postgres?sslmode=disable`
-from the container above): each test creates its own database from `migrations/` and drops it, and runs the store as the real
-`harper_admin` role, so a test also proves what that role cannot do. CI runs them against a PostgreSQL service container.
+`make test` runs the unit tests. The handler tests use an in-memory store. The store tests need PostgreSQL and are **skipped** unless
+`TEST_PG_CERTS` points at the stack's certificates; `make test-db` does everything: it starts the stack's PostgreSQL, copies the
+certificates to `.e2e-certs/`, runs `go test -race ./...` and removes the stack. The store tests log in the way the services do
+(libpq variables, `verify-full`, client certificate): once as `harper_sync` to seed rows, and once as `harper_admin`, which is the
+login under test. They check the queries, that a certificate with another common name and a plain connection are refused, and
+that the role gets a permission error on notes and on everything beyond its grants. CI runs `make test-db`.
 
 ## Images
 

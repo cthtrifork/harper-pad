@@ -24,8 +24,10 @@ issue() { # name common-name extended-key-usage [subjectAltName]
 	printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=%s\n%s\n' "$3" "${4:+subjectAltName=$4}" >"$1.ext"
 	openssl x509 -req -in "$1.csr" -CA ca.crt -CAkey ca.key -CAcreateserial -days 1 -extfile "$1.ext" -out "$1.crt" 2>/dev/null
 }
-issue server postgres serverAuth DNS:postgres
+# The server certificate also names localhost, so tests on the host (published port) can use sslmode=verify-full.
+issue server postgres serverAuth DNS:postgres,DNS:localhost,IP:127.0.0.1
 issue client harper_sync clientAuth
+issue admin harper_admin clientAuth
 # A certificate from the same CA with the wrong common name: PostgreSQL must refuse it for the role harper_sync.
 issue wrongcn someone_else clientAuth
 
@@ -33,15 +35,16 @@ issue wrongcn someone_else clientAuth
 # to read the client key, which is acceptable in a throwaway volume.
 chown 999:999 server.key
 chmod 600 server.key
-chmod 644 client.key wrongcn.key ca.crt
+chmod 644 client.key admin.key wrongcn.key ca.crt
 
-# TLS and a client certificate for the role (common name must equal it); everything else, including plain TCP, is refused.
+# TLS and a client certificate for the role (common name must equal it), for the sync and the admin role; everything else, including plain TCP, is refused.
 cat >pg_hba.conf <<'HBA'
 local all all trust
 hostssl harper harper_sync all cert
+hostssl harper harper_admin all cert
 host all all all reject
 HBA
 
 # Last: the files the services wait for.
-for f in ca.crt server.crt server.key client.crt client.key wrongcn.crt wrongcn.key pg_hba.conf; do mv "$f" "/certs/$f"; done
+for f in ca.crt server.crt server.key client.crt client.key admin.crt admin.key wrongcn.crt wrongcn.key pg_hba.conf; do mv "$f" "/certs/$f"; done
 cd / && rm -rf "$work"

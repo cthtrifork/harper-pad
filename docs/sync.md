@@ -168,7 +168,7 @@ agent, rename and revoke.
 It is **one page**: a name field with **Add device** at the top, which shows the new enrollment URL inline (once, with Copy and a
 countdown), then the pending URLs (each with Cancel) and the device list (each with Rename and Revoke). There is no navigation, no
 tiles and no table, so it works at phone width too. It uses the app's own design tokens, light and dark, and its markup and
-styles are in `backend/internal/admin/web`; [`backend/README.md`](../backend/README.md) shows how to run it against a seeded PostgreSQL. It reads the sync service's public address from its configuration, which is how it builds enrollment
+styles are in `backend/internal/admin/web`; [`backend/README.md`](../backend/README.md) shows how to run it (`make admin-up`) against the e2e stack's PostgreSQL with client-certificate login. It reads the sync service's public address from its configuration, which is how it builds enrollment
 URLs. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
 account, so **Add device** has no account selector, and the admin app refuses to create an invite if it finds more than
 one client account, until a selector exists.
@@ -726,8 +726,10 @@ Runs the real pieces together, because only that proves the JavaScript sync clie
 work as one: a Playwright script driving real Chromium against a compose stack (`backend/test/e2e/`, `make` target locally; in CI
 it follows `scripts/screenshots.sh`).
 
-- **Stack:** PostgreSQL, `harper-pad-sync` built from its real `backend/Containerfile.sync`, and Caddy for HTTPS. The compose file
-  works with both `podman compose` and `docker compose`.
+- **Stack:** PostgreSQL, `harper-pad-sync` built from its real `backend/Containerfile.sync`, `harper-pad-admin` (plain HTTP on
+  loopback, logging in as `harper_admin` with its own client certificate), and Caddy for HTTPS. The compose file works with both
+  `podman compose` and `docker compose`. The same stack runs the Go store tests (`make test-db`) and the admin UI for development
+  (`make admin-up`), so the database login under test is the production one.
 - **HTTPS:** Caddy (`tls internal`, high port for rootless) serves `https://app.localhost:18443` (the web build) and
   `https://sync.localhost:18443` (proxy to the sync service). Page and API are different https origins, as in production, so CORS,
   the CSP `connect-src` and the client's "https only" rule are exercised, with `PUBLIC_URL` strict and no development exception.
