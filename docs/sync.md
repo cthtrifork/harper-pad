@@ -625,6 +625,12 @@ on its own) and to Sync all.
 is unchanged, and a newer server version applies as a plain update. Nothing in the table replaces changed text: a draft with unsent
 edits is only ever uploaded, or kept next to the server's version as a copy.
 
+**Editing a note that was deleted elsewhere.** A tombstone is a row like any other, with a `version` and an `updated_at`. The device
+takes those as the server's current state and pushes its text with them as `base`, so the compare-and-set check passes and the row is
+live again with the next version. The write needs no special case on the server, and the device that deleted the note gets it back
+as a plain update at its next sync. If the device only learns of the tombstone from a 409 on its push, it retries the same way
+with the `base` the 409 returned.
+
 **The copy is created locally.** The server's different version is saved on this device as a **new draft** whose first line is
 prefixed with "Conflicted copy" and the time. The device's own text keeps its id, because it is what the user may have open and be
 typing in ([the principles](#the-client-is-the-source-of-truth), rule 3). The device then pushes its own text on top of the server's
