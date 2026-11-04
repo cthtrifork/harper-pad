@@ -1,7 +1,7 @@
 # Sync (design)
 
-Status: **proposal, not built.** This page describes an optional sync service so drafts, the personal dictionary and the ignore
-list follow the user between the desktop app and the iPhone Home Screen app. Nothing here is in the code yet. When it is
+Status: **proposal, not built.** This page describes an optional sync service so **notes** (the scratch pad drafts)
+follow the user between the desktop app and the iPhone Home Screen app. Nothing here is in the code yet. When it is
 built, this page becomes the reference and [storage](storage.md), [security](security.md) and [architecture](architecture.md)
 get the matching changes (see [Documentation changes](#documentation-changes)).
 
@@ -9,7 +9,7 @@ get the matching changes (see [Documentation changes](#documentation-changes)).
 
 Goals:
 
-- The same drafts and dictionary on the desktop app and the web app (the iPhone Home Screen app is the web build).
+- The same drafts on the desktop app and the web app (the iPhone Home Screen app is the web build).
 - Works offline: editing never waits for the network, and changes made offline are sent when the app next syncs.
 - **The device is the source of truth and the server is a supporting system.** If the whole backend is lost, syncing from a device
   rebuilds it ([The client is the source of truth](#the-client-is-the-source-of-truth)).
@@ -19,6 +19,8 @@ Goals:
 
 Non-goals for v1:
 
+- **Syncing settings.** The personal dictionary, the ignore list, text size and every other setting stay on the device. What
+  syncs is notes. Settings can be added later ([Later](#later)).
 - **End-to-end encryption.** In v1 the server can read drafts. The wire format keeps the draft as an opaque string, so v2
   ([v2: end-to-end encryption](#v2-end-to-end-encryption)) can add encryption without changing how docs are pushed and pulled.
 - **More than one user.** One server holds one user's data. There are no accounts, only devices.
@@ -39,7 +41,7 @@ conflict with them, they win.
    local text keeps its id and the other version becomes a "conflicted copy" ([Conflicts](#conflicts)), so the open editor never
    changes under the user.
 4. **The server cannot destroy local data.** Revoking a device, an expired or invalid token, a server reset and "Sign out" all
-   leave the local drafts and settings in place; sync just stops.
+   leave the local drafts in place; sync just stops.
 5. **Any device can rebuild the server.** See [Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server).
 6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll), version history, tombstones and
    the cursor are the only such things; in v2 the key bag is also kept on each device.
@@ -48,7 +50,7 @@ What losing the whole server costs:
 
 | Lost | Effect |
 |---|---|
-| Drafts, dictionary, ignore list | Nothing: rebuilt from the devices |
+| Drafts | Nothing: rebuilt from the devices |
 | Devices and tokens | Every device shows "Sign in again". Run `invite` once per device; local data is untouched |
 | Version history | Older versions from before the loss cannot be restored. This is the one real loss, and the reason to back the server up anyway |
 | Tombstones | A draft deleted on one device while another was offline can **reappear** when that other device re-uploads. Harmless and rare: delete it again |
@@ -72,7 +74,7 @@ What losing the whole server costs:
 ## Overview
 
 ```
- desktop app (Wails)  ─┐                              ┌─ docs, settings, devices, invites
+ desktop app (Wails)  ─┐                              ┌─ docs, devices, invites
                        ├── HTTPS, Bearer token ──►  harper-pad-sync  ── SQLite file
  web app (Pages, iPhone)┘                              └─ CLI: invite, devices, revoke
 ```
@@ -184,8 +186,8 @@ one is a day old, keep the previous one valid for about 10 minutes, and revoke t
 | Item | Synced fields | Not synced |
 |---|---|---|
 | Draft | `id`, `created_at`, `updated_at`, `format`, `content` | `title`, `excerpt`, `tasks*` (derived, recomputed on save), `file_path`, `file_mtime` (belong to one device's disk) |
-| Dictionary | the word list | |
-| Ignore list | Harper's export string | |
+
+Everything else stays on the device: the personal dictionary, the ignore list, text size and the other settings. Only drafts sync.
 
 Draft ids are already 16 bytes (6 of time, 10 random) as 32 hex characters (`internal/store/drafts.go`, `newID`), so devices
 can create drafts offline without colliding.
@@ -195,7 +197,6 @@ can create drafts offline without colliding.
 ```sql
 docs     (id TEXT PRIMARY KEY, version INTEGER NOT NULL, created_at INTEGER, updated_at INTEGER,
           deleted INTEGER NOT NULL DEFAULT 0, data TEXT)           -- data: opaque string, the draft blob
-settings (key TEXT PRIMARY KEY, version INTEGER NOT NULL, value TEXT)
 history  (id TEXT, version INTEGER, updated_at INTEGER, deleted INTEGER, data TEXT, PRIMARY KEY (id, version))
 devices  (id TEXT PRIMARY KEY, name TEXT, user_agent TEXT, token_hash BLOB UNIQUE, created_at INTEGER, last_seen INTEGER,
           public_key TEXT)                                         -- public_key (JWK) is empty until the v1.1 device-bound key
@@ -213,8 +214,7 @@ be undone. Keep the last 20 versions of each doc or 90 days, whichever keeps mor
 tombstone. The CLI restores one (`harper-pad-sync restore <id> [--version n]`); an in-app restore is a later addition. This is the
 one measure that helps against every kind of compromise, including a live one, which is why it is in v1.
 
-The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id; at most 10,000
-dictionary words of at most 64 characters; an ignore list of valid JSON and at most 1 MB. All SQL uses `?` parameters.
+The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `?` parameters.
 
 ## Protocol
 
@@ -223,7 +223,7 @@ JSON over HTTPS. Every route except `/enroll` needs the bearer token.
 | Route | Purpose |
 |---|---|
 | `POST /enroll` | `{invite, deviceName}` returns `{deviceToken}`. Spends the invite. |
-| `GET /sync?since=<cursor>&limit=<n>` | `{changes: [...], cursor, more}`: docs and settings changed after the cursor, deletions included. |
+| `GET /sync?since=<cursor>&limit=<n>` | `{changes: [...], cursor, more}`: docs changed after the cursor, deletions included. |
 | `POST /sync` | `{changes: [{id, baseVersion, deleted, data, ...}]}` returns, per change, `ok` with the new version, or `conflict` with the server's current copy. |
 | `GET /devices`, `PATCH /devices/<id>`, `DELETE /devices/<id>` | List, rename, revoke. |
 
@@ -240,19 +240,30 @@ answers `conflict` and includes its copy. A deletion is a change with `deleted: 
 
 ### Conflicts
 
-When a push comes back `conflict`, the device keeps its own text under the original id and saves the server's copy as a **new
-draft** whose title line is prefixed with "Conflicted copy", then pushes both: its own text on top of the server's version, and
-the conflicted copy as a new doc. Nothing is lost and the user decides which to keep. The local text keeps its id because it is what
-the user may have open and be typing in ([the principles](#the-client-is-the-source-of-truth), rule 3). Other devices then receive
-the new text under the original id and the conflicted copy as a new draft.
+A conflict is settled **on the device**, by comparing, and only when it is not clearly just an update. For each draft the device
+compares three things: its own text now, the text as it was at the last sync (`synced_hash`, below), and the server's current
+version.
 
-A pull never overwrites a draft that has unsent edits: that draft is pushed first and handled as above if the server disagrees.
-Delete versus edit follows the same rule: an edit to a doc deleted elsewhere is restored (this matches how "undo delete" works
-today); a deletion of a doc edited elsewhere is dropped and the edit survives.
+| This device | The server | What happens |
+|---|---|---|
+| Unchanged since the last sync | A newer version | **Plain update:** apply it. No copy. |
+| Changed | Unchanged since the last sync | **Plain update:** push it. No copy. |
+| Changed | Changed, with the same text and format | Adopt the server's version number. No copy. |
+| Changed | Changed, with different text | **Conflict:** make a copy (below). |
+| Changed | Deleted | The edit survives and the draft is restored, as "undo delete" does today. No copy. |
+| Unchanged | Deleted | Apply the deletion. |
 
-Dictionary words merge as a set union; a word removed on one device and not on another comes back, which is the safe
-direction for a dictionary. The ignore list is replaced as a whole by the newer version (it is Harper's own export, which the app
-cannot merge).
+"Changed" means the text's hash differs from `synced_hash`, not that the draft was touched, so typing something and then undoing it
+is unchanged, and a newer remote version applies as a plain update.
+
+**The copy is created locally.** The server's different version is saved on this device as a **new draft** whose first line is
+prefixed with "Conflicted copy" and the time. The device's own text keeps its id, because it is what the user may have open and be
+typing in ([the principles](#the-client-is-the-source-of-truth), rule 3). The device then pushes its own text on top of the server's
+version. The copy is an ordinary draft: it syncs like any other, so other devices receive the text under the original id and the copy
+as a new draft. Nothing is lost, and the user decides which to keep and deletes the other.
+
+A pull never overwrites a draft that has unsent edits: that draft is pushed first and goes through the table above if the server
+disagrees. The server never makes copies and never merges text.
 
 ### First sync
 
@@ -270,7 +281,7 @@ notices either and re-uploads what the server lacks.
   cursor higher than the server's change counter (an older backup), means the server's state no longer matches. A token the new
   server does not know is a 401, so devices first show "Sign in again" and re-enroll with a fresh invite; the first sync after
   that takes the same path.
-- **Resetting the sync state.** The client keeps all drafts and settings, marks every one as dirty with `server_version` 0, sets the
+- **Resetting the sync state.** The client keeps all drafts, clears every `synced_hash` (so every draft counts as changed) and sets `server_version` to 0, sets the
   cursor to 0, drops pending tombstones (a delete that the lost server never saw is moot), and stores the new `serverId`. Then
   it runs a normal sync: the push uploads everything, in resumable chunks, keeping each draft's own `created_at` and `updated_at`.
 - **Several devices.** The first device to sync repopulates the server. Each later device pushes the same ids with `baseVersion` 0;
@@ -294,19 +305,19 @@ The groundwork, and the riskiest part, because it touches both storage engines. 
 
 - **Tombstones.** `DeleteDraft` is a hard delete today (`DELETE FROM drafts`), so a deletion cannot be sent. Keep a small record of
   deleted ids that are pending upload, and remove it once the server has acknowledged it.
-- **Per-draft sync state:** `dirty` (changed since the last successful push) and `server_version` (the version last
-  seen). Both are local columns; neither is sent.
+- **Per-draft sync state:** `server_version` (the version last seen) and `synced_hash` (a hash of the text and format at the last
+  sync). A draft is dirty when its current hash differs from `synced_hash`. Both are local columns; neither is sent.
 - **A way to apply remote changes without rewriting them.** `Store.Save` always sets `updated_at` to now and recomputes the
   summary, which is right for typing but wrong for applying a pulled draft, whose timestamps must be kept and which must not be
-  marked dirty. Add a separate store method for it, with the same validation.
+  marked dirty; it sets `synced_hash` to the applied text. Add a separate store method for it, with the same validation.
 - **Migrations.** SQLite `PRAGMA user_version` 2 to 3, and `DB_VERSION` for IndexedDB, both upgrading an old database in place
   and refusing a newer one as they do now. Update the shared fixtures so the Go and the frontend tests keep checking the same
   cases.
 - **Rebuild support.** The device also stores the `serverId` it last saw, and a "reset sync state" operation that sets every draft
-  dirty with `server_version` 0, clears pending tombstones and zeroes the cursor
+  changed (empty `synced_hash`) with `server_version` 0, clears pending tombstones and zeroes the cursor
   ([Rebuilding](#rebuilding-a-lost-or-restored-server)). Pulling must skip any draft with `dirty` set.
-- **Device-local sync settings** (server URL, device token, cursor, `serverId`, device name) live outside the synced `settings` table so they
-  are never uploaded. On desktop that is a separate table or key set; in the browser a separate IndexedDB key.
+- **Device-local sync settings** (server URL, device token, cursor, `serverId`, device name) are kept apart from the app's own settings and are
+  never uploaded. On desktop that is a separate table or key set; in the browser a separate IndexedDB key.
 - New host calls go through `backend.js` with both implementations, as [pages](pages.md) requires. New Go service methods mean
   running `make bindings`.
 
@@ -324,7 +335,7 @@ This is a bearer-token model with transport security and no content encryption.
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
 | Content-Security-Policy | `connect-src` is `'self'` today. Add the sync origin only when sync is configured (a build-time setting for the web build; the desktop page is embedded, so it needs the origin in its policy too), and change nothing else. See [security](security.md). |
-| Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the synced settings. Neither is encrypted; there is no OS keyring in the web build. |
+| Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted; there is no OS keyring in the web build. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |
 
 Not defended: a compromised device (it has the data), a compromised server (it has the data in v1; in v2 it has only ciphertext,
@@ -386,7 +397,7 @@ and returns opaque `data` strings by id and version.
 
 | Visible to the server | Not visible |
 |---|---|
-| Doc ids, versions, created and updated times, the deleted flag, the size of each blob, request times and the client's IP | Draft text, format, the dictionary words, the ignore list |
+| Doc ids, versions, created and updated times, the deleted flag, the size of each blob, request times and the client's IP | Draft text and format |
 
 The ids and times stay in the clear because the protocol and the [history](#history) need them. Sizes leak roughly how long a draft
 is. There is **no feature loss from hiding the text**: search already runs on each device's local copy, never on the server.
@@ -433,9 +444,6 @@ The plaintext is the v1 blob plus a revision counter: `{"v":1,"format":"markdown
 authenticated data is `id || "|" || v || "|" || kid`, so a blob cannot be swapped between docs or relabelled. `kid` names the data
 key, which lets a later rotation tell old blobs from new ones.
 
-Settings are encrypted the same way (their own key derived with `info = "harper-pad settings " + key`), so the dictionary and the
-ignore list are hidden too.
-
 ### What this does and does not stop
 
 - **A server cannot alter a blob** without the device noticing (GCM fails). It **can** refuse to return one, hide a delete, or
@@ -461,7 +469,7 @@ ignore list are hidden too.
    `data` that is not an envelope** (`encrypted` flag on the server, set by the first key bag), and any request from a client that
    does not send `Harper-Protocol: 2` gets an error telling it to update. Without this, an old client would quietly keep
    uploading plaintext.
-3. The device re-encrypts and pushes every local doc and setting as a new version. Other devices see the key bag, prompt for the
+3. The device re-encrypts and pushes every local doc as a new version. Other devices see the key bag, prompt for the
    passphrase, unlock and carry on.
 4. **Plaintext remains on the server** in the older versions of [history](#history) and in any backup. The operator runs
    `harper-pad-sync purge-plaintext` to delete history entries that are not envelopes, and backups taken before that are the
@@ -471,7 +479,7 @@ New devices after step 3 enroll as in v1, then are asked for the passphrase or r
 
 ### Rotating the key
 
-**Rotate key** makes a new DK (`kid` increments), re-encrypts every doc and setting under it, uploads the new key bag, and the
+**Rotate key** makes a new DK (`kid` increments), re-encrypts every doc under it, uploads the new key bag, and the
 old `kid` is no longer accepted by the server for new writes. Other devices unlock again with the passphrase. Use it after revoking
 a device that held the DK, or after a passphrase or recovery key may have leaked. It re-uploads everything, so it is slow on a
 phone with many drafts, and it runs in chunks that can be resumed.
@@ -496,5 +504,7 @@ phone with many drafts, and it runs in chunks that can be resumed.
 
 ## Later
 
+- **Syncing settings,** if wanted: the dictionary (a set union) and the ignore list (the newer replaces the older) are the candidates.
+  They need their own table, validation and merge rules, which is why v1 leaves them out.
 - **Multiple users or sharing,** with OIDC and short-lived tokens with refresh.
 - **Merging text** with a CRDT such as Yjs (it has a CodeMirror 6 binding) if two-device simultaneous edits become common.

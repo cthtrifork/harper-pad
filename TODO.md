@@ -47,7 +47,7 @@ never run on a real desktop yet.
   Run it in Safari and as an installed Home Screen app (add the icon first, then run it from the icon), on the current iOS. Record
   in `docs/sync.md` whether each step passes, then repeat after the app has been closed for a day, a week, and after an iOS
   restart, to see whether the key is cleared. If it fails or is cleared often, use the rotation fallback described there.
-- [ ] Local groundwork: tombstones, dirty tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
+- [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
 - [ ] The server (`harper-pad-sync`): enrollment, sync, devices, history, the CLI, tests. Decide whether it lives in this repository
       (see the open questions in `docs/sync.md`).
