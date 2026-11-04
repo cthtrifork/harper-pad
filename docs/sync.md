@@ -43,8 +43,8 @@ conflict with them, they win.
 4. **The server cannot destroy local data.** Revoking a device, an expired or invalid token, a server reset and "Sign out" all
    leave the local drafts in place; sync just stops.
 5. **Any device can rebuild the server.** See [Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server).
-6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll), version history, tombstones and
-   the cursor are the only such things; in v2 the key bag is also kept on each device.
+6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll), tombstones and the cursor
+   are the only such things; in v2 the key bag is also kept on each device.
 
 What losing the whole server costs:
 
@@ -52,7 +52,6 @@ What losing the whole server costs:
 |---|---|
 | Drafts | Nothing: rebuilt from the devices |
 | Devices and tokens | Every device shows "Sign in again". Create one enrollment URL per device in the admin UI; local data is untouched |
-| Version history | Older versions from before the loss cannot be restored. This is the one real loss, and the reason to back the server up anyway |
 | Tombstones | A draft deleted on one device while another was offline can **reappear** when that other device re-uploads. Harmless and rare: delete it again |
 | v2 key bag | Re-uploaded from a device's local copy ([v2](#v2-end-to-end-encryption)) |
 
@@ -68,7 +67,7 @@ What losing the whole server costs:
 | Users | One | No account table or sharing rules |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
-| Stolen-token hardening | v1: version history, a device list with last-seen and a 30-day idle expiry, "sign out other devices". v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
+| Stolen-token hardening | v1: a device list with last-seen and a 30-day idle expiry, revoking in the admin UI. v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None in v1 (TLS only); end-to-end in v2 | Keeps the first version small; see [v2](#v2-end-to-end-encryption) |
 | Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
 | Source of truth | The device. The server can be rebuilt from any device | A supporting system must not be able to lose or destroy notes; see [the principles](#the-client-is-the-source-of-truth) |
@@ -133,8 +132,8 @@ PostgreSQL publishes no port outside the internal network.
 
 | Role | Used by | Allowed |
 |---|---|---|
-| `harper_sync` | `harper-pad-sync` | Read and write `docs`, `history`, `meta` (and the key bag in v2); `devices`: select, insert, update (last-seen); `invites`: select, update (spend) |
-| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs` or `history`**, so a compromised admin UI cannot read notes |
+| `harper_sync` | `harper-pad-sync` | Read and write `docs`, `meta` (and the key bag in v2); `devices`: select, insert, update (last-seen); `invites`: select, update (spend) |
+| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes |
 
 ### The admin UI
 
@@ -146,8 +145,7 @@ the origin. The sync API is not behind Cloudflare in this design; only the admin
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
 agent, rename, and revoke. It reads the sync service's public address from its configuration, which is how it builds enrollment
-URLs, and keeps an audit log of who did what. History restore and `purge-plaintext` need access to notes, so they stay out of the
-admin UI, in a break-glass CLI of the sync binary that runs on the server host with the sync role (`podman exec`).
+URLs, and keeps an audit log of who did what. It has no feature that reads or writes notes, which is why its database role has no access to them.
 
 #### Login: Cloudflare Access with OIDC
 
@@ -250,12 +248,11 @@ Two different attackers need different answers, and the design treats them separ
 | Attacker | What they have | What helps |
 |---|---|---|
 | **Copies the token** (a backup, a disk image, a dump of IndexedDB) but does not keep the device | The bearer token | A device-bound key (v1.1); revocation; idle expiry |
-| **Uses the unlocked device** (or script running in the page) | The token, the key, and the drafts themselves | Revocation, version history, and the strict CSP; nothing else can stop a legitimate client being used |
+| **Uses the unlocked device** (or script running in the page) | The token, the key, and the drafts themselves | Revocation and the strict CSP. Nothing else can stop a legitimate client being used, and its edits and deletions sync to the other devices; there is no server-side undo in v1 (see [Later](#later)) |
 
 **v1 (cheap, covers both):**
 
-- **Version history on the server** ([History](#history)), so overwritten or deleted drafts can be restored.
-- **A device list** with name, created, last-seen, and the user agent; **Sign out other devices**; revoke from the admin UI.
+- **A device list** with name, created, last-seen, and the user agent, in the admin UI, where a device is also revoked.
 - **A notice** (a banner on the next open of each device) when a device enrolls or is revoked.
 - **30-day idle expiry**, above.
 
@@ -317,7 +314,6 @@ can create drafts offline without colliding.
 ```sql
 docs     (id TEXT PRIMARY KEY, version BIGINT NOT NULL, created_at BIGINT, updated_at BIGINT,
           deleted BOOLEAN NOT NULL DEFAULT FALSE, data TEXT)       -- data: opaque string, the draft blob
-history  (id TEXT, version BIGINT, updated_at BIGINT, deleted BOOLEAN, data TEXT, PRIMARY KEY (id, version))
 devices  (id TEXT PRIMARY KEY, name TEXT, user_agent TEXT, token_hash BYTEA UNIQUE, created_at BIGINT, last_seen BIGINT,
           public_key TEXT)                                         -- public_key (JWK) is empty until the v1.1 device-bound key
 invites  (token_hash BYTEA PRIMARY KEY, expires_at BIGINT, used BOOLEAN NOT NULL DEFAULT FALSE)
@@ -327,13 +323,6 @@ meta     (key TEXT PRIMARY KEY, value TEXT)                        -- schema ver
 
 `version` comes from one PostgreSQL sequence that increases on every accepted change anywhere (taken in the same transaction as the write). A client's cursor is the highest counter value
 it has seen, so `since=<cursor>` returns everything newer, including deletions (`deleted = 1`).
-
-### History
-
-Every accepted change to a doc also writes the previous state to `history`, so an attacker's (or a bug's) overwrite or deletion can
-be undone. Keep the last 20 versions of each doc or 90 days, whichever keeps more, and never prune the latest state or a
-tombstone. The break-glass CLI on the server host restores one (`harper-pad-sync restore <id> [--version n]`); an in-app restore is a later addition. This is the
-one measure that helps against every kind of compromise, including a live one, which is why it is in v1.
 
 The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `?` parameters.
 
@@ -356,8 +345,7 @@ answers `conflict` and includes its copy. A deletion is a change with `deleted: 
 - Every response carries the server's `serverId`, a random id made when its database is created. The client stores it with its
   cursor ([Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server)).
 - A push with `baseVersion` 0 for an id the server already has is accepted when the data is **identical** (the answer is `ok`
-  with the current version) or when the pushed `updatedAt` is **newer** than the server's (the server's old state goes to
-  [history](#history)). Otherwise it is a `conflict`. A normal new draft never hits this, because ids are unique.
+  with the current version) or when the pushed `updatedAt` is **newer** than the server's (the server's old state is replaced). Otherwise it is a `conflict`. A normal new draft never hits this, because ids are unique.
 
 ### Conflicts
 
@@ -450,7 +438,7 @@ This is a bearer-token model with transport security and no content encryption.
 |---|---|
 | Transport | HTTPS only, on a certificate iOS trusts. The client refuses an `http:` server. |
 | Who can read the data | The server and whoever controls it, since content is not encrypted in v1. Protect it with disk encryption, a locked-down host, backups that are protected like the live file, and no request bodies in logs. The settings screen says this plainly. |
-| Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; version history to undo damage; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
+| Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Database access | TLS and client certificates only, no passwords; the database is on an internal network with no published port; each service has its own role with least privilege ([Database access](#database-access)). |
 | Admin UI | No published port; reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login and MFA at the identity provider; the app verifies the Access token on every request; CSRF tokens, same-origin checks, strict CSP, an audit log. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1), so the identity provider and Cloudflare accounts are part of the trust chain. See [the admin UI](#the-admin-ui). |
@@ -461,7 +449,7 @@ This is a bearer-token model with transport security and no content encryption.
 | Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted; there is no OS keyring in the web build. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |
 
-Not defended: a compromised device (it has the data), a compromised server (it has the data in v1; in v2 it has only ciphertext,
+Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data in v1; in v2 it has only ciphertext,
 see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees sizes and times).
 
 ## Deploying the server
@@ -473,11 +461,10 @@ that is `https:`. It trusts `X-Forwarded-Proto` only from the proxy's address.
 
 PostgreSQL holds all state. Backing it up (`pg_dump` on a schedule, or WAL archiving) is **recommended but not required for the
 notes' safety**, because every device holds a full copy and can rebuild the server; a backup preserves what devices do not have:
-version history, tombstones and the device list. Restoring an older backup is handled by the client
+tombstones and the device list. Restoring an older backup is handled by the client
 ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
 
-Commands: `harper-pad-sync serve`, `migrate`, and the break-glass `restore <id> [--version n]` and `purge-plaintext`;
-`harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not on the command line.
+Commands: `harper-pad-sync serve` and `migrate`; `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not on the command line.
 
 ## Build order
 
@@ -485,12 +472,12 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 
 1. **Local groundwork.** Tombstones, dirty tracking, the apply-remote store method, both migrations, with tests for the Go store and
    the web store.
-2. **The server.** Enrollment, sync, devices, the admin container, the break-glass CLI, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
+2. **The server.** Enrollment, sync, devices, the admin container, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
 3. **The sync module** (`lib/sync.js`), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
    with Node's runner against fixtures, and an end-to-end test against the real server.
 4. **UI:** the enrollment and status screens, the device list and the status bar state.
 5. **Docs and policy:** the changes below, and the CSP change.
-6. **Hardening (v1.1):** the device-bound signing key, after the iPhone check in `TODO.md` passes. Version history, the device
+6. **Hardening (v1.1):** the device-bound signing key, after the iPhone check in `TODO.md` passes. The device
    list and idle expiry are in steps 2 and 4, not here.
 7. **v2:** end-to-end encryption ([v2](#v2-end-to-end-encryption)), after v1 is in use. It is independent of step 6.
 
@@ -531,7 +518,7 @@ and returns opaque `data` strings by id and version.
 |---|---|
 | Doc ids, versions, created and updated times, the deleted flag, the size of each blob, request times and the client's IP | Draft text and format |
 
-The ids and times stay in the clear because the protocol and the [history](#history) need them. Sizes leak roughly how long a draft
+The ids and times stay in the clear because the cursor and conflict handling need them. Sizes leak roughly how long a draft
 is. There is **no feature loss from hiding the text**: search already runs on each device's local copy, never on the server.
 
 ### Keys
@@ -603,9 +590,8 @@ key, which lets a later rotation tell old blobs from new ones.
    uploading plaintext.
 3. The device re-encrypts and pushes every local doc as a new version. Other devices see the key bag, prompt for the
    passphrase, unlock and carry on.
-4. **Plaintext remains on the server** in the older versions of [history](#history) and in any backup. The operator runs
-   `harper-pad-sync purge-plaintext` to delete history entries that are not envelopes, and backups taken before that are the
-   operator's to destroy. The settings screen says this.
+4. **Plaintext remains in any server backup** taken before this step, and the operator has to destroy those. The server keeps no
+   other old copies, because there is no history. The settings screen says this.
 
 New devices after step 3 enroll as in v1, then are asked for the passphrase or recovery key before the first sync.
 
@@ -618,11 +604,11 @@ phone with many drafts, and it runs in chunks that can be resumed.
 
 ### Changes beyond v1
 
-- **Server:** key bag endpoints (`GET` and `PUT /keys`, with compare-and-set), envelope shape validation, the `encrypted` flag, the
-  protocol version check, `purge-plaintext`. Storage and history are unchanged; they hold ciphertext.
+- **Server:** key bag endpoints (`GET` and `PUT /keys`, with compare-and-set), envelope shape validation, the `encrypted` flag and the
+  protocol version check. Storage is unchanged; it holds ciphertext.
 - **Client:** a `lib/crypto.js` (HKDF, AES-GCM, the envelope, the key bag) with test vectors checked in as shared fixtures like the
   existing Go and frontend tests, plus the Argon2id worker and the unlock, setup, change-passphrase and rotate screens.
-- **Docs:** [security](security.md) (the new table above), and the operations page (backup, `purge-plaintext`).
+- **Docs:** [security](security.md) (the new table above), and the operations page (backup, destroying plaintext backups).
 
 ### Open questions for v2
 
@@ -632,10 +618,14 @@ phone with many drafts, and it runs in chunks that can be resumed.
 - **Device pairing** as a third unlock method: an enrolled device wraps the DK to the new device's public key (ECDH P-256, in
   WebCrypto) through the server, after the user confirms a fingerprint on both. It avoids typing the passphrase on a phone but
   needs both devices online; leave it for after the first v2 release.
-- **Whether to encrypt the id and times.** Not planned; it would break the cursor, the history and conflict handling.
+- **Whether to encrypt the id and times.** Not planned; it would break the cursor and conflict handling.
 
 ## Later
 
+- **Server-side version history,** if wanted: keep the previous versions of each doc and a way to restore one. v1 has none, because
+  a restore has to read and write notes, and putting that in the admin UI would give the internet-reachable admin role access to
+  them. It would be a command on the server host with the sync role. Until then, the operator's database backups are the only
+  older copies, and restoring one is handled by the client ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
 - **Syncing settings,** if wanted: the dictionary (a set union) and the ignore list (the newer replaces the older) are the candidates.
   They need their own table, validation and merge rules, which is why v1 leaves them out.
 - **Multiple users or sharing,** with OIDC and short-lived tokens with refresh.

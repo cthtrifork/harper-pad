@@ -49,7 +49,7 @@ never run on a real desktop yet.
   restart, to see whether the key is cleared. If it fails or is cleared often, use the rotation fallback described there.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
-- [ ] The server: `harper-pad-sync` (enrollment, sync, devices, history, break-glass CLI), the `harper-pad-admin` Go + HTMX
+- [ ] The server: `harper-pad-sync` (enrollment, sync, devices), the `harper-pad-admin` Go + HTMX
       container (enrollment URLs, devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), PostgreSQL roles and client certificates, container images and a compose or quadlet
       setup on two networks, tests. Decide whether it lives in this repository
       (see the open questions in `docs/sync.md`).
@@ -61,5 +61,5 @@ never run on a real desktop yet.
 - [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md`, `architecture.md`, `pages.md`, `AGENTS.md`, and a server
       operations page.
 - [ ] v2, end-to-end encryption (`docs/sync.md`, "v2"): after v1 is in use. `lib/crypto.js` with shared test vectors, the
-      Argon2id worker, key bag endpoints, envelope validation and `purge-plaintext` on the server, and the setup, unlock,
+      Argon2id worker, key bag endpoints, envelope validation on the server, and the setup, unlock,
       change-passphrase and rotate-key screens.
