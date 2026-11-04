@@ -1,13 +1,15 @@
 #!/bin/sh
 # Turns ZAP's JSON report into GitHub output: workflow annotations on stdout and a markdown summary in the file given as $3.
+# Rules marked IGNORE in rules.tsv are left out (ZAP still puts them in its JSON report).
 # Usage: report.sh report.json rules.tsv summary.md
 # An alert whose rule is FAIL in rules.tsv becomes an ::error, any other alert a ::warning.
 set -eu
 report=$1 rules=$2 out=$3
 
+ignore_ids=$(awk -F'\t' '!/^#/ && $2=="IGNORE" {printf "%s ", $1}' "$rules")
 fail_ids=$(awk -F'\t' '!/^#/ && $2=="FAIL" {printf "%s ", $1}' "$rules")
 
-alerts=$(jq -r '[.site[]?.alerts[]?] | .[] | [.pluginid, .alert, .riskdesc, .count] | @tsv' "$report")
+alerts=$(jq -r --arg ignore " $ignore_ids" '[.site[]?.alerts[]?] | .[] | .pluginid as $id | select($ignore | contains(" " + $id + " ") | not) | [.pluginid, .alert, .riskdesc, .count] | @tsv' "$report")
 
 {
   echo "### OWASP ZAP scan of the sync backend"
