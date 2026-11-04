@@ -51,8 +51,10 @@ never run on a real desktop yet.
       `DB_VERSION` migrations, with tests.
 - [ ] The server: `harper-pad-sync` (enrollment, sync, devices), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
       devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), two container
-      images, and Kustomize manifests: CloudNativePG `Cluster`, cert-manager certificates (database clients and the sync domain),
-      the ingress route and middlewares for the sync API, NetworkPolicies, the admin pod with its `cloudflared` sidecar, tests. Verify the CloudNativePG `pg_hba` certificate setup on a real cluster.
+      images, and tests. The Kubernetes manifests are not kept in this repository; write them in the cluster's GitOps repository from
+      the "Deploying the server" section of `docs/sync.md`: CloudNativePG `Cluster`, cert-manager certificates (database clients and
+      the sync domain), the ingress route and middlewares for the sync API, NetworkPolicies, the admin pod with its `cloudflared`
+      sidecar. Verify the CloudNativePG `pg_hba` certificate setup on a real cluster.
 - [ ] The sync module (`lib/sync.js`) with unit tests and an end-to-end test against the real server.
 - [ ] A "lose the server" test in the end-to-end suite: sync two devices, wipe the server's database, re-enroll, and check that
       the server is rebuilt with identical drafts and no conflicted copies; then restore an older backup and check the same,

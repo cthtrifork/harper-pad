@@ -59,11 +59,12 @@ What losing the whole server costs:
 
 | Decision | Choice | Why |
 |---|---|---|
-| Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment behind a ClusterIP Service, exposed through the cluster's ingress | Small, one static binary; reuses the app's validation limits and habits |
+| Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment behind a ClusterIP Service, exposed through the cluster's ingress | Small, one static binary; applies the same draft limits as the app, written separately (see Code layout) |
 | Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service and the admin UI each get their own certificate and a role, the admin one with least privilege |
 | Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port and no login code to write; keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
 | Hosting | Kubernetes. The sync API is exposed through the cluster's existing ingress on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([what this trusts](#what-this-trusts)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
+| Code layout | `backend/` in this repository, as its **own Go module that shares no code with the app**; the sync client stays in the frontend | The overlap is about 30 lines of draft rules, and a shared module or a single module costs more than writing them twice. The end-to-end test runs the real client against the real server, which is what catches drift. The release workflow gains two artifacts, the sync and admin images |
 | Users | One | No account table or sharing rules |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
@@ -469,8 +470,8 @@ see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees size
 
 ## Deploying the server
 
-Everything runs in one Kubernetes namespace, `harper-pad`, described by Kustomize manifests (see the open questions for where
-they live):
+Everything runs in one Kubernetes namespace, `harper-pad`, described by manifests that live in the cluster's own
+GitOps repository, not in this one (this section is their specification):
 
 - **PostgreSQL:** a CloudNativePG `Cluster` with one instance to start (one user, and devices can rebuild the server, so high
   availability is not needed), the client CA and `pg_hba` settings above, and the certificates from cert-manager. CloudNativePG's
@@ -540,15 +541,12 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 
 - **The desktop webview origin** for the CORS allowlist, and whether the embedded page's CSP can name the sync origin at build
   time or needs a setting at run time.
-- **Where the server code lives:** in this repository (shares the validation constants) or its own. In this repository is simpler
-  for v1; the release workflow would then need two more artifacts (the sync and admin container images).
 - **Which OIDC provider** signs the operator in, and whether to also allow only specific devices or networks in the Access policy.
 - **Approval of new devices:** whether enrollment should additionally need a confirmation on an already-enrolled device, so that
   admin access alone cannot add a device that reads the notes.
 - **The exact CloudNativePG settings** for certificate authentication of application roles: the `pg_hba` entries and their order, and
   whether the certificate's common name must equal the role name (otherwise a `pg_ident` map). Check against the operator version
   in use and test before relying on it.
-- **Where the Kubernetes manifests live:** in this repository under `backend/deploy/`, or in the cluster's own GitOps repository.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
   with forever; one user does not delete enough to matter.
 - **Whether a non-extractable key works in the installed iPhone app,** and how often iOS clears it. Test plan in `TODO.md`.
