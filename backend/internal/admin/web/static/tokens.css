@@ -1,0 +1,50 @@
+/* Harper Pad's design tokens (frontend/src/styles/tokens.css, docs/design-cheatsheet.html): light first, dark values below.
+   No inline styles anywhere in the admin UI: the Content-Security-Policy forbids them. */
+:root {
+  --bg: #f6f7f9;
+  --panel: #eceff3;
+  --raised: #fff;
+  --selected: #dde4ec;
+  --sunken: #eef1f5;
+  --line: #d3d9e0;
+
+  --text: #1a2028;
+  --mute: #566170;
+
+  --accent: #b36b00;
+  --on-accent: #fff;
+  --accent-tint: #f6e7cf;
+  --ok: #166534;
+  --bad: #b91c1c;
+  --bad-tint: #f8dcdc;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur: 150ms;
+
+  --font-ui: system-ui, sans-serif;
+  --font-doc: Georgia, serif;
+  --font-mono: ui-monospace, monospace;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161b;
+    --panel: #181d23;
+    --raised: #1f252d;
+    --selected: #2c3745;
+    --sunken: #151a20;
+    --line: #2b333d;
+
+    --text: #e8ebef;
+    --mute: #9aa5b1;
+
+    --accent: #f5a524;
+    --on-accent: #1a1203;
+    --accent-tint: #3a2a0e;
+    --ok: #4cc38a;
+    --bad: #ff7b72;
+    --bad-tint: #3a1c1b;
+  }
+}

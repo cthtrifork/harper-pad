@@ -1,0 +1,21 @@
+/* htmx adds .htmx-added to swapped-in content and .htmx-swapping to content on its way out; both fade for a moment. */
+.item,
+.card,
+.note,
+.empty {
+  transition: opacity var(--dur) var(--ease);
+}
+
+.htmx-added,
+.htmx-swapping {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
