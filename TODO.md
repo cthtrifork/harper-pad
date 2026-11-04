@@ -40,7 +40,9 @@ never run on a real desktop yet.
       app. `persist()` returned false. Results are recorded in `docs/sync.md`.
   - [ ] **Still to do:** open the Home Screen app again after a few hours, a day, a week and a phone restart, and look for "Key from
         an earlier run survived" and the history. If the key is cleared, use the rotation fallback described in `docs/sync.md`.
-        Close PR #86 when the checks are done.
+        Also open the test page in a browser on each desktop engine (GNOME Web or another WebKitGTK browser for the Linux window,
+        Edge for the Windows window) and check the same results, because the desktop app keeps its key in the webview's IndexedDB
+        with no OS keyring. Close PR #86 when the checks are done.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
 - [ ] The server: `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,

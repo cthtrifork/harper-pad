@@ -19,6 +19,8 @@ Goals:
 
 Non-goals for v1:
 
+- **Operating-system integrations.** No OS keyring, Credential Manager, TPM or similar on any platform. The desktop app keeps its
+  device key where the web build keeps its own, so the sync code is the same everywhere.
 - **Syncing settings.** The personal dictionary, the ignore list, text size and every other setting stay on the device. What
   syncs is notes. Settings can be added later ([Later](#later)).
 - **End-to-end encryption.** The server can read drafts. The wire format keeps the draft as an opaque string, so an encryption
@@ -51,6 +53,10 @@ conflict with them, they win.
    special-cased for it.
 6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll) and tombstones
    are the only such things.
+7. **The server never generates a secret that a device must keep private.** The device signing key (and, in the
+   [encryption option](#option-end-to-end-encryption), the data key, the recovery key and the passphrase) is made on the device
+   with its own random generator and never sent to the server. The server creates only secrets it is meant to know: invite
+   tokens and device tokens, which it stores as hashes.
 
 What losing the whole server costs:
 
@@ -306,11 +312,15 @@ Where the private key lives:
 
 | Build | Key storage |
 |---|---|
-| Web (iPhone Home Screen app, browsers) | `crypto.subtle.generateKey` with `extractable: false`; **only the private `CryptoKey`** is stored in IndexedDB (a `CryptoKeyPair` cannot be stored); the public key is exported as a JWK and sent to the server |
-| Desktop | The OS keyring where there is one; otherwise a file readable only by the user |
+| Web (iPhone Home Screen app, browsers) | `crypto.subtle.generateKey` with `extractable: false`; **only the private `CryptoKey`** is stored in IndexedDB (storing a whole `CryptoKeyPair` is not needed; the iPhone test showed it is accepted there, but older WebKit rejected it); the public key is exported as a JWK and sent to the server |
+| Desktop (Linux, Windows) | **The same as the web build.** The window is a webview (WebKitGTK on Linux, WebView2 on Windows), so the same WebCrypto key is created there and stored in the webview's IndexedDB. There is no OS keyring, Credential Manager, TPM or key file, and no Go signing method: the sync module is the same code everywhere. Still to check: that both webviews keep a non-extractable key across a relaunch (`TODO.md`) |
 
 Details that are easy to get wrong:
 
+- **On desktop the key sits in the webview's profile folder,** next to the device token and the local database, so a copy of that
+  folder (a backup, a disk image) can carry the token and the key blob together. The key is still non-extractable inside the
+  webview, but this is weaker than an OS keyring, and the drafts themselves are plain text in the SQLite file. That is accepted: the
+  key protects the server against a copied token, not the machine against someone who can read its disk.
 - **WebCrypto's ECDSA signature is raw `r‖s` (64 bytes for P-256), not DER.** Go's `ecdsa.VerifyASN1` will reject it; the server must
   split it into two 32-byte integers and call `ecdsa.Verify`.
 - **Losing the key means re-enrolling.** If the browser or iOS clears storage, the proof fails and the client shows "Sign in
@@ -633,7 +643,7 @@ This is a bearer-token model with transport security and no content encryption.
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
 | Content-Security-Policy | `connect-src` is `'self'` today. Add the sync origin only when sync is configured (a build-time setting for the web build; the desktop page is embedded, so it needs the origin in its policy too), and change nothing else. See [security](security.md). |
-| Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted; there is no OS keyring in the web build. |
+| Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted, and the device key sits in the same webview profile as the token on desktop (no OS keyring, by design), so a copied profile carries both. The local drafts are plain text in any case. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |
 
 Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data; the [encryption option](#option-end-to-end-encryption) would leave it only
@@ -839,7 +849,7 @@ key, which lets a later rotation tell old blobs from new ones.
 | Build | Storage |
 |---|---|
 | Web (iPhone Home Screen app, browsers) | After unlocking, the DK is imported as a **non-extractable** WebCrypto key (HKDF material) and only that handle is stored in IndexedDB, so the passphrase is entered once per device. The iPhone check in `TODO.md` showed this works, as for the device key. |
-| Desktop | The OS keyring where there is one; otherwise a file readable only by the user, or ask for the passphrase at each start (a setting). |
+| Desktop (Linux, Windows) | The same as the web build: the webview's IndexedDB, with no OS keyring. |
 
 ### Rotating the key
 
