@@ -1,0 +1,9 @@
+# Keeps the build context (backend/) small and the layer cache stable: nothing here is needed to build the binaries.
+.playwright
+test
+**/*_test.go
+testdata
+README.md
+Makefile
+Containerfile.*
+.gitignore

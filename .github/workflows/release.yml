@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes a GitHub release with a Linux amd64 binary, a tarball, a .deb and an .rpm (PGP-signed,
+# Publishes a GitHub release (and the two backend container images on ghcr.io) with a Linux amd64 binary, a tarball, a .deb and an .rpm (PGP-signed,
 # with the public key published alongside), a Windows amd64 exe (Authenticode-signed once SignPath is set up), SHA256SUMS, a CycloneDX SBOM and
 # signed attestations (build provenance for the binaries, tarball, packages and SBOM; the SBOM bound to the
 # Linux binary). The in-app updater installs the raw binary of its platform and verifies it against SHA256SUMS, so those
@@ -100,7 +100,7 @@ jobs:
             echo "::error::Released commit is not on main"; exit 1
           fi
 
-  # Never ship something CI would have rejected. Runs beside the build; the release
+  # Never ship something CI would have rejected. Runs beside the build; the images and the release
   # both wait for it.
   checks:
     name: vet, test, govulncheck
@@ -383,9 +383,95 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # The backend images (backend/Containerfile.sync and .admin, backend/README.md) go out with the other
+  # release artifacts: only for a tagged release, never from a branch push, and only after vet, tests and
+  # govulncheck have passed. backend-image.yml has already built, scanned and started them on every
+  # change. They run beside the binary builds, and the release is only published once they are pushed.
+  images:
+    name: publish image (${{ matrix.name }})
+    needs: [meta, checks]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read # check out the tag
+      packages: write # push to ghcr.io
+      id-token: write # sign the provenance attestation
+      attestations: write # store the attestations
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [sync, admin]
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/harper-pad-${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha || (inputs.tag && format('refs/tags/{0}', inputs.tag)) || '' }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Tags: 1.2.3 and v1.2.3, plus latest for a final release (not for a pre-release).
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.meta.outputs.version }}
+            type=raw,value=${{ needs.meta.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.meta.outputs.prerelease == 'false' }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.meta.outputs.sha }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          file: backend/Containerfile.${{ matrix.name }}
+          platforms: linux/amd64
+          push: true
+          # BuildKit attaches a SLSA provenance and an SBOM attestation to the image in the registry.
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ needs.meta.outputs.sha }}
+            APP_VERSION=${{ needs.meta.outputs.version }}
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      # The cluster pins by digest.
+      - name: Digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "### ${IMAGE}"
+            echo
+            echo '```'
+            echo "${IMAGE}@${DIGEST}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     name: publish release
-    needs: [meta, checks, build, build-windows]
+    needs: [meta, checks, build, build-windows, images]
     if: needs.meta.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10

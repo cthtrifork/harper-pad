@@ -1,0 +1,27 @@
+# e2e stack only. Caddy's own local CA signs these names (`tls internal`); the test reads its root from the running container and
+# makes Chromium trust that key alone (helpers.mjs), so the certificates are really checked. The page and the API are different
+# https origins, as in production.
+
+{
+	# The root cannot be installed into a container's trust store, and nothing here needs the admin API.
+	skip_install_trust
+	admin off
+}
+
+# The compose healthcheck: plain http on a port that is not published.
+:2020 {
+	respond /health 200
+}
+
+https://app.localhost {
+	# Explicit although Caddy already uses its local CA for *.localhost names.
+	tls internal
+	root * /srv/app
+	try_files {path} /index.html
+	file_server
+}
+
+https://sync.localhost {
+	tls internal
+	reverse_proxy sync:8080
+}

@@ -18,6 +18,8 @@ on:
     paths:
       - go.mod
       - go.sum
+      - backend/go.mod
+      - backend/go.sum
       - frontend/package.json
       - frontend/package-lock.json
       - .github/trivy/**

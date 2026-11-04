@@ -1,0 +1,89 @@
+# End-to-end stack (docs/sync.md, "End-to-end test"): PostgreSQL, harper-pad-sync and Caddy providing https.
+# Plain compose spec, so `podman compose` and `docker compose` both read it. Test-only credentials; never reuse them.
+#
+#   https://app.localhost:${E2E_PORT:-18443}   the web build (frontend/dist-web, built by `make e2e-web`)
+#   https://sync.localhost:${E2E_PORT:-18443}  harper-pad-sync, through Caddy
+# Only https is published: unlike the production ingress there is no port 80 and no redirect from http.
+name: harper-pad-e2e
+
+volumes:
+  pgcerts:
+
+services:
+  postgres:
+    image: mirror.gcr.io/library/postgres:17
+    # First makes the CA, the server certificate and the client certificates into the pgcerts volume (certs.sh, run as root), then
+    # starts the image's own entrypoint, which drops to the postgres user. TLS is required, and pg_hba.conf (made by certs.sh) lets
+    # the role in only with a client certificate whose common name is the role, as the CloudNativePG cluster does (docs/sync.md,
+    # "Database access"). The password only satisfies the image's init script; no login uses it.
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "/certs.sh && exec docker-entrypoint.sh \"$$@\"", "sh"]
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
+      - -c
+      - ssl_ca_file=/certs/ca.crt
+      - -c
+      - ssl_min_protocol_version=TLSv1.3
+      - -c
+      - hba_file=/certs/pg_hba.conf
+    environment:
+      POSTGRES_DB: harper
+      POSTGRES_USER: harper_sync
+      POSTGRES_PASSWORD: e2e-only
+    volumes:
+      - ./certs.sh:/certs.sh:ro,z
+      - pgcerts:/certs
+    # The data is thrown away with the stack, so keep it in memory.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      # Over TCP: the init script runs a temporary server that listens on the socket only, so a socket check reports ready too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U harper_sync -d harper"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  sync:
+    build:
+      context: ../..
+      dockerfile: Containerfile.sync
+    environment:
+      LISTEN_ADDR: ":8080"
+      PUBLIC_URL: https://sync.localhost:${E2E_PORT:-18443}
+      CORS_ALLOWED_ORIGINS: https://app.localhost:${E2E_PORT:-18443}
+      # Client-certificate login with no password, configured the way the cluster does it: the libpq variables.
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: harper
+      PGUSER: harper_sync
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: /certs/ca.crt
+      PGSSLCERT: /certs/client.crt
+      PGSSLKEY: /certs/client.key
+    volumes:
+      - pgcerts:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    # Pinned by version and digest (Renovate updates both), so a new Caddy cannot change the stack under CI.
+    image: mirror.gcr.io/library/caddy:2.11.7@sha256:04913b1da43339a40ad1ea87827d70a576ac5aa6cf674c6e24fdca675887533a
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2020/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    ports:
+      - "${E2E_PORT:-18443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - ../../../frontend/dist-web:/srv/app:ro,z
+    depends_on:
+      - sync
