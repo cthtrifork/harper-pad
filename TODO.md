@@ -43,8 +43,8 @@ never run on a real desktop yet.
         Also open the test page in a browser on each desktop engine (GNOME Web or another WebKitGTK browser for the Linux window,
         Edge for the Windows window) and check the same results, because the desktop app keeps its key in the webview's IndexedDB
         with no OS keyring. Close PR #86 when the checks are done.
-- [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
-      `DB_VERSION` migrations, with tests.
+- [x] Local groundwork: sync state in its own table/store, hash-based change tracking, apply-remote store methods, additive SQLite
+      and IndexedDB (`DB_VERSION` 3) migrations that older builds survive, with tests. The host calls and bindings come with the sync module.
 - [ ] The server: `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
       devices) behind a Cloudflare Tunnel and Access with OIDC (Cloudflare does all authentication; the app has none), two container
       images, and tests. The Kubernetes manifests are not kept in this repository; write them in the cluster's GitOps repository from

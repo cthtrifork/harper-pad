@@ -595,7 +595,7 @@ sequenceDiagram
 ### Conflicts
 
 A conflict is settled **on the device**, by comparing, and only when it is not clearly just an update. For each draft the device
-compares its own text now, the state it recorded at the last sync (`synced_hash` and the synced state, below) and the server's
+compares its own text now, the state it recorded at the last sync (the sync state, below) and the server's
 current state. The same table applies to a save that comes back 409, to opening a note (where only the "newer there" row can apply
 on its own) and to Sync all.
 
@@ -608,12 +608,12 @@ on its own) and to Sync all.
 | Changed | Changed, with different text | **Conflict:** make a copy (below). |
 | Changed | Deleted (tombstone) | The edit survives: upload it again. No copy. |
 | Unchanged | Deleted (tombstone) | Remove it here, with undo. |
-| Deleted here (tombstone pending) | Unchanged | Upload the tombstone. |
-| Deleted here | Edited elsewhere | The edit survives: download it and drop the local tombstone. |
+| Deleted here (pending delete) | Unchanged | Upload the tombstone. |
+| Deleted here | Edited elsewhere | The edit survives: download it and drop the pending delete. |
 | Has it | Has no copy and no tombstone | Upload it (absence is not deletion). |
-| Does not have it | Has it, and there is no local tombstone | Download it. |
+| Does not have it | Has it, and there is no pending delete | Download it. |
 
-"Changed" means the text's hash differs from `synced_hash`, not that the draft was touched, so typing something and then undoing it
+"Changed" means the text's hash differs from the one in the sync state, not that the draft was touched, so typing something and then undoing it
 is unchanged, and a newer server version applies as a plain update. Nothing in the table replaces changed text: a draft with unsent
 edits is only ever uploaded, or kept next to the server's version as a copy.
 
@@ -635,18 +635,24 @@ A user who wants a clean device deletes the drafts on it first, which is an ordi
 
 The groundwork, and the riskiest part, because it touches both storage engines. It changes nothing for a user who leaves sync off.
 
-- **Tombstones.** `DeleteDraft` is a hard delete today (`DELETE FROM drafts`), so a deletion cannot be sent. Keep a small record of
-  deleted ids that are pending upload, and remove it once the server has acknowledged it.
-- **Per-draft sync state:** `synced_hash` (a hash of the text and format at the last sync), `synced_updated_at` and
-  `synced_deleted` (the server's state for the draft at the last sync) and `server_version` (the base of the next write). A
-  draft is *changed* when its current hash differs from `synced_hash`; the server *changed* when its state differs from the
-  synced pair. All of these are local columns; none is sent.
-- **A way to apply remote changes without rewriting them.** `Store.Save` always sets `updated_at` to now and recomputes the
-  summary, which is right for typing but wrong for applying a pulled draft, whose timestamps must be kept and which must not be
-  marked changed; it sets the synced state to what was applied. Add a separate store method for it, with the same validation.
-- **Migrations.** SQLite `PRAGMA user_version` 2 to 3, and `DB_VERSION` for IndexedDB, both upgrading an old database in place
-  and refusing a newer one as they do now. Update the shared fixtures so the Go and the frontend tests keep checking the same
-  cases.
+- **Sync state, in its own table.** `sync_state` (SQLite) and the `sync` object store (IndexedDB) hold one record per draft the
+  server knows: `hash` (SHA-256 of the format and the text at the last sync, the same value on both sides, checked against
+  `internal/store/testdata/contenthash.json`), `updated_at` and `deleted` (the server's state then) and `version` (the base of the
+  next write). Nothing is added to the draft rows, and none of it is sent. With sync off the table stays empty.
+- **No dirty flag and no tombstone record.** A draft is *changed* when its current hash differs from `hash` (or it has no state);
+  the hash is computed when asked, never stored on the draft, so it cannot go stale. A delete is a state record with no draft and
+  `deleted` false: a *pending delete*. `DeleteDraft` stays a plain delete, and the record goes to `deleted` true when the server
+  accepts it. Undo (saving the id again with the same text) is then no change at all.
+- **A way to apply remote changes without rewriting them.** `Save` sets `updated_at` to now and recomputes the summary, which is
+  wrong for a pulled draft. `ApplyRemote` (and `ApplyRemoteDelete`) keep the server's timestamps and the file link, recompute the
+  summary, run the same checks as `Save`, and record the state as synced in the same transaction.
+- **Older builds keep working.** Both changes are additive: SQLite gets a table and `PRAGMA user_version` stays 2 (it is the
+  compatibility level, raised only for a change an older build would misread or damage, so an older build still opens the file),
+  and IndexedDB `DB_VERSION` goes to 3 with a new store (a build one version behind opens it as it is, see
+  [pages](pages.md#changing-the-schema)). An older build ignores the state, and because state is in its own table or store, its
+  rewrites cannot lose it; because changes and deletes are derived, what it saves or deletes is seen by the newer build. Tests run
+  the previous build's statements against a database with sync state, and upgrade databases written by user_version 1 and 2.
+  A build from before `#83` fails on the newer IndexedDB version instead of opening it; there is no way around that.
 - **Device-local sync settings** (server URL, device token, device name) are kept apart from the app's own settings and are
   never uploaded. On desktop that is a separate table or key set; in the browser a separate IndexedDB key.
 - New host calls go through `backend.js` with both implementations, as [pages](pages.md) requires. New Go service methods mean
@@ -742,7 +748,7 @@ it follows `scripts/screenshots.sh`).
 
 Each step is its own pull request, from a branch off `origin/main`, and each leaves the app working with sync off.
 
-1. **Local groundwork.** Tombstones, dirty tracking, the apply-remote store method, both migrations, with tests for the Go store and
+1. **Local groundwork.** The sync state, hash-based change tracking, the apply-remote store methods, both migrations, with tests for the Go store and
    the web store.
 2. **The server.** Enrollment (binding the token to the key in the enrollment DPoP proof), the draft endpoints (checking each request's DPoP proof), devices, the admin container, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
 3. **The sync module** (`lib/sync.js`) and the DPoP key (generate it at enrollment, store the private key, send a proof with every request), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
@@ -755,7 +761,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 
 - [security](security.md): replace "no accounts, no server and no network use beyond the update check" with the opt-in
   description, add this page's threat table, and the `connect-src` change.
-- [storage](storage.md): schema version 3, the new columns and the tombstone record.
+- [storage](storage.md): the `sync_state` table and the compatibility rule for `user_version`.
 - [architecture](architecture.md) and `AGENTS.md`: the sync module, the new binary and its layout.
 - [pages](pages.md): the web build's sync origin setting and CORS.
 - A server operations page (run, proxy, back up, rotate, revoke).
