@@ -69,7 +69,8 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           marker='<!-- harper-pad-preview -->'
-          body="$marker"$'\n'"**Preview** of $SHA: $URL"$'\n\n'"Pages takes about a minute to publish it. It is removed when the \`preview\` label is removed or the pull request is closed. It shares the site's address but keeps its own dictionary and drafts."
+          short="$(printf '%s' "$SHA" | cut -c1-7)"
+          body="$marker"$'\n'"### Preview"$'\n\n'"**$URL**"$'\n\n'"Built from $short. Pages takes about a minute to publish a new build. The preview is removed when the \`preview\` label is removed or the pull request is closed. It shares the site's address but keeps its own dictionary and drafts."
           id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
           if [ -n "$id" ]; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
@@ -106,7 +107,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           marker='<!-- harper-pad-preview -->'
-          body="$marker"$'\n'"**Preview** removed."
+          body="$marker"$'\n'"### Preview"$'\n\n'"Removed."
           id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
           if [ -n "$id" ]; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
