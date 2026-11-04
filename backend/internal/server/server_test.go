@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type fakeDB struct{ err error }
@@ -43,5 +44,27 @@ func TestReadyz(t *testing.T) {
 	h.draining.Store(true)
 	if got := get(t, h, "/readyz").Code; got != http.StatusServiceUnavailable {
 		t.Fatalf("draining: /readyz = %d, want 503", got)
+	}
+}
+
+type countingDB struct{ n int }
+
+func (c *countingDB) Ping(context.Context) error { c.n++; return nil }
+
+func TestReadyzCachesTheDatabaseCheck(t *testing.T) {
+	db := &countingDB{}
+	h := NewHealth(db)
+	for range 5 {
+		if got := get(t, h, "/readyz").Code; got != http.StatusOK {
+			t.Fatalf("/readyz = %d", got)
+		}
+	}
+	if db.n != 1 {
+		t.Fatalf("database pinged %d times for 5 probes, want 1", db.n)
+	}
+	h.checkedAt = h.checkedAt.Add(-readyCacheTTL - time.Second)
+	get(t, h, "/readyz")
+	if db.n != 2 {
+		t.Fatalf("expired cache: pinged %d times, want 2", db.n)
 	}
 }

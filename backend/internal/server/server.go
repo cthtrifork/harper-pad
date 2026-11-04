@@ -3,7 +3,8 @@
 //
 //	GET /healthz  liveness: the process is up and serving. It never touches the database, so a database outage does not make the
 //	              kubelet restart a healthy pod.
-//	GET /readyz   readiness: a round trip to PostgreSQL (SELECT 1) succeeds, and the process is not shutting down. 503 otherwise.
+//	GET /readyz   readiness: a round trip to PostgreSQL succeeds (the result is cached for 2 s), and the process is not shutting
+//	              down. 503 otherwise.
 package server
 
 import (
@@ -13,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -26,6 +28,9 @@ type Pinger interface {
 const (
 	pingTimeout     = 2 * time.Second // the probes should set timeoutSeconds above this
 	shutdownTimeout = 20 * time.Second
+	// readyCacheTTL bounds the database round trips: /readyz is also reachable through the public route, so a flood of requests
+	// must not become a flood of queries. It stays well below the kubelet's probe period.
+	readyCacheTTL = 2 * time.Second
 	// shutdownDelay lets the endpoint controller and Traefik see the failing /readyz before the listener closes.
 	shutdownDelay = 5 * time.Second
 )
@@ -34,6 +39,11 @@ const (
 type Health struct {
 	db       Pinger
 	draining atomic.Bool
+
+	mu        sync.Mutex
+	checkedAt time.Time
+	lastErr   error
+	wasReady  bool // for logging only the changes
 }
 
 // NewHealth returns a Health that checks db for readiness.
@@ -52,15 +62,34 @@ func (h *Health) ready(w http.ResponseWriter, r *http.Request) {
 		reply(w, http.StatusServiceUnavailable, "shutting down\n")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), pingTimeout)
-	defer cancel()
-	if err := h.db.Ping(ctx); err != nil {
-		// The cause goes to the log, not to the client: it can name hosts and users.
-		slog.Warn("readiness: database ping failed", "err", err)
+	if err := h.ping(r.Context()); err != nil {
 		reply(w, http.StatusServiceUnavailable, "database unavailable\n")
 		return
 	}
 	reply(w, http.StatusOK, "ok\n")
+}
+
+// ping returns the result of the last database round trip when it is younger than readyCacheTTL, and otherwise makes a new one.
+// It logs when the state changes, not on every probe. The cause goes to the log, not to the client: it can name hosts and users.
+func (h *Health) ping(ctx context.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.checkedAt.IsZero() && time.Since(h.checkedAt) < readyCacheTTL {
+		return h.lastErr
+	}
+	ctx, cancel := context.WithTimeout(ctx, pingTimeout)
+	defer cancel()
+	err := h.db.Ping(ctx)
+	ready := err == nil
+	if h.checkedAt.IsZero() && !ready || !h.checkedAt.IsZero() && ready != h.wasReady {
+		if ready {
+			slog.Info("readiness: database reachable again")
+		} else {
+			slog.Warn("readiness: database ping failed", "err", err)
+		}
+	}
+	h.checkedAt, h.lastErr, h.wasReady = time.Now(), err, ready
+	return err
 }
 
 func reply(w http.ResponseWriter, status int, body string) {

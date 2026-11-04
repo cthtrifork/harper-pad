@@ -29,7 +29,7 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 | Endpoint | Use it for | |
 |---|---|---|
 | `GET /healthz` | `livenessProbe` | The process is serving. Never touches PostgreSQL, so a database outage does not restart healthy pods |
-| `GET /readyz` | `readinessProbe` | A `SELECT 1` round trip to PostgreSQL succeeds (2 s limit, so set `timeoutSeconds: 3`). 503 while the database is unreachable and while shutting down |
+| `GET /readyz` | `readinessProbe` | A PostgreSQL round trip succeeds (2 s limit, so set `timeoutSeconds: 3`; the result is cached for 2 s and logged only when it changes). 503 while the database is unreachable and while shutting down |
 
 PostgreSQL does not have to be up at start: the pool connects lazily, `/readyz` reports 503 until it is, and the pod recovers by
 itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and the endpoints to notice, drains in-flight requests
