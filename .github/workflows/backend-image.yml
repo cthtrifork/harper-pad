@@ -53,9 +53,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # The image the runner can scan and start (linux/amd64 only). No --cache-from/--cache-to: the Actions
-      # cache evicts blobs while keeping the manifest that names them, which fails builds intermittently
-      # (BlobNotFound), and a cache must never reach what release.yml publishes.
+      # The image the runner can scan and start (linux/amd64 only). Layers are cached in the Actions cache; the
+      # cache is only read by this workflow, never by release.yml, so it cannot reach a published image.
       - name: Build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -64,6 +63,8 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=backend-${{ matrix.name }}
+          cache-to: type=gha,scope=backend-${{ matrix.name }},mode=max # zizmor: ignore[cache-poisoning]
           build-args: |
             GIT_SHA=${{ github.sha }}
             APP_VERSION=ci
