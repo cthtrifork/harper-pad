@@ -100,8 +100,9 @@ func reply(w http.ResponseWriter, status int, body string) {
 }
 
 // Run serves handler on addr until SIGTERM or SIGINT, then marks the process not ready, waits shutdownDelay for the
-// load balancers to notice, and drains in-flight requests for up to shutdownTimeout.
-func Run(addr string, handler http.Handler, h *Health) error {
+// load balancers to notice, and drains in-flight requests for up to shutdownTimeout. When metricsAddr is not empty, metrics is
+// served there on its own listener (so it never shares the public route) and stops with the main one.
+func Run(addr string, handler http.Handler, h *Health, metricsAddr string, metrics http.Handler) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
@@ -115,9 +116,23 @@ func Run(addr string, handler http.Handler, h *Health) error {
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-	errc := make(chan error, 1)
+	errc := make(chan error, 2)
 	go func() { errc <- srv.Serve(ln) }()
 	slog.Info("listening", "addr", ln.Addr().String())
+
+	var msrv *http.Server
+	if metricsAddr != "" {
+		mln, err := net.Listen("tcp", metricsAddr)
+		if err != nil {
+			_ = ln.Close()
+			return err
+		}
+		mux := http.NewServeMux()
+		mux.Handle("GET /metrics", metrics)
+		msrv = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+		go func() { errc <- msrv.Serve(mln) }()
+		slog.Info("serving metrics", "addr", mln.Addr().String())
+	}
 
 	select {
 	case err := <-errc:
@@ -129,6 +144,9 @@ func Run(addr string, handler http.Handler, h *Health) error {
 	time.Sleep(shutdownDelay)
 	sctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+	if msrv != nil {
+		_ = msrv.Shutdown(sctx)
+	}
 	if err := srv.Shutdown(sctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

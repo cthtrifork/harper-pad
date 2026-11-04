@@ -24,12 +24,19 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 |---|---|
 | `LISTEN_ADDR` | Default `:9000` (sync) and `127.0.0.1:9001` (admin, loopback: only its cloudflared sidecar reaches it) |
 | `PUBLIC_URL` | Sync only, required, must be `https:` or the service refuses to start |
+| `METRICS_ADDR` | Where `/metrics` is served, on its own listener so it is never on the public route. Default `:9102` (sync); admin has none unless set, because its pod accepts no traffic except from its own sidecar |
 | `DATABASE_URL` | Optional. When unset, the standard libpq variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`) are read, which is how the cluster does client-certificate login |
 
 | Endpoint | Use it for | |
 |---|---|---|
 | `GET /healthz` | `livenessProbe` | The process is serving. Never touches PostgreSQL, so a database outage does not restart healthy pods |
 | `GET /readyz` | `readinessProbe` | A PostgreSQL round trip succeeds (2 s limit, so set `timeoutSeconds: 3`; the result is cached for 2 s and logged only when it changes). 503 while the database is unreachable and while shutting down |
+
+Metrics (Prometheus, `client_golang`, a private registry): `GET :9102/metrics` has the Go runtime and process collectors,
+`harper_pad_http_requests_total` and `harper_pad_http_request_duration_seconds` labelled by method and route *pattern* (never the
+raw path, so the label values are bounded) and `harper_pad_db_pool_*` from the pgx pool (connections by state, acquires, empty
+acquires and wait time: a pool that is too small shows there before `/readyz` fails). The cluster needs a NetworkPolicy that lets
+Prometheus reach port 9102 and a PodMonitor; both live in the gitops repository.
 
 PostgreSQL does not have to be up at start: the pool connects lazily, `/readyz` reports 503 until it is, and the pod recovers by
 itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and the endpoints to notice, drains in-flight requests

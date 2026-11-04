@@ -14,6 +14,8 @@ type Common struct {
 	// DatabaseURL is DATABASE_URL, or empty: the standard libpq variables (PGHOST, PGSSLCERT, ...) are then read by the driver,
 	// which is how the cluster configures client-certificate login.
 	DatabaseURL string
+	// MetricsAddr is METRICS_ADDR, where /metrics is served on its own listener; empty turns metrics off.
+	MetricsAddr string
 }
 
 // Sync is the environment of harper-pad-sync.
@@ -28,17 +30,22 @@ type Admin struct {
 	Common
 }
 
-func common(defaultAddr string) Common {
+func common(defaultAddr, defaultMetricsAddr string) Common {
+	metrics, ok := os.LookupEnv("METRICS_ADDR")
+	if !ok {
+		metrics = defaultMetricsAddr
+	}
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
 		addr = defaultAddr
 	}
-	return Common{ListenAddr: addr, DatabaseURL: os.Getenv("DATABASE_URL")}
+	return Common{ListenAddr: addr, DatabaseURL: os.Getenv("DATABASE_URL"), MetricsAddr: metrics}
 }
 
-// LoadSync reads the environment of harper-pad-sync. It listens on :9000 by default, the port the cluster manifests use.
+// LoadSync reads the environment of harper-pad-sync. It listens on :9000 by default, the port the cluster manifests use, and
+// serves metrics on :9102.
 func LoadSync() (Sync, error) {
-	c := Sync{Common: common(":9000"), PublicURL: os.Getenv("PUBLIC_URL")}
+	c := Sync{Common: common(":9000", ":9102"), PublicURL: os.Getenv("PUBLIC_URL")}
 	if err := validatePublicURL(c.PublicURL); err != nil {
 		return Sync{}, err
 	}
@@ -46,9 +53,9 @@ func LoadSync() (Sync, error) {
 }
 
 // LoadAdmin reads the environment of harper-pad-admin. It listens on loopback by default: in the cluster only its
-// cloudflared sidecar may reach it.
+// cloudflared sidecar may reach it, so its metrics are off unless METRICS_ADDR is set.
 func LoadAdmin() (Admin, error) {
-	return Admin{Common: common("127.0.0.1:9001")}, nil
+	return Admin{Common: common("127.0.0.1:9001", "")}, nil
 }
 
 func validatePublicURL(raw string) error {

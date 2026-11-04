@@ -1,6 +1,7 @@
 // Command harper-pad-sync is the sync API of Harper Pad (docs/sync.md).
 //
-// Scaffold: it serves /healthz (liveness) and /readyz (readiness, a PostgreSQL round trip) and nothing else yet. It is run as
+// Scaffold: it serves /healthz (liveness) and /readyz (readiness, a PostgreSQL round trip) and nothing else yet, plus Prometheus
+// metrics on a separate port. It is run as
 // `harper-pad-sync serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
 package main
 
@@ -12,6 +13,7 @@ import (
 	"os"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/config"
+	"github.com/cthtrifork/harper-pad/backend/internal/metrics"
 	"github.com/cthtrifork/harper-pad/backend/internal/server"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 )
@@ -37,8 +39,10 @@ func run(args []string) error {
 	}
 	defer db.Close()
 
+	m := metrics.New("sync")
+	m.RegisterPool(db)
 	health := server.NewHealth(db)
 	mux := http.NewServeMux()
 	health.Register(mux)
-	return server.Run(cfg.ListenAddr, mux, health)
+	return server.Run(cfg.ListenAddr, m.Instrument(mux), health, cfg.MetricsAddr, m.Handler())
 }

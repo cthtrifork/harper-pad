@@ -11,6 +11,6 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/harper-pad-sync /harper-pad-sync
 USER 65532:65532
-EXPOSE 9000
+EXPOSE 9000 9102
 ENTRYPOINT ["/harper-pad-sync"]
 CMD ["serve"]
