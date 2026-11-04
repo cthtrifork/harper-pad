@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harper Pad admin: mockup</title>
+<style>
+/* Tokens are Harper Pad's own (frontend/src/styles/tokens.css, docs/design-cheatsheet.html). Mockup only: no script, no network. */
+:root{
+  --bg:#f6f7f9; --panel:#eceff3; --raised:#fff; --selected:#dde4ec; --sunken:#eef1f5; --line:#d3d9e0;
+  --text:#1a2028; --mute:#566170; --accent:#b36b00; --on-accent:#fff; --accent-tint:#f6e7cf; --ok:#166534; --bad:#b91c1c;
+  --ok-tint:#dcf0e3; --bad-tint:#f8dcdc;
+  --ease:cubic-bezier(.2,0,0,1);
+  --font-ui:system-ui,sans-serif; --font-doc:Georgia,serif; --font-mono:ui-monospace,monospace;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12161b; --panel:#181d23; --raised:#1f252d; --selected:#2c3745; --sunken:#151a20; --line:#2b333d;
+  --text:#e8ebef; --mute:#9aa5b1; --accent:#f5a524; --on-accent:#1a1203; --accent-tint:#3a2a0e; --ok:#4cc38a; --bad:#ff7b72;
+  --ok-tint:#16301f; --bad-tint:#3a1c1b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font-ui);padding:32px 24px 48px}
+.stack{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+.cap{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:0 0 8px}
+.win{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.bar{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--raised);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--font-doc);font-weight:700;font-size:17px}
+.brand span{color:var(--mute);font-weight:500}
+.who{color:var(--mute);font-size:12px}
+.seg{display:inline-flex;background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px}
+.seg button{font:inherit;height:26px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--raised);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgb(0 0 0/.12)}
+.page{padding:20px;display:flex;flex-direction:column;gap:20px}
+.head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+h2{font-family:var(--font-doc);font-size:20px;margin:0}
+.hp{font:inherit;height:32px;display:inline-flex;align-items:center;gap:8px;padding:0 12px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--text);white-space:nowrap}
+.hp svg,.st svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.hp.primary{background:var(--accent);color:var(--on-accent);font-weight:600}
+.hp.secondary{background:var(--raised);border-color:var(--line)}
+.hp.quiet{color:var(--mute)}
+.hp.danger{color:var(--bad);border-color:var(--line)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tile{background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.tile .l{color:var(--mute);font-size:12px}
+.tile .v{font-size:26px;font-weight:600;line-height:1.2}
+.tile .n{color:var(--mute);font-size:12px}
+table{width:100%;border-collapse:collapse;background:var(--raised);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--sunken)}
+td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td .sub{display:block;color:var(--mute);font-size:12px}
+td.act{text-align:right;white-space:nowrap}
+.mono{font-family:var(--font-mono);font-size:12px}
+.st{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;font-size:12px;font-weight:600;border:1px solid transparent}
+.st.warn{background:var(--accent-tint);color:var(--text);border-color:var(--accent)}
+.st.warn svg{color:var(--accent)}
+.foot{color:var(--mute);font-size:12px}
+.field{display:flex;flex-direction:column;gap:6px;max-width:360px}
+.field label{font-size:12px;color:var(--mute)}
+.field input{font:inherit;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--raised);color:var(--text)}
+.card{background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.url{display:flex;gap:8px;align-items:center}
+.url code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-family:var(--font-mono);font-size:13px}
+.note{display:flex;gap:10px;background:var(--accent-tint);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;font-size:13px}
+.note svg{width:16px;height:16px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none;margin-top:2px}
+.cols{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px}
+@media(max-width:760px){.cols{grid-template-columns:1fr}}
+.acct{display:inline-flex;align-items:center;height:22px;padding:0 8px;margin-right:10px;border-radius:11px;border:1px solid var(--line);background:var(--sunken);color:var(--text);font-size:12px;font-weight:600}
+.field .ro{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--sunken);color:var(--text)}
+.field .ro small{color:var(--mute);font-size:12px}
+.field select{font:inherit;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--raised);color:var(--text)}
+.tag{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:1px 6px;background:var(--sunken);color:var(--mute);border:1px solid var(--line);margin-left:8px;vertical-align:middle}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="7" height="8" rx="1.2"/><path d="M3.5 10.5v-7a1 1 0 0 1 1-1h6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.5l6 10.5H2z"/><path d="M8 7v3M8 11.8v.1"/></symbol>
+</svg>
+
+<div class="stack">
+
+<!-- 1. Devices -->
+<section>
+<p class="cap">1 · Devices</p>
+<div class="win">
+  <div class="bar">
+    <div class="brand">Harper Pad <span>admin</span></div>
+    <div class="seg" role="group" aria-label="Section">
+      <button type="button" aria-pressed="true">Devices</button>
+      <button type="button" aria-pressed="false">Enrollment</button>
+    </div>
+    <div class="who"><span class="acct">Account: default</span></div>
+  </div>
+  <div class="page">
+    <div class="head">
+      <h2>Devices</h2>
+      <button class="hp primary" type="button"><svg><use href="#i-plus"/></svg>New enrollment URL</button>
+    </div>
+    <div class="tiles">
+      <div class="tile"><span class="l">Devices</span><span class="v">3</span><span class="n">enrolled</span></div>
+      <div class="tile"><span class="l">Pending enrollment URLs</span><span class="v">0</span><span class="n">URLs expire after 15 minutes</span></div>
+      <div class="tile"><span class="l">Last sync</span><span class="v">2 min ago</span><span class="n">Desktop</span></div>
+    </div>
+    <table>
+      <thead><tr><th>Device</th><th>Enrolled</th><th>Last seen</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Desktop<span class="sub">Harper Pad 0.9 · Linux</span></td><td>12 Oct 2026</td><td>2 min ago</td>
+          <td class="act"><button class="hp quiet" type="button">Rename</button> <button class="hp danger" type="button">Revoke</button></td></tr>
+        <tr><td>iPhone<span class="sub">Safari · Home Screen app</span></td><td>28 Oct 2026</td><td>Yesterday, 21:14</td>
+          <td class="act"><button class="hp quiet" type="button">Rename</button> <button class="hp danger" type="button">Revoke</button></td></tr>
+        <tr><td>Old laptop<span class="sub">Chromium · Windows</span></td><td>3 Sep 2026</td><td>28 Sep 2026 (37 days ago)</td>
+          <td class="act"><button class="hp quiet" type="button">Rename</button> <button class="hp danger" type="button">Revoke</button></td></tr>
+      </tbody>
+    </table>
+    <p class="foot">Revoking a device signs it out at its next sync. Its drafts stay on the device.</p>
+  </div>
+</div>
+</section>
+
+<!-- 2. New enrollment URL -->
+<section>
+<p class="cap">2 · New enrollment URL (shown once)</p>
+<div class="win">
+  <div class="bar">
+    <div class="brand">Harper Pad <span>admin</span></div>
+    <div class="seg" role="group" aria-label="Section">
+      <button type="button" aria-pressed="false">Devices</button>
+      <button type="button" aria-pressed="true">Enrollment</button>
+    </div>
+    <div class="who"><span class="acct">Account: default</span></div>
+  </div>
+  <div class="page">
+    <div class="cols">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h2>New enrollment URL</h2>
+        <div class="field"><label for="dn">Device name</label><input id="dn" value="iPhone 2"></div>
+        <div class="field"><label>Client account</label><div class="ro">default <small>the only account; a device is bound to it for good</small></div></div>
+        <div class="card">
+          <div class="head">
+            <strong>Enrollment URL for “iPhone 2”</strong>
+            <span class="st warn"><svg><use href="#i-clock"/></svg>Expires in 14:52</span>
+          </div>
+          <div class="url">
+            <code>https://sync.example.com/join#4Kc9mWq7RtX2…ZtL8Q</code>
+            <button class="hp secondary" type="button"><svg><use href="#i-copy"/></svg>Copy</button>
+          </div>
+          <div class="note"><svg><use href="#i-alert"/></svg><span>This is shown once and cannot be recovered. Anyone with it can enroll a device that reads your notes. Paste it into <b>Settings → Sync → Add this device</b>, then close this page.</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h2>Pending</h2>
+        <table>
+          <thead><tr><th>For</th><th>Expires</th><th></th></tr></thead>
+          <tbody><tr><td>iPhone 2</td><td>in 14:52</td><td class="act"><button class="hp danger" type="button">Cancel</button></td></tr></tbody>
+        </table>
+        <p class="foot">Cancelling removes the URL so it can no longer be used.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- 3. Later: more than one client account -->
+<section>
+<p class="cap">3 · Later: more than one client account <span class="tag">not in v1</span></p>
+<div class="win">
+  <div class="bar">
+    <div class="brand">Harper Pad <span>admin</span></div>
+    <div class="seg" role="group" aria-label="Section">
+      <button type="button" aria-pressed="false">Devices</button>
+      <button type="button" aria-pressed="true">Enrollment</button>
+      <button type="button" aria-pressed="false">Accounts</button>
+    </div>
+    <div class="who"><span class="acct">All accounts</span></div>
+  </div>
+  <div class="page">
+    <div class="cols">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h2>New enrollment URL</h2>
+        <div class="field"><label for="dn2">Device name</label><input id="dn2" value="Anna's laptop"></div>
+        <div class="field"><label for="acct2">Client account</label>
+          <select id="acct2"><option>family</option><option>default</option></select></div>
+        <div><button class="hp primary" type="button"><svg><use href="#i-plus"/></svg>Create URL</button></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h2>Accounts</h2>
+        <table>
+          <thead><tr><th>Account</th><th>Devices</th><th>Created</th></tr></thead>
+          <tbody>
+            <tr><td>default</td><td>3</td><td>12 Oct 2026</td></tr>
+            <tr><td>family</td><td>1</td><td>4 Nov 2026</td></tr>
+          </tbody>
+        </table>
+        <p class="foot">Accounts are separate: a device only ever sees the drafts of its own account.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+</div>
+</body>
+</html>
