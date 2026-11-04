@@ -1,0 +1,49 @@
+/* The lists of pending URLs and devices: one row (.item) per entry, with a status dot, a name and its actions. */
+.list {
+  display: flex;
+  flex-direction: column;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.item .main {
+  flex: 1;
+  min-width: 140px;
+}
+
+.item .sub {
+  display: block;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+/* Green: synced recently. Grey: nothing for 14 days. Amber: a pending enrollment URL. */
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--ok);
+  border-radius: 50%;
+}
+
+.dot.old {
+  background: var(--line);
+}
+
+.dot.pending {
+  background: var(--accent);
+}

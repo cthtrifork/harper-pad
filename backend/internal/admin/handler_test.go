@@ -101,7 +101,7 @@ func TestDevicesPage(t *testing.T) {
 
 func TestStatic(t *testing.T) {
 	c := newClient(t, demo())
-	for _, p := range []string{"/static/htmx.min.js", "/static/admin.css", "/static/admin.js"} {
+	for _, p := range []string{"/static/htmx.min.js", "/static/tokens.css", "/static/phone.css", "/static/admin.js"} {
 		if rec := c.do("GET", p, nil, nil); rec.Code != 200 || rec.Body.Len() == 0 {
 			t.Errorf("%s: %d", p, rec.Code)
 		}

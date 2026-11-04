@@ -1,0 +1,97 @@
+/* The enrollment URL card and the messages: the one-time URL, its expiry chip, and the warning and error notes. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.url code {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  overflow: hidden;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The expiry chip. */
+.st {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.st.warn {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.st.warn svg {
+  color: var(--accent);
+}
+
+.note {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.note.bad {
+  background: var(--bad-tint);
+  border-color: var(--bad);
+}
+
+.st svg,
+.note svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.note svg {
+  margin-top: 2px;
+  stroke: var(--accent);
+}
+
+.note.bad svg {
+  stroke: var(--bad);
+}

@@ -1,0 +1,109 @@
+/* Buttons (.hp) and the name field (.inl). Types follow docs/design-cheatsheet.html. */
+.hp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.hp:hover {
+  background: var(--selected);
+}
+
+.hp svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hp.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.hp.primary:hover {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
+.hp.secondary {
+  background: var(--raised);
+  border-color: var(--line);
+}
+
+.hp.quiet {
+  color: var(--mute);
+}
+
+.hp.danger {
+  color: var(--bad);
+  border-color: var(--line);
+}
+
+.hp.danger:hover {
+  background: var(--bad-tint);
+}
+
+/* The form row: the field takes the free width, the button keeps its own. */
+.inl {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Fill is --bg, not --raised: in dark mode --raised is nearly the panel colour and the field would vanish. */
+.inl input {
+  flex: 1;
+  min-width: 180px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.inl input::placeholder {
+  color: var(--mute);
+}
+
+.inl input:hover {
+  border-color: var(--mute);
+}
+
+.inl input:focus-visible {
+  border-color: var(--accent);
+  outline-offset: 0;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--bad);
+}
+
+.err {
+  margin: 0;
+  color: var(--bad);
+  font-size: 12px;
+}
