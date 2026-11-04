@@ -39,14 +39,15 @@ conflict with them, they win.
 1. **Local first.** Every read and write uses the device's own store; sync runs behind it. The app behaves the same with sync off,
    the server down or the token revoked, and a failed sync never blocks or loses an edit.
 2. **Absence is not deletion.** Only an explicit tombstone deletes a draft. A doc that is missing on the server (a new server, a
-   restore from an older backup, a failed write) is something to **upload**, never something to remove locally.
+   failed write) is something to **upload**, never something to remove locally.
 3. **Sync never changes what the user is working on.** A pull never overwrites a draft that has unsent edits. In a conflict the
    local text keeps its id and the other version becomes a "conflicted copy" ([Conflicts](#conflicts)), so the open editor never
    changes under the user.
 4. **The server cannot destroy local data.** Revoking a device, an invalid token, a server reset and "Sign out" all
    leave the local drafts in place; sync just stops.
-5. **Any device can rebuild the server,** with no special client code: **Sync all** reconciles in both directions. See
-   [Restoring or replacing the server](#restoring-or-replacing-the-server).
+5. **An empty server is just a server that receives uploads.** Every device holds a full copy and **Sync all** reconciles in both
+   directions, so a lost or new server is repopulated by enrolling the devices and running Sync all; nothing in the client is
+   special-cased for it.
 6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll) and tombstones
    are the only such things; in v2 the key bag is also kept on each device.
 
@@ -74,7 +75,7 @@ What losing the whole server costs:
 | Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
 | Stolen-token hardening | v1: a device list with last-seen, and revoking in the admin UI. v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None in v1 (TLS only); end-to-end in v2 | Keeps the first version small; see [v2](#v2-end-to-end-encryption) |
-| Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; any restore or loss is healed by the same Sync all |
+| Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; a lost or emptied server is repopulated by the same Sync all |
 | Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
 | Source of truth | The device. The server can be rebuilt from any device | A supporting system must not be able to lose or destroy notes; see [the principles](#the-client-is-the-source-of-truth) |
 
@@ -123,7 +124,7 @@ flowchart LR
 | Component | Runs as | Reachable from | Does |
 |---|---|---|---|
 | `harper-pad-sync` | Deployment and ClusterIP Service | The cluster's ingress only (NetworkPolicy) | The API: enroll, list, get and put drafts |
-| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices, and signs out all devices |
+| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices |
 | PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the sync and admin pods (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
 | cert-manager | Cluster add-on | Nothing | Issues the database client certificates and the sync domain's TLS certificate |
 | Cloudflare | External | The internet | Carries the admin tunnel and runs Access on the admin hostname. Not in the sync path |
@@ -164,8 +165,7 @@ A small Go server rendering HTML with HTMX, in its own pod so the public API car
 identity provider before any request reaches the pod. The sync API is not behind Cloudflare; the cluster's ingress serves it.
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
-agent, rename, revoke, and **sign out all devices** (the first step after restoring a backup, see
-[Restoring or replacing the server](#restoring-or-replacing-the-server)).
+agent, rename and revoke.
 There are three pages: Devices, Enrollment and Audit log. A mockup in the app's own design tokens, light and dark, is in
 [`admin-ui-mockup.html`](admin-ui-mockup.html); open it in a browser. It reads the sync service's public address from its configuration, which is how it builds enrollment
 URLs, and keeps an audit log of who did what. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
@@ -390,7 +390,7 @@ CREATE TABLE audit (
   client_id BIGINT REFERENCES clients (id),       -- NULL for actions that belong to no account
   at        BIGINT NOT NULL,
   actor     TEXT   NOT NULL,
-  action    TEXT   NOT NULL,                      -- 'invite.create', 'device.rename', 'device.revoke', 'device.signout_all'
+  action    TEXT   NOT NULL,                      -- 'invite.create', 'device.rename', 'device.revoke'
   detail    TEXT   NOT NULL DEFAULT ''
 );
 
@@ -434,7 +434,7 @@ How it is used:
 - **v1 has one client account,** inserted by the first migration (`name` `default`). Nothing creates another: there is no endpoint
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector in
   **New enrollment URL**, and per-account operators.
-- **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times that survive a rebuild.
+- **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
 - **The 8 MiB check** is a backstop. The app enforces the 5 MB draft limit, and v2's base64 envelope is larger than the plaintext.
 
 The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `$1`-style parameters.
@@ -451,12 +451,12 @@ assigns each draft a version, and it never merges, never makes copies and has no
 | `GET /docs/<id>` | One draft with its text: `{id, version, createdAt, updatedAt, deleted, data}`, or 404 if the server has no such id. The `ETag` is the draft's `updatedAt` and `deleted`; `If-None-Match` returns 304 when they match. |
 | `PUT /docs/<id>` | `{base: {version, updatedAt}, createdAt, updatedAt, deleted, data}`. Accepted only if the stored draft matches `base` (version 0 for an id the server does not have). 200 returns `{version}`; otherwise 409 returns the server's current copy. A deletion is `deleted: true` with empty `data`. |
 
-- **A draft's state is the pair `(updatedAt, deleted)`.** `updatedAt` is set by the device that saved the draft, so it survives a
-  server restore, and two equal states are the same text. The device records the state it last synced for each draft, and "the
+- **A draft's state is the pair `(updatedAt, deleted)`.** `updatedAt` is set by the device that saved the draft, so it does not depend on the server's numbering, and two equal states are the
+  same text. The device records the state it last synced for each draft, and "the
   server changed" means the server's state differs from that record. Only equality is tested, never order, so device clocks do not
   matter.
-- **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed, because after
-  a restore the numbers can fork (the same number can name two different texts). That is why `base` carries `updatedAt` too.
+- **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed. `base` carries
+  `updatedAt` too, so a write is checked against the exact state the device saw.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
 
 ### When sync happens
@@ -604,72 +604,6 @@ device lacks. Merge cannot overwrite anything, because ids are unique, and there
 because the server must not be able to discard what a device holds ([the principles](#the-client-is-the-source-of-truth), rule 4).
 A user who wants a clean device deletes the drafts on it first, which is an ordinary delete.
 
-### Restoring or replacing the server
-
-Every device holds a full copy and Sync all reconciles in both directions, so a lost or restored server needs **no special client
-code**: no server id, no cursor, no reset. The client does not even have to notice. What follows is what happens, and what the
-operator does.
-
-- **The server is replaced by an empty database.** Every token is gone, so each device gets a 401 and shows "Sign in again". The
-  operator creates an enrollment URL per device; enrolling runs Sync all, and every local draft is "has it, the server has no copy",
-  so it is uploaded. The second device to sync meets the first one's uploads: the same id arrives with the same text, so it is
-  adopted without a copy (a different text gives one Conflicted copy). In v2 the server cannot compare ciphertext, so the `PUT`
-  comes back 409, and the device decrypts the server's copy, finds it equal and adopts it.
-- **The server is restored from an older backup.** This is the case a cursor-based design gets wrong. A draft that exists only on
-  device B (created after the backup) is found by Sync all because the server lacks it, so it is uploaded, and A receives it on its
-  next Sync all. Nothing has to detect the restore.
-- **Tokens.** Devices enrolled after the backup have no row and get a 401; they re-enroll. Devices **revoked after the backup come
-  back to life**, because their rows are restored. That is a security problem, so signing out all devices is the first step.
-- **Smaller losses.** A draft deleted after the backup can reappear when a device that still has it uploads it (delete it again),
-  and the audit log since the backup is gone. In v2 a device uploads its local key bag first when the server has none or an older
-  one (compare-and-set on its version), so a passphrase change or key rotation after the backup is not lost.
-- **Point-in-time recovery makes this small.** CloudNativePG can archive WAL to object storage and recover to a chosen moment, so
-  a restore loses minutes and not a day. It is a backup setting, recommended but not required, and the backups must live outside the
-  cluster.
-
-**What the operator does:**
-
-1. Scale the sync service to zero, restore the database (a CloudNativePG recovery, or point in time), and start the service again.
-2. In the admin UI choose **Sign out all devices**. It deletes every device row, so a device that was revoked stays revoked.
-3. Create an enrollment URL for each device and paste it on that device. Enrolling runs Sync all, which rebuilds the server.
-4. Check the drafts on one device, and press **Sync all** on the others.
-
-**Restoring a backup that is missing a draft:**
-
-```mermaid
-sequenceDiagram
-  actor Op as Operator
-  participant Admin as Admin UI
-  participant DB as PostgreSQL (restored, older)
-  participant A as Device A
-  participant B as Device B
-  participant S as Sync API
-  Note over DB: The backup was taken before device B created draft X and synced it
-  Op->>DB: Restore the backup
-  Op->>Admin: Sign out all devices
-  Admin->>DB: Delete every device row
-  A->>S: Any request with its old token
-  S-->>A: 401
-  A-->>A: Show Sign in again (the drafts stay)
-  Op->>Admin: New enrollment URL for A
-  Op->>A: Paste the URL
-  A->>S: POST /enroll
-  S-->>A: new device token
-  A->>S: Sync all
-  S-->>A: states of the restored drafts (X is not among them)
-  A->>S: PUT every draft the server lacks or has in a different state
-  Op->>B: New enrollment URL, paste it
-  B->>S: POST /enroll, then Sync all
-  S-->>B: states, including what A uploaded
-  B->>S: PUT X (the server lacks it)
-  B->>S: GET the drafts only A had, and apply them
-  Note over A,B: A receives X on its next Sync all. No device had to detect the restore.
-```
-
-Devices never hold their `client_id` (it comes from their token), so a rebuilt server's new account id changes nothing for them.
-After an empty restore the whole data set is uploaded once per device; with the 5 MB per-draft limit and a personal collection
-that is small, and an interrupted run simply resumes on the next Sync all.
-
 ## Changes to local storage
 
 The groundwork, and the riskiest part, because it touches both storage engines. It changes nothing for a user who leaves sync off.
@@ -698,7 +632,7 @@ This is a bearer-token model with transport security and no content encryption.
 | Concern | Handling |
 |---|---|
 | Transport | HTTPS only, on a Let's Encrypt certificate (cert-manager) for the sync domain, terminated at the cluster's ingress, with HTTP redirected and HSTS set. The client refuses an `http:` server. |
-| Who can read the data | The server and its operator; content is not encrypted until v2. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, protect backups like the live data, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
+| Who can read the data | The server and its operator; content is not encrypted until v2. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
 | Stolen device token | Revoke that device in the admin UI; from v1.1 a device-bound key makes a copied token useless. The token grants only its client account's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Isolation between client accounts | The account is taken from the token's device row and never from the request; every query on account data filters on it; one account per server in v1, so it is a guard for the future. Before a second account is created, consider PostgreSQL row-level security as a second layer (`FORCE ROW LEVEL SECURITY`, because the sync role owns the tables, and a `SET LOCAL` of the account per transaction), and test that two accounts cannot see each other's drafts or devices. |
@@ -721,10 +655,8 @@ Everything runs in one Kubernetes namespace, `harper-pad`, described by manifest
 GitOps repository, not in this one (this section is their specification):
 
 - **PostgreSQL:** a CloudNativePG `Cluster` with one instance to start (one user, and devices can rebuild the server, so high
-  availability is not needed), the client CA and `pg_hba` settings above, and the certificates from cert-manager. CloudNativePG's
-  scheduled backups to object storage are **recommended but not required for the notes' safety**, because every device holds a
-  full copy and can rebuild the server; a backup preserves what devices do not have: tombstones and the device list. Restoring an
-  older backup is handled by the client ([Restoring or replacing the server](#restoring-or-replacing-the-server)).
+  availability is not needed), the client CA and `pg_hba` settings above, and the certificates from cert-manager. The design makes
+  no provision for backing it up or restoring it: every device holds a full copy, and a new empty server is repopulated by Sync all.
 - **Migrations:** the sync service applies them itself at start, under its own role, taking a PostgreSQL advisory lock so that
   only one pod migrates if there is ever more than one replica. It refuses to start if the database has a newer schema than it
   knows. The admin service starts only against a schema it recognises, and does not migrate.
@@ -792,11 +724,8 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
      reaches B when B opens the note, as a plain update with no "Conflicted copy". A draft created on A after B enrolled appears on
      B after Sync all.
   4. **Lose the server:** wipe the database, restart the sync service, re-enroll both devices, and check that Sync all rebuilds the
-     drafts with no conflicted copies ([Restoring or replacing the server](#restoring-or-replacing-the-server)).
-  5. **Restore an older backup:** take a `pg_dump` midway, let B create a draft after it, restore the dump, sign out all devices,
-     re-enroll, and check that the draft reaches the server and A, with no conflicted copies. This is the case a cursor-based
-     design would miss.
-  6. **Later:** an offline edit on both devices makes a local conflicted copy, and a revoked token shows "Sign in again" while the
+     drafts with no conflicted copies.
+  5. **Later:** an offline edit on both devices makes a local conflicted copy, and a revoked token shows "Sign in again" while the
      local drafts stay; with a second client account, neither account sees the other's drafts or devices.
 - **Settings it needs:** the page origin in the CORS allowlist and the sync origin in the web build's CSP `connect-src`, so this
   test is where the build-time setting for the sync origin is first exercised.
@@ -848,7 +777,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 ## v2: end-to-end encryption
 
 Status: proposal, after v1 and the v1.1 device key. Goal: **the server stores only ciphertext**, so a compromised server, a stolen
-backup of its database or a copied device token reveals no draft text. This does not need a new kind of server: it still stores
+copy of its database or a copied device token reveals no draft text. This does not need a new kind of server: it still stores
 and returns opaque `data` strings by id and version.
 
 ### What the server sees afterwards
@@ -878,7 +807,7 @@ is. There is **no feature loss from hiding the text**: search already runs on ea
      printed. It wraps the same DK, so a forgotten passphrase is recoverable, and because it is high entropy it cannot be guessed
      offline.
 - **A local copy of the key bag** on every device that has unlocked it. It is only ciphertext (the data key wrapped by the
-  passphrase and recovery key), so keeping it is safe. It is what lets a device restore the server's key bag after a loss without
+  passphrase and recovery key), so keeping it is safe. It is what lets a device re-create the server's key bag on a new server without
   ever exposing the data key, which the web build holds as a non-extractable handle and cannot re-wrap. A device re-uploads it
   before any doc ([principles](#the-client-is-the-source-of-truth), rule 6).
 - **Check value:** the key bag also holds a small known string encrypted under the DK, so a wrong passphrase is rejected on the
@@ -929,8 +858,8 @@ key, which lets a later rotation tell old blobs from new ones.
    uploading plaintext.
 3. The device re-encrypts and pushes every local doc as a new version. Other devices see the key bag, prompt for the
    passphrase, unlock and carry on.
-4. **Plaintext remains in any server backup** taken before this step, and the operator has to destroy those. The server keeps no
-   other old copies, because there is no history. The settings screen says this.
+4. **Plaintext remains in any copy of the database** made before this step, and the operator has to destroy those. The server
+   keeps no other old copies, because there is no history. The settings screen says this.
 
 New devices after step 3 enroll as in v1, then are asked for the passphrase or recovery key before the first sync.
 
@@ -947,7 +876,7 @@ phone with many drafts, and it runs in chunks that can be resumed.
   protocol version check. Storage is unchanged; it holds ciphertext.
 - **Client:** a `lib/crypto.js` (HKDF, AES-GCM, the envelope, the key bag) with test vectors checked in as shared fixtures like the
   existing Go and frontend tests, plus the Argon2id worker and the unlock, setup, change-passphrase and rotate screens.
-- **Docs:** [security](security.md) (the new table above), and the operations page (backup, destroying plaintext backups).
+- **Docs:** [security](security.md) (the new table above), and the operations page (destroying old plaintext copies).
 
 ### Open questions for v2
 
@@ -961,10 +890,9 @@ phone with many drafts, and it runs in chunks that can be resumed.
 
 ## Later
 
-- **Server-side version history,** if wanted: keep the previous versions of each doc and a way to restore one. v1 has none, because
-  a restore has to read and write notes, and putting that in the admin UI would give the internet-reachable admin role access to
-  them. It would be a command on the server host with the sync role. Until then, the operator's database backups are the only
-  older copies, and restoring one is handled by the client ([Restoring or replacing the server](#restoring-or-replacing-the-server)).
+- **Server-side version history,** if wanted: keep the previous versions of each doc and a way to bring one back. v1 has none, because
+  bringing one back has to read and write notes, and putting that in the admin UI would give the internet-reachable admin role access to
+  them. It would be a command on the server host with the sync role. Until then the server keeps no older copies.
 - **Syncing settings,** if wanted: the dictionary (a set union) and the ignore list (the newer replaces the older) are the candidates.
   They need their own table, validation and merge rules, which is why v1 leaves them out.
 - **More client accounts.** The schema already carries `client_id`; what is missing is an admin action to create an account, an
