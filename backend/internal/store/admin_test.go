@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -18,75 +17,56 @@ import (
 
 var t0 = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 
-// adminFixture makes a throwaway database from migrations/, as a superuser (TEST_DATABASE_URL, any database on a scratch
-// PostgreSQL), and returns the admin store, whose connections `SET ROLE harper_admin`, so the real grants are what the test runs under,
-// plus the superuser connection to seed rows. The tests are skipped when TEST_DATABASE_URL is not set.
+// pgEnv points the libpq variables at the end-to-end stack's PostgreSQL (backend/test/e2e: TLS 1.3, client-certificate login, no
+// passwords), which is how the cluster configures the services; store.Open("") reads them. The certificates are copied out of the
+// stack's volume by `make test-db`. The tests are skipped when TEST_PG_CERTS is not set.
+func pgEnv(t *testing.T, role, cert string) {
+	t.Helper()
+	dir := os.Getenv("TEST_PG_CERTS")
+	if dir == "" {
+		t.Skip("TEST_PG_CERTS is not set: run `make test-db` in backend/ (PostgreSQL with TLS client certificates from the e2e stack)")
+	}
+	port := os.Getenv("TEST_PG_PORT")
+	if port == "" {
+		port = "15432"
+	}
+	for k, v := range map[string]string{
+		"PGHOST": "localhost", "PGPORT": port, "PGDATABASE": "harper", "PGUSER": role, "PGSSLMODE": "verify-full",
+		"PGSSLROOTCERT": dir + "/ca.crt", "PGSSLCERT": dir + "/" + cert + ".crt", "PGSSLKEY": dir + "/" + cert + ".key",
+		"PGPASSWORD": "", "DATABASE_URL": "",
+	} {
+		t.Setenv(k, v)
+	}
+}
+
+// adminFixture returns the admin store, connected as harper_admin with its client certificate (so the real grants apply), the
+// pool behind it, and a connection as harper_sync (the schema owner and, in this stack, a superuser) to seed rows. Each test
+// starts from an empty devices and invites table and the single default account; the schema comes from migrations/ (the stack
+// applies it at first start).
 func adminFixture(t *testing.T) (*Admin, *pgxpool.Pool, *pgx.Conn) {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is not set (a superuser URL for a scratch PostgreSQL)")
-	}
 	ctx := context.Background()
-	root, err := pgx.Connect(ctx, url)
+
+	pgEnv(t, "harper_sync", "client")
+	cfg, err := pgx.ParseConfig("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = root.Close(ctx) })
-
-	name := fmt.Sprintf("hp_admin_test_%d", time.Now().UnixNano())
-	for _, q := range []string{
-		`DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'harper_admin') THEN CREATE ROLE harper_admin NOLOGIN; END IF; END $$`,
-		`CREATE DATABASE ` + name,
-	} {
-		if _, err := root.Exec(ctx, q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Cleanup(func() {
-		c, err := pgx.Connect(ctx, url)
-		if err == nil {
-			_, _ = c.Exec(ctx, `DROP DATABASE `+name+` WITH (FORCE)`)
-			_ = c.Close(ctx)
-		}
-	})
-
-	cfg, err := pgx.ParseConfig(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.Database = name
 	owner, err := pgx.ConnectConfig(ctx, cfg)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("connecting as harper_sync (is the stack up? make test-db): %v", err)
 	}
 	t.Cleanup(func() { _ = owner.Close(ctx) })
-	files, err := Migrations.ReadDir("migrations")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range files {
-		sql, err := Migrations.ReadFile("migrations/" + f.Name())
-		if err != nil {
+	reset := func() {
+		if _, err := owner.Exec(ctx, `TRUNCATE devices, invites; DELETE FROM clients WHERE id <> 1`); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := owner.Exec(ctx, string(sql)); err != nil {
-			t.Fatalf("%s: %v", f.Name(), err)
-		}
 	}
+	reset()
+	t.Cleanup(reset)
 
-	pcfg, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pcfg.ConnConfig.Database = name
-	// Every connection of the store's pool drops to harper_admin, so queries run under that role's grants without the test
-	// needing a password for it (which would clash with a role someone made by hand on the same server).
-	pcfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
-		_, err := c.Exec(ctx, `SET ROLE harper_admin`)
-		return err
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, pcfg)
+	pgEnv(t, "harper_admin", "admin")
+	pool, err := Open(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,6 +170,31 @@ func TestAdminInvites(t *testing.T) {
 		if err := a.CancelInvite(ctx, id); !errors.Is(err, admin.ErrNotFound) {
 			t.Errorf("cancel %q: %v", id, err)
 		}
+	}
+}
+
+// The login itself: PostgreSQL accepts the role only with a client certificate whose common name is the role.
+func TestAdminLoginNeedsItsOwnCertificate(t *testing.T) {
+	pgEnv(t, "harper_admin", "wrongcn") // a certificate from the same CA with another common name
+	pool, err := Open(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(context.Background()); err == nil {
+		t.Error("harper_admin logged in with another role's certificate")
+	}
+
+	t.Setenv("PGSSLMODE", "disable") // and plain TCP is refused too
+	t.Setenv("PGSSLCERT", os.Getenv("TEST_PG_CERTS")+"/admin.crt")
+	t.Setenv("PGSSLKEY", os.Getenv("TEST_PG_CERTS")+"/admin.key")
+	plain, err := Open(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plain.Close()
+	if err := plain.Ping(context.Background()); err == nil {
+		t.Error("harper_admin logged in without TLS")
 	}
 }
 

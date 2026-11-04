@@ -2,6 +2,8 @@ SHELL := /bin/sh
 
 # podman compose where podman exists, docker compose otherwise. Override with COMPOSE="docker compose".
 COMPOSE ?= $(shell command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose")
+# The container engine behind it, for the one place that needs it directly (copying the certificates out of the volume).
+ENGINE ?= $(firstword $(COMPOSE))
 E2E_FILE := test/e2e/compose.yaml
 export COMPOSE E2E_FILE
 
@@ -13,7 +15,7 @@ export PLAYWRIGHT_DIR
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help build test vet fmt e2e-web e2e-playwright e2e-up e2e-down e2e
+.PHONY: help build test vet fmt test-db admin-up admin-seed admin-down e2e-certs e2e-web e2e-playwright e2e-up e2e-down e2e
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -21,7 +23,7 @@ help: ## List the targets
 build: ## Build both commands into ./bin
 	CGO_ENABLED=0 go build -trimpath -o bin/ ./cmd/...
 
-test: ## Run the tests (the store tests need TEST_DATABASE_URL, see README.md)
+test: ## Run the tests (the store tests are skipped without the PostgreSQL stack, see test-db)
 	go test -count=1 ./...
 
 vet: ## go vet
@@ -29,6 +31,30 @@ vet: ## go vet
 
 fmt: ## Format the Go code
 	gofmt -w .
+
+E2E_CERTS := $(CURDIR)/.e2e-certs
+E2E_PG_PORT ?= 15432
+export E2E_PG_PORT
+
+e2e-certs: ## Copy the stack's throwaway certificates out of its volume into .e2e-certs/
+	rm -rf $(E2E_CERTS) && mkdir -p $(E2E_CERTS)
+	$(ENGINE) run --rm --user 0:0 -v harper-pad-e2e_pgcerts:/certs:ro -v $(E2E_CERTS):/out:z --entrypoint /bin/sh \
+		mirror.gcr.io/library/postgres:17 -c 'cp /certs/ca.crt /certs/client.crt /certs/client.key /certs/admin.crt /certs/admin.key /certs/wrongcn.crt /certs/wrongcn.key /out/ && chmod 644 /out/*'
+
+test-db: ## Run all tests with PostgreSQL from the stack (TLS and client certificates); the stack is removed afterwards
+	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres
+	$(MAKE) e2e-certs
+	TEST_PG_CERTS=$(E2E_CERTS) TEST_PG_PORT=$(E2E_PG_PORT) go test -count=1 -race ./...; status=$$?; \
+	$(COMPOSE) -f $(E2E_FILE) down -v; exit $$status
+
+admin-up: ## Start PostgreSQL and the admin UI (http://127.0.0.1:19001); add devices with admin-seed
+	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres admin
+
+admin-seed: ## Add three devices to the running stack (testdata/admin-seed.sql)
+	$(COMPOSE) -f $(E2E_FILE) exec -T postgres psql -U harper_sync -d harper -v ON_ERROR_STOP=1 < testdata/admin-seed.sql
+
+admin-down: ## Stop the stack and delete its data
+	$(COMPOSE) -f $(E2E_FILE) down -v
 
 e2e-web: ## Build the web app for the end-to-end stack (served by Caddy at the root path)
 	cd ../frontend && { [ -d node_modules ] || npm ci --ignore-scripts --no-audit --no-fund; } && BASE_PATH=/ npm run build:web

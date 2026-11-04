@@ -384,20 +384,6 @@ jobs:
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # A scratch PostgreSQL for the store tests (internal/store): each test makes its own database and drops it. Test-only
-    # credentials, reachable only from this job.
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_PASSWORD: ci-only
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -409,13 +395,16 @@ jobs:
           check-latest: true
           cache: false # no go.sum yet, see lint-backend
 
+      # `test-db` runs every test, the store tests included, against the e2e stack's PostgreSQL (TLS 1.3 and client certificates,
+      # like the cluster; docs/sync.md, "Database access") and removes the stack afterwards. `docker compose` is preinstalled on the
+      # runner; the Makefile prefers podman, so COMPOSE is set explicitly, as in the e2e job.
       - name: Vet, build and test
         working-directory: backend
         env:
-          TEST_DATABASE_URL: postgres://postgres:ci-only@localhost:5432/postgres?sslmode=disable
+          COMPOSE: docker compose
         run: |
           go version
-          make vet build test
+          make vet build test-db
 
   # The aggregate check, named "test" for the same reason as "lint" above.
   test:
