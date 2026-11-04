@@ -78,6 +78,15 @@ header .lede{max-width:60ch;margin-top:8px;color:var(--mute)}
 .hp:disabled{color:var(--mute);cursor:not-allowed;opacity:.6;filter:none}
 .hp.primary:disabled{background:var(--selected);color:var(--mute);opacity:1}
 .hp.is-focus{outline:2px solid var(--accent);outline-offset:2px}
+.in{font:inherit;height:32px;width:100%;padding:0 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}
+.in::placeholder{color:var(--mute)}
+.in:hover,.in.is-hover{border-color:var(--mute)}
+.in:focus-visible,.in.is-focus{border-color:var(--accent);outline:2px solid var(--accent);outline-offset:0}
+.in[aria-invalid="true"]{border-color:var(--bad)}
+.in:disabled{opacity:.55;cursor:not-allowed}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.fields>div{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--mute)}
+.fields .err{color:var(--bad)}
 .hp.busy{pointer-events:none}
 .spin{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -271,6 +280,27 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
       </div></div>
       <p class="mute" style="margin-top:8px">Focus: 2px <code>--accent</code> outline, 2px offset, on <code>:focus-visible</code>. Disabled keeps the label and uses <code>cursor: not-allowed</code>. A busy button keeps its width and swaps the icon for a spinner.</p>
     </div>
+  </div>
+</section>
+
+<!-- 1b. Text fields -->
+<section class="sec" id="fields">
+  <div class="sec-head"><h2>Text fields</h2><p>One look for every single-line input: the drafts search, the rename box and the admin UI's device name.</p></div>
+  <div class="body">
+    <div class="card"><div class="fields">
+      <div>Rest<input class="in" value="iPhone 2" aria-label="Rest"></div>
+      <div>Placeholder<input class="in" placeholder="Name the new device" aria-label="Placeholder"></div>
+      <div>Hover<input class="in is-hover" value="iPhone 2" aria-label="Hover"></div>
+      <div>Focus<input class="in is-focus" value="iPhone 2" aria-label="Focus"></div>
+      <div>Error<input class="in" value="" aria-invalid="true" aria-label="Error"><span class="err">Enter a name.</span></div>
+      <div>Disabled<input class="in" value="iPhone 2" disabled aria-label="Disabled"></div>
+    </div></div>
+    <ul>
+      <li><b>Fill is <code>--bg</code>, not <code>--raised</code>.</b> Fields usually sit on <code>--panel</code> or <code>--raised</code>; in dark mode those two are almost the same grey, so a <code>--raised</code> field disappears. <code>--bg</code> is the darkest (dark) or lightest (light) surface, so the field reads as an inset well on either.</li>
+      <li>32px high (30 in drawers, 44 on touch), 6px radius, 12px side padding, 1px <code>--line</code> border, text colour <code>--text</code>, placeholder <code>--mute</code>.</li>
+      <li>Hover darkens the border to <code>--mute</code>. Focus-visible turns the border <code>--accent</code> with the same 2px <code>--accent</code> ring as buttons. Error uses <code>--bad</code> for the border and a message under the field; set <code>aria-invalid="true"</code>.</li>
+      <li>Always a real <code>&lt;label&gt;</code> (visually hidden if the placeholder says it), never the placeholder alone. Check the field in both themes before shipping.</li>
+    </ul>
   </div>
 </section>
 
