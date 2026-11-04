@@ -53,7 +53,7 @@ conflict with them, they win.
    special-cased for it.
 6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll) and tombstones
    are the only such things.
-7. **The server never generates a secret that a device must keep private.** The device signing key (and, in the
+7. **The server never generates a secret that a device must keep private.** The device's DPoP key (and, in the
    [encryption option](#option-end-to-end-encryption), the data key, the recovery key and the passphrase) is made on the device
    with its own random generator and never sent to the server. The server creates only secrets it is meant to know: invite
    tokens and device tokens, which it stores as hashes.
@@ -78,8 +78,8 @@ What losing the whole server costs:
 | Code layout | `backend/` in this repository, as its **own Go module that shares no code with the app**; the sync client stays in the frontend | The overlap is about 30 lines of draft rules, and a shared module or a single module costs more than writing them twice. The end-to-end test runs the real client against the real server, which is what catches drift. The release workflow gains two artifacts, the sync and admin images |
 | Client accounts | One in v1, modelled as many: a `clients` table, a `client_id` on every row, and every device bound to one account | More accounts later need no schema change. No sharing between accounts, no user management in v1 |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
-| Auth | One opaque, long-lived bearer token per device, plus a signature from a device-bound key on every request; no refresh tokens | See [Authentication](#authentication) |
-| Stolen-token hardening | A device list with last-seen, revoking in the admin UI, and a **device-bound signing key** that makes a copied token useless | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
+| Auth | One opaque, long-lived device token per device, **bound to a device key with DPoP** (a signed proof on every request); no refresh tokens | See [Authentication](#authentication) |
+| Stolen-token hardening | A device list with last-seen, revoking in the admin UI, and **DPoP**, which makes a token that leaks without its key useless but does not cover a copy of the device's own storage | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None (TLS only). End-to-end encryption is an option, not planned | The server can read the notes; see [the option](#option-end-to-end-encryption) |
 | Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; a lost or emptied server is repopulated by the same Sync all |
 | Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
@@ -115,8 +115,8 @@ flowchart LR
   end
 
   pwa -. "loads the app" .-> pages
-  desktop -->|"https://sync.example.com<br/>bearer token"| api
-  pwa -->|"https://sync.example.com<br/>bearer token, CORS: Pages origin"| api
+  desktop -->|"https://sync.example.com<br/>DPoP token and proof"| api
+  pwa -->|"https://sync.example.com<br/>DPoP token and proof, CORS: Pages origin"| api
   operator -->|"https://admin.example.com"| cf
   cf <-->|"OIDC login"| idp
   cf <-->|"outbound tunnel"| cfd
@@ -228,10 +228,10 @@ sequenceDiagram
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
   Op->>Dev: Paste in Settings, Sync, Add this device
-  Dev->>API: POST /enroll {invite, deviceName, publicKey}
+  Dev->>API: POST /enroll {invite, deviceName} with a DPoP proof
   API->>DB: Spend invite, INSERT device (token hash)
   API-->>Dev: device token
-  Dev->>API: Sync all with the bearer token (GET /docs, PUT /docs/{id})
+  Dev->>API: Sync all with the device token and a DPoP proof (GET /docs, PUT /docs/{id})
 ```
 
 ## Enrollment
@@ -244,9 +244,9 @@ Every device, including the first, enrolls the same way.
    device it enrolls is bound to that account for good.
 2. On the device: Settings, Sync, **Add this device**, then paste the URL. The URL carries the server address and the token, so
    there is no separate server field.
-3. The app generates a signing key pair whose private key never leaves the device ([the device-bound key](#limiting-the-damage-of-a-stolen-device)),
-   and calls `POST /enroll` with the invite token, a device name and the public key. It gets back a device token. The invite is now
-   spent.
+3. The app generates a signing key pair whose private key never leaves the device ([DPoP](#limiting-the-damage-of-a-stolen-device)),
+   and calls `POST /enroll` with the invite token, a device name and a DPoP proof signed by the new key (the proof carries the public
+   key). It gets back a device token bound to that key. The invite is now spent.
 4. The app stores the device token and runs the first sync ([First sync](#first-sync)).
 
 Why paste instead of opening the link: on iPhone, a tapped link opens Safari, which has separate storage from the installed Home
@@ -259,8 +259,8 @@ short, and honour reduced motion.
 
 ## Authentication
 
-After enrollment every request carries `Authorization: Bearer <device token>` and a `Harper-Proof` signature made with the device's
-key ([below](#limiting-the-damage-of-a-stolen-device)).
+After enrollment every request carries `Authorization: DPoP <device token>` and a `DPoP` proof signed with the device's key
+([below](#limiting-the-damage-of-a-stolen-device)).
 
 - The token is 256 bits from a cryptographic random source. The server stores only its SHA-256 (a fast hash is enough for a
   high-entropy secret) and looks it up in constant time.
@@ -274,73 +274,92 @@ key ([below](#limiting-the-damage-of-a-stolen-device)).
   sign out a phone that is opened rarely.
 - On a 401 the client stops syncing and shows "Sign in again", which goes back to **Add this device** with a new invite. This also
   covers iOS clearing a Home Screen app's storage.
-- A bearer header, not a cookie, so a page on another site cannot make the browser attach credentials (no CSRF).
+- An `Authorization` header, not a cookie, so a page on another site cannot make the browser attach credentials (no CSRF).
 - Bad tokens and bad invites get the same generic 401 and are rate limited.
 
 Revisit refresh tokens if the design gains multiple users, sharing, a third-party client, a native iOS app that can use the
-Keychain, or an identity provider. The wire format (`Bearer`) is the same, so the change would be on the server.
+Keychain, or an identity provider. The `Authorization` header and the DPoP proof are the same, so the change would be on the server.
 
 ### Limiting the damage of a stolen device
 
-Two different attackers need different answers, and the design treats them separately.
+Three different attackers need different answers, and the design treats them separately.
 
 | Attacker | What they have | What helps |
 |---|---|---|
-| **Copies the token** (a backup, a disk image, a dump of IndexedDB) but does not keep the device | The bearer token | The device-bound key below; revocation |
+| **Copies the token** from a log, a proxy or a script, but cannot copy the key | The device token | **DPoP** (below): the token is useless without a fresh proof from the key |
+| **Copies the device's own storage** (a disk image, a backup, a profile folder) | The token **and**, on a Chromium-based engine, a usable key | DPoP does **not** help here (see "What DPoP does not cover" below). Revocation, and disk encryption on the device |
 | **Uses the unlocked device** (or script running in the page) | The token, the key, and the drafts themselves | Revocation and the strict CSP. Nothing else can stop a legitimate client being used, and its edits and deletions sync to the other devices; there is no server-side undo in v1 (see [Later](#later)) |
 
-**Device list, notices and revocation (cover both):**
+**Device list, notices and revocation (cover all three):**
 
 - **A device list** with name, created, last-seen, and the user agent, in the admin UI, where a device is also revoked.
 - **A notice** (a banner on the next open of each device) when a device enrolls or is revoked.
 
-**A device-bound signing key (proof of possession, in the style of DPoP, RFC 9449), part of v1.**
+**DPoP: a device-bound signing key.** The device proves it holds a key on every request, as in DPoP (Demonstrating Proof of
+Possession, [RFC 9449](https://rfc-editor.org/rfc/rfc9449)). The one difference from the RFC is that the token is opaque and not a
+JWT, so the binding to the key is kept in our database instead of in a `cnf.jkt` claim.
 
-At enrollment the device generates an ECDSA P-256 key pair and sends the public key (JWK) with `POST /enroll`; the server stores it
-on the device row. After that, every request carries the bearer token **and** a proof header:
+At enrollment the device generates an ECDSA P-256 key pair and calls `POST /enroll` with the invite and a DPoP proof signed by the
+new key; the proof's header carries the public key as a JWK. The server checks the proof, spends the invite and stores the key on the
+device row, which binds the token to it. It answers with the token and `token_type: "DPoP"`.
+
+Every later request carries `Authorization: DPoP <device token>` and a `DPoP: <proof>` header. The proof is a JWT signed with ES256
+by the device's key:
 
 ```
-Harper-Proof: <timestamp>.<nonce>.<signature>
+header   {"typ": "dpop+jwt", "alg": "ES256", "jwk": {the device's public key}}
+payload  {"jti": "<random id>", "htm": "PUT", "htu": "https://sync.example.com/docs/<id>",
+          "iat": <unix seconds>, "ath": "<base64url SHA-256 of the device token>"}
 ```
 
-The signature is over `method`, the request path, `timestamp`, `nonce` and the SHA-256 of the bearer token, made with the device's
-private key. The server checks that the signature verifies against the stored public key, that `timestamp` is within about 60
-seconds of its clock, and that the `nonce` has not been seen in that window (a small in-memory cache is enough for one user). A
-copied token without the key is then useless.
+The server checks, as RFC 9449 section 4.3 lists: exactly one proof; `typ`, `alg` and a well-formed public `jwk`; the signature;
+`htm` and `htu` equal to the request's method and URL (without query or fragment); `iat` within about 60 seconds of its clock;
+`jti` not seen in that window (a small in-memory cache is enough at one replica); `ath` equal to the hash of the presented token;
+and that the `jwk` is the key stored on the token's device row, compared by JWK thumbprint. A token copied without the key is then
+useless.
 
 Where the private key lives:
 
 | Build | Key storage |
 |---|---|
-| Web (iPhone Home Screen app, browsers) | `crypto.subtle.generateKey` with `extractable: false`; **only the private `CryptoKey`** is stored in IndexedDB (storing a whole `CryptoKeyPair` is not needed; the iPhone test showed it is accepted there, but older WebKit rejected it); the public key is exported as a JWK and sent to the server |
+| Web (iPhone Home Screen app, browsers) | `crypto.subtle.generateKey` with `extractable: false`; **only the private `CryptoKey`** is stored in IndexedDB (storing a whole `CryptoKeyPair` is not needed; the iPhone test showed it is accepted there, but older WebKit rejected it); the public key goes to the server in the enrollment proof. `extractable: false` stops script from exporting the key bytes; it does not encrypt the key on disk |
 | Desktop (Linux, Windows) | **The same as the web build.** The window is a webview (WebKitGTK on Linux, WebView2 on Windows), so the same WebCrypto key is created there and stored in the webview's IndexedDB. There is no OS keyring, Credential Manager, TPM or key file, and no Go signing method: the sync module is the same code everywhere. Still to check: that both webviews keep a non-extractable key across a relaunch (`TODO.md`) |
 
 Details that are easy to get wrong:
 
+- **What DPoP does not cover.** `extractable: false` is an API rule, not a promise about the disk. **Tested on Chromium:** after a
+  non-extractable key was generated on the live test page, the private key was present in plain form in the profile's IndexedDB
+  files, and a signature made from that disk copy verified against the real public key. Chrome, Edge and the Windows WebView2 share
+  that engine, so a copy of such a profile (a backup, a disk image, a copied folder) carries the token and a usable key together.
+  On WebKit (the iPhone, Safari, the Linux WebKitGTK window) this has not been tested, and it is not known whether the stored key is
+  wrapped. So DPoP defends against a token that leaks without its key (logs, a proxy, a script that copies the token), and not
+  against a copy of the device's own storage. The defences for that are revoking the device and encrypting the device's disk
+  (BitLocker, LUKS, the phone's own protection).
 - **On desktop the key sits in the webview's profile folder,** next to the device token and the local database, so a copy of that
-  folder (a backup, a disk image) can carry the token and the key blob together. The key is still non-extractable inside the
-  webview, but this is weaker than an OS keyring, and the drafts themselves are plain text in the SQLite file. That is accepted: the
-  key protects the server against a copied token, not the machine against someone who can read its disk.
-- **WebCrypto's ECDSA signature is raw `r‖s` (64 bytes for P-256), not DER.** Go's `ecdsa.VerifyASN1` will reject it; the server must
-  split it into two 32-byte integers and call `ecdsa.Verify`.
-- **Losing the key means re-enrolling.** If the browser or iOS clears storage, the proof fails and the client shows "Sign in
-  again", the same recovery as a revoked token. Call `navigator.storage.persist()` (`keepData()`) as the app already does.
-- **Limits:** it does not stop script running in the page, or someone using the unlocked device, because both can ask the key to
-  sign. The RFC says the same of DPoP. Only preventing XSS (the strict CSP in [security](security.md)) addresses the first, and
-  revocation the second.
+  folder carries both (see the first bullet), and the drafts themselves are plain text in the SQLite file. That is accepted: DPoP
+  protects the server against a leaked token, not the machine against someone who can read its disk.
+- **WebCrypto's ECDSA signature is already the JWS `ES256` format** (raw `r‖s`, 64 bytes), so the client needs no DER conversion and
+  a JOSE library on the Go side can verify the proof directly. Go's `ecdsa.VerifyASN1` would reject it; use the two 32-byte integers
+  with `ecdsa.Verify`, or the library.
+- **Losing the key means re-enrolling.** If the browser or iOS clears storage, the server rejects the proof and the client shows
+  "Sign in again", the same recovery as a revoked token. Call `navigator.storage.persist()` (`keepData()`) as the app already does.
+- **Limits:** DPoP does not stop script running in the page, or someone using the unlocked device, because both can ask the key to
+  sign. The RFC says the same. Only preventing XSS (the strict CSP in [security](security.md)) addresses the first, and revocation
+  the second.
 - **Checked on an iPhone** (4 November 2026, a throwaway test page published as a pull request preview; the user agent was
   `iPhone OS 18_7` with Safari `Version/27.0.1`), in a Safari tab and in an installed Home Screen app: a non-extractable ECDSA
   P-256 key is generated, **only the private `CryptoKey`** is stored in IndexedDB and read back, `exportKey` on it is refused, a
   signature is raw `r||s` (64 bytes) and verifies against the public key saved at the first run, and a tampered signature is
-  rejected. The key, and a second non-extractable key used to test the encryption option, both **survived closing and reopening the Home Screen
-  app** (39 seconds later, the same keys, not new ones). A Home Screen app starts with its own empty storage, so a device enrolls inside the installed app, as designed.
-  `navigator.storage.persist()` returned false in both, so iOS promises nothing. **Still open:** whether the key survives a day, a
-  week and a phone restart. The key is part of v1, with the rotation fallback below if it turns out to be cleared.
+  rejected. The key, and a second non-extractable key used to test the encryption option, both **survived closing and reopening the
+  Home Screen app** (39 seconds later, the same keys, not new ones). A Home Screen app starts with its own empty storage, so a device
+  enrolls inside the installed app, as designed. `navigator.storage.persist()` returned false in both, so iOS promises nothing.
+  **Still open:** whether the key survives a day, a week and a phone restart.
 
-**Not planned:** rotating the token on a schedule with reuse detection, and a separate refresh token. A device-bound key covers the
-copied-token case better and has no refresh race (two tabs, the service worker, a response lost when iOS suspends the app). If the
-key turns out not to work on iOS, rotation with reuse detection is the fallback: issue a new token in a response once the old
-one is a day old, keep the previous one valid for about 10 minutes, and revoke the device if the previous one is presented after that.
+**Not planned:** rotating the token on a schedule with reuse detection, and a separate refresh token. DPoP covers the leaked-token
+case with no refresh race (two tabs, the service worker, a response lost when iOS suspends the app). Rotation with reuse detection
+is the one measure here that would notice a copied profile being used (the second user of an old token trips the check), and it is
+also the fallback if the key turns out to be cleared on iOS: issue a new token in a response once the old one is a day old, keep the
+previous one valid for about 10 minutes, and revoke the device if the previous one is presented after that.
 
 ## Data model
 
@@ -385,8 +404,8 @@ CREATE TABLE devices (
   client_id  BIGINT NOT NULL REFERENCES clients (id),
   name       TEXT   NOT NULL,
   user_agent TEXT   NOT NULL DEFAULT '',
-  token_hash BYTEA  NOT NULL UNIQUE,              -- SHA-256 of the bearer token; it alone identifies the device and so its client account
-  public_key TEXT   NOT NULL,                     -- the device's signing key (JWK), sent at enrollment
+  token_hash BYTEA  NOT NULL UNIQUE,              -- SHA-256 of the device token; it alone identifies the device and so its client account
+  public_key TEXT   NOT NULL,                     -- the device's DPoP key (JWK), from the enrollment proof; every later proof must use it
   created_at BIGINT NOT NULL,
   last_seen  BIGINT NOT NULL
 );
@@ -414,7 +433,7 @@ GRANT UPDATE (name) ON devices TO harper_admin;       -- rename only
 
 How it is used:
 
-- **The client account comes from the token, never from the request.** The server looks the bearer token up in `devices` and takes
+- **The client account comes from the token, never from the request.** The server looks the device token up in `devices` and takes
   `client_id` from that row. The protocol has no `client_id` field, so a device cannot name another account, and every query on
   `docs`, `devices`, `invites` and `keybag` has `client_id = <the device's>` in its `WHERE`. Devices never see the id.
 - **Listing is one indexed query on the primary key:** `SELECT id, version, updated_at, deleted FROM docs WHERE client_id = $1 AND
@@ -439,12 +458,12 @@ The server validates what the app validates: drafts at most 5 MB of valid UTF-8,
 
 ## Protocol
 
-JSON over HTTPS. Every route except `/enroll` needs the bearer token. The server is plain storage with compare-and-set: it
+JSON over HTTPS. Every route except `/enroll` needs the device token and a DPoP proof. The server is plain storage with compare-and-set: it
 assigns each draft a version, and it never merges, never makes copies and has no change feed. All the sync logic is in the device.
 
 | Route | Purpose |
 |---|---|
-| `POST /enroll` | `{invite, deviceName, publicKey}` returns `{deviceToken}`. Spends the invite and registers the device's public key. |
+| `POST /enroll` | `{invite, deviceName}` with a DPoP proof signed by the new key. Returns `{deviceToken, token_type: "DPoP"}`. Spends the invite and binds the token to the proof's key. |
 | `GET /docs?after=<id>&limit=<n>` | The state of every draft of the client account, **without text**: `[{id, version, updatedAt, deleted}]`, in id order and paged. Tombstones are included. |
 | `GET /docs/<id>` | One draft with its text: `{id, version, createdAt, updatedAt, deleted, data}`, or 404 if the server has no such id. The `ETag` is the draft's `updatedAt` and `deleted`; `If-None-Match` returns 304 when they match. |
 | `PUT /docs/<id>` | `{base: {version, updatedAt}, createdAt, updatedAt, deleted, data}`. Accepted only if the stored draft matches `base` (version 0 for an id the server does not have). 200 returns `{version}`; otherwise 409 returns the server's current copy. A deletion is `deleted: true` with empty `data`. |
@@ -455,8 +474,8 @@ assigns each draft a version, and it never merges, never makes copies and has no
   matter.
 - **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed. `base` carries
   `updatedAt` too, so a write is checked against the exact state the device saw.
-- **Every route except `/enroll` also needs a valid `Harper-Proof` header** ([the device-bound key](#limiting-the-damage-of-a-stolen-device)),
-  so CORS allows `Authorization`, `Harper-Proof` and `Content-Type`.
+- **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS
+  allows `Authorization`, `DPoP` and `Content-Type`.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
 
 ### When sync happens
@@ -627,23 +646,23 @@ The groundwork, and the riskiest part, because it touches both storage engines. 
 
 ## Security
 
-This is a bearer-token model with transport security and no content encryption.
+This is a device-token model with DPoP key binding, transport security and no content encryption.
 
 | Concern | Handling |
 |---|---|
 | Transport | HTTPS only, on a Let's Encrypt certificate (cert-manager) for the sync domain, terminated at the cluster's ingress, with HTTP redirected and HSTS set. The client refuses an `http:` server. |
 | Who can read the data | The server and its operator; content is not end-to-end encrypted. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
-| Stolen device token | Revoke that device in the admin UI; the device-bound key makes a copied token useless. The token grants only its client account's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
+| Stolen device token | Revoke that device in the admin UI. DPoP makes a token that leaks without its key useless; a copy of the device's own storage is not covered (and on Chromium engines carries the key). The token grants only its client account's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Isolation between client accounts | The account is taken from the token's device row and never from the request; every query on account data filters on it; one account per server in v1, so it is a guard for the future. Before a second account is created, consider PostgreSQL row-level security as a second layer (`FORCE ROW LEVEL SECURITY`, because the sync role owns the tables, and a `SET LOCAL` of the account per transaction), and test that two accounts cannot see each other's drafts or devices. |
 | Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles for sync and admin, the admin one with least privilege ([Database access](#database-access)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from the ingress controller; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1). See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
-| Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
+| Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. `Authorization` and `DPoP` headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
 | Content-Security-Policy | `connect-src` is `'self'` today. Add the sync origin only when sync is configured (a build-time setting for the web build; the desktop page is embedded, so it needs the origin in its policy too), and change nothing else. See [security](security.md). |
-| Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted, and the device key sits in the same webview profile as the token on desktop (no OS keyring, by design), so a copied profile carries both. The local drafts are plain text in any case. |
+| Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted, and the device key sits in the same profile as the token (no OS keyring, by design). On Chromium engines a copied profile carries a usable key as well as the token (tested); the other engines are not tested. The local drafts are plain text in any case. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |
 
 Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data; the [encryption option](#option-end-to-end-encryption) would leave it only
@@ -665,7 +684,7 @@ GitOps repository, not in this one (this section is their specification):
   `Certificate` (Let's Encrypt) and these middlewares: redirect HTTP to HTTPS, HSTS and standard security headers, a rate limit
   per client IP, and a request body cap slightly above the largest allowed request. CORS stays in the app, with its explicit
   allowlist. The app takes the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but the ingress controller connect to
-  it. The in-memory rate limiter and the proof nonce cache are per pod, so move them to PostgreSQL before running
+  it. The in-memory rate limiter and the DPoP `jti` replay cache are per pod, so move them to PostgreSQL before running
   more than one replica.
 - **`harper-pad-admin`:** a Deployment (one replica) with **no Service**. The pod has the app container, listening on
   127.0.0.1, and a `cloudflared` sidecar (a native sidecar container where the cluster supports them, so the tunnel is up before
@@ -739,8 +758,8 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 
 1. **Local groundwork.** Tombstones, dirty tracking, the apply-remote store method, both migrations, with tests for the Go store and
    the web store.
-2. **The server.** Enrollment (registering the device's public key), the draft endpoints (checking each request's signature), devices, the admin container, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
-3. **The sync module** (`lib/sync.js`) and the device key (generate it at enrollment, store the private key, sign every request), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
+2. **The server.** Enrollment (binding the token to the key in the enrollment DPoP proof), the draft endpoints (checking each request's DPoP proof), devices, the admin container, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
+3. **The sync module** (`lib/sync.js`) and the DPoP key (generate it at enrollment, store the private key, send a proof with every request), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
    with Node's runner against fixtures, and the [end-to-end test](#end-to-end-test) against the real server.
 4. **UI:** the enrollment and status screens, the device list and the status bar state.
 5. **Docs and policy:** the changes below, and the CSP change.
