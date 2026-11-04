@@ -100,17 +100,8 @@ func newID(now time.Time) string {
 // Save stores a draft. With an empty ID it creates one. With an ID it updates that draft, or, when none is stored under
 // it, restores it (undoing a delete), keeping CreatedAt if given. UpdatedAt is always set to now. The stored draft is returned.
 func (s *Store) Save(d Draft) (Draft, error) {
-	if d.Format == "" {
-		d.Format = FormatMarkdown
-	}
-	if d.Format != FormatMarkdown && d.Format != FormatText {
-		return Draft{}, fmt.Errorf("unknown draft format %q", d.Format)
-	}
-	if len(d.Content) > MaxContentBytes {
-		return Draft{}, fmt.Errorf("the draft is %d bytes; the limit is %d", len(d.Content), MaxContentBytes)
-	}
-	if !utf8.ValidString(d.Content) {
-		return Draft{}, errors.New("the draft is not valid UTF-8 text")
+	if err := checkDraft(&d); err != nil {
+		return Draft{}, err
 	}
 	now := s.now()
 	if d.ID == "" {

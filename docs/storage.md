@@ -61,6 +61,8 @@ drafts   (id TEXT PRIMARY KEY, created_at INTEGER, updated_at INTEGER,
           tasks TEXT, tasks_total INTEGER, tasks_done INTEGER,
           file_path TEXT, file_mtime INTEGER)                 -- the file it was saved to ('' if never) and its mtime after our write (version 2)
 settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wails", ...]; "ignored": Harper's export
+sync_state (id TEXT PRIMARY KEY, hash TEXT, updated_at INTEGER,   -- only for the optional sync ([sync](sync.md)): what the server held
+            deleted INTEGER, version INTEGER)                     -- at the last sync; empty when sync is off; no foreign key, a row outlives its draft
 ```
 
 - Draft ids are 32 hex characters that sort by creation. Timestamps are Unix milliseconds.
@@ -81,8 +83,10 @@ settings (key TEXT PRIMARY KEY, value TEXT)                   -- "words": ["Wail
 
 - SQLite's default rollback journal with full syncing: no `-wal` or `-shm` files beside the database, and a crash leaves the last
   committed state.
-- **Version:** `PRAGMA user_version` is 2 (1 had no `file_path`; an older database is upgraded when opened). A database with a higher number (written by a newer app) is refused with an error and left
-  untouched, so an older build never damages newer data. Changes to the draft blob are handled with its `v` field and defaults when
+- **Version:** `PRAGMA user_version` is 2 (1 had no `file_path`; an older database is upgraded when opened). It is the **compatibility
+  level**: a database with a higher number (written by a newer app) is refused with an error and left untouched, so an older build never
+  damages newer data. It is raised only for a change an older build could not live with. An additive change, such as the `sync_state`
+  table, is made when the database is opened and leaves it alone, so the previous build still opens the file and ignores the table. Changes to the draft blob are handled with its `v` field and defaults when
   reading, so old rows keep loading.
 - **Damage:** a file that is not a database or fails SQLite's quick integrity check is moved aside as `harper-pad.db.bad-<time>` and a
   fresh database is created, so the app still starts. (Drafts and settings in the damaged file are in the `.bad` copy.)

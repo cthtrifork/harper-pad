@@ -21,6 +21,8 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
+// schemaVersion is the compatibility level (PRAGMA user_version): a build refuses a database with a higher number. It goes up only
+// for changes an older build could not live with. Additive changes (a new table, such as sync_state) leave it alone.
 const schemaVersion = 2
 
 // dsnOptions are applied to every connection the driver opens:
@@ -112,9 +114,23 @@ func (s *Store) prepare() error {
 		return fmt.Errorf("%w: %s", errIntegrity, check)
 	}
 	if version < schemaVersion {
-		return s.migrate(version)
+		if err := s.migrate(version); err != nil {
+			return err
+		}
 	}
-	return nil
+	return s.ensureSyncState()
+}
+
+// ensureSyncState adds the sync_state table to a database that does not have it yet. It is an additive change, so it does not
+// raise user_version: an older build still opens the file (it never reads the table) and loses nothing. user_version only goes up
+// for a change that an older build would misread or damage.
+func (s *Store) ensureSyncState() error {
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_state'`).Scan(&n); err != nil || n > 0 {
+		return err
+	}
+	_, err := s.db.Exec(syncStateDDL)
+	return err
 }
 
 // migrate brings an older database up to schemaVersion. Version 2 added file_path, the file a draft was saved to, and file_mtime.
@@ -169,6 +185,7 @@ func (s *Store) create() error {
 			key   TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		) STRICT, WITHOUT ROWID`,
+		syncStateDDL,
 		fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion),
 	} {
 		if _, err := tx.Exec(stmt); err != nil {
