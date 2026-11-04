@@ -12,6 +12,7 @@ on:
       - go.sum
       - frontend/package.json
       - frontend/package-lock.json
+      - backend/**
       - .github/workflows/**
   push:
     branches: [main]
@@ -22,6 +23,7 @@ on:
       - go.sum
       - frontend/package.json
       - frontend/package-lock.json
+      - backend/**
   schedule:
     - cron: '23 5 * * 1' # Mondays 05:23 UTC
   workflow_dispatch:
@@ -41,8 +43,44 @@ env:
   TRIVY_SKIP_DB_UPDATE: 'true'
 
 jobs:
+  # Which scans a pull request needs. Schedules, pushes to main and manual runs run every scan.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # dorny/paths-filter lists the files of a pull request through the API
+    outputs:
+      go: ${{ github.event_name != 'pull_request' || steps.filter.outputs.go }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend }}
+      npm: ${{ github.event_name != 'pull_request' || steps.filter.outputs.npm }}
+    steps:
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            go:
+              - main.go
+              - internal/**
+              - go.mod
+              - go.sum
+              - .tool-versions
+              - .github/workflows/security.yml
+            backend:
+              - backend/**
+              - .tool-versions
+              - .github/workflows/security.yml
+            npm:
+              - frontend/package.json
+              - frontend/package-lock.json
+              - .github/workflows/security.yml
+
   govulncheck:
     name: govulncheck
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -71,6 +109,33 @@ jobs:
           go version
           go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
 
+  # The backend is its own Go module (backend/go.mod); `./...` above does not reach it. It has no GUI code, so no GTK headers.
+  govulncheck-backend:
+    name: govulncheck (backend)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: false # no go.sum yet; turn the cache on with the first dependency
+
+      - name: Run govulncheck
+        working-directory: backend
+        env:
+          # renovate: datasource=go depName=golang.org/x/vuln
+          GOVULNCHECK_VERSION: v1.9.0
+        run: |
+          go version
+          go run golang.org/x/vuln/cmd/govulncheck@"${GOVULNCHECK_VERSION}" ./...
+
   trivy-fs:
     name: trivy (filesystem)
     runs-on: ubuntu-24.04
@@ -96,6 +161,8 @@ jobs:
 
   npm-audit:
     name: npm audit (frontend runtime dependencies)
+    needs: changes
+    if: needs.changes.outputs.npm == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

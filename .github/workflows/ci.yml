@@ -1,9 +1,11 @@
 name: CI
 
-# Runs on every pull request and on pushes to main. There is deliberately no
-# workflow-level paths filter, so "CI / test" can be a required status check. The slow
-# `build` and `windows` jobs are skipped instead (a skipped job counts as passing for a required
-# check) when a pull request changes nothing that goes into a binary; see the `changes` job.
+# Runs on every pull request and on pushes to main. There is deliberately no workflow-level paths filter, so the
+# aggregate checks "CI / lint" and "CI / test" can be required status checks. Instead the `changes` job works out which
+# parts of the repository a pull request touches, and every real job below runs only when its part changed. A skipped
+# job counts as passing for a required check, and the two aggregate jobs (`lint`, `test`) fail if any job they wait for
+# failed. Jobs that do not depend on each other run in parallel, so wall time is the slowest job. Pushes to main and
+# manual runs always run everything.
 on:
   pull_request:
   push:
@@ -22,8 +24,7 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
-  # Decides whether a pull request touches anything that ends up in a binary. Pushes to main and manual
-  # runs always build.
+  # Decides which parts of the repository a pull request touches. On pushes to main and manual runs every output is true.
   changes:
     name: changes
     runs-on: ubuntu-24.04
@@ -32,16 +33,59 @@ jobs:
       contents: read
       pull-requests: read # dorny/paths-filter lists the files of a pull request through the API
     outputs:
-      # Pushes to main and manual runs always build.
+      go: ${{ github.event_name != 'pull_request' || steps.filter.outputs.go }}
+      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend }}
+      bindings: ${{ github.event_name != 'pull_request' || steps.filter.outputs.bindings }}
+      yaml: ${{ github.event_name != 'pull_request' || steps.filter.outputs.yaml }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend }}
+      e2e: ${{ github.event_name != 'pull_request' || steps.filter.outputs.e2e }}
       build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build }}
     steps:
       # On pull requests it lists the files through the API (no checkout needed); on pushes and manual
-      # runs the filter is bypassed below.
+      # runs the filter is bypassed above.
       - id: filter
         if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           filters: |
+            go:
+              - main.go
+              - internal/**
+              - go.mod
+              - go.sum
+              - .tool-versions
+              - Makefile
+              - .github/linters/golangci.yml
+              - .github/workflows/ci.yml
+              - .github/actions/**
+            frontend:
+              - frontend/**
+              - internal/store/testdata/** # the frontend tests run the same fixtures as the Go tests
+              - .tool-versions
+              - Makefile
+              - .github/workflows/ci.yml
+            bindings:
+              - internal/app/**
+              - frontend/bindings/**
+              - go.mod
+              - go.sum
+              - .tool-versions
+              - Makefile
+              - .github/workflows/ci.yml
+            yaml:
+              - '**/*.yml'
+              - '**/*.yaml'
+              - .github/linters/yamllint.yml
+            backend:
+              - backend/**
+              - .tool-versions
+              - .github/linters/golangci.yml
+              - .github/workflows/ci.yml
+            e2e:
+              - backend/**
+              - frontend/**
+              - .tool-versions
+              - .github/workflows/ci.yml
             build:
               - '**/*.go'
               - go.mod
@@ -56,8 +100,40 @@ jobs:
               - .github/workflows/ci.yml
               - .github/actions/**
 
-  lint:
-    name: lint
+  # --- lint: independent jobs, aggregated by `lint` below ---------------------------------------------------------
+
+  # Biome lint, format check and knip (unused exports and dependencies, frontend/knip.json). Run `npm run format` to fix
+  # formatting. Needs node_modules, not a bundle.
+  lint-frontend:
+    name: lint-frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      - name: Install frontend dependencies
+        run: |
+          node --version
+          cd frontend && npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Lint and check formatting (frontend)
+        run: make lint-frontend
+
+  # Go formatting, module hygiene and golangci-lint for the desktop app (the root module; `./...` does not cross into
+  # backend/, which has its own module and its own job).
+  lint-go:
+    name: lint-go
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -72,59 +148,10 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .tool-versions
-          package-manager-cache: false
-
-      # Biome and knip need node_modules, not a bundle: frontend/dist/.gitkeep satisfies go:embed, and the
-      # build job builds the real bundle once.
-      - name: Install frontend dependencies
-        run: |
-          node --version
-          cd frontend && npm ci --ignore-scripts --no-audit --no-fund
-
-      # Biome lint (see frontend/biome.json), format check and knip (unused exports and dependencies,
-      # frontend/knip.json). Run `npm run format` to fix formatting.
-      - name: Lint and check formatting (frontend)
-        run: make lint-frontend
-
-      - id: wails3
-        run: echo "version=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)" >> "$GITHUB_OUTPUT"
-
-      # The wails3 CLI takes about 40 s to compile, so keep the built binary. The key is the Wails version
-      # (the CLI follows go.mod) and the Go version it was built with.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/bin
-          key: wails3-${{ steps.go.outputs.go-version }}-${{ steps.wails3.outputs.version }}
-
-      # frontend/bindings is generated from the Go services and committed. Regenerate it with the
-      # CLI version that matches go.mod and fail if the committed copy differs (run `make bindings`).
-      - name: Check Wails bindings are up to date
-        run: |
-          [ -x "$RUNNER_TEMP/bin/wails3" ] || GOBIN="$RUNNER_TEMP/bin" make wails3-install
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          PATH="$RUNNER_TEMP/bin:$PATH" make bindings
-          if [ -n "$(git status --porcelain -- frontend/bindings)" ]; then
-            git status --short -- frontend/bindings
-            git diff -- frontend/bindings | head -80
-            echo "::error::frontend/bindings is stale: run 'make bindings' and commit the result"; exit 1
-          fi
-
       - name: Check formatting
         run: |
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then echo "These files need gofmt:"; echo "$unformatted"; exit 1; fi
-
-      # Config in .github/linters/yamllint.yml.
-      - name: Lint YAML
-        env:
-          # renovate: datasource=pypi depName=yamllint
-          YAMLLINT_VERSION: 1.38.0
-        run: |
-          python3 -m pip install --user "yamllint==${YAMLLINT_VERSION}"
-          PATH="$HOME/.local/bin:$PATH" yamllint --strict -c .github/linters/yamllint.yml $(git ls-files '*.yml' '*.yaml')
 
       - name: Check go.mod is tidy and modules verify
         run: |
@@ -141,6 +168,136 @@ jobs:
         with:
           version: v2.15.0
           args: --config .github/linters/golangci.yml --build-tags server ./...
+
+  # frontend/bindings is generated from the Go services and committed. Regenerate it with the wails3 CLI that matches
+  # go.mod and fail if the committed copy differs (run `make bindings`).
+  bindings:
+    name: bindings
+    needs: changes
+    if: needs.changes.outputs.bindings == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci --ignore-scripts --no-audit --no-fund
+
+      - id: wails3
+        run: echo "version=$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)" >> "$GITHUB_OUTPUT"
+
+      # The wails3 CLI takes about 40 s to compile, so keep the built binary. The key is the Wails version
+      # (the CLI follows go.mod) and the Go version it was built with.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/bin
+          key: wails3-${{ steps.go.outputs.go-version }}-${{ steps.wails3.outputs.version }}
+
+      - name: Check Wails bindings are up to date
+        run: |
+          [ -x "$RUNNER_TEMP/bin/wails3" ] || GOBIN="$RUNNER_TEMP/bin" make wails3-install
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          PATH="$RUNNER_TEMP/bin:$PATH" make bindings
+          if [ -n "$(git status --porcelain -- frontend/bindings)" ]; then
+            git status --short -- frontend/bindings
+            git diff -- frontend/bindings | head -80
+            echo "::error::frontend/bindings is stale: run 'make bindings' and commit the result"; exit 1
+          fi
+
+  # Config in .github/linters/yamllint.yml.
+  lint-yaml:
+    name: lint-yaml
+    needs: changes
+    if: needs.changes.outputs.yaml == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint YAML
+        env:
+          # renovate: datasource=pypi depName=yamllint
+          YAMLLINT_VERSION: 1.38.0
+        run: |
+          python3 -m pip install --user "yamllint==${YAMLLINT_VERSION}"
+          PATH="$HOME/.local/bin:$PATH" yamllint --strict -c .github/linters/yamllint.yml $(git ls-files '*.yml' '*.yaml')
+
+  # The sync backend is its own Go module (backend/go.mod) and shares no code with the app, so it has its own lint job.
+  lint-backend:
+    name: lint-backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No cache yet: the module has no dependencies and so no go.sum to key it on. Turn it on with the first dependency.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: false
+
+      - name: Check formatting
+        working-directory: backend
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "These files need gofmt:"; echo "$unformatted"; exit 1; fi
+
+      - name: Check go.mod is tidy and modules verify
+        working-directory: backend
+        run: |
+          go mod tidy -diff
+          go mod verify
+
+      # Same config and version as the app's lint job (renovate bumps both through the one depName).
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        env:
+          CGO_ENABLED: '0'
+        with:
+          version: v2.15.0
+          working-directory: backend
+          args: --config ${{ github.workspace }}/.github/linters/golangci.yml ./...
+
+  # The aggregate check. Keeps the name "lint" so it can stay a required check while the work is split across jobs:
+  # skipped jobs (nothing relevant changed) pass, a failed or cancelled one fails it. `changes` is waited for too, because
+  # when it fails everything after it is skipped, which would otherwise look like a pass.
+  lint:
+    name: lint
+    if: always()
+    needs: [changes, lint-frontend, lint-go, bindings, lint-yaml, lint-backend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Every lint job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "* | *" cancelled "*) echo "::error::a lint job did not pass"; exit 1 ;;
+          esac
 
   # Screenshots are rendered in CI and never committed (docs/ci.md, Pull request reports).
   no-screenshots:
@@ -165,8 +322,12 @@ jobs:
             exit 1
           fi
 
-  test:
-    name: test
+  # --- test: independent jobs, aggregated by `test` below ---------------------------------------------------------
+
+  test-go:
+    name: test-go
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -192,19 +353,104 @@ jobs:
           go version
           pkg-config --modversion gtk4 webkitgtk-6.0 libsoup-3.0
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .tool-versions
-          package-manager-cache: false
-
       # No frontend build: frontend/dist/.gitkeep satisfies go:embed, and nothing here reads the bundle.
       # `go test` runs its own vet subset; the full `make vet` runs in the build job, which has compiled the same packages.
       - name: Test
         run: make test
 
-      # The frontend's unit tests use Node's own runner, so no `npm ci` is needed.
+  # The frontend's unit tests use Node's own runner, so no `npm ci` is needed.
+  test-frontend:
+    name: test-frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
       - name: Test the frontend
         run: make test-frontend
+
+  test-backend:
+    name: test-backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .tool-versions
+          check-latest: true
+          cache: false # no go.sum yet, see lint-backend
+
+      # The store tests will need a PostgreSQL; add a service container here when the first one exists.
+      - name: Vet, build and test
+        working-directory: backend
+        run: |
+          go version
+          make vet build test
+
+  # The aggregate check, named "test" for the same reason as "lint" above.
+  test:
+    name: test
+    if: always()
+    needs: [changes, test-go, test-frontend, test-backend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Every test job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "* | *" cancelled "*) echo "::error::a test job did not pass"; exit 1 ;;
+          esac
+
+  # --- slow jobs ----------------------------------------------------------------------------------------------------
+
+  # The end-to-end test of the sync backend (docs/sync.md, "End-to-end test"): a compose stack with PostgreSQL, the sync
+  # service and Caddy, driven by Playwright with two browser contexts as devices. It runs when the backend or the frontend
+  # changes, because the test uses the real web build. `docker compose` is used here (preinstalled on the runner); the
+  # backend Makefile prefers podman, so COMPOSE is set explicitly. Chrome comes from the runner and only the pinned
+  # playwright-core package is installed, as in screenshots.yml.
+  e2e:
+    name: e2e
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          package-manager-cache: false
+
+      # The Makefile installs the pinned playwright-core when PLAYWRIGHT_VERSION is set (inside the make target, as
+      # scripts/screenshots.sh does, so the step is not an ad-hoc package install outside a lockfile for zizmor).
+      - name: Run the end-to-end test
+        env:
+          COMPOSE: docker compose
+          E2E_BROWSER_CHANNEL: chrome
+          # renovate: datasource=npm depName=playwright-core
+          PLAYWRIGHT_VERSION: 1.64.1
+        run: make -C backend e2e
 
   build:
     name: build
