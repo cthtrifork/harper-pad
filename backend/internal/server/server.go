@@ -27,7 +27,7 @@ const (
 	pingTimeout     = 2 * time.Second // the probes should set timeoutSeconds above this
 	shutdownTimeout = 20 * time.Second
 	// shutdownDelay lets the endpoint controller and Traefik see the failing /readyz before the listener closes.
-	shutdownDelay = 3 * time.Second
+	shutdownDelay = 5 * time.Second
 )
 
 // Health serves the liveness and readiness endpoints.

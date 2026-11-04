@@ -32,8 +32,8 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 | `GET /readyz` | `readinessProbe` | A `SELECT 1` round trip to PostgreSQL succeeds (2 s limit, so set `timeoutSeconds: 3`). 503 while the database is unreachable and while shutting down |
 
 PostgreSQL does not have to be up at start: the pool connects lazily, `/readyz` reports 503 until it is, and the pod recovers by
-itself. On SIGTERM `/readyz` turns 503, the process waits 3 s for Traefik and the endpoints to notice, drains in-flight requests
-(up to 20 s) and exits 0, so `terminationGracePeriodSeconds` of 30 (the default) is enough. The driver is
+itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and the endpoints to notice, drains in-flight requests
+(up to 20 s) and exits 0, so the default `terminationGracePeriodSeconds` of 30 is enough (5 + 20 = 25). The driver is
 [pgx v5](https://github.com/jackc/pgx), the most widely used maintained PostgreSQL driver for Go.
 
 ```sh
