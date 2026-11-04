@@ -97,8 +97,8 @@ Why paste instead of opening the link: on iPhone, a tapped link opens Safari, wh
 Screen app, so the enrollment would land in the wrong place. Pasting inside the installed app avoids it. The URL is only a
 convenient way to carry the address and token in one string; opening it in a browser shows a short "copy this into Harper Pad" page.
 
-States to design: sync off, paste the URL, error (invite expired or used, server unreachable, not HTTPS), first-sync choice and
-progress, and the device list with rename and revoke. Follow the [design cheat sheet](design-cheatsheet.html), keep transitions
+States to design: sync off, paste the URL, error (invite expired or used, server unreachable, not HTTPS), first-sync
+progress (merge only), and the device list with rename and revoke. Follow the [design cheat sheet](design-cheatsheet.html), keep transitions
 short, and honour reduced motion.
 
 ## Authentication
