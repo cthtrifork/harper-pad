@@ -60,7 +60,7 @@ What losing the whole server costs:
 | Decision | Choice | Why |
 |---|---|---|
 | Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment behind a ClusterIP Service, exposed by the cluster's existing **Traefik** | Small, one static binary; reuses the app's validation limits and habits |
-| Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service, the admin UI and the migration job each get their own certificate and a least-privilege role |
+| Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service and the admin UI each get their own certificate and a role, the admin one with least privilege |
 | Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port and no login code to write; keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
 | Hosting | Kubernetes. The sync API is served by **Traefik** on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([what this trusts](#what-this-trusts)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
@@ -96,7 +96,6 @@ flowchart LR
         cfd["cloudflared sidecar<br/>outbound tunnel"]
         admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>verifies the Access token"]
       end
-      job["Job: migrate<br/>role harper_owner"]
       subgraph cnpg["CloudNativePG cluster"]
         pg[("PostgreSQL<br/>TLS + client-certificate auth")]
       end
@@ -114,10 +113,8 @@ flowchart LR
   cfd -->|"localhost"| admin
   api -->|"mTLS, role harper_sync"| pg
   admin -->|"mTLS, role harper_admin"| pg
-  job -->|"mTLS, role harper_owner"| pg
   cm -. "client certificates" .-> api
   cm -. "client certificates" .-> admin
-  cm -. "client certificates" .-> job
 ```
 
 | Component | Runs as | Reachable from | Does |
@@ -125,8 +122,7 @@ flowchart LR
 | Traefik | The cluster's existing ingress controller | The internet, port 443 | Terminates TLS for the sync domain with the cert-manager certificate, applies rate-limit and body-size middlewares, forwards to the sync Service |
 | `harper-pad-sync` | Deployment and ClusterIP Service | Traefik only (NetworkPolicy) | The API: enroll, sync, devices |
 | `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices |
-| `migrate` | Job | Nothing | Applies the schema migrations with the owner role |
-| PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the three workloads above (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
+| PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the sync and admin pods (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
 | cert-manager | Cluster add-on | Nothing | Issues the sync domain's TLS certificate and the database client certificates |
 | Cloudflare | External | The internet | Carries the admin tunnel and runs Access on the admin hostname. Not in the sync path |
 | GitHub Pages | Static hosting | The internet | Serves the web app's code; holds no user data |
@@ -147,14 +143,13 @@ verify the server certificate (`sslmode=verify-full`, with the cluster's server 
 - **Authentication rules:** `spec.postgresql.pg_hba` requires `cert` for these roles over `hostssl`, and the roles have no
   password. The exact entries, their order relative to CloudNativePG's own defaults, and whether the common name must equal the
   role (otherwise a `pg_ident` map) are to be confirmed against the operator version in use; they are not verified here.
-- **Network:** a NetworkPolicy lets only the sync pods, the admin pods and the migration job reach port 5432 (plus what the
+- **Network:** a NetworkPolicy lets only the sync pods and the admin pods reach port 5432 (plus what the
   operator itself needs).
 
 | Role | Used by | Allowed |
 |---|---|---|
-| `harper_owner` | the `migrate` Job only | Owns the tables and runs the migrations (DDL). Grants the two roles below their privileges |
-| `harper_sync` | `harper-pad-sync` | Read and write `docs`, `meta` (and the key bag in v2); `devices`: select, insert, update (last-seen); `invites`: select, update (spend). No DDL |
-| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL |
+| `harper_sync` | `harper-pad-sync` | Owns the tables and runs the migrations at start (including the grants to `harper_admin`); reads and writes `docs`, `meta` (and the key bag in v2), `devices` and `invites` |
+| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL, and it cannot change the schema |
 
 ### The admin UI
 
@@ -466,7 +461,7 @@ This is a bearer-token model with transport security and no content encryption.
 | Who can read the data | The server and its operator; content is not encrypted until v2. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, protect backups like the live data, and keep request bodies out of logs (Traefik access logs must not include bodies). The settings screen says this plainly. |
 | Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
-| Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the three workloads by NetworkPolicy; separate roles for migrations, sync and admin with least privilege ([Database access](#database-access)). |
+| Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles for sync and admin, the admin one with least privilege ([Database access](#database-access)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from Traefik; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider; the app verifies the Access token on every request; CSRF tokens, same-origin checks, strict CSP, an audit log. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1), so the identity provider and Cloudflare accounts are part of the trust chain. See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
@@ -489,8 +484,9 @@ they live):
   scheduled backups to object storage are **recommended but not required for the notes' safety**, because every device holds a
   full copy and can rebuild the server; a backup preserves what devices do not have: tombstones and the device list. Restoring an
   older backup is handled by the client ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
-- **`migrate`:** a Job, run on each release before the Deployments roll out, using the owner role. The sync service refuses to
-  start if the schema version is not the one it expects.
+- **Migrations:** the sync service applies them itself at start, under its own role, taking a PostgreSQL advisory lock so that
+  only one pod migrates if there is ever more than one replica. It refuses to start if the database has a newer schema than it
+  knows. The admin service starts only against a schema it recognises, and does not migrate.
 - **`harper-pad-sync`:** a Deployment (one replica to start) and a ClusterIP Service, with a single container. Traefik routes
   the sync domain to the Service (an `IngressRoute`, or a standard Ingress), with the TLS certificate from a cert-manager
   `Certificate` (Let's Encrypt) and these middlewares: redirect HTTP to HTTPS, HSTS and standard security headers, a rate limit
@@ -505,7 +501,7 @@ they live):
   separate Deployment pointing at Services; the sidecar is chosen so the admin app can listen on loopback only, which means no
   other pod can reach it. The cost is that the two scale and restart together.
 - **NetworkPolicies:** default deny for ingress and egress in the namespace, then allow:
-  - DNS, and the three workloads to PostgreSQL on 5432;
+  - DNS, and the sync and admin pods to PostgreSQL on 5432;
   - ingress to the sync pods from the Traefik pods only, and none to the admin pod;
   - the admin pod out to Cloudflare for the tunnel (the ports Cloudflare documents) and to the Access team domain on 443 for the
     signing keys;
@@ -520,7 +516,7 @@ they live):
   application's AUD tag and the operator email allowlist.
 - **Health:** a liveness endpoint, and a readiness endpoint that checks the database connection.
 
-Commands: `harper-pad-sync serve` and `migrate`; `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not
+Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not
 on the command line.
 
 ## Build order

@@ -50,7 +50,7 @@ never run on a real desktop yet.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
 - [ ] The server: `harper-pad-sync` (enrollment, sync, devices), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
-      devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), the `migrate` Job, two container
+      devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), two container
       images, and Kustomize manifests: CloudNativePG `Cluster`, cert-manager certificates (database clients and the sync domain),
       the Traefik `IngressRoute` and middlewares for the sync API, NetworkPolicies, the admin pod with its `cloudflared` sidecar, tests. Verify the CloudNativePG `pg_hba` certificate setup on a real cluster.
 - [ ] The sync module (`lib/sync.js`) with unit tests and an end-to-end test against the real server.
