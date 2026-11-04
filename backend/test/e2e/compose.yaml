@@ -1,8 +1,8 @@
 # End-to-end stack (docs/sync.md, "End-to-end test"): PostgreSQL, harper-pad-sync and Caddy providing https.
 # Plain compose spec, so `podman compose` and `docker compose` both read it. Test-only credentials; never reuse them.
 #
-#   https://app.localhost:8443   the web build (frontend/dist-web, built by `make e2e-web`)
-#   https://sync.localhost:8443  harper-pad-sync, through Caddy
+#   https://app.localhost:${E2E_PORT:-18443}   the web build (frontend/dist-web, built by `make e2e-web`)
+#   https://sync.localhost:${E2E_PORT:-18443}  harper-pad-sync, through Caddy
 name: harper-pad-e2e
 
 services:
@@ -27,8 +27,8 @@ services:
       dockerfile: Containerfile.sync
     environment:
       LISTEN_ADDR: ":8080"
-      PUBLIC_URL: https://sync.localhost:8443
-      CORS_ALLOWED_ORIGINS: https://app.localhost:8443
+      PUBLIC_URL: https://sync.localhost:${E2E_PORT:-18443}
+      CORS_ALLOWED_ORIGINS: https://app.localhost:${E2E_PORT:-18443}
       # Password authentication here; mTLS to PostgreSQL is checked on a real cluster, not in this stack.
       DATABASE_URL: postgres://harper_sync:e2e-only@postgres:5432/harper?sslmode=disable
     depends_on:
@@ -38,7 +38,7 @@ services:
   caddy:
     image: mirror.gcr.io/library/caddy:2
     ports:
-      - "8443:443"
+      - "${E2E_PORT:-18443}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
       - ../../../frontend/dist-web:/srv/app:ro,z

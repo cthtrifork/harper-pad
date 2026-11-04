@@ -4,8 +4,9 @@ import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-export const APP_URL = "https://app.localhost:8443";
-export const SYNC_URL = "https://sync.localhost:8443";
+const PORT = process.env.E2E_PORT || "18443";
+export const APP_URL = `https://app.localhost:${PORT}`;
+export const SYNC_URL = `https://sync.localhost:${PORT}`;
 
 // Same lookup order as scripts/screenshots.mjs: PLAYWRIGHT_DIR, this file's own resolution, then a global install.
 function loadPlaywright() {

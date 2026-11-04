@@ -24,7 +24,7 @@ fmt: ## Format the Go code
 
 e2e-web: ## Build the web app for the end-to-end stack (served by Caddy at the root path)
 	cd ../frontend && BASE_PATH=/ npm run build:web
-# TODO: the web build also needs the sync origin (https://sync.localhost:8443) in its CORS/CSP settings once the
+# TODO: the web build also needs the sync origin (https://sync.localhost:18443) in its CORS/CSP settings once the
 # build-time setting exists (docs/sync.md, open questions).
 
 e2e-up: ## Start PostgreSQL, harper-pad-sync and Caddy

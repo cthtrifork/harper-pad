@@ -24,5 +24,8 @@ make e2e     # build the web app, start the stack, run the test, remove the stac
 ```
 
 `make e2e` needs Node 22+, Playwright (`PLAYWRIGHT_DIR`, a global `playwright-core`, or `E2E_BROWSER_PATH` for a Chromium binary) and
-`podman compose` or `docker compose`. The stack serves the web build at `https://app.localhost:8443` and the sync service at
-`https://sync.localhost:8443` with certificates from Caddy's own CA; the test ignores certificate errors.
+`podman compose` or `docker compose`. The stack serves the web build at `https://app.localhost:18443` and the sync service at
+`https://sync.localhost:18443` (set `E2E_PORT` to use another host port) with certificates from Caddy's own CA; the test ignores certificate errors.
+
+`podman compose` is only a front end: it needs a provider, `podman-compose` (`pip install --user podman-compose`) or
+`docker-compose`. The stack has been run with podman 5.8 and podman-compose 1.6; `docker compose` has not been tried.
