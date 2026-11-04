@@ -79,6 +79,7 @@ What losing the whole server costs:
 | Client accounts | One in v1, modelled as many: a `clients` table, a `client_id` on every row, and every device bound to one account | More accounts later need no schema change. No sharing between accounts, no user management in v1 |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived device token per device, **bound to a device key with DPoP** (a signed proof on every request); no refresh tokens | See [Authentication](#authentication) |
+| Approving new devices | None. A new device needs no confirmation from an enrolled one; the operator creates one short-lived, single-use enrollment URL per device in the admin UI, and that is the approval | The invite is single use and expires in 15 minutes, the operator signs in through Access with MFA, and every device is listed and can be revoked, with a "new device enrolled" notice on the others. Confirmation on an enrolled device would add a flow and a way to get locked out (no enrolled device left) for little extra safety. See [what this trusts](#what-this-trusts) |
 | Stolen-token hardening | A device list with last-seen, revoking in the admin UI, and **DPoP**, which makes a token that leaks without its key useless but does not cover a copy of the device's own storage | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None (TLS only). End-to-end encryption is an option, not planned | The server can read the notes; see [the option](#option-end-to-end-encryption) |
 | Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; a lost or emptied server is repopulated by the same Sync all |
@@ -206,7 +207,7 @@ authentication:
   read notes does not make a compromised admin UI harmless. Whoever controls the operator's identity provider account, the
   Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
   the Cloudflare account are part of the security of the notes. Mitigations in this design: the "new device enrolled" notice on
-  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and a new device can read everything it syncs. A further option is to require approval of a new device on an already-enrolled one (open question).
+  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and a new device can read everything it syncs. A new device does not need approval from an enrolled one ([decided](#decisions)): the invite is the approval.
 - **The Access configuration is the whole of the admin UI's access control.** If the Access application or its policy is removed or
   loosened, or the tunnel's hostname is pointed at the app without an Access application, the admin UI is open to the internet
   and the app has no second check. The loopback listener and the NetworkPolicy keep every other route closed. Treat the
@@ -799,8 +800,6 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - **The desktop webview origin** for the CORS allowlist, and whether the embedded page's CSP can name the sync origin at build
   time or needs a setting at run time.
 - **Which OIDC provider** signs the operator in, and whether to also allow only specific devices or networks in the Access policy.
-- **Approval of new devices:** whether enrollment should additionally need a confirmation on an already-enrolled device, so that
-  admin access alone cannot add a device that reads the notes.
 - **The exact CloudNativePG settings** for certificate authentication of application roles: the `pg_hba` entries and their order, and
   whether the certificate's common name must equal the role name (otherwise a `pg_ident` map). Check against the operator version
   in use and test before relying on it.
