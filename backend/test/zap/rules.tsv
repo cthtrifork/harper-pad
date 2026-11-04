@@ -1,0 +1,20 @@
+# OWASP ZAP rule overrides for the sync backend scan (backend/test/zap, .github/workflows/backend-zap.yml).
+# Columns, tab separated: rule id, FAIL | WARN | IGNORE, note. Rules not listed keep ZAP's default (WARN, which does not fail the job).
+# The FAIL rows are the OWASP Top 10 classes the service controls itself. Ids: https://www.zaproxy.org/docs/alerts/
+10020	FAIL	Anti-clickjacking header missing (A05 security misconfiguration)
+10021	FAIL	X-Content-Type-Options header missing (A05)
+10038	FAIL	Content Security Policy header not set (A05)
+10049	IGNORE	Storable and cacheable content: the health endpoints send Cache-Control: no-store, and a stub 404 is not worth a finding
+10063	IGNORE	Permissions Policy header: no page is served, only an API
+90022	FAIL	Application error disclosure (A05)
+40012	FAIL	Cross-site scripting, reflected (A03 injection)
+40014	FAIL	Cross-site scripting, persistent (A03)
+40018	FAIL	SQL injection (A03)
+40024	FAIL	SQL injection, SQLite (A03)
+40027	FAIL	SQL injection, MsSQL (A03)
+90019	FAIL	Server-side code injection (A03)
+90020	FAIL	Remote OS command injection (A03)
+6	FAIL	Path traversal (A01 broken access control)
+7	FAIL	Remote file inclusion (A01)
+90034	FAIL	Cloud metadata exposed (A10 server-side request forgery)
+40046	FAIL	Server-side request forgery (A10)
