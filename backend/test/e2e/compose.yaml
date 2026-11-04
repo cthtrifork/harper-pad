@@ -3,6 +3,7 @@
 #
 #   https://app.localhost:${E2E_PORT:-18443}   the web build (frontend/dist-web, built by `make e2e-web`)
 #   https://sync.localhost:${E2E_PORT:-18443}  harper-pad-sync, through Caddy
+# Only https is published: unlike the production ingress there is no port 80 and no redirect from http.
 name: harper-pad-e2e
 
 volumes:
@@ -72,7 +73,13 @@ services:
         condition: service_healthy
 
   caddy:
-    image: mirror.gcr.io/library/caddy:2
+    # Pinned by version and digest (Renovate updates both), so a new Caddy cannot change the stack under CI.
+    image: mirror.gcr.io/library/caddy:2.11.7@sha256:04913b1da43339a40ad1ea87827d70a576ac5aa6cf674c6e24fdca675887533a
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2020/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
     ports:
       - "${E2E_PORT:-18443}:443"
     volumes:
