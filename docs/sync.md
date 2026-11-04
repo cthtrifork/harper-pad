@@ -11,6 +11,8 @@ Goals:
 
 - The same drafts and dictionary on the desktop app and the web app (the iPhone Home Screen app is the web build).
 - Works offline: editing never waits for the network, and changes made offline are sent when the app next syncs.
+- **The device is the source of truth and the server is a supporting system.** If the whole backend is lost, syncing from a device
+  rebuilds it ([The client is the source of truth](#the-client-is-the-source-of-truth)).
 - Off by default. A user who never turns it on has no network use beyond today's update check, and the security page's
   "no server" statement stays true for them.
 - Small to run: one Go binary with one SQLite file, on the user's own domain.
@@ -22,6 +24,35 @@ Non-goals for v1:
 - **More than one user.** One server holds one user's data. There are no accounts, only devices.
 - **Real-time collaboration or merging text.** Conflicts keep both versions; they are not merged.
 - **Syncing files.** A draft's link to a file on disk stays on the device.
+
+## The client is the source of truth
+
+The server is a relay and a replica: it is what lets a second device have the same notes. Each device holds a complete copy and is
+authoritative for it. These rules apply to every part of the design below, and where something else in this page seems to
+conflict with them, they win.
+
+1. **Local first.** Every read and write uses the device's own store; sync runs behind it. The app behaves the same with sync off,
+   the server down or the token revoked, and a failed sync never blocks or loses an edit.
+2. **Absence is not deletion.** Only an explicit tombstone deletes a draft. A doc that is missing on the server (a new server, a
+   restore from an older backup, a failed write) is something to **upload**, never something to remove locally.
+3. **Sync never changes what the user is working on.** A pull never overwrites a draft that has unsent edits. In a conflict the
+   local text keeps its id and the other version becomes a "conflicted copy" ([Conflicts](#conflicts)), so the open editor never
+   changes under the user.
+4. **The server cannot destroy local data.** Revoking a device, an expired or invalid token, a server reset and "Sign out" all
+   leave the local drafts and settings in place; sync just stops.
+5. **Any device can rebuild the server.** See [Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server).
+6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll), version history, tombstones and
+   the cursor are the only such things; in v2 the key bag is also kept on each device.
+
+What losing the whole server costs:
+
+| Lost | Effect |
+|---|---|
+| Drafts, dictionary, ignore list | Nothing: rebuilt from the devices |
+| Devices and tokens | Every device shows "Sign in again". Run `invite` once per device; local data is untouched |
+| Version history | Older versions from before the loss cannot be restored. This is the one real loss, and the reason to back the server up anyway |
+| Tombstones | A draft deleted on one device while another was offline can **reappear** when that other device re-uploads. Harmless and rare: delete it again |
+| v2 key bag | Re-uploaded from a device's local copy ([v2](#v2-end-to-end-encryption)) |
 
 ## Decisions
 
@@ -35,7 +66,8 @@ Non-goals for v1:
 | Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
 | Stolen-token hardening | v1: version history, a device list with last-seen and a 30-day idle expiry, "sign out other devices". v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None in v1 (TLS only); end-to-end in v2 | Keeps the first version small; see [v2](#v2-end-to-end-encryption) |
-| Conflicts | Server-assigned versions; the loser becomes a "conflicted copy" draft | Never loses text, no merge logic |
+| Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
+| Source of truth | The device. The server can be rebuilt from any device | A supporting system must not be able to lose or destroy notes; see [the principles](#the-client-is-the-source-of-truth) |
 
 ## Overview
 
@@ -198,12 +230,25 @@ JSON over HTTPS. Every route except `/enroll` needs the bearer token.
 A change is accepted only if `baseVersion` equals the server's current version for that id (0 for a new one). Otherwise the server
 answers `conflict` and includes its copy. A deletion is a change with `deleted: true`.
 
+**Rebuilding.** Two rules let a device re-upload everything to an empty or older server without conflicts:
+
+- Every response carries the server's `serverId`, a random id made when its database is created. The client stores it with its
+  cursor ([Rebuilding a lost or restored server](#rebuilding-a-lost-or-restored-server)).
+- A push with `baseVersion` 0 for an id the server already has is accepted when the data is **identical** (the answer is `ok`
+  with the current version) or when the pushed `updatedAt` is **newer** than the server's (the server's old state goes to
+  [history](#history)). Otherwise it is a `conflict`. A normal new draft never hits this, because ids are unique.
+
 ### Conflicts
 
-When a push comes back `conflict`, the client keeps the server's copy under the original id and saves its own text as a **new
-draft** whose title line is prefixed with "Conflicted copy" and the device name, then pushes that as a new doc. Nothing is lost
-and the user decides which to keep. Delete versus edit follows the same rule: an edit to a doc deleted elsewhere is restored
-(this matches how "undo delete" works today); a deletion of a doc edited elsewhere is dropped and the edit survives.
+When a push comes back `conflict`, the device keeps its own text under the original id and saves the server's copy as a **new
+draft** whose title line is prefixed with "Conflicted copy", then pushes both: its own text on top of the server's version, and
+the conflicted copy as a new doc. Nothing is lost and the user decides which to keep. The local text keeps its id because it is what
+the user may have open and be typing in ([the principles](#the-client-is-the-source-of-truth), rule 3). Other devices then receive
+the new text under the original id and the conflicted copy as a new draft.
+
+A pull never overwrites a draft that has unsent edits: that draft is pushed first and handled as above if the server disagrees.
+Delete versus edit follows the same rule: an edit to a doc deleted elsewhere is restored (this matches how "undo delete" works
+today); a deletion of a doc edited elsewhere is dropped and the edit survives.
 
 Dictionary words merge as a set union; a word removed on one device and not on another comes back, which is the safe
 direction for a dictionary. The ignore list is replaced as a whole by the newer version (it is Harper's own export, which the app
@@ -211,8 +256,31 @@ cannot merge).
 
 ### First sync
 
-If a device has local drafts when it enrolls, the app offers **Merge** (the default: upload local drafts as new docs and pull remote
-ones), **Replace local with the server's** and **Cancel**. Merge cannot overwrite anything, because ids are unique.
+When a device enrolls it **merges**: it uploads its local drafts as new docs and pulls the remote ones. Merge cannot overwrite
+anything, because ids are unique, and there is no "replace local with the server's" choice, because the server must not be able to
+discard what a device holds ([the principles](#the-client-is-the-source-of-truth), rule 4). A user who wants a clean device deletes
+the drafts on it first, which is an ordinary delete.
+
+### Rebuilding a lost or restored server
+
+The server can lose state in two ways: it is **replaced by an empty one**, or **restored from an older backup**. The client
+notices either and re-uploads what the server lacks.
+
+- **Detecting it.** The client stores the `serverId` it last saw and its cursor. A different `serverId` (a new database), or a
+  cursor higher than the server's change counter (an older backup), means the server's state no longer matches. A token the new
+  server does not know is a 401, so devices first show "Sign in again" and re-enroll with a fresh invite; the first sync after
+  that takes the same path.
+- **Resetting the sync state.** The client keeps all drafts and settings, marks every one as dirty with `server_version` 0, sets the
+  cursor to 0, drops pending tombstones (a delete that the lost server never saw is moot), and stores the new `serverId`. Then
+  it runs a normal sync: the push uploads everything, in resumable chunks, keeping each draft's own `created_at` and `updated_at`.
+- **Several devices.** The first device to sync repopulates the server. Each later device pushes the same ids with `baseVersion` 0;
+  the push rules in [Protocol](#protocol) make identical content a no-op, so they converge without conflicted copies. Devices
+  that diverged (an edit made while the server was gone) produce one conflicted copy, as usual. In v2 the data is encrypted with
+  fresh nonces, so the server cannot compare content: it answers `conflict`, and the client decrypts the server's copy, finds it
+  equal to its own, and adopts the version without making a conflicted copy.
+- **What the operator does.** Start the new server, run `harper-pad-sync invite`, paste the URL on each device. Nothing else.
+- **Cost.** The whole data set is uploaded once. With the 5 MB per-draft limit and a personal collection this is small, but it is
+  chunked and resumable, so a phone that is suspended partway carries on later.
 
 ### When it runs
 
@@ -234,7 +302,10 @@ The groundwork, and the riskiest part, because it touches both storage engines. 
 - **Migrations.** SQLite `PRAGMA user_version` 2 to 3, and `DB_VERSION` for IndexedDB, both upgrading an old database in place
   and refusing a newer one as they do now. Update the shared fixtures so the Go and the frontend tests keep checking the same
   cases.
-- **Device-local sync settings** (server URL, device token, cursor, device name) live outside the synced `settings` table so they
+- **Rebuild support.** The device also stores the `serverId` it last saw, and a "reset sync state" operation that sets every draft
+  dirty with `server_version` 0, clears pending tombstones and zeroes the cursor
+  ([Rebuilding](#rebuilding-a-lost-or-restored-server)). Pulling must skip any draft with `dirty` set.
+- **Device-local sync settings** (server URL, device token, cursor, `serverId`, device name) live outside the synced `settings` table so they
   are never uploaded. On desktop that is a separate table or key set; in the browser a separate IndexedDB key.
 - New host calls go through `backend.js` with both implementations, as [pages](pages.md) requires. New Go service methods mean
   running `make bindings`.
@@ -263,7 +334,9 @@ see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees size
 
 One binary, a data directory, and a reverse proxy (Caddy, nginx or similar) that terminates TLS for the domain and proxies to the
 binary on a local port. The binary refuses to run an unauthenticated listener on a public interface without TLS in front (it
-checks `X-Forwarded-Proto` or an explicit `--behind-proxy` flag). The SQLite file is the only state and is backed up like any
+checks `X-Forwarded-Proto` or an explicit `--behind-proxy` flag). The SQLite file is the only state. Backing it up is **recommended
+but not required for the notes' safety**, because every device holds a full copy and can rebuild the server; a backup preserves what
+devices do not have: version history, tombstones and the device list. It is backed up like any
 other file; it uses the same rollback journal setup as [storage](storage.md#practices-in-use), so a copy at rest is one file.
 
 CLI: `harper-pad-sync serve`, `invite`, `devices`, `revoke <id>`.
@@ -335,6 +408,10 @@ is. There is **no feature loss from hiding the text**: search already runs on ea
   2. **Recovery key.** A generated 160-bit secret shown once as groups of Base32 characters, to be saved in a password manager or
      printed. It wraps the same DK, so a forgotten passphrase is recoverable, and because it is high entropy it cannot be guessed
      offline.
+- **A local copy of the key bag** on every device that has unlocked it. It is only ciphertext (the data key wrapped by the
+  passphrase and recovery key), so keeping it is safe. It is what lets a device restore the server's key bag after a loss without
+  ever exposing the data key, which the web build holds as a non-extractable handle and cannot re-wrap. A device re-uploads it
+  before any doc ([principles](#the-client-is-the-source-of-truth), rule 6).
 - **Check value:** the key bag also holds a small known string encrypted under the DK, so a wrong passphrase is rejected on the
   device, before anything is decrypted.
 - **Passphrase change:** unwrap the DK, wrap it again under the new key-encryption key, and upload the key bag with a

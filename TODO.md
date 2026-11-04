@@ -52,6 +52,9 @@ never run on a real desktop yet.
 - [ ] The server (`harper-pad-sync`): enrollment, sync, devices, history, the CLI, tests. Decide whether it lives in this repository
       (see the open questions in `docs/sync.md`).
 - [ ] The sync module (`lib/sync.js`) with unit tests and an end-to-end test against the real server.
+- [ ] A "lose the server" test in the end-to-end suite: sync two devices, wipe the server's database, re-enroll, and check that
+      the server is rebuilt with identical drafts and no conflicted copies; then restore an older backup and check the same,
+      and that a draft deleted elsewhere while a device was offline can reappear (documented), but nothing else is lost.
 - [ ] The enrollment and status UI: follow `docs/design-cheatsheet.html`, short eased transitions, reduced motion honoured.
 - [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md`, `architecture.md`, `pages.md`, `AGENTS.md`, and a server
       operations page.
