@@ -32,10 +32,10 @@ never run on a real desktop yet.
 
 ## 4. Sync (proposal: `docs/sync.md`)
 
-- [ ] **iPhone check for the device-bound key** (decides whether v1.1 hardening goes ahead as written). A throwaway page
+- [ ] **iPhone check for the device-bound key** (decides whether the device-bound key stays as designed). A throwaway page
       (`frontend/web/key-test.html`, PR #86, published as a pull request preview, not merged) checks it. **Done on 4 November 2026**
       on an iPhone, in a Safari tab and as a Home Screen app: key generation, storing only the private `CryptoKey`, `exportKey`
-      refused, raw `r||s` signatures that verify against the saved public key, the v2 HKDF data key and a derived AES-GCM key, and
+      refused, raw `r||s` signatures that verify against the saved public key, an HKDF data key and a derived AES-GCM key (for the encryption option), and
       Argon2id at 32, 64 and 128 MiB (about 0.1 to 0.2 s, no page kill). The keys survived closing and reopening the Home Screen
       app. `persist()` returned false. Results are recorded in `docs/sync.md`.
   - [ ] **Still to do:** open the Home Screen app again after a few hours, a day, a week and a phone restart, and look for "Key from
@@ -62,6 +62,3 @@ never run on a real desktop yet.
       motion honoured.
 - [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md`, `architecture.md`, `pages.md`, `AGENTS.md`, and a server
       operations page.
-- [ ] v2, end-to-end encryption (`docs/sync.md`, "v2"): after v1 is in use. `lib/crypto.js` with shared test vectors, the
-      Argon2id worker, key bag endpoints, envelope validation on the server, and the setup, unlock,
-      change-passphrase and rotate-key screens.

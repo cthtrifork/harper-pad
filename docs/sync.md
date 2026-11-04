@@ -21,8 +21,9 @@ Non-goals for v1:
 
 - **Syncing settings.** The personal dictionary, the ignore list, text size and every other setting stay on the device. What
   syncs is notes. Settings can be added later ([Later](#later)).
-- **End-to-end encryption.** In v1 the server can read drafts. The wire format keeps the draft as an opaque string, so v2
-  ([v2: end-to-end encryption](#v2-end-to-end-encryption)) can add encryption without changing how docs are pushed and pulled.
+- **End-to-end encryption.** The server can read drafts. The wire format keeps the draft as an opaque string, so an encryption
+  design ([Option: end-to-end encryption](#option-end-to-end-encryption)) could be added without changing how docs are pushed and
+  pulled. It is an option and is not planned.
 - **More than one client account in v1.** A *client account* is the owner of a set of notes and devices. Everything the server
   stores carries a `client_id` and every device is bound to one, so a second account can be added later without reshaping the
   schema, but v1 has exactly one and nothing creates another. (In this document "the client" is still the app's sync code; the
@@ -49,7 +50,7 @@ conflict with them, they win.
    directions, so a lost or new server is repopulated by enrolling the devices and running Sync all; nothing in the client is
    special-cased for it.
 6. **What only the server holds is disposable or re-creatable.** Devices and tokens (re-enroll) and tombstones
-   are the only such things; in v2 the key bag is also kept on each device.
+   are the only such things.
 
 What losing the whole server costs:
 
@@ -58,7 +59,6 @@ What losing the whole server costs:
 | Drafts | Nothing: rebuilt from the devices |
 | Devices and tokens | Every device shows "Sign in again". Create one enrollment URL per device in the admin UI; local data is untouched |
 | Tombstones | A draft deleted on one device while another was offline can **reappear** when that other device re-uploads. Harmless and rare: delete it again |
-| v2 key bag | Re-uploaded from a device's local copy ([v2](#v2-end-to-end-encryption)) |
 
 ## Decisions
 
@@ -72,9 +72,9 @@ What losing the whole server costs:
 | Code layout | `backend/` in this repository, as its **own Go module that shares no code with the app**; the sync client stays in the frontend | The overlap is about 30 lines of draft rules, and a shared module or a single module costs more than writing them twice. The end-to-end test runs the real client against the real server, which is what catches drift. The release workflow gains two artifacts, the sync and admin images |
 | Client accounts | One in v1, modelled as many: a `clients` table, a `client_id` on every row, and every device bound to one account | More accounts later need no schema change. No sharing between accounts, no user management in v1 |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
-| Auth | One opaque, long-lived bearer token per device, no refresh tokens | See [Authentication](#authentication) |
-| Stolen-token hardening | v1: a device list with last-seen, and revoking in the admin UI. v1.1: a device-bound signing key | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
-| Encryption of content | None in v1 (TLS only); end-to-end in v2 | Keeps the first version small; see [v2](#v2-end-to-end-encryption) |
+| Auth | One opaque, long-lived bearer token per device, plus a signature from a device-bound key on every request; no refresh tokens | See [Authentication](#authentication) |
+| Stolen-token hardening | A device list with last-seen, revoking in the admin UI, and a **device-bound signing key** that makes a copied token useless | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
+| Encryption of content | None (TLS only). End-to-end encryption is an option, not planned | The server can read the notes; see [the option](#option-end-to-end-encryption) |
 | Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; a lost or emptied server is repopulated by the same Sync all |
 | Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
 | Source of truth | The device. The server can be rebuilt from any device | A supporting system must not be able to lose or destroy notes; see [the principles](#the-client-is-the-source-of-truth) |
@@ -153,7 +153,7 @@ verify the server certificate (`sslmode=verify-full`, with the cluster's server 
 
 | Role | Used by | Allowed |
 |---|---|---|
-| `harper_sync` | `harper-pad-sync` | Owns the tables and runs the migrations at start (including the grants to `harper_admin`); reads and writes `docs`, `meta` (and the key bag in v2), `devices` and `invites` |
+| `harper_sync` | `harper-pad-sync` | Owns the tables and runs the migrations at start (including the grants to `harper_admin`); reads and writes `docs`, `meta`, `devices` and `invites` |
 | `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL, and it cannot change the schema |
 
 ### The admin UI
@@ -199,8 +199,7 @@ authentication:
   read notes does not make a compromised admin UI harmless. Whoever controls the operator's identity provider account, the
   Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
   the Cloudflare account are part of the security of the notes. Mitigations in this design: the "new device enrolled" notice on
-  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and in v2 a new device also needs the passphrase or
-  recovery key. A further option is to require approval of a new device on an already-enrolled one (open question).
+  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and a new device can read everything it syncs. A further option is to require approval of a new device on an already-enrolled one (open question).
 - **The Access configuration is the whole of the admin UI's access control.** If the Access application or its policy is removed or
   loosened, or the tunnel's hostname is pointed at the app without an Access application, the admin UI is open to the internet
   and the app has no second check. The loopback listener and the NetworkPolicy keep every other route closed. Treat the
@@ -223,7 +222,7 @@ sequenceDiagram
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
   Op->>Dev: Paste in Settings, Sync, Add this device
-  Dev->>API: POST /enroll {invite, deviceName}
+  Dev->>API: POST /enroll {invite, deviceName, publicKey}
   API->>DB: Spend invite, INSERT device (token hash)
   API-->>Dev: device token
   Dev->>API: Sync all with the bearer token (GET /docs, PUT /docs/{id})
@@ -239,8 +238,9 @@ Every device, including the first, enrolls the same way.
    device it enrolls is bound to that account for good.
 2. On the device: Settings, Sync, **Add this device**, then paste the URL. The URL carries the server address and the token, so
    there is no separate server field.
-3. The app generates nothing secret itself. It calls `POST /enroll` with the invite token and a device name and gets back a device
-   token. The invite is now spent.
+3. The app generates a signing key pair whose private key never leaves the device ([the device-bound key](#limiting-the-damage-of-a-stolen-device)),
+   and calls `POST /enroll` with the invite token, a device name and the public key. It gets back a device token. The invite is now
+   spent.
 4. The app stores the device token and runs the first sync ([First sync](#first-sync)).
 
 Why paste instead of opening the link: on iPhone, a tapped link opens Safari, which has separate storage from the installed Home
@@ -253,7 +253,8 @@ short, and honour reduced motion.
 
 ## Authentication
 
-After enrollment every request carries `Authorization: Bearer <device token>`.
+After enrollment every request carries `Authorization: Bearer <device token>` and a `Harper-Proof` signature made with the device's
+key ([below](#limiting-the-damage-of-a-stolen-device)).
 
 - The token is 256 bits from a cryptographic random source. The server stores only its SHA-256 (a fast hash is enough for a
   high-entropy secret) and looks it up in constant time.
@@ -279,15 +280,15 @@ Two different attackers need different answers, and the design treats them separ
 
 | Attacker | What they have | What helps |
 |---|---|---|
-| **Copies the token** (a backup, a disk image, a dump of IndexedDB) but does not keep the device | The bearer token | A device-bound key (v1.1); revocation |
+| **Copies the token** (a backup, a disk image, a dump of IndexedDB) but does not keep the device | The bearer token | The device-bound key below; revocation |
 | **Uses the unlocked device** (or script running in the page) | The token, the key, and the drafts themselves | Revocation and the strict CSP. Nothing else can stop a legitimate client being used, and its edits and deletions sync to the other devices; there is no server-side undo in v1 (see [Later](#later)) |
 
-**v1 (cheap, covers both):**
+**Device list, notices and revocation (cover both):**
 
 - **A device list** with name, created, last-seen, and the user agent, in the admin UI, where a device is also revoked.
 - **A notice** (a banner on the next open of each device) when a device enrolls or is revoked.
 
-**v1.1: a device-bound signing key (proof of possession, in the style of DPoP, RFC 9449).**
+**A device-bound signing key (proof of possession, in the style of DPoP, RFC 9449), part of v1.**
 
 At enrollment the device generates an ECDSA P-256 key pair and sends the public key (JWK) with `POST /enroll`; the server stores it
 on the device row. After that, every request carries the bearer token **and** a proof header:
@@ -314,8 +315,6 @@ Details that are easy to get wrong:
   split it into two 32-byte integers and call `ecdsa.Verify`.
 - **Losing the key means re-enrolling.** If the browser or iOS clears storage, the proof fails and the client shows "Sign in
   again", the same recovery as a revoked token. Call `navigator.storage.persist()` (`keepData()`) as the app already does.
-- **Fallback during rollout:** a device enrolled without a key (v1) keeps working with the bearer token alone until the operator
-  turns on `--require-proof`. The client re-enrolls to get a key.
 - **Limits:** it does not stop script running in the page, or someone using the unlocked device, because both can ask the key to
   sign. The RFC says the same of DPoP. Only preventing XSS (the strict CSP in [security](security.md)) addresses the first, and
   revocation the second.
@@ -323,10 +322,10 @@ Details that are easy to get wrong:
   `iPhone OS 18_7` with Safari `Version/27.0.1`), in a Safari tab and in an installed Home Screen app: a non-extractable ECDSA
   P-256 key is generated, **only the private `CryptoKey`** is stored in IndexedDB and read back, `exportKey` on it is refused, a
   signature is raw `r||s` (64 bytes) and verifies against the public key saved at the first run, and a tampered signature is
-  rejected. The key and the v2 data key both **survived closing and reopening the Home Screen app** (39 seconds later, the same key,
-  not a new one). A Home Screen app starts with its own empty storage, so a device enrolls inside the installed app, as designed.
+  rejected. The key, and a second non-extractable key used to test the encryption option, both **survived closing and reopening the Home Screen
+  app** (39 seconds later, the same keys, not new ones). A Home Screen app starts with its own empty storage, so a device enrolls inside the installed app, as designed.
   `navigator.storage.persist()` returned false in both, so iOS promises nothing. **Still open:** whether the key survives a day, a
-  week and a phone restart. The step goes ahead as written, with the rotation fallback if the key turns out to be cleared.
+  week and a phone restart. The key is part of v1, with the rotation fallback below if it turns out to be cleared.
 
 **Not planned:** rotating the token on a schedule with reuse detection, and a separate refresh token. A device-bound key covers the
 copied-token case better and has no refresh race (two tabs, the service worker, a response lost when iOS suspends the app). If the
@@ -351,7 +350,7 @@ can create drafts offline without colliding.
 ```sql
 CREATE TABLE meta (
   key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL                             -- 'schema_version', (v2) 'encrypted'
+  value TEXT NOT NULL                             -- 'schema_version'
 );
 
 CREATE TABLE clients (                            -- client accounts: one row in v1, inserted by the first migration
@@ -377,7 +376,7 @@ CREATE TABLE devices (
   name       TEXT   NOT NULL,
   user_agent TEXT   NOT NULL DEFAULT '',
   token_hash BYTEA  NOT NULL UNIQUE,              -- SHA-256 of the bearer token; it alone identifies the device and so its client account
-  public_key TEXT   NOT NULL DEFAULT '',          -- v1.1: the device's signing key (JWK)
+  public_key TEXT   NOT NULL,                     -- the device's signing key (JWK), sent at enrollment
   created_at BIGINT NOT NULL,
   last_seen  BIGINT NOT NULL
 );
@@ -390,13 +389,6 @@ CREATE TABLE invites (
   created_at  BIGINT NOT NULL,
   expires_at  BIGINT NOT NULL,
   used_at     BIGINT                              -- NULL until spent
-);
-
--- v2 only, in a later migration
-CREATE TABLE keybag (
-  client_id BIGINT PRIMARY KEY REFERENCES clients (id),  -- one key bag per client account
-  version   BIGINT NOT NULL,                      -- compare-and-set
-  data      TEXT   NOT NULL                       -- opaque JSON: wrapped data key, KDF parameters, check value
 );
 ```
 
@@ -431,7 +423,7 @@ How it is used:
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector in
   **New enrollment URL**, and per-account operators (see Later).
 - **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
-- **The 8 MiB check** is a backstop. The app enforces the 5 MB draft limit, and v2's base64 envelope is larger than the plaintext.
+- **The 8 MiB check** is a backstop. The app enforces the 5 MB draft limit, and a base64 envelope (the encryption option) would be larger than the plaintext.
 
 The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `$1`-style parameters.
 
@@ -442,7 +434,7 @@ assigns each draft a version, and it never merges, never makes copies and has no
 
 | Route | Purpose |
 |---|---|
-| `POST /enroll` | `{invite, deviceName}` returns `{deviceToken}`. Spends the invite. |
+| `POST /enroll` | `{invite, deviceName, publicKey}` returns `{deviceToken}`. Spends the invite and registers the device's public key. |
 | `GET /docs?after=<id>&limit=<n>` | The state of every draft of the client account, **without text**: `[{id, version, updatedAt, deleted}]`, in id order and paged. Tombstones are included. |
 | `GET /docs/<id>` | One draft with its text: `{id, version, createdAt, updatedAt, deleted, data}`, or 404 if the server has no such id. The `ETag` is the draft's `updatedAt` and `deleted`; `If-None-Match` returns 304 when they match. |
 | `PUT /docs/<id>` | `{base: {version, updatedAt}, createdAt, updatedAt, deleted, data}`. Accepted only if the stored draft matches `base` (version 0 for an id the server does not have). 200 returns `{version}`; otherwise 409 returns the server's current copy. A deletion is `deleted: true` with empty `data`. |
@@ -453,6 +445,8 @@ assigns each draft a version, and it never merges, never makes copies and has no
   matter.
 - **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed. `base` carries
   `updatedAt` too, so a write is checked against the exact state the device saw.
+- **Every route except `/enroll` also needs a valid `Harper-Proof` header** ([the device-bound key](#limiting-the-damage-of-a-stolen-device)),
+  so CORS allows `Authorization`, `Harper-Proof` and `Content-Type`.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
 
 ### When sync happens
@@ -628,8 +622,8 @@ This is a bearer-token model with transport security and no content encryption.
 | Concern | Handling |
 |---|---|
 | Transport | HTTPS only, on a Let's Encrypt certificate (cert-manager) for the sync domain, terminated at the cluster's ingress, with HTTP redirected and HSTS set. The client refuses an `http:` server. |
-| Who can read the data | The server and its operator; content is not encrypted until v2. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
-| Stolen device token | Revoke that device in the admin UI; from v1.1 a device-bound key makes a copied token useless. The token grants only its client account's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
+| Who can read the data | The server and its operator; content is not end-to-end encrypted. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
+| Stolen device token | Revoke that device in the admin UI; the device-bound key makes a copied token useless. The token grants only its client account's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Isolation between client accounts | The account is taken from the token's device row and never from the request; every query on account data filters on it; one account per server in v1, so it is a guard for the future. Before a second account is created, consider PostgreSQL row-level security as a second layer (`FORCE ROW LEVEL SECURITY`, because the sync role owns the tables, and a `SET LOCAL` of the account per transaction), and test that two accounts cannot see each other's drafts or devices. |
 | Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles for sync and admin, the admin one with least privilege ([Database access](#database-access)). |
@@ -642,8 +636,8 @@ This is a bearer-token model with transport security and no content encryption.
 | Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted; there is no OS keyring in the web build. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |
 
-Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data in v1; in v2 it has only ciphertext,
-see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees sizes and times).
+Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data; the [encryption option](#option-end-to-end-encryption) would leave it only
+ciphertext), and traffic analysis (the server sees sizes and times).
 
 ## Deploying the server
 
@@ -661,7 +655,7 @@ GitOps repository, not in this one (this section is their specification):
   `Certificate` (Let's Encrypt) and these middlewares: redirect HTTP to HTTPS, HSTS and standard security headers, a rate limit
   per client IP, and a request body cap slightly above the largest allowed request. CORS stays in the app, with its explicit
   allowlist. The app takes the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but the ingress controller connect to
-  it. The in-memory rate limiter and, from v1.1, the proof nonce cache are per pod, so move them to PostgreSQL before running
+  it. The in-memory rate limiter and the proof nonce cache are per pod, so move them to PostgreSQL before running
   more than one replica.
 - **`harper-pad-admin`:** a Deployment (one replica) with **no Service**. The pod has the app container, listening on
   127.0.0.1, and a `cloudflared` sidecar (a native sidecar container where the cluster supports them, so the tunnel is up before
@@ -735,14 +729,12 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 
 1. **Local groundwork.** Tombstones, dirty tracking, the apply-remote store method, both migrations, with tests for the Go store and
    the web store.
-2. **The server.** Enrollment, sync, devices, the admin container, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
-3. **The sync module** (`lib/sync.js`), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
+2. **The server.** Enrollment (registering the device's public key), the draft endpoints (checking each request's signature), devices, the admin container, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
+3. **The sync module** (`lib/sync.js`) and the device key (generate it at enrollment, store the private key, sign every request), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
    with Node's runner against fixtures, and the [end-to-end test](#end-to-end-test) against the real server.
 4. **UI:** the enrollment and status screens, the device list and the status bar state.
 5. **Docs and policy:** the changes below, and the CSP change.
-6. **Hardening (v1.1):** the device-bound signing key, after the iPhone check in `TODO.md` passes. The device
-   list is in steps 2 and 4, not here.
-7. **v2:** end-to-end encryption ([v2](#v2-end-to-end-encryption)), after v1 is in use. It is independent of step 6.
+6. **Option, not planned:** end-to-end encryption ([the option](#option-end-to-end-encryption)). The device list is in steps 2 and 4.
 
 ## Documentation changes
 
@@ -769,11 +761,13 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
   and restart checks are still running (`TODO.md`).
 - **How large the first upload can be** before it needs chunking, given the 5 MB per draft limit.
 
-## v2: end-to-end encryption
+## Option: end-to-end encryption
 
-Status: proposal, after v1 and the v1.1 device key. Goal: **the server stores only ciphertext**, so a compromised server, a stolen
-copy of its database or a copied device token reveals no draft text. This does not need a new kind of server: it still stores
-and returns opaque `data` strings by id and version.
+Status: **an option, not planned.** It is kept so that choosing it later would not need a different server. Goal: **the server
+stores only ciphertext**, so a compromised server, a stolen copy of its database or a copied device token reveals no draft text.
+This does not need a new kind of server: it still stores and returns opaque `data` strings by id and version. A new device can
+only read the notes with a secret (the recovery key or the passphrase below) or from another enrolled device, so without v1's
+"enroll and sync" shortcut, losing every device and the secret loses the notes.
 
 ### What the server sees afterwards
 
@@ -793,7 +787,7 @@ is. There is **no feature loss from hiding the text**: search already runs on ea
 - **Cipher:** AES-256-GCM through WebCrypto, native in every browser including iOS Safari and in the desktop webview, so the sync
   module needs no crypto library for the data itself. (XChaCha20-Poly1305 is not in WebCrypto.)
 - **Key bag on the server** (one per client account): the DK **wrapped** (AES-GCM) by a key-encryption key, plus the KDF parameters, so devices can fetch it.
-  It holds one wrapping per unlock method, and the first version has two:
+  It holds one wrapping per unlock method, and the sketch has two:
   1. **Passphrase.** The key-encryption key is `Argon2id(passphrase, salt)` with parameters stored in the key bag. The default is
      **32 MiB, 3 passes, 1 lane**, which is above OWASP's minimum of 19 MiB, 2 iterations and 1 lane; a device refuses a key bag
      below that floor, so the parameters cannot be weakened. They can be raised later, by re-wrapping the key with a stronger
@@ -807,7 +801,7 @@ is. There is **no feature loss from hiding the text**: search already runs on ea
 - **A local copy of the key bag** on every device that has unlocked it. It is only ciphertext (the data key wrapped by the
   passphrase and recovery key), so keeping it is safe. It is what lets a device re-create the server's key bag on a new server without
   ever exposing the data key, which the web build holds as a non-extractable handle and cannot re-wrap. A device re-uploads it
-  before any doc ([principles](#the-client-is-the-source-of-truth), rule 6).
+  before any doc.
 - **Check value:** the key bag also holds a small known string encrypted under the DK, so a wrong passphrase is rejected on the
   device, before anything is decrypted.
 - **Passphrase change:** unwrap the DK, wrap it again under the new key-encryption key, and upload the key bag with a
@@ -844,22 +838,8 @@ key, which lets a later rotation tell old blobs from new ones.
 
 | Build | Storage |
 |---|---|
-| Web (iPhone Home Screen app, browsers) | After unlocking, the DK is imported as a **non-extractable** WebCrypto key (HKDF material) and only that handle is stored in IndexedDB, so the passphrase is entered once per device. Same assumption as the v1.1 device key, and the same iPhone check in `TODO.md` covers it. |
+| Web (iPhone Home Screen app, browsers) | After unlocking, the DK is imported as a **non-extractable** WebCrypto key (HKDF material) and only that handle is stored in IndexedDB, so the passphrase is entered once per device. The iPhone check in `TODO.md` showed this works, as for the device key. |
 | Desktop | The OS keyring where there is one; otherwise a file readable only by the user, or ask for the passphrase at each start (a setting). |
-
-### Turning it on (migration from v1)
-
-1. The user picks **Turn on encryption** on a device (this is the one place that needs a device already enrolled and synced).
-2. The app makes the DK, shows the recovery key, asks for a passphrase and uploads the key bag. From now on the server **rejects any
-   `data` that is not an envelope** (`encrypted` flag on the server, set by the first key bag), and any request from a client that
-   does not send `Harper-Protocol: 2` gets an error telling it to update. Without this, an old client would quietly keep
-   uploading plaintext.
-3. The device re-encrypts and pushes every local doc as a new version. Other devices see the key bag, prompt for the
-   passphrase, unlock and carry on.
-4. **Plaintext remains in any copy of the database** made before this step, and the operator has to destroy those. The server
-   keeps no other old copies, because there is no history. The settings screen says this.
-
-New devices after step 3 enroll as in v1, then are asked for the passphrase or recovery key before the first sync.
 
 ### Rotating the key
 
@@ -868,23 +848,23 @@ old `kid` is no longer accepted by the server for new writes. Other devices unlo
 a device that held the DK, or after a passphrase or recovery key may have leaked. It re-uploads everything, so it is slow on a
 phone with many drafts, and it runs in chunks that can be resumed.
 
-### Changes beyond v1
+### What it would take
 
-- **Server:** key bag endpoints (`GET` and `PUT /keys`, with compare-and-set), envelope shape validation, the `encrypted` flag and the
-  protocol version check. Storage is unchanged; it holds ciphertext.
+- **Server:** a `keybag` table (one row per client account: `client_id` primary key, `version` for compare-and-set, and an opaque
+  `data` JSON with the wrapped data key, the KDF parameters and the check value), key bag endpoints (`GET` and `PUT /keys`, with
+  compare-and-set) and a check that a draft's `data` has the envelope shape. Storage is otherwise unchanged; it holds ciphertext.
 - **Client:** a `lib/crypto.js` (HKDF, AES-GCM, the envelope, the key bag) with test vectors checked in as shared fixtures like the
   existing Go and frontend tests, plus the Argon2id worker and the unlock, setup, change-passphrase and rotate screens.
-- **Docs:** [security](security.md) (the new table above), and the operations page (destroying old plaintext copies).
 
-### Open questions for v2
+### Open questions for the option
 
 - **Argon2id memory on an iPhone: answered.** In the installed Home Screen app, Argon2id (hash-wasm 4.12.0, in a worker, 3 passes,
   1 lane) ran at 32, 64 and 128 MiB in about 101, 107 and 218 ms, with no page kill and no warning. That is one phone on one iOS
   version, so an older, low-memory device may differ, which is why the default stays at 32 MiB and not higher.
-- **Which Argon2id WebAssembly package** to pin, and whether to keep it lazy-loaded so v1 users do not pay for it.
+- **Which Argon2id WebAssembly package** to pin, and whether to keep it lazy-loaded so people who never turn it on do not pay for it.
 - **Device pairing** as a third unlock method: an enrolled device wraps the DK to the new device's public key (ECDH P-256, in
   WebCrypto) through the server, after the user confirms a fingerprint on both. It avoids typing the passphrase on a phone but
-  needs both devices online; leave it for after the first v2 release.
+  needs both devices online; leave it for later.
 - **Whether to encrypt the id and times.** Not planned; it would break listing and conflict handling.
 
 ## Later
