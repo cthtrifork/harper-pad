@@ -1,8 +1,12 @@
 name: Pages
 
-# Builds the web version of the frontend (`vite build --mode web`, see docs/pages.md) and publishes it to the root of the gh-pages
-# branch on every push to main. Pull requests only build it, so a broken web build is caught before merge. Opt-in previews of a pull
-# request go to pr-<number>/ on the same branch (preview.yml); this workflow leaves them alone.
+# Builds the web version of the frontend (`vite build --mode web`, see docs/pages.md) and publishes it to the gh-pages branch, which follows
+# the versions of the app:
+#   - /          the latest release. release.yml calls this workflow (workflow_call) once a final release is published, with its tag;
+#                running it by hand on a tag ref (Actions > Pages > Run workflow, "Use workflow from" a tag) redeploys that version.
+#   - /preview/  the head of main, on every push to main that touches the frontend (or a manual run on a branch).
+#   - /pr-<n>/   opt-in previews of a pull request (preview.yml); this workflow leaves them alone.
+# Pull requests only build it, so a broken web build is caught before merge.
 # The site is https://<owner>.github.io/harper-pad/, or the repository's custom domain (Settings > Pages) at its root; the build reads
 # which one from the Pages settings (configure-pages), so nothing here names a domain.
 #
@@ -20,12 +24,18 @@ on:
       - scripts/pages-publish.sh
       - .github/workflows/pages.yml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: The release tag (v1.2.3) to publish to the root of the site
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.event.pull_request.number || github.ref }}
+  group: pages-${{ github.event.pull_request.number || inputs.tag || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -35,15 +45,29 @@ jobs:
     timeout-minutes: 10
     permissions:
       pages: read # configure-pages reads the Pages settings (custom domain or not) to work out the site's base path
+    outputs:
+      release: ${{ steps.target.outputs.release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # A release call builds its tag; everything else builds the ref that triggered the run.
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
           persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .tool-versions
           package-manager-cache: false
+
+      # A release (called with a tag, or run by hand on a tag ref) goes to the root; main, a branch run and a pull request to preview/.
+      - name: Work out where this goes
+        id: target
+        env:
+          TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ -n "$TAG" ] || [ "$REF_TYPE" = tag ]; then release=true; else release=false; fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
 
       # base_path is empty on a custom domain (the site is at the root) and "/harper-pad" on <owner>.github.io.
       - id: pages
@@ -52,7 +76,9 @@ jobs:
       - name: Build the web version
         working-directory: frontend
         env:
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          # /preview/ is what tells the frontend it is not the release (src/lib/scope.js, web/sw.js): its own localStorage keys and
+          # service-worker cache on the shared origin. The IndexedDB database is shared on purpose (real data).
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}${{ steps.target.outputs.release == 'true' && '/' || '/preview/' }}
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build:web
@@ -74,7 +100,7 @@ jobs:
     permissions:
       contents: write # pushes the gh-pages branch
     # No concurrency group on purpose: a queued job that is replaced by a newer one could be a clean-up. The script retries its push when
-    # preview.yml pushed first, and the two only ever change their own folders.
+    # preview.yml pushed first, and they only ever change their own folders.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,7 +111,8 @@ jobs:
           name: site
           path: site
 
-      - name: Publish to the root of gh-pages
+      - name: Publish to gh-pages
         env:
           PAGES_REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
-        run: scripts/pages-publish.sh site site
+          MODE: ${{ needs.build.outputs.release == 'true' && 'site' || 'main' }}
+        run: scripts/pages-publish.sh "$MODE" site

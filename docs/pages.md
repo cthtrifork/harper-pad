@@ -23,9 +23,17 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 
 ## Deploying
 
-`.github/workflows/pages.yml` builds the web version on every pull request that touches `frontend/`, and on pushes to `main` publishes
-it to the root of the `gh-pages` branch with `scripts/pages-publish.sh`, which GitHub Pages serves. The site is at
-`https://<owner>.github.io/harper-pad/`, or at the root of the repository's custom domain if Settings > Pages has one (this repository: `harper.portableinfo.cloud`). The workflow asks the Pages settings which (`actions/configure-pages`) and builds with the matching `BASE_PATH`, so changing the domain needs no code change; it needs a new deploy.
+The site follows the versions of the app. `.github/workflows/pages.yml` builds the web version and `scripts/pages-publish.sh` publishes it to the `gh-pages` branch, which GitHub Pages serves:
+
+| Path | What | Published when |
+|---|---|---|
+| `/` | the latest release | `release.yml` has published a final (not pre-) release; it calls `pages.yml` with the tag, which is built, not `main` |
+| `/preview/` | the head of `main` | every push to `main` that touches `frontend/` |
+| `/pr-<n>/` | a pull request | the `preview` label, see below |
+
+Pull requests that touch `frontend/` only build it. To redeploy a release (a failed deploy does not undo the release), run **Pages** from the Actions tab with **Use workflow from** set to the tag; run on a branch it deploys that branch to `/preview/`.
+
+The site is at `https://<owner>.github.io/harper-pad/`, or at the root of the repository's custom domain if Settings > Pages has one (this repository: `harper.portableinfo.cloud`, so the preview is `harper.portableinfo.cloud/preview/`). The workflow asks the Pages settings which (`actions/configure-pages`) and builds with the matching `BASE_PATH`, so changing the domain needs no code change; it needs a new deploy. Until the first release after this change, `/` still holds the last build of `main`.
 
 ### One-time setup (repository admin)
 
@@ -38,7 +46,7 @@ it to the root of the `gh-pages` branch with `scripts/pages-publish.sh`, which G
 5. A private repository needs a GitHub plan that includes Pages for private repos. On Free, the repository must be public. Anyone
    with the URL can open the site, whatever the repository's visibility.
 
-Every later push to `main` that touches `frontend/` redeploys; nothing else to do. A deploy takes about a minute, and an installed
+Every later release and push to `main` that touches `frontend/` redeploys; nothing else to do. A deploy takes about a minute, and an installed
 phone app picks it up on its next launch (the service worker fetches the page network first).
 
 ### Previews of a pull request
@@ -48,7 +56,7 @@ publishes it to `pr-<number>/` on `gh-pages`, and posts one sticky comment with 
 (`https://harper.portableinfo.cloud/pr-123/`). Each push to the branch updates it. Removing the label, or closing or merging the pull
 request, deletes the folder. Without the label nothing is published.
 
-- **Same origin as the real site.** IndexedDB, localStorage and Cache Storage are shared by every path of an origin. The IndexedDB database
+- **Same origin as the real site.** (This holds for `/preview/` too, which is scoped like a `pr-<n>` preview: its keys end in `.preview` and its cache is `harper-pad-preview-v1`.) IndexedDB, localStorage and Cache Storage are shared by every path of an origin. The IndexedDB database
   (`harper-pad`, the dictionary and drafts) is deliberately shared, so a preview opens with the real data. That means a preview that
   changes the schema (`DB_VERSION` in `webDrafts.js`) upgrades the real database for the released site too. Older builds still open
   it, as long as the migration is backwards compatible: see [Changing the schema](#changing-the-schema). The presentation settings and the cache are scoped, so a preview cannot
@@ -60,7 +68,7 @@ request, deletes the folder. Without the label nothing is published.
   the site's domain; that is the same trust as write access to the repository.
 - **`gh-pages` is a build output.** Nothing on it is edited by hand. It keeps its history (each deploy is a commit); if it grows too large,
   delete the branch and run **Pages** again, which recreates it (open previews come back on their next push).
-- The site deploy keeps `pr-*/`, `CNAME` and `.nojekyll`, and replaces everything else.
+- The release deploy keeps `preview/`, `pr-*/`, `CNAME` and `.nojekyll`, and replaces everything else; the `main` deploy replaces only `preview/`.
 
 ### Icons
 

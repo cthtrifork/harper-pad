@@ -30,7 +30,7 @@ as an installable offline web app ([`docs/pages.md`](docs/pages.md)). Markdown s
 
 The web version is hosted on GitHub Pages at <https://harper.portableinfo.cloud/>. It runs entirely in the browser,
 keeps its data in IndexedDB, works offline after the first load, and can be added to a phone's Home Screen. It is
-redeployed from `main` by the [Pages workflow](.github/workflows/pages.yml). See [`docs/pages.md`](docs/pages.md) for how
+follows the releases: a published release replaces the site, and the head of `main` is at `/preview/` (the [Pages workflow](.github/workflows/pages.yml)). See [`docs/pages.md`](docs/pages.md) for how
 the two builds differ and how to deploy.
 
 ## Develop

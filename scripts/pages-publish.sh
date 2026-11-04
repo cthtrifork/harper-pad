@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Publishes to the gh-pages branch, which GitHub Pages serves (Settings > Pages > Source: Deploy from a branch). See docs/pages.md.
 #
-#   pages-publish.sh site <dir>         replace the site root with <dir>; the previews (pr-<n>/), CNAME and .nojekyll stay
+#   pages-publish.sh site <dir>         replace the site root with <dir> (the latest release); preview/, pr-<n>/, CNAME and .nojekyll stay
+#   pages-publish.sh main <dir>         replace preview/ with <dir> (the head of main)
 #   pages-publish.sh preview <n> <dir>  replace pr-<n>/ with <dir>
 #   pages-publish.sh remove <n>         delete pr-<n>/ (nothing to do if it is not there)
 #
@@ -9,13 +10,14 @@
 # Each call only touches its own part of the branch, so a site deploy and a preview deploy racing each other just retry on top of one another.
 set -euo pipefail
 
-usage="usage: pages-publish.sh site <dir> | preview <n> <dir> | remove <n>"
+usage="usage: pages-publish.sh site <dir> | main <dir> | preview <n> <dir> | remove <n>"
 mode="${1:?$usage}"
 remote="${PAGES_REMOTE:-origin}"
 branch="${PAGES_BRANCH:-gh-pages}"
 
 case "$mode" in
   site) src="${2:?$usage}"; msg="Deploy the site" ;;
+  main) src="${2:?$usage}"; msg="Deploy main to preview/" ;;
   preview) pr="${2:?$usage}"; src="${3:?$usage}"; msg="Deploy the preview of pull request $pr" ;;
   remove) pr="${2:?$usage}"; msg="Remove the preview of pull request $pr" ;;
   *) echo "$usage" >&2; exit 2 ;;
@@ -49,9 +51,14 @@ for attempt in 1 2 3 4 5; do
 
   case "$mode" in
     site)
-      # Everything except the previews, the custom domain file and git's own folder.
-      find . -mindepth 1 -maxdepth 1 ! -name .git ! -name CNAME ! -name .nojekyll ! -name 'pr-[0-9]*' -exec rm -rf {} +
+      # Everything except the previews (preview/ and pr-<n>/), the custom domain file and git's own folder.
+      find . -mindepth 1 -maxdepth 1 ! -name .git ! -name CNAME ! -name .nojekyll ! -name preview ! -name 'pr-[0-9]*' -exec rm -rf {} +
       cp -a "$src"/. .
+      ;;
+    main)
+      rm -rf preview
+      mkdir preview
+      cp -a "$src"/. preview/
       ;;
     preview)
       rm -rf "pr-$pr"
