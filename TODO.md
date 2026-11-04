@@ -50,7 +50,7 @@ never run on a real desktop yet.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
 - [ ] The server: `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
-      devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), two container
+      devices) behind a Cloudflare Tunnel and Access with OIDC (Cloudflare does all authentication; the app has none), two container
       images, and tests. The Kubernetes manifests are not kept in this repository; write them in the cluster's GitOps repository from
       the "Deploying the server" section of `docs/sync.md`: CloudNativePG `Cluster`, cert-manager certificates (database clients and
       the sync domain), the ingress route and middlewares for the sync API, NetworkPolicies, the admin pod with its `cloudflared`

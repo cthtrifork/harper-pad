@@ -66,7 +66,7 @@ What losing the whole server costs:
 |---|---|---|
 | Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment behind a ClusterIP Service, exposed through the cluster's ingress | Small, one static binary; applies the same draft limits as the app, written separately (see Code layout) |
 | Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service and the admin UI each get their own certificate and a role, the admin one with least privilege |
-| Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port and no login code to write; keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
+| Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port, and the app knows nothing about users or login (Cloudflare does all of it); keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
 | Hosting | Kubernetes. The sync API is exposed through the cluster's existing ingress on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([what this trusts](#what-this-trusts)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
 | Code layout | `backend/` in this repository, as its **own Go module that shares no code with the app**; the sync client stays in the frontend | The overlap is about 30 lines of draft rules, and a shared module or a single module costs more than writing them twice. The end-to-end test runs the real client against the real server, which is what catches drift. The release workflow gains two artifacts, the sync and admin images |
@@ -100,7 +100,7 @@ flowchart LR
       end
       subgraph adminpod["Pod harper-pad-admin"]
         cfd["cloudflared sidecar<br/>outbound tunnel"]
-        admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>verifies the Access token"]
+        admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>no login of its own"]
       end
       subgraph cnpg["CloudNativePG cluster"]
         pg[("PostgreSQL<br/>TLS + client-certificate auth")]
@@ -154,7 +154,7 @@ verify the server certificate (`sslmode=verify-full`, with the cluster's server 
 | Role | Used by | Allowed |
 |---|---|---|
 | `harper_sync` | `harper-pad-sync` | Owns the tables and runs the migrations at start (including the grants to `harper_admin`); reads and writes `docs`, `meta` (and the key bag in v2), `devices` and `invites` |
-| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke); `audit`: insert, select. **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL, and it cannot change the schema |
+| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL, and it cannot change the schema |
 
 ### The admin UI
 
@@ -166,28 +166,27 @@ identity provider before any request reaches the pod. The sync API is not behind
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
 agent, rename and revoke.
-There are three pages: Devices, Enrollment and Audit log. A mockup in the app's own design tokens, light and dark, is in
+There are two pages: Devices and Enrollment. A mockup in the app's own design tokens, light and dark, is in
 [`admin-ui-mockup.html`](admin-ui-mockup.html); open it in a browser. It reads the sync service's public address from its configuration, which is how it builds enrollment
-URLs, and keeps an audit log of who did what. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
+URLs. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
 account, so **New enrollment URL** has no account selector, and the admin app refuses to create an invite if it finds more than
 one client account, until a selector exists.
 
 #### Login: Cloudflare Access with OIDC
 
-- **Access application** for `admin.example.com`, with the OIDC identity provider added as its login method (MFA is enforced at the
-  identity provider). The policy allows only the operator's identity (an email, or a group at the provider), and the session is
-  short, for example a few hours.
-- **The admin app does not trust that a request came through Access.** On every request it verifies the
-  `Cf-Access-Jwt-Assertion` header: the RS256 signature against the team's signing keys (the JWKS at
-  `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, cached and refreshed when an unknown `kid` appears), `iss` equal to
-  the team domain, `aud` equal to this application's AUD tag, `exp`, and the `email` claim in the configured allowlist. It ignores
-  the plain `Cf-Access-Authenticated-User-Email` header, which anything that can reach the container could forge. A request
-  without a valid token gets a 403, so a misrouted request or something else on the internal network cannot use the admin UI.
-- **Still needed inside the app:** a CSRF token on every state-changing request and an `Origin` check against the admin host
-  (the session is a cookie), and the same strict Content-Security-Policy as the app (no inline scripts).
-- **Alternative:** skip Access and make the admin app an OIDC client itself (authorization code flow with PKCE and its own session
-  cookie) behind the tunnel. That removes the dependency on Cloudflare for authentication, at the cost of login code in the app.
-  The design uses Access plus token verification because it has no login code to write or get wrong.
+The admin app has **no login, no sessions, no token verification and no idea who is using it.** Cloudflare does all of the
+authentication:
+
+- **An Access application** for `admin.example.com`, with the OIDC identity provider as its login method. MFA is enforced at the
+  identity provider, the policy allows only your identity (an email or a group at the provider), and the session is short, for
+  example a few hours. Who may reach the admin UI is decided there and nowhere else.
+- **The only way to the app is the tunnel.** The app listens on 127.0.0.1, the pod has no Service and a NetworkPolicy allows no
+  ingress to it, so a request can only arrive through the `cloudflared` sidecar, and the tunnel serves only the admin hostname.
+- **Still needed inside the app, none of it about identity:** a same-origin check on every state-changing request (`Origin` and
+  `Sec-Fetch-Site`) and a CSRF token, because Cloudflare's session is a cookie that a page on another site could otherwise ride; and
+  the same strict Content-Security-Policy as the app (no inline scripts).
+- **No record of who did what.** The app keeps no audit log. Cloudflare's own logs show who signed in and when, and the device
+  list shows each device and when it was last seen.
 
 #### What this trusts
 
@@ -200,8 +199,12 @@ one client account, until a selector exists.
   read notes does not make a compromised admin UI harmless. Whoever controls the operator's identity provider account, the
   Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
   the Cloudflare account are part of the security of the notes. Mitigations in this design: the "new device enrolled" notice on
-  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), the audit log, and in v2 a new device also needs the
-  passphrase or recovery key. A further option is to require approval of a new device on an already-enrolled one (open question).
+  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and in v2 a new device also needs the passphrase or
+  recovery key. A further option is to require approval of a new device on an already-enrolled one (open question).
+- **The Access configuration is the whole of the admin UI's access control.** If the Access application or its policy is removed or
+  loosened, or the tunnel's hostname is pointed at the app without an Access application, the admin UI is open to the internet
+  and the app has no second check. The loopback listener and the NetworkPolicy keep every other route closed. Treat the
+  Cloudflare account and the Access policy as part of the security of the notes, and review them like the database.
 
 ### Enrolling a device
 
@@ -214,10 +217,9 @@ sequenceDiagram
   participant Dev as Device
   participant API as Sync API
   Op->>CF: Open admin.example.com (OIDC login with MFA)
-  CF->>Admin: Request with the Access token (JWT)
-  Admin->>Admin: Verify the JWT and the operator's email
+  CF->>Admin: Forward the request (Cloudflare has already authenticated the operator)
   Op->>CF: New enrollment URL (device name)
-  CF->>Admin: Request with the Access token
+  CF->>Admin: Forward the request
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
   Op->>Dev: Paste in Settings, Sync, Add this device
@@ -379,19 +381,9 @@ CREATE TABLE invites (
   token_hash  BYTEA  PRIMARY KEY,
   client_id   BIGINT NOT NULL REFERENCES clients (id),   -- the account the enrolled device is bound to
   device_name TEXT   NOT NULL DEFAULT '',         -- entered in the admin UI, copied to the device on enrollment
-  created_by  TEXT   NOT NULL,                    -- operator email from the Access token
   created_at  BIGINT NOT NULL,
   expires_at  BIGINT NOT NULL,
   used_at     BIGINT                              -- NULL until spent
-);
-
-CREATE TABLE audit (
-  id        BIGSERIAL PRIMARY KEY,
-  client_id BIGINT REFERENCES clients (id),       -- NULL for actions that belong to no account
-  at        BIGINT NOT NULL,
-  actor     TEXT   NOT NULL,
-  action    TEXT   NOT NULL,                      -- 'invite.create', 'device.rename', 'device.revoke'
-  detail    TEXT   NOT NULL DEFAULT ''
 );
 
 -- v2 only, in a later migration
@@ -409,8 +401,6 @@ GRANT SELECT ON clients TO harper_admin;              -- read only until there i
 GRANT SELECT, INSERT, DELETE ON invites TO harper_admin;
 GRANT SELECT, DELETE ON devices TO harper_admin;
 GRANT UPDATE (name) ON devices TO harper_admin;       -- rename only
-GRANT SELECT, INSERT ON audit TO harper_admin;
-GRANT USAGE ON SEQUENCE audit_id_seq TO harper_admin;
 -- nothing on docs, meta or keybag
 ```
 
@@ -433,7 +423,7 @@ How it is used:
 - **Revoking a device deletes its row.** The "new device added" banner comes from `created_at`.
 - **v1 has one client account,** inserted by the first migration (`name` `default`). Nothing creates another: there is no endpoint
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector in
-  **New enrollment URL**, and per-account operators.
+  **New enrollment URL**, and per-account operators (see Later).
 - **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
 - **The 8 MiB check** is a backstop. The app enforces the 5 MB draft limit, and v2's base64 envelope is larger than the plaintext.
 
@@ -638,7 +628,7 @@ This is a bearer-token model with transport security and no content encryption.
 | Isolation between client accounts | The account is taken from the token's device row and never from the request; every query on account data filters on it; one account per server in v1, so it is a guard for the future. Before a second account is created, consider PostgreSQL row-level security as a second layer (`FORCE ROW LEVEL SECURITY`, because the sync role owns the tables, and a `SET LOCAL` of the account per transaction), and test that two accounts cannot see each other's drafts or devices. |
 | Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles for sync and admin, the admin one with least privilege ([Database access](#database-access)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from the ingress controller; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
-| Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider; the app verifies the Access token on every request; CSRF tokens, same-origin checks, strict CSP, an audit log. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1), so the identity provider and Cloudflare accounts are part of the trust chain. See [the admin UI](#the-admin-ui). |
+| Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1). See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
@@ -676,8 +666,7 @@ GitOps repository, not in this one (this section is their specification):
 - **NetworkPolicies:** default deny for ingress and egress in the namespace, then allow:
   - DNS, and the sync and admin pods to PostgreSQL on 5432;
   - ingress to the sync pods from the ingress controller's pods only, and none to the admin pod;
-  - the admin pod out to Cloudflare for the tunnel (the ports Cloudflare documents) and to the Access team domain on 443 for the
-    signing keys;
+  - the admin pod out to Cloudflare for the tunnel (the ports Cloudflare documents);
   - nothing else out of the sync pods.
 
   The cluster's network plugin has to enforce NetworkPolicy.
@@ -685,8 +674,7 @@ GitOps repository, not in this one (this section is their specification):
   Kubernetes API token (`automountServiceAccountToken: false`, because neither app talks to the Kubernetes API), resource limits, and
   images pinned by digest.
 - **Configuration:** `PUBLIC_URL` must be `https:` or the service refuses to start. The ingress terminates TLS, so the app sees plain
-  HTTP and takes the scheme from this setting, not from a forwarded header. The admin pod also gets the Access team domain, the
-  application's AUD tag and the operator email allowlist.
+  HTTP and takes the scheme from this setting, not from a forwarded header.
 - **Health:** a liveness endpoint, and a readiness endpoint that checks the database connection.
 
 Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not
@@ -715,8 +703,8 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
 - **The devices:** the web build, built for the root path and mounted into Caddy, and two Chromium contexts, each with its own
   IndexedDB, acting as device A and device B. There is no frontend container and no `vite preview`.
 - **Invites:** the test inserts an invite row into PostgreSQL itself, with the same SHA-256 token hash the service uses, bound to the default client account (`client_id`). It does not
-  go through the admin UI, which sits behind a Cloudflare Access login, and the admin app gets no "skip authentication" switch for
-  tests. The admin UI gets its own small test later, with a locally signed Access token and a fake key set.
+  go through the admin UI, which sits behind a Cloudflare Access login, and the admin app has no authentication of its own to skip.
+  The admin UI gets its own small test later, a plain HTTP one.
 - **Checks, in this order:**
   1. **Enrollment:** device A pastes an invite URL and gets a token; using the same invite again fails.
   2. **Save pushes:** a draft made on A is in PostgreSQL shortly after the save.
@@ -896,7 +884,7 @@ phone with many drafts, and it runs in chunks that can be resumed.
 - **Syncing settings,** if wanted: the dictionary (a set union) and the ignore list (the newer replaces the older) are the candidates.
   They need their own table, validation and merge rules, which is why v1 leaves them out.
 - **More client accounts.** The schema already carries `client_id`; what is missing is an admin action to create an account, an
-  account selector in **New enrollment URL**, per-account operators (an OIDC identity mapped to an account), quotas, and the
+  account selector in **New enrollment URL**, per-account operators (which would need the app to learn who is signed in, something v1 deliberately does not do), quotas, and the
   isolation checks above.
 - **Sharing between client accounts,** with OIDC and short-lived tokens with refresh. This is a different feature from more accounts.
 - **Merging text** with a CRDT such as Yjs (it has a CodeMirror 6 binding) if two-device simultaneous edits become common.
