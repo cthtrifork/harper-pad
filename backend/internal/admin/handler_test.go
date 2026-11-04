@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -74,9 +75,9 @@ func (c *client) do(method, path string, form url.Values, headers map[string]str
 	return rec
 }
 
-func demo() Store { return NewDemoStore(func() time.Time { return t0 }) }
+func demo() Store { return newFakeStore(func() time.Time { return t0 }) }
 
-func TestTemplatesParse(t *testing.T) { New(NewStubStore(), Config{}) } // New panics on a bad template
+func TestTemplatesParse(t *testing.T) { New(demo(), Config{}) } // New panics on a bad template
 
 func TestDevicesPage(t *testing.T) {
 	c := newClient(t, demo())
@@ -230,10 +231,17 @@ func TestRefusesInviteWithSeveralAccounts(t *testing.T) {
 	}
 }
 
-func TestStubStoreSaysNotBuilt(t *testing.T) {
-	c := newClient(t, NewStubStore())
+// failing is a Store whose every call fails with a database error that must not reach the page.
+type failing struct{ Store }
+
+func (failing) Devices(context.Context) ([]Device, error) {
+	return nil, errors.New("dial tcp 10.0.0.7:5432: connection refused")
+}
+
+func TestUnexpectedErrorIsLoggedNotShown(t *testing.T) {
+	c := newClient(t, failing{demo()})
 	rec := c.do("GET", "/", nil, nil)
-	if rec.Code != 501 || !strings.Contains(rec.Body.String(), "not built yet") {
+	if rec.Code != 500 || strings.Contains(rec.Body.String(), "10.0.0.7") || !strings.Contains(rec.Body.String(), "Something went wrong") {
 		t.Errorf("%d %s", rec.Code, rec.Body)
 	}
 }

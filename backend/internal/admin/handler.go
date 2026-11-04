@@ -294,8 +294,6 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		status, msg = http.StatusNotFound, "That device or URL no longer exists."
-	case errors.Is(err, ErrNotImplemented):
-		status, msg = http.StatusNotImplemented, "The sync service is not built yet, so there is nothing to show here."
 	default:
 		slog.Error("admin request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	}

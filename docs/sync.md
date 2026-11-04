@@ -168,7 +168,7 @@ agent, rename and revoke.
 It is **one page**: a name field with **Add device** at the top, which shows the new enrollment URL inline (once, with Copy and a
 countdown), then the pending URLs (each with Cancel) and the device list (each with Rename and Revoke). There is no navigation, no
 tiles and no table, so it works at phone width too. It uses the app's own design tokens, light and dark, and its markup and
-styles are in `backend/internal/admin/web`; run it with `ADMIN_DEMO=true` to see it. It reads the sync service's public address from its configuration, which is how it builds enrollment
+styles are in `backend/internal/admin/web`; [`backend/README.md`](../backend/README.md) shows how to run it against a seeded PostgreSQL. It reads the sync service's public address from its configuration, which is how it builds enrollment
 URLs. It has no feature that reads or writes notes, which is why its database role has no access to them. In v1 there is one client
 account, so **Add device** has no account selector, and the admin app refuses to create an invite if it finds more than
 one client account, until a selector exists.

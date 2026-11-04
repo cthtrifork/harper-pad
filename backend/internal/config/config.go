@@ -29,8 +29,6 @@ type Admin struct {
 	Common
 	// SyncPublicURL is SYNC_PUBLIC_URL, the sync service's public https origin: enrollment URLs are built from it.
 	SyncPublicURL string
-	// Demo is ADMIN_DEMO=true: serve seeded in-memory data instead of the database stubs, to look at the UI. Never in a deployment.
-	Demo bool
 }
 
 func common(defaultAddr, defaultMetricsAddr string) Common {
@@ -58,7 +56,7 @@ func LoadSync() (Sync, error) {
 // LoadAdmin reads the environment of harper-pad-admin. It listens on loopback by default: in the cluster only its
 // cloudflared sidecar may reach it, so its metrics are off unless METRICS_ADDR is set.
 func LoadAdmin() (Admin, error) {
-	c := Admin{Common: common("127.0.0.1:9001", ""), SyncPublicURL: os.Getenv("SYNC_PUBLIC_URL"), Demo: os.Getenv("ADMIN_DEMO") == "true"}
+	c := Admin{Common: common("127.0.0.1:9001", ""), SyncPublicURL: os.Getenv("SYNC_PUBLIC_URL")}
 	if err := validateURL("SYNC_PUBLIC_URL", c.SyncPublicURL); err != nil {
 		return Admin{}, err
 	}

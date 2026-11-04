@@ -10,8 +10,6 @@ import (
 var (
 	// ErrNotFound means the device or invite does not exist (any more).
 	ErrNotFound = errors.New("not found")
-	// ErrNotImplemented is what the stub store returns until the PostgreSQL store exists.
-	ErrNotImplemented = errors.New("not implemented")
 	// ErrInvalid means the input broke a rule (an empty or over-long device name).
 	ErrInvalid = errors.New("invalid input")
 )

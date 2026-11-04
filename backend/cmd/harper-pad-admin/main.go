@@ -2,8 +2,7 @@
 // Cloudflare Access (docs/sync.md, "The admin UI").
 //
 // It serves /healthz (liveness) and /readyz (readiness, a PostgreSQL round trip), the admin pages (internal/admin) and Prometheus
-// metrics on a separate port. The pages run against a stub store until the PostgreSQL one exists (ADMIN_DEMO=true shows seeded
-// in-memory data instead). It is run as
+// metrics on a separate port. It is run as
 // `harper-pad-admin serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
 package main
 
@@ -48,12 +47,6 @@ func run(args []string) error {
 	mux := http.NewServeMux()
 	health.Register(mux)
 
-	// TODO: replace the stub with the PostgreSQL store (internal/store) once the server is built (docs/sync.md, build order).
-	var as admin.Store = admin.NewStubStore()
-	if cfg.Demo {
-		slog.Warn("ADMIN_DEMO is on: showing seeded in-memory data, nothing is stored")
-		as = admin.NewDemoStore(nil)
-	}
-	mux.Handle("/", admin.New(as, admin.Config{SyncURL: cfg.SyncPublicURL}))
+	mux.Handle("/", admin.New(store.NewAdmin(db), admin.Config{SyncURL: cfg.SyncPublicURL}))
 	return server.Run(cfg.ListenAddr, m.Instrument(mux), health, cfg.MetricsAddr, m.Handler())
 }
