@@ -763,8 +763,11 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
   test is where the build-time setting for the sync origin is first exercised.
 - **Where it runs:** CI follows the pattern of `scripts/screenshots.sh` and its workflow (a pinned `playwright-core` driving
   the runner's Chrome); locally it is a `make` target.
-- **What it does not prove:** mTLS to PostgreSQL (the compose database uses password or trust authentication; the production
-  certificate setup is checked on a real cluster, see the open questions), the real ingress and its certificate, cert-manager,
+- **Database login:** the compose PostgreSQL requires TLS and a client certificate whose common name is the role, from a
+  throwaway CA made by `certs.sh`; the sync service logs in with the libpq variables and `verify-full`, and the test checks that
+  TLS without a certificate, a certificate with another common name and a plain connection are refused.
+- **What it does not prove:** CloudNativePG's own `pg_hba` defaults and `pg_ident` handling (checked on a real cluster, see the
+  open questions), certificate renewal by cert-manager (the reload has a unit test), the real ingress and its certificate,
   Cloudflare and Access, and Safari or WebKit behaviour.
 
 ## Build order
