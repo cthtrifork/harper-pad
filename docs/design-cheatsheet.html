@@ -297,7 +297,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
     </div></div>
     <ul>
       <li><b>Fill is <code>--bg</code>, not <code>--raised</code>.</b> Fields usually sit on <code>--panel</code> or <code>--raised</code>; in dark mode those two are almost the same grey, so a <code>--raised</code> field disappears. <code>--bg</code> is the darkest (dark) or lightest (light) surface, so the field reads as an inset well on either.</li>
-      <li>32px high (30 in drawers, 44 on touch), 6px radius, 12px side padding, 1px <code>--line</code> border, text colour <code>--text</code>, placeholder <code>--mute</code>.</li>
+      <li>32px high (30 in drawers, 44 on touch, 16px text on phones), 6px radius, 12px side padding, 1px <code>--line</code> border, text colour <code>--text</code>, placeholder <code>--mute</code>.</li>
       <li>Hover darkens the border to <code>--mute</code>. Focus-visible turns the border <code>--accent</code> with the same 2px <code>--accent</code> ring as buttons. Error uses <code>--bad</code> for the border and a message under the field; set <code>aria-invalid="true"</code>.</li>
       <li>Always a real <code>&lt;label&gt;</code> (visually hidden if the placeholder says it), never the placeholder alone. Check the field in both themes before shipping.</li>
     </ul>
@@ -425,6 +425,9 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
       <div class="dont"><b>Don't</b><span>Interrupt writing with modals. Problems, updates and drafts live in panels and popovers.</span></div>
       <div class="dont"><b>Don't</b><span>Use <code>div</code> or <code>span</code> with click handlers. Tab skips them.</span></div>
       <div class="dont"><b>Don't</b><span>Use "Click here", "OK" or "Submit". Name the action.</span></div>
+      <div class="do"><b>Do</b><span>Cap the width of a content column (about 760px for lists and forms) and centre it, so rows never stretch across a wide window.</span></div>
+      <div class="do"><b>Do</b><span>Design the phone layout as the base: at 600px and narrower the window fills the screen, a form and its button stack, and a row's actions move to their own line and share its width.</span></div>
+      <div class="dont"><b>Don't</b><span>Let an input be smaller than 16px on a phone (iOS zooms in on focus), or a touch target be smaller than 44px.</span></div>
     </div>
     <div>
       <h3>Toolbar order</h3>
