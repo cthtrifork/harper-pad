@@ -79,6 +79,7 @@ What losing the whole server costs:
 | Client accounts | One in v1, modelled as many: a `clients` table, a `client_id` on every row, and every device bound to one account | More accounts later need no schema change. No sharing between accounts, no user management in v1 |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived device token per device, **bound to a device key with DPoP** (a signed proof on every request); no refresh tokens | See [Authentication](#authentication) |
+| Approving new devices | None. A new device needs no confirmation from an enrolled one; the operator creates one short-lived, single-use enrollment URL per device in the admin UI, and that is the approval | The invite is single use and expires in 15 minutes, the operator signs in through Access with MFA, and every device is listed and can be revoked, with a "new device enrolled" notice on the others. Confirmation on an enrolled device would add a flow and a way to get locked out (no enrolled device left) for little extra safety. See [what this trusts](#what-this-trusts) |
 | Stolen-token hardening | A device list with last-seen, revoking in the admin UI, and **DPoP**, which makes a token that leaks without its key useless but does not cover a copy of the device's own storage | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None (TLS only). End-to-end encryption is an option, not planned | The server can read the notes; see [the option](#option-end-to-end-encryption) |
 | Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; a lost or emptied server is repopulated by the same Sync all |
@@ -144,19 +145,10 @@ drafts, so devices never compare clocks (they only test two states for equality)
 ### Database access
 
 No workload has a database password. PostgreSQL requires TLS and a client certificate for every connection, and the clients
-verify the server certificate (`sslmode=verify-full`, with the cluster's server CA mounted in each pod).
-
-- **Certificates:** cert-manager issues one `Certificate` per role (usage `client auth`, common name equal to the role name) from
-  an issuer whose CA is given to the cluster as `spec.certificates.clientCASecret`. With a custom client CA the cluster no longer
-  holds the signing key, so the `kubectl cnpg certificate` helper cannot be used and cert-manager is the issuer. Each pod mounts
-  its certificate Secret as a volume, and the app reads the files once at start (pgx does not reload them). Renewal is handled by
-  [Stakater Reloader](https://github.com/stakater/Reloader): the Deployments carry its annotation for the certificate Secrets, and
-  it does a rolling restart when cert-manager renews one, so the app has no reload code.
-- **Authentication rules:** `spec.postgresql.pg_hba` requires `cert` for these roles over `hostssl`, and the roles have no
-  password. The exact entries, their order relative to CloudNativePG's own defaults, and whether the common name must equal the
-  role (otherwise a `pg_ident` map) are to be confirmed against the operator version in use; they are not verified here.
-- **Network:** a NetworkPolicy lets only the sync pods and the admin pods reach port 5432 (plus what the
-  operator itself needs).
+verify the server certificate (`sslmode=verify-full`). cert-manager issues one certificate per role (common name equal to the
+role name, from the CA given to the cluster as `spec.certificates.clientCASecret`), `pg_hba` requires `cert` over `hostssl`, and
+a NetworkPolicy lets only the sync and admin pods reach port 5432. The app reads the certificate files once at start; Stakater
+Reloader restarts the pods when cert-manager renews them, so there is no reload code. This is deployed and working.
 
 | Role | Used by | Allowed |
 |---|---|---|
@@ -206,7 +198,7 @@ authentication:
   read notes does not make a compromised admin UI harmless. Whoever controls the operator's identity provider account, the
   Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
   the Cloudflare account are part of the security of the notes. Mitigations in this design: the "new device enrolled" notice on
-  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and a new device can read everything it syncs. A further option is to require approval of a new device on an already-enrolled one (open question).
+  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and a new device can read everything it syncs. A new device does not need approval from an enrolled one ([decided](#decisions)): the invite is the approval.
 - **The Access configuration is the whole of the admin UI's access control.** If the Access application or its policy is removed or
   loosened, or the tunnel's hostname is pointed at the app without an Access application, the admin UI is open to the internet
   and the app has no second check. The loopback listener and the NetworkPolicy keep every other route closed. Treat the
@@ -686,91 +678,65 @@ ciphertext), and traffic analysis (the server sees sizes and times).
 
 ## Deploying the server
 
-Everything runs in one Kubernetes namespace, `harper-pad`, described by manifests that live in the cluster's own
-GitOps repository, not in this one (this section is their specification):
+Everything runs in one Kubernetes namespace, `harper-pad`, described by manifests in the cluster's GitOps repository, not in
+this one (this section is their specification):
 
-- **PostgreSQL:** a CloudNativePG `Cluster` with one instance to start (one user, and devices can rebuild the server, so high
-  availability is not needed), the client CA and `pg_hba` settings above, and the certificates from cert-manager. The design makes
-  no provision for backing it up or restoring it: every device holds a full copy, and a new empty server is repopulated by Sync all.
-- **Migrations:** the sync service applies them itself at start, under its own role, taking a PostgreSQL advisory lock so that
-  only one pod migrates if there is ever more than one replica. It refuses to start if the database has a newer schema than it
-  knows. The admin service starts only against a schema it recognises, and does not migrate.
-- **`harper-pad-sync`:** a Deployment (one replica to start) and a ClusterIP Service, with a single container. The ingress (Traefik)
-  routes the sync domain to the Service (an `IngressRoute`, or a standard Ingress), with the TLS certificate from a cert-manager
-  `Certificate` (Let's Encrypt) and these middlewares: redirect HTTP to HTTPS, HSTS and standard security headers, a rate limit
-  per client IP, and a request body cap slightly above the largest allowed request. CORS stays in the app, with its explicit
-  allowlist. The app takes the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but the ingress controller connect to
-  it. The in-memory rate limiter and the DPoP `jti` replay cache are per pod, so move them to PostgreSQL before running
-  more than one replica.
-- **`harper-pad-admin`:** a Deployment (one replica) with **no Service**. The pod has the app container, listening on
-  127.0.0.1, and a `cloudflared` sidecar (a native sidecar container where the cluster supports them, so the tunnel is up before
-  the app and outlives it). The tunnel token is a Kubernetes Secret passed as `TUNNEL_TOKEN`; the tunnel is remotely managed and
-  maps the admin hostname to `http://localhost:<port>` in Cloudflare. Cloudflare's own Kubernetes guide runs `cloudflared` as a
-  separate Deployment pointing at Services; the sidecar is chosen so the admin app can listen on loopback only, which means no
-  other pod can reach it. The cost is that the two scale and restart together.
-- **NetworkPolicies:** default deny for ingress and egress in the namespace, then allow:
-  - DNS, and the sync and admin pods to PostgreSQL on 5432;
-  - ingress to the sync pods from the ingress controller's pods only, and none to the admin pod;
-  - the admin pod out to Cloudflare for the tunnel (the ports Cloudflare documents);
-  - nothing else out of the sync pods.
+- **PostgreSQL:** a CloudNativePG `Cluster` with one instance (one user, and devices can rebuild the server, so no high
+  availability), with certificate authentication as above. No backup or restore: every device holds a full copy, and a new empty
+  server is repopulated by Sync all.
+- **Migrations:** the sync service applies them at start under its own role, behind a PostgreSQL advisory lock so only one pod
+  migrates. It refuses to start against a newer schema than it knows. The admin service starts only against a schema it
+  recognises and does not migrate.
+- **`harper-pad-sync`:** one replica and a ClusterIP Service. Traefik routes the sync domain to it with a Let's Encrypt
+  certificate from cert-manager and these middlewares: HTTP to HTTPS redirect, HSTS and security headers, a rate limit per client
+  IP, and a body cap slightly above the largest allowed request. CORS stays in the app, with its explicit allowlist. The app takes
+  the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but the ingress controller connect. The
+  in-memory rate limiter and the DPoP `jti` replay cache are per pod: move them to PostgreSQL before running more than one replica.
+- **`harper-pad-admin`:** one replica and **no Service**. The app listens on 127.0.0.1 next to a `cloudflared` sidecar (a native
+  sidecar where supported, so the tunnel is up before the app and outlives it). The remotely managed tunnel (token in a Secret,
+  `TUNNEL_TOKEN`) maps the admin hostname to `http://localhost:<port>`. A sidecar rather than Cloudflare's separate Deployment, so
+  no other pod can reach the app; the cost is that the two restart together.
+- **NetworkPolicies:** default deny for ingress and egress, then allow DNS, the sync and admin pods to PostgreSQL on 5432,
+  ingress to the sync pods from the ingress controller only (none to admin), and the admin pod out to Cloudflare. Nothing else
+  leaves the sync pods. The network plugin has to enforce NetworkPolicy.
+- **Pod hardening:** non-root, read-only root filesystem, no capabilities, runtime-default seccomp, no Kubernetes API token,
+  resource limits, images pinned by digest.
+- **Configuration and health:** `PUBLIC_URL` must be `https:` or the service refuses to start (the app takes the scheme from it,
+  not from a forwarded header). `/healthz` is liveness; `/readyz` checks the database.
 
-  The cluster's network plugin has to enforce NetworkPolicy.
-- **Pod hardening:** non-root, read-only root filesystem, all capabilities dropped, the runtime-default seccomp profile, no
-  Kubernetes API token (`automountServiceAccountToken: false`, because neither app talks to the Kubernetes API), resource limits, and
-  images pinned by digest.
-- **Configuration:** `PUBLIC_URL` must be `https:` or the service refuses to start. The ingress terminates TLS, so the app sees plain
-  HTTP and takes the scheme from this setting, not from a forwarded header.
-- **Health:** a liveness endpoint, and a readiness endpoint that checks the database connection.
-
-Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not
-on the command line.
+Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI.
 
 ## End-to-end test
 
-A small test that runs the real pieces together, because only that proves the JavaScript sync client, CORS, the CSP, IndexedDB, TLS
-and the server work as one. It is a Playwright script driving a real Chromium against a compose stack.
+Runs the real pieces together, because only that proves the JavaScript sync client, CORS, the CSP, IndexedDB, TLS and the server
+work as one: a Playwright script driving real Chromium against a compose stack (`backend/test/e2e/`, `make` target locally; in CI
+it follows `scripts/screenshots.sh`).
 
-- **The stack:** a compose file with three services, built or pulled and started together:
-  - **PostgreSQL**;
-  - **`harper-pad-sync`**, built from its real Containerfile (`backend/Containerfile.sync`, with `Containerfile.admin` beside
-    it), so the image, the listen address and the configuration guards are tested too;
-  - **Caddy**, which provides HTTPS the way the cluster's ingress does in production.
-
-  The compose file avoids features only Docker has, so `podman compose` and `docker compose` both run it; the `make` target uses
-  whichever is installed.
-- **HTTPS with Caddy:** Caddy serves two sites with its internal CA (`tls internal`) on a high port, so a rootless runtime can bind it:
-  `https://app.localhost:18443`, a static file server for the web build, and `https://sync.localhost:18443`, a reverse proxy to
-  `harper-pad-sync`. Because the page and the API are on different https origins, as in production, CORS, the CSP `connect-src`
-  and the client's "https only" rule are all exercised. `PUBLIC_URL` is `https://sync.localhost:18443` (the port is `E2E_PORT`), so the service's guard stays
-  strict and there is no development exception. Certificates are really checked (no `ignoreHTTPSErrors`, which would also hide a broken
-  chain and break service workers): the test reads Caddy's intermediate certificate from the running container and starts Chromium
-  with `--ignore-certificate-errors-spki-list` set to that key's hash, so only chains from Caddy's CA are accepted. (Chromium resolves `*.localhost` to loopback by itself; confirm this, and that Caddy issues for these names, when
-  the stack is built.)
-- **The devices:** the web build, built for the root path and mounted into Caddy, and two Chromium contexts, each with its own
-  IndexedDB, acting as device A and device B. There is no frontend container and no `vite preview`.
-- **Invites:** the test inserts an invite row into PostgreSQL itself, with the same SHA-256 token hash the service uses, bound to the default client account (`client_id`). It does not
-  go through the admin UI, which sits behind a Cloudflare Access login, and the admin app has no authentication of its own to skip.
-  The admin UI gets its own small test later, a plain HTTP one.
-- **Checks, in this order:**
-  1. **Enrollment:** device A pastes an invite URL and gets a token; using the same invite again fails.
+- **Stack:** PostgreSQL, `harper-pad-sync` built from its real `backend/Containerfile.sync`, and Caddy for HTTPS. The compose file
+  works with both `podman compose` and `docker compose`.
+- **HTTPS:** Caddy (`tls internal`, high port for rootless) serves `https://app.localhost:18443` (the web build) and
+  `https://sync.localhost:18443` (proxy to the sync service). Page and API are different https origins, as in production, so CORS,
+  the CSP `connect-src` and the client's "https only" rule are exercised, with `PUBLIC_URL` strict and no development exception.
+  Certificates are really checked: Chromium trusts only Caddy's intermediate through `--ignore-certificate-errors-spki-list`
+  (no `ignoreHTTPSErrors`, which would hide a broken chain and break service workers).
+- **Devices and invites:** two Chromium contexts, each with its own IndexedDB, act as devices A and B. The test inserts invite
+  rows into PostgreSQL itself (same SHA-256 token hash, bound to the default `client_id`) instead of going through the admin UI,
+  which sits behind Access. The admin UI gets its own plain HTTP test later.
+- **Checks, in order:**
+  1. **Enrollment:** A pastes an invite URL and gets a token; reusing the invite fails.
   2. **Save pushes:** a draft made on A is in PostgreSQL shortly after the save.
-  3. **Sync all and opening a note:** device B, enrolled with its own invite (which runs Sync all), has the draft. An edit on A
-     reaches B when B opens the note, as a plain update with no "Conflicted copy". A draft created on A after B enrolled appears on
-     B after Sync all.
-  4. **Lose the server:** wipe the database, restart the sync service, re-enroll both devices, and check that Sync all rebuilds the
-     drafts with no conflicted copies.
-  5. **Later:** an offline edit on both devices makes a local conflicted copy, and a revoked token shows "Sign in again" while the
-     local drafts stay; with a second client account, neither account sees the other's drafts or devices.
-- **Settings it needs:** the page origin in the CORS allowlist and the sync origin in the web build's CSP `connect-src`, so this
-  test is where the build-time setting for the sync origin is first exercised.
-- **Where it runs:** CI follows the pattern of `scripts/screenshots.sh` and its workflow (a pinned `playwright-core` driving
-  the runner's Chrome); locally it is a `make` target.
+  3. **Sync all and opening a note:** B, enrolled with its own invite, has the draft. An edit on A reaches B when B opens the note
+     as a plain update, with no "Conflicted copy". A draft created on A after B enrolled appears on B after Sync all.
+  4. **Lose the server:** wipe the database, restart the service, re-enroll both devices; Sync all rebuilds the drafts with no
+     conflicted copies.
+  5. **Later:** offline edits on both devices make a local conflicted copy; a revoked token shows "Sign in again" with local drafts
+     kept; with a second client account, neither sees the other's drafts or devices.
 - **Database login:** the compose PostgreSQL requires TLS 1.3 and a client certificate whose common name is the role, from a
-  throwaway CA made by `certs.sh`; the sync service logs in with the libpq variables and `verify-full`, and the test checks that
-  TLS without a certificate, a certificate with another common name and a plain connection are refused.
-- **What it does not prove:** CloudNativePG's own `pg_hba` defaults and `pg_ident` handling (checked on a real cluster, see the
-  open questions), certificate renewal by cert-manager and the Reloader restart, the real ingress and its certificate,
-  Cloudflare and Access, and Safari or WebKit behaviour.
+  throwaway CA (`certs.sh`). The test checks that TLS without a certificate, a certificate with another common name and a plain
+  connection are refused.
+- **Needs:** the page origin in the CORS allowlist and the sync origin in the web build's CSP `connect-src`.
+- **Does not prove:** certificate renewal and the Reloader restart, the real ingress and its certificate, Cloudflare and
+  Access, and Safari or WebKit behaviour.
 
 ## Build order
 
@@ -799,11 +765,6 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - **The desktop webview origin** for the CORS allowlist, and whether the embedded page's CSP can name the sync origin at build
   time or needs a setting at run time.
 - **Which OIDC provider** signs the operator in, and whether to also allow only specific devices or networks in the Access policy.
-- **Approval of new devices:** whether enrollment should additionally need a confirmation on an already-enrolled device, so that
-  admin access alone cannot add a device that reads the notes.
-- **The exact CloudNativePG settings** for certificate authentication of application roles: the `pg_hba` entries and their order, and
-  whether the certificate's common name must equal the role name (otherwise a `pg_ident` map). Check against the operator version
-  in use and test before relying on it.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
   with forever; one user does not delete enough to matter.
 - **How long a non-extractable key survives in the installed iPhone app.** It works and survives a relaunch; the one-day, one-week
