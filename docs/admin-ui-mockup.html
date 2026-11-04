@@ -65,6 +65,11 @@ td.act{text-align:right;white-space:nowrap}
 .note svg{width:16px;height:16px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none;margin-top:2px}
 .cols{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px}
 @media(max-width:760px){.cols{grid-template-columns:1fr}}
+.acct{display:inline-flex;align-items:center;height:22px;padding:0 8px;margin-right:10px;border-radius:11px;border:1px solid var(--line);background:var(--sunken);color:var(--text);font-size:12px;font-weight:600}
+.field .ro{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--sunken);color:var(--text)}
+.field .ro small{color:var(--mute);font-size:12px}
+.field select{font:inherit;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--raised);color:var(--text)}
+.tag{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:1px 6px;background:var(--sunken);color:var(--mute);border:1px solid var(--line);margin-left:8px;vertical-align:middle}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
@@ -89,7 +94,7 @@ td.act{text-align:right;white-space:nowrap}
       <button type="button" aria-pressed="false">Enrollment</button>
       <button type="button" aria-pressed="false">Audit log</button>
     </div>
-    <div class="who">Signed in as operator@example.com</div>
+    <div class="who"><span class="acct">Account: default</span>Signed in as operator@example.com</div>
   </div>
   <div class="page">
     <div class="head">
@@ -128,13 +133,14 @@ td.act{text-align:right;white-space:nowrap}
       <button type="button" aria-pressed="true">Enrollment</button>
       <button type="button" aria-pressed="false">Audit log</button>
     </div>
-    <div class="who">Signed in as operator@example.com</div>
+    <div class="who"><span class="acct">Account: default</span>Signed in as operator@example.com</div>
   </div>
   <div class="page">
     <div class="cols">
       <div style="display:flex;flex-direction:column;gap:16px">
         <h2>New enrollment URL</h2>
         <div class="field"><label for="dn">Device name</label><input id="dn" value="iPhone 2"></div>
+        <div class="field"><label>Client account</label><div class="ro">default <small>the only account; a device is bound to it for good</small></div></div>
         <div class="card">
           <div class="head">
             <strong>Enrollment URL for “iPhone 2”</strong>
@@ -171,7 +177,7 @@ td.act{text-align:right;white-space:nowrap}
       <button type="button" aria-pressed="false">Enrollment</button>
       <button type="button" aria-pressed="true">Audit log</button>
     </div>
-    <div class="who">Signed in as operator@example.com</div>
+    <div class="who"><span class="acct">Account: default</span>Signed in as operator@example.com</div>
   </div>
   <div class="page">
     <h2>Audit log</h2>
@@ -185,6 +191,45 @@ td.act{text-align:right;white-space:nowrap}
       </tbody>
     </table>
     <p class="foot">Only actions in this admin UI are listed. Devices syncing are not.</p>
+  </div>
+</div>
+</section>
+
+<!-- 4. Later: more than one client account -->
+<section>
+<p class="cap">4 · Later: more than one client account <span class="tag">not in v1</span></p>
+<div class="win">
+  <div class="bar">
+    <div class="brand">Harper Pad <span>admin</span></div>
+    <div class="seg" role="group" aria-label="Section">
+      <button type="button" aria-pressed="false">Devices</button>
+      <button type="button" aria-pressed="true">Enrollment</button>
+      <button type="button" aria-pressed="false">Accounts</button>
+      <button type="button" aria-pressed="false">Audit log</button>
+    </div>
+    <div class="who"><span class="acct">All accounts</span>Signed in as operator@example.com</div>
+  </div>
+  <div class="page">
+    <div class="cols">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h2>New enrollment URL</h2>
+        <div class="field"><label for="dn2">Device name</label><input id="dn2" value="Anna's laptop"></div>
+        <div class="field"><label for="acct2">Client account</label>
+          <select id="acct2"><option>family</option><option>default</option></select></div>
+        <div><button class="hp primary" type="button"><svg><use href="#i-plus"/></svg>Create URL</button></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <h2>Accounts</h2>
+        <table>
+          <thead><tr><th>Account</th><th>Devices</th><th>Created</th></tr></thead>
+          <tbody>
+            <tr><td>default</td><td>3</td><td>12 Oct 2026</td></tr>
+            <tr><td>family</td><td>1</td><td>4 Nov 2026</td></tr>
+          </tbody>
+        </table>
+        <p class="foot">Accounts are separate: a device only ever sees the drafts of its own account.</p>
+      </div>
+    </div>
   </div>
 </div>
 </section>
