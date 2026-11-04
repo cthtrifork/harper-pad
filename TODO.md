@@ -49,10 +49,10 @@ never run on a real desktop yet.
   restart, to see whether the key is cleared. If it fails or is cleared often, use the rotation fallback described there.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
-- [ ] The server: `harper-pad-sync` (enrollment, sync, devices), the `harper-pad-admin` Go + HTMX
-      container (enrollment URLs, devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), PostgreSQL roles and client certificates, container images and a compose or quadlet
-      setup on two networks, tests. Decide whether it lives in this repository
-      (see the open questions in `docs/sync.md`).
+- [ ] The server: `harper-pad-sync` (enrollment, sync, devices), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
+      devices) behind a Cloudflare Tunnel and Access with OIDC (verify the Access JWT in the app), the `migrate` Job, two container
+      images, and Kustomize manifests: CloudNativePG `Cluster`, cert-manager client certificates and roles, NetworkPolicies, pods
+      with `cloudflared` sidecars, tests. Verify the CloudNativePG `pg_hba` certificate setup on a real cluster.
 - [ ] The sync module (`lib/sync.js`) with unit tests and an end-to-end test against the real server.
 - [ ] A "lose the server" test in the end-to-end suite: sync two devices, wipe the server's database, re-enroll, and check that
       the server is rebuilt with identical drafts and no conflicted copies; then restore an older backup and check the same,

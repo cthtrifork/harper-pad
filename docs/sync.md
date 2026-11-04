@@ -59,10 +59,10 @@ What losing the whole server costs:
 
 | Decision | Choice | Why |
 |---|---|---|
-| Server | A new Go service, `harper-pad-sync`, in a container, behind a reverse proxy | Small, one static binary; reuses the app's validation limits and habits |
-| Database | PostgreSQL on an internal network, authenticated with **client certificates** (mTLS), no passwords | The sync service and the admin UI each get their own certificate and a least-privilege role |
+| Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment, reached through a `cloudflared` sidecar in its pod | Small, one static binary; reuses the app's validation limits and habits |
+| Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service, the admin UI and the migration job each get their own certificate and a least-privilege role |
 | Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port and no login code to write; keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
-| Hosting | The user's own domain over HTTPS, behind a reverse proxy that terminates TLS | iOS needs a trusted certificate for service workers and `fetch` from the web app |
+| Hosting | Kubernetes. Both hostnames (the sync API on the user's own domain, and the admin UI) are served by **Cloudflare Tunnels** whose `cloudflared` runs as a sidecar in each pod. No Ingress, no LoadBalancer | Cloudflare's edge presents a certificate iOS trusts, and nothing in the cluster is reachable from outside. The cost is that Cloudflare terminates TLS and sees the traffic ([what this trusts](#what-this-trusts)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
 | Users | One | No account table or sharing rules |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
@@ -83,40 +83,49 @@ flowchart LR
   pages["GitHub Pages<br/>static app code only,<br/>no user data"]
   operator(["Operator<br/>browser"])
   idp["OIDC identity provider<br/>with MFA"]
-  cf["Cloudflare<br/>Access (OIDC login)<br/>and Tunnel"]
+  cf["Cloudflare<br/>TLS for both hostnames<br/>Access (OIDC) on the admin hostname only"]
 
-  subgraph host["Your server (containers)"]
-    direction LR
-    subgraph edge["Edge network: internet-facing"]
-      proxy["Reverse proxy<br/>TLS for sync.example.com"]
-      api["harper-pad-sync<br/>Go sync API<br/>enroll, sync, devices<br/>(also on the internal network)"]
+  subgraph k8s["Kubernetes namespace harper-pad: default-deny NetworkPolicies, no Ingress, no LoadBalancer"]
+    subgraph apipod["Pod harper-pad-sync"]
+      cfd1["cloudflared sidecar<br/>API tunnel"]
+      api["sync API<br/>listens on 127.0.0.1"]
     end
-    subgraph internal["Internal network: no published ports"]
+    subgraph adminpod["Pod harper-pad-admin"]
+      cfd2["cloudflared sidecar<br/>admin tunnel"]
+      admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>verifies the Access token"]
+    end
+    job["Job: migrate<br/>role harper_owner"]
+    subgraph cnpg["CloudNativePG cluster"]
       pg[("PostgreSQL<br/>TLS + client-certificate auth")]
-      admin["harper-pad-admin<br/>Go + HTMX<br/>enrollment URLs, devices<br/>verifies the Access token"]
-      cfd["cloudflared<br/>outbound connection only"]
     end
+    cm["cert-manager<br/>issues and renews<br/>the client certificates"]
   end
 
   pwa -. "loads the app" .-> pages
-  desktop -->|"HTTPS + bearer token"| proxy
-  pwa -->|"HTTPS + bearer token<br/>CORS: Pages origin only"| proxy
-  proxy --> api
-  api -->|"mTLS, role harper_sync"| pg
-  admin -->|"mTLS, role harper_admin"| pg
+  desktop -->|"https://sync.example.com<br/>bearer token"| cf
+  pwa -->|"https://sync.example.com<br/>bearer token, CORS: Pages origin"| cf
+  cf <-->|"outbound tunnel"| cfd1
+  cfd1 -->|"localhost"| api
   operator -->|"https://admin.example.com"| cf
   cf <-->|"OIDC login"| idp
-  cfd <-->|"outbound tunnel, no inbound port"| cf
-  cfd -->|"HTTP, internal network"| admin
+  cf <-->|"outbound tunnel"| cfd2
+  cfd2 -->|"localhost"| admin
+  api -->|"mTLS, role harper_sync"| pg
+  admin -->|"mTLS, role harper_admin"| pg
+  job -->|"mTLS, role harper_owner"| pg
+  cm -. "client certificate Secrets" .-> api
+  cm -. "client certificate Secrets" .-> admin
+  cm -. "client certificate Secrets" .-> job
 ```
 
 | Component | Runs as | Reachable from | Does |
 |---|---|---|---|
-| Reverse proxy | Container (Caddy, nginx or similar) | The internet, port 443 | Terminates TLS for the domain and forwards to the sync service |
-| `harper-pad-sync` | Go container | The proxy only | The API: enroll, sync, devices. Attached to the edge and the internal network |
-| `harper-pad-admin` | Go + HTMX container | Cloudflare Tunnel only, behind Cloudflare Access (OIDC login); **no published port** | Creates enrollment URLs, lists, renames and revokes devices |
-| `cloudflared` | Container, internal network | Makes an outbound-only connection to Cloudflare; no inbound port | Carries admin UI requests from Cloudflare to `harper-pad-admin` |
-| PostgreSQL | Container | The internal network only | All server state; accepts only TLS connections with a valid client certificate |
+| `harper-pad-sync` | Deployment; the pod also runs a `cloudflared` sidecar for the API tunnel | The API hostname through Cloudflare, and nothing else: it listens on 127.0.0.1, so only the sidecar can connect | The API: enroll, sync, devices |
+| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar for the admin tunnel | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1 | Creates enrollment URLs, lists, renames and revokes devices |
+| `migrate` | Job | Nothing | Applies the schema migrations with the owner role |
+| PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the three workloads above (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
+| cert-manager | Cluster add-on | Nothing | Issues and renews the database client certificates |
+| Cloudflare | External | The internet | Terminates TLS for both hostnames, carries the tunnels, runs Access on the admin hostname |
 | GitHub Pages | Static hosting | The internet | Serves the web app's code; holds no user data |
 
 Each device keeps its own full copy (SQLite on desktop, IndexedDB in the browser) and works without the server. The sync module
@@ -124,24 +133,33 @@ pushes local changes and pulls remote ones. The server is the only place version
 
 ### Database access
 
-Neither container has a database password. PostgreSQL requires TLS and a client certificate for every connection
-(`hostssl ... cert clientcert=verify-full` in `pg_hba.conf`, with the certificate's common name equal to the role name), and the
-clients verify the server certificate (`sslmode=verify-full`). The certificates come from a private CA, are mounted into each
-container as secrets, are short-lived (for example 90 days) and are replaced by restarting the container with new ones.
-PostgreSQL publishes no port outside the internal network.
+No workload has a database password. PostgreSQL requires TLS and a client certificate for every connection, and the clients
+verify the server certificate (`sslmode=verify-full`, with the cluster's server CA mounted in each pod).
+
+- **Certificates:** cert-manager issues one `Certificate` per role (usage `client auth`, common name equal to the role name) from
+  an issuer whose CA is given to the cluster as `spec.certificates.clientCASecret`. With a custom client CA the cluster no longer
+  holds the signing key, so the `kubectl cnpg certificate` helper cannot be used and cert-manager is the issuer. Each pod mounts
+  its certificate Secret as a volume (not a `subPath`, so renewals reach the pod), and the app re-reads the files for new
+  connections, so renewal needs no restart.
+- **Authentication rules:** `spec.postgresql.pg_hba` requires `cert` for these roles over `hostssl`, and the roles have no
+  password. The exact entries, their order relative to CloudNativePG's own defaults, and whether the common name must equal the
+  role (otherwise a `pg_ident` map) are to be confirmed against the operator version in use; they are not verified here.
+- **Network:** a NetworkPolicy lets only the sync pods, the admin pods and the migration job reach port 5432 (plus what the
+  operator itself needs).
 
 | Role | Used by | Allowed |
 |---|---|---|
-| `harper_sync` | `harper-pad-sync` | Read and write `docs`, `meta` (and the key bag in v2); `devices`: select, insert, update (last-seen); `invites`: select, update (spend) |
-| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes |
+| `harper_owner` | the `migrate` Job only | Owns the tables and runs the migrations (DDL). Grants the two roles below their privileges |
+| `harper_sync` | `harper-pad-sync` | Read and write `docs`, `meta` (and the key bag in v2); `devices`: select, insert, update (last-seen); `invites`: select, update (spend). No DDL |
+| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL |
 
 ### The admin UI
 
-A small Go server rendering HTML with HTMX, in its own container so the public API carries no administration code. It publishes no
-port and the reverse proxy does not route to it. It is reached through a **Cloudflare Tunnel**: a `cloudflared` container on the
-internal network makes an outbound-only connection to Cloudflare, so the host opens no inbound port for it, and a **Cloudflare
-Access** application in front of the tunnel makes the operator sign in with an OIDC identity provider before any request reaches
-the origin. The sync API is not behind Cloudflare in this design; only the admin UI is.
+A small Go server rendering HTML with HTMX, in its own pod so the public API carries no administration code. It listens on
+127.0.0.1, has no Service reachable from outside, and nothing routes to it except its own sidecar. It is reached through a
+**Cloudflare Tunnel**: a `cloudflared` sidecar in the same pod makes an outbound-only connection to Cloudflare and forwards to
+`http://localhost:<port>`, and a **Cloudflare Access** application in front of the tunnel makes the operator sign in with an OIDC
+identity provider before any request reaches the pod. The sync API has its own pod and tunnel (below) and is not behind Access.
 
 What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
 agent, rename, and revoke. It reads the sync service's public address from its configuration, which is how it builds enrollment
@@ -166,9 +184,14 @@ URLs, and keeps an audit log of who did what. It has no feature that reads or wr
 
 #### What this trusts
 
-- **Cloudflare terminates TLS for the admin host,** so it can see admin traffic, including the enrollment URL shown on the page.
-  The invite is single use and expires in 15 minutes, and the device it enrolls appears in the device list, so a stolen invite is
-  noticed, but not prevented.
+- **Cloudflare terminates TLS for both hostnames,** so it can see all the traffic: the admin pages, including the enrollment URL
+  shown on the page, and, **in v1, every sync request and response, which contains the text of the notes**. In v2 it sees only
+  ciphertext. This is the cost of having no Ingress. If it is not acceptable for v1, serve the API through an Ingress with
+  cert-manager and Let's Encrypt instead, and keep Cloudflare for the admin UI only. The enrollment invite is single use and
+  expires in 15 minutes, and the device it enrolls appears in the device list, so a stolen invite is noticed, but not prevented.
+- **The API hostname has no Access policy:** devices authenticate with bearer tokens, and the web app cannot do an interactive
+  login. Cloudflare features that challenge scripts (Bot Fight Mode, managed challenges) must be off or skipped for that hostname,
+  because the clients are scripts. Cloudflare rate-limiting rules on it are welcome in addition to the app's own limits.
 - **Admin access is the ability to enroll a device, and in v1 a device can read every note.** That the admin's database role cannot
   read notes does not make a compromised admin UI harmless. Whoever controls the operator's identity provider account, the
   Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
@@ -181,11 +204,11 @@ URLs, and keeps an audit log of who did what. It has no feature that reads or wr
 ```mermaid
 sequenceDiagram
   actor Op as Operator
-  participant CF as Cloudflare Access + Tunnel
-  participant Admin as Admin UI (internal)
+  participant CF as Cloudflare (Access + Tunnel)
+  participant Admin as Admin UI (pod, localhost)
   participant DB as PostgreSQL
   participant Dev as Device
-  participant API as Sync API (public HTTPS)
+  participant API as Sync API (via Cloudflare Tunnel)
   Op->>CF: Open admin.example.com (OIDC login with MFA)
   CF->>Admin: Request with the Access token (JWT)
   Admin->>Admin: Verify the JWT and the operator's email
@@ -194,10 +217,11 @@ sequenceDiagram
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
   Op->>Dev: Paste in Settings, Sync, Add this device
-  Dev->>API: POST /enroll {invite, deviceName}
+  Dev->>CF: POST /enroll {invite, deviceName}
+  CF->>API: through the API tunnel
   API->>DB: Spend invite, INSERT device (token hash)
-  API-->>Dev: device token
-  Dev->>API: GET and POST /sync with the bearer token
+  API-->>Dev: device token (back through Cloudflare)
+  Dev->>API: GET and POST /sync with the bearer token (via Cloudflare)
 ```
 
 ## Enrollment
@@ -436,12 +460,13 @@ This is a bearer-token model with transport security and no content encryption.
 
 | Concern | Handling |
 |---|---|
-| Transport | HTTPS only, on a certificate iOS trusts. The client refuses an `http:` server. |
-| Who can read the data | The server and whoever controls it, since content is not encrypted in v1. Protect it with disk encryption, a locked-down host, backups that are protected like the live file, and no request bodies in logs. The settings screen says this plainly. |
+| Transport | HTTPS only, on Cloudflare's edge certificate for the API hostname, which iOS trusts. The client refuses an `http:` server. Inside the pod the sidecar reaches the app over loopback. |
+| Who can read the data | The server and its operator, and, in v1, **Cloudflare**, which terminates TLS for the API hostname; content is not encrypted until v2. Protect the cluster with encrypted volumes and tight access to the namespace, protect backups like the live data, and keep request bodies out of logs. The settings screen says this plainly. |
 | Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
-| Database access | TLS and client certificates only, no passwords; the database is on an internal network with no published port; each service has its own role with least privilege ([Database access](#database-access)). |
-| Admin UI | No published port; reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login and MFA at the identity provider; the app verifies the Access token on every request; CSRF tokens, same-origin checks, strict CSP, an audit log. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1), so the identity provider and Cloudflare accounts are part of the trust chain. See [the admin UI](#the-admin-ui). |
+| Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the three workloads by NetworkPolicy; separate roles for migrations, sync and admin with least privilege ([Database access](#database-access)). |
+| Cluster | Default-deny NetworkPolicies, no Ingress or LoadBalancer, apps listening on loopback only, hardened pods, no Kubernetes API token, images pinned by digest. |
+| Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider; the app verifies the Access token on every request; CSRF tokens, same-origin checks, strict CSP, an audit log. Its database role cannot read notes, **but admin access can enroll a device, and a device reads the notes** (v1), so the identity provider and Cloudflare accounts are part of the trust chain. See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. Bearer headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
@@ -454,17 +479,38 @@ see [v2](#v2-end-to-end-encryption)), and traffic analysis (the server sees size
 
 ## Deploying the server
 
-Five containers on one host, on two container networks (for example with podman): the **edge** network holds the reverse proxy and
-the sync service, and the **internal** network holds the sync service, the admin UI, `cloudflared` and PostgreSQL. Only the proxy publishes a port
-(443); `cloudflared` only dials out to Cloudflare. The sync service runs the schema migrations at start and refuses to run without a database certificate and a `PUBLIC_URL`
-that is `https:`. It trusts `X-Forwarded-Proto` only from the proxy's address.
+Everything runs in one Kubernetes namespace, `harper-pad`, described by Kustomize manifests (see the open questions for where
+they live):
 
-PostgreSQL holds all state. Backing it up (`pg_dump` on a schedule, or WAL archiving) is **recommended but not required for the
-notes' safety**, because every device holds a full copy and can rebuild the server; a backup preserves what devices do not have:
-tombstones and the device list. Restoring an older backup is handled by the client
-([Rebuilding](#rebuilding-a-lost-or-restored-server)).
+- **PostgreSQL:** a CloudNativePG `Cluster` with one instance to start (one user, and devices can rebuild the server, so high
+  availability is not needed), the client CA and `pg_hba` settings above, and the certificates from cert-manager. CloudNativePG's
+  scheduled backups to object storage are **recommended but not required for the notes' safety**, because every device holds a
+  full copy and can rebuild the server; a backup preserves what devices do not have: tombstones and the device list. Restoring an
+  older backup is handled by the client ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
+- **`migrate`:** a Job, run on each release before the Deployments roll out, using the owner role. The sync service refuses to
+  start if the schema version is not the one it expects.
+- **`harper-pad-sync` and `harper-pad-admin`:** one Deployment each, one replica to start. Each pod has the app container and a
+  `cloudflared` sidecar (a native sidecar container where the cluster supports them, so the tunnel is up before the app and
+  outlives it). Each service has **its own tunnel**, and its token is a Kubernetes Secret passed as `TUNNEL_TOKEN`, so a leaked
+  token exposes one hostname, not both. The tunnels are remotely managed: the hostname maps to `http://localhost:<port>` in
+  Cloudflare. Several replicas would each run a sidecar connecting to the same tunnel, but the in-memory rate limiter and, from
+  v1.1, the proof nonce cache are per pod, so move them to PostgreSQL before scaling out.
+- **Sidecar versus a separate `cloudflared` Deployment:** Cloudflare's own Kubernetes guide runs `cloudflared` as a separate
+  Deployment pointing at Services. The sidecar is chosen here so the app can listen on loopback only, which means no Service and
+  no other pod can reach the API or the admin UI. The cost is that the two scale and restart together.
+- **NetworkPolicies:** default deny for ingress and egress in the namespace, then allow DNS, the three workloads to PostgreSQL
+  on 5432, the `cloudflared` sidecars out to Cloudflare (the tunnel ports Cloudflare documents), and the admin pod out to the
+  Access team domain on 443 for the signing keys. The cluster's network plugin has to enforce NetworkPolicy.
+- **Pod hardening:** non-root, read-only root filesystem, all capabilities dropped, the runtime-default seccomp profile, no
+  Kubernetes API token (`automountServiceAccountToken: false`, because neither app talks to the Kubernetes API), resource limits, and
+  images pinned by digest.
+- **Configuration:** `PUBLIC_URL` must be `https:` or the service refuses to start. Behind the sidecar the app sees plain HTTP on
+  loopback, so it takes the scheme from this setting and not from a forwarded header. The admin pod also gets the Access team
+  domain, the application's AUD tag and the operator email allowlist.
+- **Health:** a liveness endpoint, and a readiness endpoint that checks the database connection.
 
-Commands: `harper-pad-sync serve` and `migrate`; `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not on the command line.
+Commands: `harper-pad-sync serve` and `migrate`; `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI, not
+on the command line.
 
 ## Build order
 
@@ -499,8 +545,12 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - **Which OIDC provider** signs the operator in, and whether to also allow only specific devices or networks in the Access policy.
 - **Approval of new devices:** whether enrollment should additionally need a confirmation on an already-enrolled device, so that
   admin access alone cannot add a device that reads the notes.
-- **Issuing and rotating the database certificates:** a small private CA kept offline, or the host's existing PKI; and how the
-  containers pick up a renewed certificate without a long outage.
+- **The exact CloudNativePG settings** for certificate authentication of application roles: the `pg_hba` entries and their order, and
+  whether the certificate's common name must equal the role name (otherwise a `pg_ident` map). Check against the operator version
+  in use and test before relying on it.
+- **Whether Cloudflare may see v1 traffic.** Terminating TLS at Cloudflare means it can read note text until v2. If not, use an
+  Ingress with cert-manager for the API hostname.
+- **Where the Kubernetes manifests live:** in this repository under `backend/deploy/`, or in the cluster's own GitOps repository.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
   with forever; one user does not delete enough to matter.
 - **Whether a non-extractable key works in the installed iPhone app,** and how often iOS clears it. Test plan in `TODO.md`.
