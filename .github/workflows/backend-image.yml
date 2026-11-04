@@ -43,7 +43,7 @@ jobs:
             env: -e PUBLIC_URL=https://sync.example.test
           - name: admin
             port: 9001
-            env: -e LISTEN_ADDR=:9001
+            env: -e LISTEN_ADDR=:9001 -e SYNC_PUBLIC_URL=https://sync.example.test
     env:
       IMAGE: harper-pad-${{ matrix.name }}:ci
     steps:

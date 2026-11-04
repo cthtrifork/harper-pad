@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -28,6 +27,10 @@ type Sync struct {
 // Admin is the environment of harper-pad-admin.
 type Admin struct {
 	Common
+	// SyncPublicURL is SYNC_PUBLIC_URL, the sync service's public https origin: enrollment URLs are built from it.
+	SyncPublicURL string
+	// Demo is ADMIN_DEMO=true: serve seeded in-memory data instead of the database stubs, to look at the UI. Never in a deployment.
+	Demo bool
 }
 
 func common(defaultAddr, defaultMetricsAddr string) Common {
@@ -46,7 +49,7 @@ func common(defaultAddr, defaultMetricsAddr string) Common {
 // serves metrics on :9102.
 func LoadSync() (Sync, error) {
 	c := Sync{Common: common(":9000", ":9102"), PublicURL: os.Getenv("PUBLIC_URL")}
-	if err := validatePublicURL(c.PublicURL); err != nil {
+	if err := validateURL("PUBLIC_URL", c.PublicURL); err != nil {
 		return Sync{}, err
 	}
 	return c, nil
@@ -55,19 +58,23 @@ func LoadSync() (Sync, error) {
 // LoadAdmin reads the environment of harper-pad-admin. It listens on loopback by default: in the cluster only its
 // cloudflared sidecar may reach it, so its metrics are off unless METRICS_ADDR is set.
 func LoadAdmin() (Admin, error) {
-	return Admin{Common: common("127.0.0.1:9001", "")}, nil
+	c := Admin{Common: common("127.0.0.1:9001", ""), SyncPublicURL: os.Getenv("SYNC_PUBLIC_URL"), Demo: os.Getenv("ADMIN_DEMO") == "true"}
+	if err := validateURL("SYNC_PUBLIC_URL", c.SyncPublicURL); err != nil {
+		return Admin{}, err
+	}
+	return c, nil
 }
 
-func validatePublicURL(raw string) error {
+func validateURL(name, raw string) error {
 	if raw == "" {
-		return errors.New("PUBLIC_URL is required")
+		return fmt.Errorf("%s is required", name)
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
-		return fmt.Errorf("PUBLIC_URL %q is not a URL", raw)
+		return fmt.Errorf("%s %q is not a URL", name, raw)
 	}
 	if u.Scheme != "https" {
-		return fmt.Errorf("PUBLIC_URL must be an https URL, got scheme %q", u.Scheme)
+		return fmt.Errorf("%s must be an https URL, got scheme %q", name, u.Scheme)
 	}
 	return nil
 }
