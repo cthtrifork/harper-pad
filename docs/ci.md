@@ -100,3 +100,5 @@ Three workflows report on pull requests, copied from trivy-dashboard-wail3 and a
 ## Trivy DB cache
 
 `trivy-cache.yml` refreshes the Trivy vulnerability DB cache daily on the default branch (the trivy-action README's recommendation). `security.yml` restores it through trivy-action's built-in cache and sets `TRIVY_SKIP_DB_UPDATE=true`, so they do not download the DB and avoid registry rate limits. If the cache is missing (never run, or evicted), the scans fail until the workflow runs once: trigger it with *Run workflow*.
+
+Throwaway change to verify that a docs-only pull request skips the code jobs. Do not merge.
