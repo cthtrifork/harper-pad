@@ -21,7 +21,8 @@ The workflow then:
 2. works out the version (the `tag` input, otherwise Release Drafter's) and stops if a git tag of that name already exists (see *Retrying* for an existing tag);
 3. calls `release.yml` with that version and the commit it started on (the head of `main`). That commit is built, and **no tag exists yet**: `release.yml` re-runs vet, tests and `govulncheck` (in a `checks` job beside the binary build, not before it), builds the Linux binary and, on a Windows runner, the Windows exe (see [windows](windows.md)), pushes the two backend images (`harper-pad-sync`, `harper-pad-admin`) to ghcr.io, and publishes the
    release: the draft Release Drafter wrote for that version, with the assets attached (Linux binary, tarball, signed `.deb` and `.rpm`, public key, Windows exe, CycloneDX SBOM, `SHA256SUMS`) and signed attestations. Publishing sets the release's target to the built commit and GitHub creates the tag there. See [self-update](self-update.md) for why those assets
-   have the names they do.
+   have the names they do;
+4. for a final release (not a pre-release), publishes that tag's web version to the root of the GitHub Pages site (`pages.yml`, see [pages](pages.md)); the head of `main` is at `/preview/`.
 
 ## Release notes
 

@@ -86,6 +86,7 @@ jobs:
       packages: write # push the backend images to ghcr.io
       id-token: write # sign the provenance attestation
       attestations: write # store the attestations
+      pages: read # the web version's deploy reads the Pages settings
     uses: $/.github/workflows/release.yml
     with:
       tag: ${{ needs.tag.outputs.tag }}
