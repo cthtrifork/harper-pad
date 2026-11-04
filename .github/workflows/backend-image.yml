@@ -1,8 +1,11 @@
 name: Backend images
 
-# Builds the two backend container images (backend/Containerfile.sync and .admin) for amd64 and arm64. A push to main publishes them
-# to ghcr.io as sha-<commit>, with SBOM and provenance attestations, and writes each digest to the job summary (the cluster pins by
-# digest). Pull requests build only, so a broken Containerfile is caught before merge. See backend/README.md, "Images".
+# Checks the two backend container images (backend/Containerfile.sync and .admin) the way the images are
+# shipped: built, scanned with Trivy and started. Nothing is published from here. The release workflow
+# (release.yml) builds and pushes them to ghcr.io when a version is cut, so an image only exists for a
+# released commit. Runs for pull requests that touch backend/ (do not mark it required: it has a paths
+# filter), for pushes to main, weekly (a new base-image CVE needs no commit to appear), and by hand.
+# See backend/README.md, "Images".
 on:
   pull_request:
     paths:
@@ -13,6 +16,8 @@ on:
     paths:
       - backend/**
       - .github/workflows/backend-image.yml
+  schedule:
+    - cron: '23 5 * * 1' # Mondays 05:23 UTC
   workflow_dispatch:
 
 permissions:
@@ -22,21 +27,29 @@ concurrency:
   group: backend-image-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
+  # The DB comes from the cache that trivy-cache.yml refreshes daily.
+  TRIVY_SKIP_DB_UPDATE: 'true'
+
 jobs:
   image:
     name: image (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write # push to ghcr.io (only done outside pull requests)
     strategy:
       fail-fast: false
       matrix:
-        name: [sync, admin]
+        include:
+          - name: sync
+            port: 9000
+            env: -e PUBLIC_URL=https://sync.example.test
+          - name: admin
+            port: 9001
+            env: -e LISTEN_ADDR=:9001
     env:
-      IMAGE: ghcr.io/${{ github.repository_owner }}/harper-pad-${{ matrix.name }}
-      PUSH: ${{ github.event_name != 'pull_request' }}
+      IMAGE: harper-pad-${{ matrix.name }}:ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,38 +57,85 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Log in to ghcr.io
-        if: env.PUSH == 'true'
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build${{ github.event_name != 'pull_request' && ' and push' || '' }}
-        id: build
+      # The image the runner can scan and start (amd64). Layers are cached in the Actions cache; the
+      # cache is only read by this workflow, never by release.yml, so it cannot reach a published image.
+      - name: Build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: backend
           file: backend/Containerfile.${{ matrix.name }}
-          platforms: linux/amd64,linux/arm64
-          push: ${{ env.PUSH == 'true' }}
-          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
-          sbom: ${{ env.PUSH == 'true' }}
-          provenance: ${{ env.PUSH == 'true' && 'mode=max' || 'false' }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=backend-${{ matrix.name }}
+          cache-to: type=gha,scope=backend-${{ matrix.name }},mode=max # zizmor: ignore[cache-poisoning]
 
-      - name: Digest
-        if: env.PUSH == 'true'
+      # The release builds arm64 as well, so a Containerfile that only breaks there is caught before it.
+      # It cross-compiles (no emulation), so this is quick and the layers come from the cache above.
+      - name: Build arm64
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          file: backend/Containerfile.${{ matrix.name }}
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=backend-${{ matrix.name }}
+
+      # Only CRITICAL findings with a fix fail the job. HIGH findings are listed by the next step;
+      # security.yml and dependency-scan.yml keep reporting them too.
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln,secret
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          version: ${{ env.TRIVY_VERSION }}
+
+      # HIGH and CRITICAL, never fails the job; the table is in the job summary.
+      - name: Report all findings
+        if: ${{ !cancelled() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          output: image-scan.txt
+          exit-code: '0'
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Add the report to the job summary
+        if: ${{ !cancelled() }}
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          NAME: ${{ matrix.name }}
         run: |
           {
-            echo "### ${IMAGE}"
+            echo "## Trivy image scan (${NAME}): all HIGH and CRITICAL findings with a fix"
+            echo
+            echo 'Only CRITICAL findings fail the job; HIGH findings are listed here for review.'
             echo
             echo '```'
-            echo "${IMAGE}@${DIGEST}"
+            head -c 60000 image-scan.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The service must start and answer /healthz. That needs no database; /readyz does. The image has
+      # no shell or curl, so the check runs from the runner.
+      - name: Smoke test
+        env:
+          PORT: ${{ matrix.port }}
+          RUN_ENV: ${{ matrix.env }}
+        run: |
+          # shellcheck disable=SC2086 # RUN_ENV is a fixed list of -e options from the matrix above
+          docker run -d --name smoke -p "${PORT}:${PORT}" $RUN_ENV "$IMAGE" serve
+          for _ in $(seq 1 30); do
+            curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/healthz" && exit 0
+            sleep 1
+          done
+          docker logs smoke
+          exit 1
