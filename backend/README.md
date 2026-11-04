@@ -2,7 +2,7 @@
 
 The optional sync service for Harper Pad: `harper-pad-sync` (the API) and `harper-pad-admin` (Go + HTMX, for enrollment URLs
 and devices), on PostgreSQL. The design is in [`docs/sync.md`](../docs/sync.md). **Nothing here works yet beyond the health
-endpoints**: this directory is the layout, the stub commands and the end-to-end stack, to be filled in following the build order
+endpoints and the admin pages (on stub data)**: this directory is the layout, the stub commands and the end-to-end stack, to be filled in following the build order
 in that document.
 
 This is its own Go module (`github.com/cthtrifork/harper-pad/backend`) and shares no code with the desktop app. The Kubernetes
@@ -11,6 +11,7 @@ manifests are not kept in this repository.
 | Path | What |
 |---|---|
 | `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
+| `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; no inline script or style, same-origin and CSRF checks). It reaches the database only through the `Store` interface; a stub (`ErrNotImplemented`, the default) and an in-memory demo implementation stand in until the PostgreSQL one exists |
 | `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool; all SQL and `migrations/` later), and `syncapi`, `admin`, `auth`, `protocol`: empty packages with a package comment each |
 | `Containerfile.sync`, `Containerfile.admin` | Container images; the build context is this directory |
 | `testdata/protocol/` | Fixtures for the protocol (empty) |
@@ -24,6 +25,8 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 |---|---|
 | `LISTEN_ADDR` | Default `:9000` (sync) and `127.0.0.1:9001` (admin, loopback: only its cloudflared sidecar reaches it) |
 | `PUBLIC_URL` | Sync only, required, must be `https:` or the service refuses to start |
+| `SYNC_PUBLIC_URL` | Admin only, required, `https:`: the sync service's public address, which enrollment URLs (`<it>/join#<token>`) are built from |
+| `ADMIN_DEMO` | Admin only. `true` serves seeded in-memory data instead of the database stub, to look at the UI. Never set it in a deployment |
 | `METRICS_ADDR` | Where `/metrics` is served, on its own listener so it is never on the public route. Default `:9102` (sync); admin has none unless set, because its pod accepts no traffic except from its own sidecar |
 | `DATABASE_URL` | Optional. When unset, the standard libpq variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`) are read, which is how the cluster does client-certificate login |
 

@@ -1,0 +1,9 @@
+{{define "content"}}
+<div class="head">
+  <h2>Devices</h2>
+  <a class="hp primary" href="/enroll"><svg><use href="#i-plus"/></svg>New enrollment URL</a>
+</div>
+{{template "tiles" .}}
+{{template "devices-list" .}}
+<p class="foot">Revoking a device signs it out at its next sync. Its drafts stay on the device.</p>
+{{end}}

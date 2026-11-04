@@ -1,0 +1,22 @@
+{{define "content"}}
+<div class="cols">
+  <div class="stack">
+    <h2>New enrollment URL</h2>
+    <form class="stack" method="post" action="/enroll" hx-post="/enroll" hx-target="#result" hx-swap="innerHTML">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <div class="field">
+        <label for="name">Device name</label>
+        <input id="name" name="name" value="{{.Form}}" maxlength="64" required autocomplete="off" placeholder="iPhone 2"{{if .NameError}} aria-invalid="true" aria-describedby="name-error"{{end}}>
+      </div>
+      <div class="field"><span class="label">Client account</span><div class="ro">{{.Account}} <small>the only account; a device is bound to it for good</small></div></div>
+      <div><button class="hp primary" type="submit"><svg><use href="#i-plus"/></svg>Create URL</button></div>
+    </form>
+    <div id="result" aria-live="polite">{{template "enroll-result" .}}</div>
+  </div>
+  <div class="stack">
+    <h2>Pending</h2>
+    {{template "pending" .}}
+    <p class="foot">Cancelling removes the URL so it can no longer be used.</p>
+  </div>
+</div>
+{{end}}

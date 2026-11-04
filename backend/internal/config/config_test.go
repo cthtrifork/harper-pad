@@ -26,7 +26,17 @@ func TestLoadSync(t *testing.T) {
 	}
 }
 
+func TestLoadAdminSyncPublicURL(t *testing.T) {
+	for url, wantErr := range map[string]bool{"https://sync.example.org": false, "": true, "http://sync.example.org": true} {
+		t.Setenv("SYNC_PUBLIC_URL", url)
+		if _, err := LoadAdmin(); (err != nil) != wantErr {
+			t.Errorf("SYNC_PUBLIC_URL=%q: err = %v, wantErr %v", url, err, wantErr)
+		}
+	}
+}
+
 func TestLoadAdminDefaultsToLoopback(t *testing.T) {
+	t.Setenv("SYNC_PUBLIC_URL", "https://sync.example.org")
 	t.Setenv("LISTEN_ADDR", "")
 	c, err := LoadAdmin()
 	if err != nil {
