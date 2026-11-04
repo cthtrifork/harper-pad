@@ -56,10 +56,10 @@ never run on a real desktop yet.
       the sync domain), the ingress route and middlewares for the sync API, NetworkPolicies, the admin pod with its `cloudflared`
       sidecar. Verify the CloudNativePG `pg_hba` certificate setup on a real cluster.
 - [ ] The sync module (`lib/sync.js`) with unit tests.
-- [ ] The end-to-end test (`docs/sync.md`, "End-to-end test"): a compose stack with PostgreSQL and `harper-pad-sync` built from
-      `backend/Containerfile.sync`, and a Playwright script with two browser contexts as devices. Checks: enrollment (and a spent
-      invite), create and sync, a plain update, and the lose-the-server rebuild below. Needs the loopback exception for `PUBLIC_URL`
-      and the client, and the build-time sync origin for the CSP.
+- [ ] The end-to-end test (`docs/sync.md`, "End-to-end test"): a compose stack with PostgreSQL, `harper-pad-sync` built from
+      `backend/Containerfile.sync`, and Caddy providing https (`app.localhost` serves the web build, `sync.localhost` proxies to the
+      service), and a Playwright script with two browser contexts as devices. Checks: enrollment (and a spent invite), create and
+      sync, a plain update, and the lose-the-server rebuild below. Needs the build-time sync origin for the CSP.
 - [ ] A "lose the server" test in the end-to-end suite: sync two devices, wipe the server's database, re-enroll, and check that
       the server is rebuilt with identical drafts and no conflicted copies; then restore an older backup and check the same,
       and that a draft deleted elsewhere while a device was offline can reappear (documented), but nothing else is lost.

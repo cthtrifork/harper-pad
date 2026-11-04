@@ -451,7 +451,7 @@ This is a bearer-token model with transport security and no content encryption.
 
 | Concern | Handling |
 |---|---|
-| Transport | HTTPS only, on a Let's Encrypt certificate (cert-manager) for the sync domain, terminated at the cluster's ingress, with HTTP redirected and HSTS set. The client refuses an `http:` server, except on loopback (`localhost`, `127.0.0.1`) for development and the end-to-end test. |
+| Transport | HTTPS only, on a Let's Encrypt certificate (cert-manager) for the sync domain, terminated at the cluster's ingress, with HTTP redirected and HSTS set. The client refuses an `http:` server. |
 | Who can read the data | The server and its operator; content is not encrypted until v2. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, protect backups like the live data, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
 | Stolen device token | Revoke that device from another device or the admin UI; 30-day idle expiry; from v1.1 a device-bound key makes a copied token useless. The token grants only this one user's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
@@ -505,8 +505,7 @@ GitOps repository, not in this one (this section is their specification):
 - **Pod hardening:** non-root, read-only root filesystem, all capabilities dropped, the runtime-default seccomp profile, no
   Kubernetes API token (`automountServiceAccountToken: false`, because neither app talks to the Kubernetes API), resource limits, and
   images pinned by digest.
-- **Configuration:** `PUBLIC_URL` must be `https:`, or `http:` on a loopback host (for development and the end-to-end test), or the
-  service refuses to start. The ingress terminates TLS, so the app sees plain
+- **Configuration:** `PUBLIC_URL` must be `https:` or the service refuses to start. The ingress terminates TLS, so the app sees plain
   HTTP and takes the scheme from this setting, not from a forwarded header. The admin pod also gets the Access team domain, the
   application's AUD tag and the operator email allowlist.
 - **Health:** a liveness endpoint, and a readiness endpoint that checks the database connection.
@@ -516,15 +515,26 @@ on the command line.
 
 ## End-to-end test
 
-A small test that runs the real pieces together, because only that proves the JavaScript sync client, CORS, the CSP, IndexedDB and
-the server work as one. It is a Playwright script driving a real Chromium against a compose stack.
+A small test that runs the real pieces together, because only that proves the JavaScript sync client, CORS, the CSP, IndexedDB, TLS
+and the server work as one. It is a Playwright script driving a real Chromium against a compose stack.
 
-- **The stack:** a compose file with **PostgreSQL** and **`harper-pad-sync`**, the latter built from its real Containerfile
-  (`backend/Containerfile.sync`, with `Containerfile.admin` beside it), so the image, the listen address and the configuration
-  guards are tested too. The compose file avoids features only Docker has, so `podman compose` and `docker compose` both run it;
-  the `make` target uses whichever is installed.
-- **The devices:** the web build served by `vite preview`, outside the stack, and two Chromium contexts, each with its own
-  IndexedDB, acting as device A and device B. No frontend container is needed.
+- **The stack:** a compose file with three services, built or pulled and started together:
+  - **PostgreSQL**;
+  - **`harper-pad-sync`**, built from its real Containerfile (`backend/Containerfile.sync`, with `Containerfile.admin` beside
+    it), so the image, the listen address and the configuration guards are tested too;
+  - **Caddy**, which provides HTTPS the way the cluster's ingress does in production.
+
+  The compose file avoids features only Docker has, so `podman compose` and `docker compose` both run it; the `make` target uses
+  whichever is installed.
+- **HTTPS with Caddy:** Caddy serves two sites with its internal CA (`tls internal`) on a high port, so a rootless runtime can bind it:
+  `https://app.localhost:8443`, a static file server for the web build, and `https://sync.localhost:8443`, a reverse proxy to
+  `harper-pad-sync`. Because the page and the API are on different https origins, as in production, CORS, the CSP `connect-src`
+  and the client's "https only" rule are all exercised. `PUBLIC_URL` is `https://sync.localhost:8443`, so the service's guard stays
+  strict and there is no development exception. Playwright runs with `ignoreHTTPSErrors`, so the browser does not need Caddy's root
+  certificate. (Chromium resolves `*.localhost` to loopback by itself; confirm this, and that Caddy issues for these names, when
+  the stack is built.)
+- **The devices:** the web build, built for the root path and mounted into Caddy, and two Chromium contexts, each with its own
+  IndexedDB, acting as device A and device B. There is no frontend container and no `vite preview`.
 - **Invites:** the test inserts an invite row into PostgreSQL itself, with the same SHA-256 token hash the service uses. It does not
   go through the admin UI, which sits behind a Cloudflare Access login, and the admin app gets no "skip authentication" switch for
   tests. The admin UI gets its own small test later, with a locally signed Access token and a fake key set.
@@ -536,13 +546,13 @@ the server work as one. It is a Playwright script driving a real Chromium agains
      copies ([Rebuilding](#rebuilding-a-lost-or-restored-server)).
   5. **Later:** an offline edit on both devices makes a local conflicted copy, and a revoked token shows "Sign in again" while the local
      drafts stay.
-- **Settings it needs:** `PUBLIC_URL` may be `http:` on a loopback host, and the client accepts the same exception. The sync origin
-  has to be in the CORS allowlist (the preview origin) and in the web build's CSP `connect-src`, so this test is where the build-time
-  setting for the sync origin is first exercised.
+- **Settings it needs:** the page origin in the CORS allowlist and the sync origin in the web build's CSP `connect-src`, so this
+  test is where the build-time setting for the sync origin is first exercised.
 - **Where it runs:** CI follows the pattern of `scripts/screenshots.sh` and its workflow (a pinned `playwright-core` driving
   the runner's Chrome); locally it is a `make` target.
 - **What it does not prove:** mTLS to PostgreSQL (the compose database uses password or trust authentication; the production
-  certificate setup is checked on a real cluster, see the open questions), the ingress, cert-manager, Cloudflare and Access.
+  certificate setup is checked on a real cluster, see the open questions), the real ingress and its certificate, cert-manager,
+  Cloudflare and Access, and Safari or WebKit behaviour.
 
 ## Build order
 
