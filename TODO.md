@@ -32,21 +32,15 @@ never run on a real desktop yet.
 
 ## 4. Sync (proposal: `docs/sync.md`)
 
-- [ ] **iPhone check for the device-bound key** (decides whether v1.1 hardening goes ahead as written). Chromium was checked
-      (a non-extractable ECDSA P-256 key stored in IndexedDB survived a reload, could not be exported and signed correctly);
-      WebKit and the installed Home Screen app were not. Build a throwaway page (not merged; serve it from a scratch branch on
-      Pages or any HTTPS host) that:
-  1. generates a non-extractable ECDSA P-256 key, stores **only the private `CryptoKey`** in IndexedDB and shows the public JWK;
-  2. after a reload, loads the key, confirms `extractable` is false and `exportKey` throws, signs a fixed message and checks
-     the signature against the JWK (raw `r‖s`, 64 bytes);
-  3. calls `navigator.storage.persist()` and reports the result;
-  4. for v2: imports 32 random bytes as a non-extractable HKDF key, stores that handle, and after a reload derives an AES-GCM
-     key from it, encrypts and decrypts a string; and runs Argon2id (WebAssembly, 64 MiB, 3 passes) in a worker, recording the
-     time and whether the app survives (try 32 and 128 MiB as well).
-
-  Run it in Safari and as an installed Home Screen app (add the icon first, then run it from the icon), on the current iOS. Record
-  in `docs/sync.md` whether each step passes, then repeat after the app has been closed for a day, a week, and after an iOS
-  restart, to see whether the key is cleared. If it fails or is cleared often, use the rotation fallback described there.
+- [ ] **iPhone check for the device-bound key** (decides whether v1.1 hardening goes ahead as written). A throwaway page
+      (`frontend/web/key-test.html`, PR #86, published as a pull request preview, not merged) checks it. **Done on 4 November 2026**
+      on an iPhone, in a Safari tab and as a Home Screen app: key generation, storing only the private `CryptoKey`, `exportKey`
+      refused, raw `r||s` signatures that verify against the saved public key, the v2 HKDF data key and a derived AES-GCM key, and
+      Argon2id at 32, 64 and 128 MiB (about 0.1 to 0.2 s, no page kill). The keys survived closing and reopening the Home Screen
+      app. `persist()` returned false. Results are recorded in `docs/sync.md`.
+  - [ ] **Still to do:** open the Home Screen app again after a few hours, a day, a week and a phone restart, and look for "Key from
+        an earlier run survived" and the history. If the key is cleared, use the rotation fallback described in `docs/sync.md`.
+        Close PR #86 when the checks are done.
 - [ ] Local groundwork: tombstones, `synced_hash` change tracking, an apply-remote store method, SQLite `user_version` 3 and IndexedDB
       `DB_VERSION` migrations, with tests.
 - [ ] The server: `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,

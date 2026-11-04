@@ -319,8 +319,14 @@ Details that are easy to get wrong:
 - **Limits:** it does not stop script running in the page, or someone using the unlocked device, because both can ask the key to
   sign. The RFC says the same of DPoP. Only preventing XSS (the strict CSP in [security](security.md)) addresses the first, and
   revocation the second.
-- **Not verified on iOS yet.** Storing and using a non-extractable key worked in a Chromium test, but it has not been run on
-  WebKit or in an installed iPhone app. The iPhone check in `TODO.md` decides whether this step goes ahead as written.
+- **Checked on an iPhone** (4 November 2026, a throwaway test page published as a pull request preview; the user agent was
+  `iPhone OS 18_7` with Safari `Version/27.0.1`), in a Safari tab and in an installed Home Screen app: a non-extractable ECDSA
+  P-256 key is generated, **only the private `CryptoKey`** is stored in IndexedDB and read back, `exportKey` on it is refused, a
+  signature is raw `r||s` (64 bytes) and verifies against the public key saved at the first run, and a tampered signature is
+  rejected. The key and the v2 data key both **survived closing and reopening the Home Screen app** (39 seconds later, the same key,
+  not a new one). A Home Screen app starts with its own empty storage, so a device enrolls inside the installed app, as designed.
+  `navigator.storage.persist()` returned false in both, so iOS promises nothing. **Still open:** whether the key survives a day, a
+  week and a phone restart. The step goes ahead as written, with the rotation fallback if the key turns out to be cleared.
 
 **Not planned:** rotating the token on a schedule with reuse detection, and a separate refresh token. A device-bound key covers the
 copied-token case better and has no refresh race (two tabs, the service worker, a response lost when iOS suspends the app). If the
@@ -759,7 +765,8 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
   in use and test before relying on it.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
   with forever; one user does not delete enough to matter.
-- **Whether a non-extractable key works in the installed iPhone app,** and how often iOS clears it. Test plan in `TODO.md`.
+- **How long a non-extractable key survives in the installed iPhone app.** It works and survives a relaunch; the one-day, one-week
+  and restart checks are still running (`TODO.md`).
 - **How large the first upload can be** before it needs chunking, given the 5 MB per draft limit.
 
 ## v2: end-to-end encryption
@@ -787,8 +794,11 @@ is. There is **no feature loss from hiding the text**: search already runs on ea
   module needs no crypto library for the data itself. (XChaCha20-Poly1305 is not in WebCrypto.)
 - **Key bag on the server** (one per client account): the DK **wrapped** (AES-GCM) by a key-encryption key, plus the KDF parameters, so devices can fetch it.
   It holds one wrapping per unlock method, and the first version has two:
-  1. **Passphrase.** The key-encryption key is `Argon2id(passphrase, salt)` with parameters stored in the key bag (a starting point:
-     64 MiB, 3 passes, 1 lane), so they can be raised later. Argon2id is not in WebCrypto; use a pinned, audited WebAssembly
+  1. **Passphrase.** The key-encryption key is `Argon2id(passphrase, salt)` with parameters stored in the key bag. The default is
+     **32 MiB, 3 passes, 1 lane**, which is above OWASP's minimum of 19 MiB, 2 iterations and 1 lane; a device refuses a key bag
+     below that floor, so the parameters cannot be weakened. They can be raised later, by re-wrapping the key with a stronger
+     setting (no document is re-encrypted); 64 MiB is fine on a recent device, but every device must derive with the stored
+     parameters, so the weakest device sets the practical ceiling. Argon2id is not in WebCrypto; use a pinned, audited WebAssembly
      implementation (the CSP already allows `'wasm-unsafe-eval'`) run in a worker, **for both builds** so the derivation is
      identical everywhere.
   2. **Recovery key.** A generated 160-bit secret shown once as groups of Base32 characters, to be saved in a password manager or
@@ -868,8 +878,9 @@ phone with many drafts, and it runs in chunks that can be resumed.
 
 ### Open questions for v2
 
-- **Argon2id memory on an iPhone.** 64 MiB inside a Home Screen app may be killed under memory pressure; measure it and pick the
-  parameters from the result (add to the iPhone check in `TODO.md`).
+- **Argon2id memory on an iPhone: answered.** In the installed Home Screen app, Argon2id (hash-wasm 4.12.0, in a worker, 3 passes,
+  1 lane) ran at 32, 64 and 128 MiB in about 101, 107 and 218 ms, with no page kill and no warning. That is one phone on one iOS
+  version, so an older, low-memory device may differ, which is why the default stays at 32 MiB and not higher.
 - **Which Argon2id WebAssembly package** to pin, and whether to keep it lazy-loaded so v1 users do not pay for it.
 - **Device pairing** as a third unlock method: an enrolled device wraps the DK to the new device's public key (ECDH P-256, in
   WebCrypto) through the server, after the user confirms a fingerprint on both. It avoids typing the passphrase on a phone but
