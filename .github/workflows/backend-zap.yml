@@ -3,7 +3,7 @@ name: Backend ZAP scan
 # OWASP ZAP against the sync backend, for the OWASP Top 10 classes a scanner can see from outside (injection, broken access
 # control, security misconfiguration, SSRF; see backend/test/zap/rules.tsv for the mapping). It starts the end-to-end compose
 # stack (backend/test/e2e) and runs ZAP's full scan (spider, passive and active rules) against harper-pad-sync on the compose
-# network, then keeps the HTML and JSON reports as an artifact, annotates the run, writes a table to the job summary and keeps one comment on the pull request up to date. Rules marked FAIL in rules.tsv fail the job; everything else is
+# network, then keeps the HTML and JSON reports as an artifact, annotates the run, writes a table to the job summary, uploads SARIF to code scanning and keeps one comment on the pull request up to date. Rules marked FAIL in rules.tsv fail the job; everything else is
 # listed in the job summary. The active scan sends attacks, so it only ever targets this throwaway stack. Runs for pull requests that
 # touch backend/ (do not mark it required: it has a paths filter), weekly (new rules appear without any commit) and by hand.
 # What it cannot find: logic flaws in the sync protocol. The scanner knows nothing of it, so the API scan should be
@@ -35,6 +35,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+      security-events: write # the SARIF upload
       pull-requests: write # the comment; the job runs no code from the pull request outside the container build
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,6 +67,20 @@ jobs:
           [ -f zap-out/report.json ] || { echo "ZAP wrote no report" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
           backend/test/zap/report.sh zap-out/report.json backend/test/zap/rules.tsv zap-out/summary.md
           cat zap-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The same alerts as SARIF, for the Security tab (code scanning). ZAP checks a running service, so the results are not tied to
+      # a line of code; they are tracked by rule and URL, and closed when a later run no longer finds them. Pull requests from
+      # forks have a read-only token and are skipped.
+      - name: Convert to SARIF
+        if: hashFiles('zap-out/report.json') != ''
+        run: backend/test/zap/sarif.sh zap-out/report.json backend/test/zap/rules.tsv zap-out/zap.sarif
+
+      - name: Upload to code scanning
+        if: hashFiles('zap-out/zap.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: zap-out/zap.sarif
+          category: zap-sync-backend
 
       # One comment per pull request, updated in place on each run. Not for forks: their token is read-only.
       - name: Comment on the pull request
