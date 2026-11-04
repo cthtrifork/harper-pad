@@ -146,7 +146,7 @@ verify the server certificate (`sslmode=verify-full`, with the cluster's server 
 | Role | Used by | Allowed |
 |---|---|---|
 | `harper_sync` | `harper-pad-sync` | Owns the tables and runs the migrations at start (including the grants to `harper_admin`); reads and writes `docs`, `meta` (and the key bag in v2), `devices` and `invites` |
-| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke). **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL, and it cannot change the schema |
+| `harper_admin` | `harper-pad-admin` | `invites`: insert, select, delete; `devices`: select, update (rename), delete (revoke); `audit`: insert, select. **No access to `docs`**, so a compromised admin UI cannot read notes. No DDL, and it cannot change the schema |
 
 ### The admin UI
 
@@ -324,22 +324,92 @@ Everything else stays on the device: the personal dictionary, the ignore list, t
 Draft ids are already 16 bytes (6 of time, 10 random) as 32 hex characters (`internal/store/drafts.go`, `newID`), so devices
 can create drafts offline without colliding.
 
-### Server schema (sketch, PostgreSQL)
+### Server schema (PostgreSQL)
 
 ```sql
-docs     (id TEXT PRIMARY KEY, version BIGINT NOT NULL, created_at BIGINT, updated_at BIGINT,
-          deleted BOOLEAN NOT NULL DEFAULT FALSE, data TEXT)       -- data: opaque string, the draft blob
-devices  (id TEXT PRIMARY KEY, name TEXT, user_agent TEXT, token_hash BYTEA UNIQUE, created_at BIGINT, last_seen BIGINT,
-          public_key TEXT)                                         -- public_key (JWK) is empty until the v1.1 device-bound key
-invites  (token_hash BYTEA PRIMARY KEY, expires_at BIGINT, used BOOLEAN NOT NULL DEFAULT FALSE)
-meta     (key TEXT PRIMARY KEY, value TEXT)                        -- schema version and the serverId
--- plus one sequence, the change counter
+CREATE SEQUENCE change_seq;                       -- the one change counter for the whole server
+
+CREATE TABLE meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL                             -- 'schema_version', 'server_id', (v2) 'encrypted'
+);
+
+CREATE TABLE docs (
+  id         TEXT    PRIMARY KEY CHECK (id ~ '^[0-9a-f]{32}$'),
+  version    BIGINT  NOT NULL,                    -- change_seq value at the last accepted change
+  created_at BIGINT  NOT NULL,                    -- the device's timestamps, Unix ms, as in the app
+  updated_at BIGINT  NOT NULL,
+  deleted    BOOLEAN NOT NULL DEFAULT FALSE,      -- a tombstone; data is cleared when this is set
+  data       TEXT    NOT NULL DEFAULT '' CHECK (octet_length(data) <= 8388608)
+);
+CREATE UNIQUE INDEX docs_version_idx ON docs (version);
+
+CREATE TABLE devices (
+  id         TEXT   PRIMARY KEY,
+  name       TEXT   NOT NULL,
+  user_agent TEXT   NOT NULL DEFAULT '',
+  token_hash BYTEA  NOT NULL UNIQUE,              -- SHA-256 of the bearer token
+  public_key TEXT   NOT NULL DEFAULT '',          -- v1.1: the device's signing key (JWK)
+  created_at BIGINT NOT NULL,
+  last_seen  BIGINT NOT NULL
+);
+
+CREATE TABLE invites (
+  token_hash  BYTEA  PRIMARY KEY,
+  device_name TEXT   NOT NULL DEFAULT '',         -- entered in the admin UI, copied to the device on enrollment
+  created_by  TEXT   NOT NULL,                    -- operator email from the Access token
+  created_at  BIGINT NOT NULL,
+  expires_at  BIGINT NOT NULL,
+  used_at     BIGINT                              -- NULL until spent
+);
+
+CREATE TABLE audit (
+  id     BIGSERIAL PRIMARY KEY,
+  at     BIGINT NOT NULL,
+  actor  TEXT   NOT NULL,
+  action TEXT   NOT NULL,                         -- 'invite.create', 'device.rename', 'device.revoke'
+  detail TEXT   NOT NULL DEFAULT ''
+);
+
+-- v2 only, in a later migration
+CREATE TABLE keybag (
+  id      SMALLINT PRIMARY KEY CHECK (id = 1),    -- one user, one key bag
+  version BIGINT   NOT NULL,                      -- compare-and-set
+  data    TEXT     NOT NULL                       -- opaque JSON: wrapped data key, KDF parameters, check value
+);
 ```
 
-`version` comes from one PostgreSQL sequence that increases on every accepted change anywhere (taken in the same transaction as the write). A client's cursor is the highest counter value
-it has seen, so `since=<cursor>` returns everything newer, including deletions (`deleted = 1`).
+The sync role owns the tables and sets the admin role's grants in the migration:
 
-The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `?` parameters.
+```sql
+GRANT SELECT, INSERT, DELETE ON invites TO harper_admin;
+GRANT SELECT, DELETE ON devices TO harper_admin;
+GRANT UPDATE (name) ON devices TO harper_admin;       -- rename only
+GRANT SELECT, INSERT ON audit TO harper_admin;
+GRANT USAGE ON SEQUENCE audit_id_seq TO harper_admin;
+-- nothing on docs, meta or keybag
+```
+
+How it is used:
+
+- **The cursor.** `version` comes from `change_seq`, which increases on every accepted change anywhere. A client's cursor is the
+  highest version it has seen, so a pull is one indexed query: `WHERE version > $1 ORDER BY version LIMIT $2`, which includes
+  deletions (`deleted = TRUE`).
+- **Writes are serialized.** A sequence hands out numbers before commit, so two concurrent pushes could commit out of order, and a
+  client that had already read the higher number would never see the lower one. Every push transaction therefore starts with
+  `pg_advisory_xact_lock(<constant>)`, so the next number is allocated only after the previous push has committed. For one user this
+  costs nothing.
+- **A push is one transaction:** take the lock, lock the doc's row, compare `base_version`, take `nextval('change_seq')`, then
+  upsert.
+- **Tombstones clear the text,** so a deleted note's content is not kept on the server. They are kept forever.
+- **Spending an invite is one statement,** so two devices cannot use it at once:
+  `UPDATE invites SET used_at = $now WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $now RETURNING device_name`. A
+  periodic delete removes expired invites.
+- **Revoking a device deletes its row.** The "new device added" banner comes from `created_at`.
+- **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times that survive a rebuild.
+- **The 8 MiB check** is a backstop. The app enforces the 5 MB draft limit, and v2's base64 envelope is larger than the plaintext.
+
+The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `$1`-style parameters.
 
 ## Protocol
 
