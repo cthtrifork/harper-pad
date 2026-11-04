@@ -154,8 +154,7 @@ verify the server certificate (`sslmode=verify-full`, with the cluster's server 
   [Stakater Reloader](https://github.com/stakater/Reloader): the Deployments carry its annotation for the certificate Secrets, and
   it does a rolling restart when cert-manager renews one, so the app has no reload code.
 - **Authentication rules:** `spec.postgresql.pg_hba` requires `cert` for these roles over `hostssl`, and the roles have no
-  password. The exact entries, their order relative to CloudNativePG's own defaults, and whether the common name must equal the
-  role (otherwise a `pg_ident` map) are to be confirmed against the operator version in use; they are not verified here.
+  password, and the certificate's common name equals the role name.
 - **Network:** a NetworkPolicy lets only the sync pods and the admin pods reach port 5432 (plus what the
   operator itself needs).
 
@@ -769,8 +768,7 @@ and the server work as one. It is a Playwright script driving a real Chromium ag
 - **Database login:** the compose PostgreSQL requires TLS 1.3 and a client certificate whose common name is the role, from a
   throwaway CA made by `certs.sh`; the sync service logs in with the libpq variables and `verify-full`, and the test checks that
   TLS without a certificate, a certificate with another common name and a plain connection are refused.
-- **What it does not prove:** CloudNativePG's own `pg_hba` defaults and `pg_ident` handling (checked on a real cluster, see the
-  open questions), certificate renewal by cert-manager and the Reloader restart, the real ingress and its certificate,
+- **What it does not prove:** certificate renewal by cert-manager and the Reloader restart, the real ingress and its certificate,
   Cloudflare and Access, and Safari or WebKit behaviour.
 
 ## Build order
@@ -800,9 +798,6 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - **The desktop webview origin** for the CORS allowlist, and whether the embedded page's CSP can name the sync origin at build
   time or needs a setting at run time.
 - **Which OIDC provider** signs the operator in, and whether to also allow only specific devices or networks in the Access policy.
-- **The exact CloudNativePG settings** for certificate authentication of application roles: the `pg_hba` entries and their order, and
-  whether the certificate's common name must equal the role name (otherwise a `pg_ident` map). Check against the operator version
-  in use and test before relying on it.
 - **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
   with forever; one user does not delete enough to matter.
 - **How long a non-extractable key survives in the installed iPhone app.** It works and survives a relaunch; the one-day, one-week
