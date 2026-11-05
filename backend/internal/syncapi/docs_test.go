@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/auth/authtest"
-	"github.com/cthtrifork/harper-pad/backend/internal/protocol"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 )
 
@@ -198,16 +197,14 @@ func TestPutLimitsAndValidation(t *testing.T) {
 	put := func(id string, b putBody) *httptest.ResponseRecorder { return a.call("PUT", "/docs/"+id, b) }
 	ok := func(data string) putBody { return putBody{Base: base(0, 0), CreatedAt: 1, UpdatedAt: 1, Data: data} }
 
-	huge := blob(strings.Repeat("x", protocol.MaxContentBytes+1))
-	atLimit := blob(strings.Repeat("x", protocol.MaxContentBytes))
+	atLimit := blob(strings.Repeat("x", maxData-60))
 	tests := []struct {
 		name string
 		rec  *httptest.ResponseRecorder
 		want int
 	}{
-		{"content at the limit", put(id1, ok(atLimit)), 200},
-		{"content over the limit", put(id2, ok(huge)), 413},
-		{"data over 8 MiB", put(id2, ok(strings.Repeat("x", protocol.MaxDataBytes+1))), 413},
+		{"data just under the limit", put(id1, ok(atLimit)), 200},
+		{"data over 8 MiB", put(id2, ok(strings.Repeat("x", maxData+1))), 413},
 		{"bad id", put("ABC", ok(blob("x"))), 422},
 		{"id with the wrong length", put(id1[:31], ok(blob("x"))), 422},
 		{"data is not json", put(id2, ok("hello")), 422},
@@ -215,7 +212,7 @@ func TestPutLimitsAndValidation(t *testing.T) {
 		{"unknown format", put(id2, ok(`{"v":1,"format":"rtf","content":"x"}`)), 422},
 		{"no content", put(id2, ok(`{"v":1,"format":"text"}`)), 422},
 		// Invalid UTF-8 on the wire never reaches the check: the JSON decoder turns it into U+FFFD, so what is stored is always valid.
-		// protocol.ValidateData still checks it (protocol_test.go).
+		// validateData still checks it (validate_test.go).
 		{"deleted with data", put(id2, putBody{Base: base(0, 0), UpdatedAt: 1, Deleted: true, Data: blob("x")}), 422},
 		{"live with empty data", put(id2, ok("")), 422},
 		{"negative base", put(id2, putBody{Base: base(-1, 0), UpdatedAt: 1, Data: blob("x")}), 422},

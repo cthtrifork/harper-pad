@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cthtrifork/harper-pad/backend/internal/protocol"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -102,7 +101,7 @@ func (a *API) registerDocs() {
 		Description: "Accepted only if the stored draft has the `base` version and `updatedAt` (version 0 for an id the server does " +
 			"not have). Otherwise nothing changes and the 409 carries the server's current copy. A deletion is `deleted: true` with " +
 			"empty `data`; the server clears the text of a tombstone.",
-		MaxBodyBytes: protocol.MaxBodyBytes,
+		MaxBodyBytes: maxBody,
 		Errors:       append([]int{http.StatusRequestEntityTooLarge, http.StatusBadRequest}, errs...), Middlewares: secured,
 		Responses: map[string]*huma.Response{
 			"409": {Description: "The stored draft is not the base the write was made against", Content: map[string]*huma.MediaType{
@@ -128,7 +127,7 @@ func (a *API) listDocs(ctx context.Context, in *listDocsInput) (*listDocsOutput,
 	dev, _ := DeviceFrom(ctx)
 	limit := in.Limit
 	if limit == 0 {
-		limit = protocol.DefaultListLimit
+		limit = defaultListLimit
 	}
 	rows, err := a.store.ListDocs(ctx, dev.ClientID, in.After, limit)
 	if err != nil {
@@ -202,8 +201,8 @@ func (a *API) putDoc(ctx context.Context, in *putDocInput) (*putDocOutput, error
 		if b.Data != "" {
 			return nil, huma.Error422UnprocessableEntity("a deleted draft has no data")
 		}
-	} else if err := protocol.ValidateData(b.Data); err != nil {
-		if errors.Is(err, protocol.ErrTooLarge) {
+	} else if err := validateData(b.Data); err != nil {
+		if errors.Is(err, errTooLarge) {
 			return nil, huma.NewError(http.StatusRequestEntityTooLarge, "draft too large")
 		}
 		return nil, huma.Error422UnprocessableEntity("invalid draft")
