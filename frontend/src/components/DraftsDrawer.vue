@@ -71,6 +71,8 @@ function open(id) {
   swiped = false;
 }
 
+// The release the web build was made from (the desktop app shows its version in the header).
+const version = import.meta.env?.APP_VERSION ?? "";
 const iso = (ms) => new Date(ms).toISOString();
 const baseName = (path) => path.split(/[\\/]/).pop();
 </script>
@@ -142,6 +144,7 @@ const baseName = (path) => path.split(/[\\/]/).pop();
       <span class="mute">{{ total }} {{ total === 1 ? "draft" : "drafts" }}</span>
       <button v-if="total > drafts.length" type="button" class="link" @click="emit('more')">Show more</button>
       <button type="button" class="link quiet" @click="help = true">Snippets</button>
+      <span v-if="version" class="version" title="Version">{{ version }}</span>
     </footer>
     </template>
 

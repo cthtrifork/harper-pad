@@ -21,8 +21,6 @@ const props = defineProps({
   sync: { type: Object, default: null }, // useSync's result; the chip shows only when sync is set up in this build
   autocorrect: { type: Boolean, default: false }, // autocorrect is on (its switch is in the Problems panel, so it shows here too)
 });
-// The release the web build was made from, shown small at the bottom right on a phone (the desktop app shows its version in the header).
-const version = import.meta.env?.APP_VERSION ?? "";
 const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect"]);
 
 // "Harper ready" shows for a few seconds, then gives its place to the format switch.
@@ -74,6 +72,5 @@ function fmt(ms) {
     <button v-if="!showState" id="format-btn" type="button" class="fmt-btn" :aria-label="isMarkdown ? 'Format: Markdown. Switch to plain text' : 'Format: plain text. Switch to Markdown'" :title="isMarkdown ? 'Markdown (click for plain text)' : 'Plain text (click for Markdown)'" @click="emit('format', isMarkdown ? 'text' : 'markdown')">
       {{ isMarkdown ? "M\u2193" : "Aa" }}
     </button>
-    <span v-if="version" id="app-version" class="app-version" title="Version">{{ version }}</span>
   </footer>
 </template>
