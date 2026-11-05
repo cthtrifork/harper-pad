@@ -39,10 +39,9 @@ services:
     volumes:
       - ./certs.sh:/certs.sh:ro,z
       - pgcerts:/certs
-      # First-start initialisation, in file name order: the admin role, then the schema from the migrations directory.
-      # TODO: drop the schema mount when harper-pad-sync applies its own migrations at start (docs/sync.md, build order).
+      # First-start initialisation: the admin role, which the cluster creates in production. The schema is not applied here:
+      # harper-pad-sync runs its migrations at start, as harper_sync, as in production.
       - ./initdb/01-roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro,z
-      - ../../internal/store/migrations/0001_init.sql:/docker-entrypoint-initdb.d/02-schema.sql:ro,z
     # Published on loopback only, for the store tests on the host (make test-db); the certificates are TLS 1.3, client-cert only.
     ports:
       - "127.0.0.1:${E2E_PG_PORT:-15432}:5432"

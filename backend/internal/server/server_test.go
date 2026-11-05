@@ -68,3 +68,18 @@ func TestReadyzCachesTheDatabaseCheck(t *testing.T) {
 		t.Fatalf("expired cache: pinged %d times, want 2", db.n)
 	}
 }
+
+func TestReadyzWhileStarting(t *testing.T) {
+	h := NewHealth(fakeDB{})
+	h.SetStarting(true)
+	if rec := get(t, h, "/readyz"); rec.Code != http.StatusServiceUnavailable || rec.Body.String() != "starting\n" {
+		t.Fatalf("starting: /readyz = %d %q, want 503 starting", rec.Code, rec.Body.String())
+	}
+	if got := get(t, h, "/healthz").Code; got != http.StatusOK {
+		t.Fatalf("starting: /healthz = %d, want 200", got)
+	}
+	h.SetStarting(false)
+	if got := get(t, h, "/readyz").Code; got != http.StatusOK {
+		t.Fatalf("started: /readyz = %d, want 200", got)
+	}
+}

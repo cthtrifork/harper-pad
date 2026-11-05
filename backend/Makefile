@@ -46,8 +46,12 @@ test-db: ## Run all tests with PostgreSQL from the stack (TLS and client certifi
 	TEST_PG_CERTS=$(E2E_CERTS) TEST_PG_PORT=$(E2E_PG_PORT) go test -count=1 -race ./...; status=$$?; \
 	$(COMPOSE) -f $(E2E_FILE) down -v; exit $$status
 
-admin-up: ## Start PostgreSQL and the admin UI (http://127.0.0.1:19001); add devices with admin-seed
-	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres admin
+admin-up: ## Start PostgreSQL, harper-pad-sync (it applies the schema) and the admin UI (http://127.0.0.1:19001); add devices with admin-seed
+	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres sync admin
+	@for i in $$(seq 1 30); do \
+		$(COMPOSE) -f $(E2E_FILE) exec -T postgres psql -U harper_sync -d harper -tAc "SELECT 1 FROM schema_migrations LIMIT 1" 2>/dev/null | grep -q 1 && exit 0; \
+		sleep 1; \
+	done; echo "the schema was not applied: see '$(COMPOSE) -f $(E2E_FILE) logs sync'"; exit 1
 
 admin-seed: ## Add three devices to the running stack (testdata/admin-seed.sql)
 	$(COMPOSE) -f $(E2E_FILE) exec -T postgres psql -U harper_sync -d harper -v ON_ERROR_STOP=1 < testdata/admin-seed.sql
