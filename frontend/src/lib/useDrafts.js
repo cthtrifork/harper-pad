@@ -23,7 +23,7 @@ const message = (err) => String(err?.message || err);
 //
 // A draft can also be saved to a file (Ctrl+Shift+S, then Ctrl+S). That only happens on request, never by the autosave.
 // A draft is created by its first save, so an empty editor leaves none behind.
-export function useDrafts(editor, drawerOpen) {
+export function useDrafts(editor, drawerOpen, { onSaved } = {}) {
   const current = ref({ id: "", createdAt: 0, format: "markdown", filePath: "" });
   const state = ref("idle"); // idle | dirty | saving | saved | error
   const error = ref("");
@@ -128,6 +128,7 @@ export function useDrafts(editor, drawerOpen) {
         state.value = "dirty"; // typed during the save: its own timer is already running
       }
       refreshListSoon();
+      onSaved?.(d.id);
     } catch (err) {
       error.value = `Not saved: ${message(err)}`;
       state.value = "error"; // the text stays dirty, so the next edit or flush tries again

@@ -8,11 +8,13 @@ import Preview from "./components/Preview.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData, sharing } from "./lib/backend.js";
+import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { contentHash } from "./lib/contentHash.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
 import { useDrafts } from "./lib/useDrafts.js";
+import { useSync } from "./lib/useSync.js";
 
 // What main.js asked the backend before mounting (see backend.js startup): the demo banner and the most recent draft.
 const props = defineProps({ start: { type: Object, required: true } });
@@ -40,7 +42,8 @@ const cursor = ref({ line: 1, col: 1, selected: 0 });
 const saveError = ref("");
 const editor = ref(null);
 const showDrawer = ref(false);
-const drafts = useDrafts(editor, showDrawer);
+const sync = useSync({ origin: import.meta.env?.SYNC_ORIGIN ?? "", deviceStore: syncDevice, drafts: syncDrafts, hash: contentHash });
+const drafts = useDrafts(editor, showDrawer, { onSaved: sync.draftSaved });
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
 // goes away on its own, and at once when the user edits the text themselves.
@@ -243,6 +246,7 @@ const removeWord = (word) =>
 const focusFromClick = (e) => e.target === pane.value && editor.value?.focusEnd();
 
 onMounted(async () => {
+  sync.init().catch(() => {}); // a device that cannot be read just shows "Sync off"
   window.addEventListener("keydown", onKeydown);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
@@ -372,6 +376,7 @@ onBeforeUnmount(() => {
       :startup="startup"
       :autocorrect="autocorrect.on"
       @toggle-autocorrect="setAutocorrect({ ...autocorrect, on: !autocorrect.on })"
+      :sync="sync"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
     />

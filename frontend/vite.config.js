@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import wails from "@wailsio/runtime/plugins/vite";
 import { defineConfig } from "vite";
-import { buildPolicy } from "./src/lib/csp.js";
+import { buildPolicy, syncOriginOf } from "./src/lib/csp.js";
 
 // Vite empties dist/ on every build. The Go side embeds it, so `go vet` and `go test` need the
 // directory to exist even when nobody has built the frontend; keep the committed placeholder.
@@ -74,6 +74,8 @@ export default defineConfig(({ mode }) => {
       port: Number(process.env.WAILS_VITE_PORT) || 9245,
       strictPort: true,
     },
+    // The page reads the sync server's origin to know whether sync is set up at all (src/lib/useSync.js); empty hides it.
+    define: { "import.meta.env.SYNC_ORIGIN": JSON.stringify(syncOriginOf(process.env.SYNC_ORIGIN)) },
     // The harper.js worker is an ES module; the default "iife" worker format cannot code-split it.
     worker: { format: "es" },
     // The web build has no Go side: no Wails plugin, and no dist/ placeholder to keep.

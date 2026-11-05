@@ -65,6 +65,9 @@ export const syncDevice = createDeviceStore(openDb);
 
 const web = isWeb ? createWebDrafts(openDb) : undefined;
 
+// What sync needs from the drafts store: the web build only for now (desktop has no bindings for it yet).
+export const syncDrafts = web ? { get: web.get, syncState: web.syncState, markSynced: web.markSynced } : null;
+
 // Everything the page needs before it shows the editor, in one call: {demo, open, total, error}. `demo` is the banner text in a
 // desktop development build's demo mode (empty otherwise), `open` the most recent draft with its text (or null), `total` how many
 // drafts there are, and `error` why drafts are unavailable (empty when they are).
