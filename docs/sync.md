@@ -363,7 +363,13 @@ Details that are easy to get wrong:
   rejected. The key, and a second non-extractable key used to test the encryption option, both **survived closing and reopening the
   Home Screen app** (39 seconds later, the same keys, not new ones). A Home Screen app starts with its own empty storage, so a device
   enrolls inside the installed app, as designed. `navigator.storage.persist()` returned false in both, so iOS promises nothing.
-  **Still open:** whether the key survives a day, a week and a phone restart.
+  Opened again 20.6 hours later (5 November 2026) in the Home Screen app, both keys were still there, still non-extractable, and
+  still signed and decrypted as before. Longer checks (a week, a phone restart) are not planned: if iOS does clear the key, the
+  device shows "Sign in again" and enrolls once more, as above.
+- **Checked in Edge on Windows** (5 November 2026, a browser tab, Edge 156, so the engine of the Windows window, not the window
+  itself): the same checks pass (non-extractable key, only the private key stored, `exportKey` refused, raw `r||s` signature that
+  verifies, a tampered one rejected, an HKDF data key and the derived AES-GCM key), and `navigator.storage.persist()` returned
+  true. WebKitGTK, the engine of the Linux window, was not checked.
 
 **Not planned:** rotating the token on a schedule with reuse detection, and a separate refresh token. DPoP covers the leaked-token
 case with no refresh race (two tabs, the service worker, a response lost when iOS suspends the app). Rotation with reuse detection
@@ -775,17 +781,6 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - [architecture](architecture.md) and `AGENTS.md`: the sync module, the new binary and its layout.
 - [pages](pages.md): the web build's sync origin setting and CORS.
 - A server operations page (run, proxy, back up, rotate, revoke).
-
-## Open questions
-
-- **The desktop webview origin** for the CORS allowlist, and whether the embedded page's CSP can name the sync origin at build
-  time or needs a setting at run time.
-- **Which OIDC provider** signs the operator in, and whether to also allow only specific devices or networks in the Access policy.
-- **Retention of tombstones on the server:** forever (simple) or pruned after every enrolled device has passed them (smaller). Start
-  with forever; one user does not delete enough to matter.
-- **How long a non-extractable key survives in the installed iPhone app.** It works and survives a relaunch; the one-day, one-week
-  and restart checks are still running (`TODO.md`).
-- **How large the first upload can be** before it needs chunking, given the 5 MB per draft limit.
 
 ## Option: end-to-end encryption
 
