@@ -153,6 +153,11 @@ export function createWebDrafts(open) {
     });
   }
 
+  // Every draft id, for Sync all (the list reads summaries and is paged; this reads only the keys).
+  async function allIds() {
+    return withDb((db) => db.getAllKeys("drafts"));
+  }
+
   // What the page needs to start: the most recent draft and how many there are (see PadService.Startup).
   async function startup() {
     const { drafts, total } = await list(1, 0);
@@ -256,5 +261,5 @@ export function createWebDrafts(open) {
     });
   }
 
-  return { get, save, setFilePath, remove, list, search, startup, syncState, markSynced, changes, applyRemote, applyRemoteDelete };
+  return { get, save, setFilePath, remove, list, search, startup, allIds, syncState, markSynced, changes, applyRemote, applyRemoteDelete };
 }

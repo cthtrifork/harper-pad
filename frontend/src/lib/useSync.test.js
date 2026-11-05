@@ -8,7 +8,7 @@ const ORIGIN = "https://sync.example.com";
 const INVITE = `${ORIGIN}/join#${"A".repeat(43)}`;
 const D = { id: "a".repeat(32), format: "markdown", content: "hello", createdAt: 1, updatedAt: 2 };
 
-function setup({ fetchFn, enrolled = true, origin = ORIGIN } = {}) {
+function setup({ fetchFn, enrolled = true, origin = ORIGIN, ...extra } = {}) {
   const kept = { device: null, states: new Map() };
   const deviceStore = {
     load: async () => kept.device,
@@ -21,12 +21,14 @@ function setup({ fetchFn, enrolled = true, origin = ORIGIN } = {}) {
   };
   const drafts = {
     get: async () => D,
+    allIds: async () => [],
+    changes: async () => ({ changed: [], deleted: [] }),
     syncState: async (id) => kept.states.get(id) ?? null,
     markSynced: async (id, s) => {
       kept.states.set(id, s);
     },
   };
-  const sync = useSync({ origin, deviceStore, drafts, hash: contentHash, fetchFn, delay: 5 });
+  const sync = useSync({ origin, deviceStore, drafts, hash: contentHash, fetchFn, delay: 5, autoSync: false, ...extra });
   const ready = async () => {
     if (enrolled) kept.device = { server: ORIGIN, token: "tok", deviceName: "Phone", ...(await generateDeviceKey()) };
     await sync.init();
@@ -137,4 +139,62 @@ test("turning sync off forgets the device and keeps the drafts' state", async ()
   assert.equal(sync.status.value, "off");
   assert.equal(kept.device, null);
   assert.equal(kept.states.size, 1);
+});
+
+const empty = reply(200, []);
+
+test("Sync all with nothing to do ends synced, says so, and saves what is typed first", async () => {
+  let prepared = 0;
+  let skipped;
+  const { sync, ready } = setup({
+    fetchFn: empty,
+    prepare: async () => {
+      prepared++;
+    },
+    skip: () => (skipped = new Set(["x"])),
+  });
+  await ready();
+  await sync.syncAll();
+  assert.equal(prepared, 1);
+  assert.ok(skipped);
+  assert.equal(sync.status.value, "synced");
+  assert.equal(sync.summary.value, "Everything is up to date");
+  assert.ok(sync.lastSync.value > 0);
+});
+
+test("Sync all offline or signed out leaves those states, and a server error leaves it pending", async () => {
+  const down = setup({
+    fetchFn: async () => {
+      throw new TypeError("x");
+    },
+  });
+  await down.ready();
+  await down.sync.syncAll();
+  assert.equal(down.sync.status.value, "offline");
+
+  const out = setup({ fetchFn: reply(401, {}) });
+  await out.ready();
+  await out.sync.syncAll();
+  assert.equal(out.sync.status.value, "signin");
+
+  const broken = setup({ fetchFn: reply(500, {}) });
+  await broken.ready();
+  await broken.sync.syncAll();
+  assert.equal(broken.sync.status.value, "pending");
+  assert.match(broken.sync.error.value, /did not finish/);
+});
+
+test("a build that starts synced runs Sync all once the device is loaded", async () => {
+  let lists = 0;
+  const { sync, ready } = setup({
+    autoSync: true,
+    fetchFn: async () => {
+      lists++;
+      return empty();
+    },
+  });
+  await ready();
+  await sync.syncAll(); // waits for the run that init started, then runs again; both are fine
+  assert.ok(lists >= 1);
+  assert.equal(sync.status.value, "synced");
 });

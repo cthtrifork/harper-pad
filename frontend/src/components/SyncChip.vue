@@ -58,6 +58,12 @@ async function add() {
   }
 }
 
+const lastSyncText = computed(() => {
+  const at = props.sync.lastSync.value;
+  return at ? new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+});
+const syncing = computed(() => status.value === "syncing");
+
 async function turnOff() {
   await props.sync.turnOff();
   open.value = false;
@@ -114,10 +120,14 @@ onBeforeUnmount(() => {
         <div v-else>
           <h2>{{ status === "offline" ? "Offline" : `Synced with ${host}` }}</h2>
           <p class="mute">This device is “{{ sync.info.value?.deviceName }}”. A saved draft is sent about two seconds after you stop typing.</p>
-          <p v-if="status === 'pending'" class="mute">Some drafts could not be sent yet. The next save tries again.</p>
+          <p v-if="status === 'pending'" class="mute">Some drafts could not be sent yet. The next save or Sync all tries again.</p>
           <p v-if="status === 'offline'" class="mute">The server could not be reached. Drafts stay on this device and are sent when it can be.</p>
-          <div class="actions">
+          <p v-if="sync.summary.value" id="sync-summary" class="summary" role="status">
+            {{ sync.summary.value }}<span v-if="lastSyncText" class="mute"> · {{ lastSyncText }}</span>
+          </p>
+          <div class="actions between">
             <button type="button" class="link" @click="turnOff">Turn off sync on this device</button>
+            <button id="sync-all" type="button" class="primary" :disabled="syncing" @click="sync.syncAll()">{{ syncing ? "Syncing…" : "Sync all" }}</button>
           </div>
           <p class="note mute">Turning it off keeps every draft on this device. The server keeps its copies.</p>
         </div>
