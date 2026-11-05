@@ -439,12 +439,20 @@
   background: var(--raised);
 }
 
+/* The name and the line beside it share a baseline (centring boxes of two font sizes leaves the smaller text sitting high). */
+.drawer .snippets-row .text {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
 .drawer .snippets-row .name {
   font-weight: 600;
 }
 
 .drawer .snippets-row .about {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   color: var(--mute);
