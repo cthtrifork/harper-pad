@@ -1,7 +1,10 @@
-/* The sync chip in the status bar and its pop-up (SyncChip.vue). Same dot language as the autocorrect chip: hollow is off, filled is on. */
+/* The sync chip in the status bar and its pop-up (SyncChip.vue). Same dot language as the autocorrect chip: hollow is off, filled is on.
+   Buttons, fields and states follow docs/design-cheatsheet.html. */
 .sync {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .sync-chip {
@@ -59,7 +62,22 @@
   }
 }
 
-/* The pop-up opens upward from the chip, as the status bar is at the bottom of the window. */
+/* "Newer on the server" is a state, not a toast: plain status text with a filled dot, until a save or Sync all settles it. */
+.sync-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.sync-marker .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* The pop-up. From the status bar it opens upward (the bar is at the bottom of the window); on a phone it is a bottom sheet. */
 .sync-panel {
   position: absolute;
   bottom: 32px;
@@ -103,8 +121,9 @@
   color: var(--mute);
 }
 
+/* Text field: the --bg fill, 30px in a popover, 6px radius, hover and focus as every other field. */
 .sync-panel .in {
-  height: 32px;
+  height: 30px;
   box-sizing: border-box;
   width: 100%;
   padding: 0 12px;
@@ -113,6 +132,18 @@
   background: var(--bg);
   color: var(--text);
   font: inherit;
+}
+
+.sync-panel .in::placeholder {
+  color: var(--mute);
+}
+
+.sync-panel .in:hover {
+  border-color: var(--mute);
+}
+
+.sync-panel .in:focus-visible {
+  border-color: var(--accent);
 }
 
 .sync-panel .in[aria-invalid="true"] {
@@ -132,54 +163,72 @@
   margin-top: 4px;
 }
 
-.sync-panel .actions button {
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--mute);
-  font: inherit;
+.sync-panel .actions.between {
+  justify-content: space-between;
 }
 
-.sync-panel .actions .primary {
+/* The one primary button: accent fill, weight 600, a verb. Busy keeps its width: the label stays, a spinner sits over it. */
+.sync-panel .primary {
+  position: relative;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
   background: var(--accent);
   color: var(--on-accent);
+  font: inherit;
   font-weight: 600;
+  transition: filter 0.15s var(--ease);
 }
 
-.sync-panel .actions .primary:disabled {
+.sync-panel .primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.sync-panel .primary:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.sync-panel .primary:disabled {
   background: var(--selected);
   color: var(--mute);
   cursor: not-allowed;
 }
 
-.sync-panel .actions .link {
-  height: auto;
+.sync-panel .primary.busy .label {
+  visibility: hidden;
+}
+
+.sync-panel .primary .spin {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  animation: sync-spin 0.9s linear infinite;
+}
+
+/* A link: a secondary action inside a popover. */
+.sync-panel .link {
   padding: 0;
+  border: 0;
+  background: none;
   color: var(--c-style);
+  font: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.sync-panel .summary {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--sunken);
 }
 
 .sync-panel .note {
   font-size: 12px;
 }
 
-.sync-scrim {
-  display: none;
-}
-
-/* A phone: a bottom sheet over a scrim, with fields and buttons big enough to tap. */
+/* A phone: a bottom sheet, with fields and buttons big enough to tap, and fields at 16px so iOS does not zoom in on focus. */
 @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
-  .sync-scrim {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 9;
-    background: rgb(0 0 0 / 0.5);
-  }
-
   .sync-panel {
     position: fixed;
     inset: auto 0 0 0;
@@ -190,65 +239,12 @@
     font-size: 14px;
   }
 
-  .sync-panel .in,
-  .sync-panel .actions button {
+  .sync-panel .in {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .sync-panel .primary {
     height: 44px;
   }
-}
-
-/* Sync all: the button on the right, "Turn off" on the left, and one line saying what the last run did. */
-.sync-panel .actions.between {
-  justify-content: space-between;
-}
-
-.sync-panel .summary {
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--sunken);
-}
-
-/* What opening a note found: a short line beside the chip. "Newer on the server" stays until Sync all or a save settles it. */
-.sync {
-  align-items: center;
-  gap: 8px;
-}
-
-.sync-note {
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  font-size: 12px;
-  color: var(--text);
-  background: var(--raised);
-}
-
-.sync-note.newer {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-}
-
-.sync-note .link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--c-style);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-/* "Deleted elsewhere": a short question over the chip, not a modal. */
-.sync-gone {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 280px;
-}
-
-.sync-gone .actions {
-  flex-direction: row;
 }

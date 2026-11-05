@@ -20,7 +20,7 @@ export async function signedRequest({ device, method, path, body, headers: extra
       referrerPolicy: "no-referrer",
     });
   } catch {
-    throw new SyncError("unreachable", "Server not reachable.");
+    throw new SyncError("unreachable", "Server not reachable. Check the connection.");
   }
   if (res.status === 401) throw new SyncError("signin", "Signed out.");
   return { status: res.status, body: await res.json().catch(() => null) };

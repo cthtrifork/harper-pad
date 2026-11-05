@@ -322,7 +322,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
           <li><code>role="menu"</code>, <code>aria-haspopup</code>, <code>aria-expanded</code> on the trigger.</li>
           <li>Item 30px, 8px radius on the panel, 5px on items, hover uses <code>--selected</code>.</li>
           <li>Shortcut right-aligned in <code>--mute</code>, 12px.</li>
-          <li>Opens downward. A choice between two (the footer Markdown or Text format) is a single button that shows the current one (M&darr; or Aa) and switches to the other, not a menu.</li>
+          <li>Opens downward, except from the status bar, which is at the bottom of the window: a popover from there (the sync chip) opens upward. A choice between two (the footer Markdown or Text format) is a single button that shows the current one (M&darr; or Aa) and switches to the other, not a menu.</li>
           <li>Closes on Esc, outside click and after choosing.</li>
           <li>Enter: fade and 4px slide, 0.12s.</li>
           <li>A popover has one job and no dismiss link: Esc, an outside click and the trigger already close it. The Updates button keeps its text (the version) and shows state with an accent icon: a dot when an update is found or ready, a spinner while checking or downloading. The popover holds the one primary action at the bottom left and always has a "What is new" link at the bottom right.</li>
@@ -422,7 +422,8 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
       <div class="dont"><b>Don't</b><span>Use two primary buttons in one view.</span></div>
       <div class="dont"><b>Don't</b><span>Show state by border colour alone, or by colour alone.</span></div>
       <div class="dont"><b>Don't</b><span>Make a toolbar of identical bordered buttons. Group by role and separate groups with a 1px divider.</span></div>
-      <div class="dont"><b>Don't</b><span>Interrupt writing with modals. Problems, updates and drafts live in panels and popovers.</span></div>
+      <div class="dont"><b>Don't</b><span>Interrupt writing with modals. Problems, updates and drafts live in panels and popovers. The one exception is a choice that must be made before the note is shown, such as a note that was deleted on another device (<code>DeletedElsewhereDialog.vue</code>): a native modal dialog, opened when a note is opened and never while typing, that Esc does not close. It has one primary button that loses nothing (Keep, focused) and one danger button (Remove) that can be undone. On a phone it is a bottom sheet.</span></div>
+      <div class="do"><b>Do</b><span>Say what sync is doing in the toast (<code>ToastBar.vue</code>, the one toast, with one action such as Undo or Open copy). A state that stays until it is settled, such as "Newer on the server", is plain status text beside the chip, not a toast.</span></div>
       <div class="dont"><b>Don't</b><span>Use <code>div</code> or <code>span</code> with click handlers. Tab skips them.</span></div>
       <div class="dont"><b>Don't</b><span>Use "Click here", "OK" or "Submit". Name the action.</span></div>
       <div class="do"><b>Do</b><span>Cap the width of a content column (about 760px for lists and forms) and centre it, so rows never stretch across a wide window.</span></div>

@@ -1,0 +1,101 @@
+/* The "Deleted on another device" dialog (DeletedElsewhereDialog.vue): a modal that forces Keep or Remove. */
+.gone-dialog {
+  width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: var(--shadow-menu);
+  font-size: 14px;
+  animation: gone-in 0.12s var(--ease);
+}
+
+.gone-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.gone-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.gone-dialog p {
+  margin: 0;
+  color: var(--mute);
+}
+
+.gone-dialog .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.gone-dialog .actions button {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  transition:
+    background-color 0.15s var(--ease),
+    border-color 0.15s var(--ease),
+    filter 0.15s var(--ease);
+}
+
+/* Primary: accent fill, weight 600. Danger: --bad text, and the border turns --bad on hover; never filled red at rest. */
+.gone-dialog .actions .primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.gone-dialog .actions .primary:hover {
+  filter: brightness(1.08);
+}
+
+.gone-dialog .actions .primary:active {
+  filter: brightness(0.92);
+}
+
+.gone-dialog .actions .danger {
+  border-color: var(--line);
+  color: var(--bad);
+}
+
+.gone-dialog .actions .danger:hover {
+  border-color: var(--bad);
+  background: var(--raised);
+}
+
+/* A phone: the dialog is a sheet at the bottom, with fields and buttons big enough to tap. */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .gone-dialog {
+    width: 100%;
+    max-width: none;
+    margin: auto 0 0;
+    padding: 20px 20px max(24px, env(safe-area-inset-bottom));
+    border-width: 1px 0 0;
+    border-radius: 16px 16px 0 0;
+    font-size: 16px;
+  }
+
+  .gone-dialog .actions {
+    flex-direction: column-reverse;
+  }
+
+  .gone-dialog .actions button {
+    height: 44px;
+  }
+}
+
+@keyframes gone-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}

@@ -47,9 +47,9 @@ export async function enrollDevice({ text, deviceName, store, fetchFn = fetch.bi
       referrerPolicy: "no-referrer",
     });
   } catch {
-    throw new SyncError("unreachable", "Server not reachable.");
+    throw new SyncError("unreachable", "Server not reachable. Check the connection.");
   }
-  if (res.status === 401) throw new SyncError("rejected", "Invite not accepted. It may be used or expired.");
+  if (res.status === 401) throw new SyncError("rejected", "Invite not accepted. Ask for a new one.");
   if (!res.ok) throw new SyncError("server", `Server error (${res.status}). Try again later.`);
 
   const body = await res.json().catch(() => null);

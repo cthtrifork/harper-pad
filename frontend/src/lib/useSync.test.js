@@ -333,8 +333,6 @@ test("opening a note that was deleted elsewhere asks, and removes nothing", asyn
   await sync.noteOpened(D.id);
   assert.deepEqual(sync.gone.value, { id: D.id });
   assert.equal(applied, 0);
-  sync.dismissGone();
-  assert.equal(sync.gone.value, null);
 });
 
 test("Remove: the draft is removed and handed to onRemoved; Keep: it is uploaded again", async () => {
