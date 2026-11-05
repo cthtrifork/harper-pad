@@ -57,6 +57,15 @@ func adminFixture(t *testing.T) (*Admin, *pgxpool.Pool, *pgx.Conn) {
 		t.Fatalf("connecting as harper_sync (is the stack up? make test-db): %v", err)
 	}
 	t.Cleanup(func() { _ = owner.Close(ctx) })
+	// The schema is made the way harper-pad-sync makes it at start, as the owner (the stack only creates the roles).
+	ownerPool, err := Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(ownerPool.Close)
+	if _, err := Migrate(ctx, ownerPool, Migrations); err != nil {
+		t.Fatalf("migrations as harper_sync: %v", err)
+	}
 	reset := func() {
 		if _, err := owner.Exec(ctx, `TRUNCATE devices, invites; DELETE FROM clients WHERE id <> 1`); err != nil {
 			t.Fatal(err)

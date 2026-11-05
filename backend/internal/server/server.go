@@ -39,6 +39,7 @@ const (
 type Health struct {
 	db       Pinger
 	draining atomic.Bool
+	starting atomic.Bool // set while start-up work (the migrations) has not finished: not ready, whatever the database says
 
 	mu        sync.Mutex
 	checkedAt time.Time
@@ -48,6 +49,10 @@ type Health struct {
 
 // NewHealth returns a Health that checks db for readiness.
 func NewHealth(db Pinger) *Health { return &Health{db: db} }
+
+// SetStarting makes /readyz answer 503 until it is called again with false. The sync service sets it until the migrations have
+// been applied, so no request reaches a database without its tables. /healthz is not affected.
+func (h *Health) SetStarting(b bool) { h.starting.Store(b) }
 
 // Register adds GET /healthz and GET /readyz to mux.
 func (h *Health) Register(mux *http.ServeMux) {
@@ -60,6 +65,10 @@ func (h *Health) Register(mux *http.ServeMux) {
 func (h *Health) ready(w http.ResponseWriter, r *http.Request) {
 	if h.draining.Load() {
 		reply(w, http.StatusServiceUnavailable, "shutting down\n")
+		return
+	}
+	if h.starting.Load() {
+		reply(w, http.StatusServiceUnavailable, "starting\n")
 		return
 	}
 	if err := h.ping(r.Context()); err != nil {

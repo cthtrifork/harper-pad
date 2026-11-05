@@ -40,6 +40,12 @@ raw path, so the label values are bounded) and `harper_pad_db_pool_*` from the p
 acquires and wait time: a pool that is too small shows there before `/readyz` fails). The cluster needs a NetworkPolicy that lets
 Prometheus reach port 9102 and a PodMonitor; both live in the gitops repository.
 
+**Migrations.** `harper-pad-sync` applies the files in `internal/store/migrations/` at start, in name order, each in a transaction
+with its row in `schema_migrations`, under a PostgreSQL advisory lock so two pods never race. It must connect as the schema owner
+(`harper_sync`); the roles themselves (`harper_admin`) are created by the cluster, and the first file grants to them. While they run
+(and while the database is down) `/readyz` is 503 and the start is retried every 2 to 30 s; `/healthz` stays 200. The admin service
+applies nothing, and it needs the tables to exist, so start it after the sync service has run once.
+
 PostgreSQL does not have to be up at start: the pool connects lazily, `/readyz` reports 503 until it is, and the pod recovers by
 itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and the endpoints to notice, drains in-flight requests
 (up to 20 s) and exits 0, so the default `terminationGracePeriodSeconds` of 30 is enough (5 + 20 = 25). The driver is
@@ -70,11 +76,11 @@ and renewing, and the NetworkPolicy.
 
 The admin pages run on PostgreSQL, and the end-to-end stack already has one with the production login (TLS 1.3, client certificate,
 no password): the admin container connects as `harper_admin` with its own certificate, so the database enforces its grants (no
-access to notes). The stack applies `internal/store/migrations/0001_init.sql` on first start, because the sync service has no
-migration runner yet.
+access to notes). The stack only creates the `harper_admin` role (`test/e2e/initdb`, which the cluster does in production);
+`harper-pad-sync` applies `internal/store/migrations/*.sql` itself when it starts, as `harper_sync`, so the stack starts it too.
 
 ```sh
-make admin-up     # PostgreSQL and the admin UI, built from Containerfile.admin: http://127.0.0.1:19001
+make admin-up     # PostgreSQL, harper-pad-sync (applies the schema) and the admin UI: http://127.0.0.1:19001
 make admin-seed   # three devices (testdata/admin-seed.sql); run it again for more
 make admin-down   # stop and delete the data
 ```

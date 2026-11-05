@@ -11,6 +11,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/config"
 	"github.com/cthtrifork/harper-pad/backend/internal/metrics"
@@ -42,7 +45,37 @@ func run(args []string) error {
 	m := metrics.New("sync")
 	m.RegisterPool(db)
 	health := server.NewHealth(db)
+	// The tables and the grants to harper_admin are made by the migrations, run here as harper_sync. PostgreSQL does not have
+	// to be up at start, so retry in the background; /readyz is 503 ("starting") until they are applied.
+	health.SetStarting(true)
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go migrate(ctx, db, health)
 	mux := http.NewServeMux()
 	health.Register(mux)
 	return server.Run(cfg.ListenAddr, m.Instrument(mux), health, cfg.MetricsAddr, m.Handler())
+}
+
+// migrate applies the schema, retrying with a growing delay (2 s up to 30 s) while the database is unreachable or a migration
+// fails, and then lets /readyz pass. A failing file is logged each time and never skipped.
+func migrate(ctx context.Context, db *pgxpool.Pool, health *server.Health) {
+	delay := 2 * time.Second
+	for {
+		applied, err := store.Migrate(ctx, db, store.Migrations)
+		if err == nil {
+			slog.Info("migrations applied", "files", applied)
+			health.SetStarting(false)
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		slog.Error("migrations failed, retrying", "err", err, "in", delay)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, 30*time.Second)
+	}
 }
