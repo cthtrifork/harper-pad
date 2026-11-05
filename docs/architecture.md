@@ -39,6 +39,7 @@ and `pprof`, which `production` rejects.
 ## Frontend
 
 - `App.vue` composes the header, the editor, the Problems panel, the status bar and the drafts drawer.
+- `internal/app/assets.go` is the Wails `AssetOptions.Middleware` (Wails has no built-in compression or cache headers; the file is the same as in trivy-dashboard-wail3): gzip for text assets (headless server builds only; the native window gets plain bytes) and `Cache-Control` (immutable for the content-hashed `/assets/*`, `no-cache` for `index.html`).
 - `lib/harper.js` starts Harper in its own Web Worker (`lib/harperWorker.js`, WebAssembly) after the first paint; the page
   talks to it with plain messages. The worker turns its lints into plain objects, so no wasm-backed value is held by Vue or
   CodeMirror. It does not use harper.js's `WorkerLinter`: that also builds a serializer on the main thread, which fetched
