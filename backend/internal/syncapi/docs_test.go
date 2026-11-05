@@ -197,14 +197,14 @@ func TestPutLimitsAndValidation(t *testing.T) {
 	put := func(id string, b putBody) *httptest.ResponseRecorder { return a.call("PUT", "/docs/"+id, b) }
 	ok := func(data string) putBody { return putBody{Base: base(0, 0), CreatedAt: 1, UpdatedAt: 1, Data: data} }
 
-	atLimit := blob(strings.Repeat("x", maxData-60))
+	atLimit := blob(strings.Repeat("x", store.MaxDocData-60))
 	tests := []struct {
 		name string
 		rec  *httptest.ResponseRecorder
 		want int
 	}{
 		{"data just under the limit", put(id1, ok(atLimit)), 200},
-		{"data over 8 MiB", put(id2, ok(strings.Repeat("x", maxData+1))), 413},
+		{"data over 8 MiB (the database refuses it)", put(id2, ok(strings.Repeat("x", store.MaxDocData+1))), 413},
 		{"bad id", put("ABC", ok(blob("x"))), 422},
 		{"id with the wrong length", put(id1[:31], ok(blob("x"))), 422},
 		{"data is not json", put(id2, ok("hello")), 422},

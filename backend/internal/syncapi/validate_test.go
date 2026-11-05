@@ -2,7 +2,6 @@ package syncapi
 
 import (
 	"errors"
-	"strings"
 	"testing"
 )
 
@@ -23,8 +22,6 @@ func TestValidateData(t *testing.T) {
 		{"no content", `{"v":1,"format":"text"}`, errInvalid},
 		{"content is not a string", `{"v":1,"format":"text","content":5}`, errInvalid},
 		{"invalid utf-8", "{\"v\":1,\"format\":\"text\",\"content\":\"\xff\"}", errInvalid},
-		{"at the limit", `{"v":1,"format":"text","content":"` + strings.Repeat("x", maxData-len(`{"v":1,"format":"text","content":""}`)) + `"}`, nil},
-		{"over the limit", strings.Repeat(" ", maxData+1), errTooLarge},
 	}
 	for _, tc := range tests {
 		if got := validateData(tc.data); !errors.Is(got, tc.want) {

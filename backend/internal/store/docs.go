@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ErrDocNotFound is returned by GetDoc for an id the client account has no row for.
@@ -13,6 +14,22 @@ var ErrDocNotFound = errors.New("doc not found")
 // ErrConflict is returned by PutDoc when the stored draft is not the state the writer saw. PutDoc also returns the stored row (an
 // empty Doc, ID "", when there is none) so the caller can hand it back as the 409.
 var ErrConflict = errors.New("doc changed")
+
+// ErrTooLarge is returned by PutDoc when the database's CHECK on docs.data refuses the text. That CHECK is the one size limit of a
+// draft on the server; MaxDocData only sizes the request body cap in front of it and is tested against it.
+var ErrTooLarge = errors.New("draft too large")
+
+// MaxDocData is the limit of the CHECK on docs.data (migration 0001), in bytes.
+const MaxDocData = 8 << 20
+
+// docWriteErr turns the database's refusal of too much text into ErrTooLarge and leaves every other error as it is.
+func docWriteErr(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == "docs_data_check" { // check_violation
+		return ErrTooLarge
+	}
+	return err
+}
 
 // Doc is one draft row. Times are Unix milliseconds set by the device that saved it.
 type Doc struct {
@@ -111,7 +128,7 @@ func (s *Sync) PutDoc(ctx context.Context, clientID int64, id string, base DocBa
 			VALUES ($1, $2, 1, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
 			clientID, id, w.CreatedAt, w.UpdatedAt, w.Deleted, w.Data)
 		if err != nil {
-			return Doc{}, err
+			return Doc{}, docWriteErr(err)
 		}
 		if tag.RowsAffected() == 0 {
 			if cur, err = docRow(ctx, tx, clientID, id, ""); err != nil {
@@ -135,7 +152,7 @@ func (s *Sync) PutDoc(ctx context.Context, clientID int64, id string, base DocBa
 		UPDATE docs SET version = $3, created_at = $4, updated_at = $5, deleted = $6, data = $7
 		WHERE client_id = $1 AND id = $2`,
 		clientID, id, next, w.CreatedAt, w.UpdatedAt, w.Deleted, w.Data); err != nil {
-		return Doc{}, err
+		return Doc{}, docWriteErr(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Doc{}, err

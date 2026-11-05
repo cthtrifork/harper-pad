@@ -125,11 +125,7 @@ type listDocsOutput struct {
 
 func (a *API) listDocs(ctx context.Context, in *listDocsInput) (*listDocsOutput, error) {
 	dev, _ := DeviceFrom(ctx)
-	limit := in.Limit
-	if limit == 0 {
-		limit = defaultListLimit
-	}
-	rows, err := a.store.ListDocs(ctx, dev.ClientID, in.After, limit)
+	rows, err := a.store.ListDocs(ctx, dev.ClientID, in.After, in.Limit) // the default (500) and the range come from the field's tags
 	if err != nil {
 		return nil, serverError("list docs", err)
 	}
@@ -202,9 +198,6 @@ func (a *API) putDoc(ctx context.Context, in *putDocInput) (*putDocOutput, error
 			return nil, huma.Error422UnprocessableEntity("a deleted draft has no data")
 		}
 	} else if err := validateData(b.Data); err != nil {
-		if errors.Is(err, errTooLarge) {
-			return nil, huma.NewError(http.StatusRequestEntityTooLarge, "draft too large")
-		}
 		return nil, huma.Error422UnprocessableEntity("invalid draft")
 	}
 	d, err := a.store.PutDoc(ctx, dev.ClientID, in.ID,
@@ -217,6 +210,8 @@ func (a *API) putDoc(ctx context.Context, in *putDocInput) (*putDocOutput, error
 			c.Current = toDoc(d)
 		}
 		return nil, c
+	case errors.Is(err, store.ErrTooLarge):
+		return nil, huma.NewError(http.StatusRequestEntityTooLarge, "draft too large")
 	case err != nil:
 		return nil, serverError("put doc", err)
 	}

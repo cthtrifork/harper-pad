@@ -9,8 +9,8 @@ export const DB_NAME = "harper-pad";
 export const DB_VERSION = 3; // 1 had only the key/value store used for settings, 2 added the drafts, 3 the sync state
 
 const MAX_CONTENT_BYTES = 5 << 20;
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = 500;
+const MAX_LIMIT = 1000;
 const ID = /^[0-9a-f]{32}$/;
 
 // Called by backend.js when it opens the database: adds what the newer versions need and leaves everything else as it is. Every change
