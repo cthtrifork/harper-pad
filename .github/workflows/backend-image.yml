@@ -36,9 +36,11 @@ jobs:
         include:
           - name: sync
             port: 9000
+            probe_port: 9102 # /healthz is on the metrics listener, not the public port
             env: -e PUBLIC_URL=https://sync.example.test
           - name: admin
             port: 9001
+            probe_port: 9001
             env: -e LISTEN_ADDR=:9001 -e SYNC_PUBLIC_URL=https://sync.example.test
     env:
       IMAGE: harper-pad-${{ matrix.name }}:ci
@@ -108,17 +110,17 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The service must start and answer /healthz. That needs no database; /readyz does. The image has
+      # The service must start and answer /healthz (on the metrics port for sync, the public one for admin). That needs no database; /readyz does. The image has
       # no shell or curl, so the check runs from the runner.
       - name: Smoke test
         env:
-          PORT: ${{ matrix.port }}
+          PROBE_PORT: ${{ matrix.probe_port }}
           RUN_ENV: ${{ matrix.env }}
         run: |
           # shellcheck disable=SC2086 # RUN_ENV is a fixed list of -e options from the matrix above
-          docker run -d --name smoke -p "${PORT}:${PORT}" $RUN_ENV "$IMAGE" serve
+          docker run -d --name smoke -p "${PROBE_PORT}:${PROBE_PORT}" $RUN_ENV "$IMAGE" serve
           for _ in $(seq 1 30); do
-            curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/healthz" && exit 0
+            curl -fsS -o /dev/null "http://127.0.0.1:${PROBE_PORT}/healthz" && exit 0
             sleep 1
           done
           docker logs smoke

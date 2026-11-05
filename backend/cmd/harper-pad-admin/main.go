@@ -52,7 +52,10 @@ func run(args []string) error {
 		}
 	}()
 	mux := http.NewServeMux()
-	health.Register(mux)
+	// The probes are on the metrics listener, off the public port; only without one do they use the public port.
+	if cfg.MetricsAddr == "" {
+		health.Register(mux)
+	}
 
 	mux.Handle("/", admin.New(store.NewAdmin(db), admin.Config{SyncURL: cfg.SyncPublicURL}))
 	return server.Run(cfg.ListenAddr, m.Instrument(mux), health, cfg.MetricsAddr, m.Handler())

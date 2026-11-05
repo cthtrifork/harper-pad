@@ -76,6 +76,9 @@ services:
       PGSSLKEY: /certs/client.key
     volumes:
       - pgcerts:/certs:ro
+    # The probes and the metrics: a port Caddy does not route, as in the cluster. Published on loopback for the tests.
+    ports:
+      - "127.0.0.1:${E2E_SYNC_OPS_PORT:-19102}:9102"
     depends_on:
       postgres:
         condition: service_healthy

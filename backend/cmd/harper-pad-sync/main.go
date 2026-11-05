@@ -52,7 +52,10 @@ func run(args []string) error {
 	sync := store.NewSync(db)
 	go waitForSchema(ctx, db, health)
 	mux := http.NewServeMux()
-	health.Register(mux)
+	// The probes are on the metrics listener, off the public port; only without one do they use the public port.
+	if cfg.MetricsAddr == "" {
+		health.Register(mux)
+	}
 	verifier := auth.NewVerifier()
 	defer verifier.Close()
 	api := syncapi.New(cfg.PublicURL, cfg.AllowedOrigins, sync, verifier)

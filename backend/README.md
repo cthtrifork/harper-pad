@@ -78,20 +78,21 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 | `PUBLIC_URL` | Sync only, required, must be `https:` or the service refuses to start |
 | `SYNC_PUBLIC_URL` | Admin only, required, `https:`: the sync service's public address, which enrollment URLs (`<it>/join#<token>`) are built from |
 | `CORS_ALLOWED_ORIGINS` | Sync only. Comma-separated exact origins (`https://app.example.org`, no trailing slash, never `*`) that browsers may call the API from: the Pages site and the desktop app's webview. Empty allows none. An origin that is not listed is logged once as `CORS: origin is not in CORS_ALLOWED_ORIGINS`, which is how a new client's real origin is found |
-| `METRICS_ADDR` | Where `/metrics` is served, on its own listener so it is never on the public route. Default `:9102` (sync); admin has none unless set, because its pod accepts no traffic except from its own sidecar |
+| `METRICS_ADDR` | Where `/metrics`, `/healthz` and `/readyz` are served, on their own listener so none of them is on the public route. Default `:9102` (sync); admin has none unless set, because its pod accepts no traffic except from its own sidecar. When empty, the probes are served on `LISTEN_ADDR` instead (and metrics are off) |
 | `DATABASE_URL` | Optional. When unset, the standard libpq variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`) are read, which is how the cluster does client-certificate login |
 
 | Endpoint | Use it for | |
 |---|---|---|
 | `POST /enroll` | Enrolling a device | `{invite, deviceName}` with a `DPoP` proof signed by the new key. Spends the invite and returns `{deviceToken, token_type: "DPoP"}`. A wrong, spent or expired invite, a bad or replayed proof and a missing proof are all the same `401` (an `application/problem+json` body that says only `unauthorized`); `400` for a malformed body, `422` for an invalid name, `413` above 4 KiB. The proof is checked before the body is read |
-| `GET /healthz` | `livenessProbe` | The process is serving. Never touches PostgreSQL, so a database outage does not restart healthy pods |
-| `GET /readyz` | `readinessProbe` | A PostgreSQL round trip succeeds (2 s limit, so set `timeoutSeconds: 3`; the result is cached for 2 s and logged only when it changes). 503 while the database is unreachable and while shutting down |
+| `GET :9102/healthz` | `livenessProbe` | The process is serving. Never touches PostgreSQL, so a database outage does not restart healthy pods |
+| `GET :9102/readyz` | `readinessProbe` | A PostgreSQL round trip succeeds (2 s limit, so set `timeoutSeconds: 3`; the result is cached for 2 s and logged only when it changes). 503 while the database is unreachable and while shutting down |
 
 Metrics (Prometheus, `client_golang`, a private registry): `GET :9102/metrics` has the Go runtime and process collectors,
 `harper_pad_http_requests_total` and `harper_pad_http_request_duration_seconds` labelled by method and route *pattern* (never the
 raw path, so the label values are bounded) and `harper_pad_db_pool_*` from the pgx pool (connections by state, acquires, empty
 acquires and wait time: a pool that is too small shows there before `/readyz` fails). The cluster needs a NetworkPolicy that lets
-Prometheus reach port 9102 and a PodMonitor; both live in the gitops repository.
+Prometheus and the kubelet reach port 9102 and a PodMonitor; both live in the gitops repository. The probes point at port 9102, not at the
+public port, which no longer answers `/healthz` or `/readyz` (404).
 
 **Migrations.** `harper-pad-admin` applies the files in `internal/store/migrations/` at start, in name order, each in a transaction
 with its row in `schema_migrations`, under a PostgreSQL advisory lock so two pods never race. It connects as `harper_admin`, the owner

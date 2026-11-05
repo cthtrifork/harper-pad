@@ -8,6 +8,8 @@ import path from "node:path";
 const PORT = process.env.E2E_PORT || "18443";
 export const APP_URL = `https://app.localhost:${PORT}`;
 export const SYNC_URL = `https://sync.localhost:${PORT}`;
+// The probes (/healthz, /readyz) and /metrics are on their own port, which Caddy does not route, so they are not on SYNC_URL.
+export const SYNC_OPS_URL = `http://127.0.0.1:${process.env.E2E_SYNC_OPS_PORT || "19102"}`;
 
 // Same lookup order as scripts/screenshots.mjs: PLAYWRIGHT_DIR, this file's own resolution, then a global install.
 function loadPlaywright() {
@@ -71,19 +73,13 @@ export function compose(service, args) {
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
 
-// Waits until the sync service answers through Caddy: it starts as soon as PostgreSQL is healthy, which can be a moment after
-// the stack reports up.
-export async function waitForSync(browser, seconds = 60) {
-  const device = await newDevice(browser);
-  const page = await device.newPage();
-  try {
-    for (let i = 0; i < seconds; i++) {
-      const res = await page.goto(`${SYNC_URL}/readyz`).catch(() => null);
-      if (res?.ok()) return;
-      await page.waitForTimeout(1000);
-    }
-    throw new Error(`the sync service was not ready after ${seconds} s`);
-  } finally {
-    await device.close();
+// Waits until the sync service is ready (its /readyz on the ops port): it starts as soon as PostgreSQL is healthy, which can be a
+// moment after the stack reports up.
+export async function waitForSync(_browser, seconds = 60) {
+  for (let i = 0; i < seconds; i++) {
+    const res = await fetch(`${SYNC_OPS_URL}/readyz`).catch(() => null);
+    if (res?.ok) return;
+    await new Promise((r) => setTimeout(r, 1000));
   }
+  throw new Error(`the sync service was not ready after ${seconds} s`);
 }
