@@ -94,8 +94,11 @@ jobs:
           } > "$body"
           echo "path=$body" >> "$GITHUB_OUTPUT"
 
+      # `!cancelled()` is what lets this run when the Lighthouse step failed (scores below the minimums): without a status function the
+      # condition gets an implicit `success()`, the step is skipped, and the comment keeps showing the last passing scores. The body
+      # step only sets `path` when the run wrote a summary, so a run that died before that leaves the comment alone.
       - name: Show the scores in a PR comment
-        if: steps.comment-body.outcome == 'success' && hashFiles('lighthouse/summary.md') != ''
+        if: ${{ !cancelled() && steps.comment-body.outputs.path != '' }}
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
           header: lighthouse-score
