@@ -35,33 +35,35 @@ func pgLogin(t *testing.T, role, cert string) {
 	}
 }
 
-// The whole path across the two roles on a real database: harper_admin creates an invite (as the admin UI does), a device enrolls
-// with it through the handler (harper_sync), the same device authenticates with its token and key, a copied token with another
+// The whole path across the two roles on a real database: harper_admin (the owner) creates an invite (as the admin UI does), a device
+// enrolls with it through the handler as harper_sync (rows only), the same device authenticates with its token and key, a copied token with another
 // key is refused, and revoking the device (harper_admin deletes the row) ends access at once.
 func TestEnrollmentAcrossTheRoles(t *testing.T) {
 	ctx := context.Background()
 
-	pgLogin(t, "harper_sync", "client")
-	syncPool, err := store.Open(ctx, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer syncPool.Close()
-	if _, err := store.Migrate(ctx, syncPool, store.Migrations); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := syncPool.Exec(ctx, `TRUNCATE devices, invites`); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _, _ = syncPool.Exec(ctx, `TRUNCATE devices, invites`) }()
-
+	// harper_admin owns the tables and applies the migrations, as harper-pad-admin does at start.
 	pgLogin(t, "harper_admin", "admin")
 	adminPool, err := store.Open(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer adminPool.Close()
+	if _, err := store.Migrate(ctx, adminPool, store.Migrations); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adminPool.Exec(ctx, `TRUNCATE devices, invites`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = adminPool.Exec(ctx, `TRUNCATE devices, invites`) }()
 	admin := store.NewAdmin(adminPool)
+
+	// harper_sync, the public API's role, has row rights only.
+	pgLogin(t, "harper_sync", "client")
+	syncPool, err := store.Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syncPool.Close()
 
 	token, _, err := admin.CreateInvite(ctx, "Desk Linux", 15*time.Minute)
 	if err != nil {

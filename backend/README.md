@@ -42,11 +42,13 @@ raw path, so the label values are bounded) and `harper_pad_db_pool_*` from the p
 acquires and wait time: a pool that is too small shows there before `/readyz` fails). The cluster needs a NetworkPolicy that lets
 Prometheus reach port 9102 and a PodMonitor; both live in the gitops repository.
 
-**Migrations.** `harper-pad-sync` applies the files in `internal/store/migrations/` at start, in name order, each in a transaction
-with its row in `schema_migrations`, under a PostgreSQL advisory lock so two pods never race. It must connect as the schema owner
-(`harper_sync`); the roles themselves (`harper_admin`) are created by the cluster, and the first file grants to them. While they run
-(and while the database is down) `/readyz` is 503 and the start is retried every 2 to 30 s; `/healthz` stays 200. The admin service
-applies nothing, and it needs the tables to exist, so start it after the sync service has run once.
+**Migrations.** `harper-pad-admin` applies the files in `internal/store/migrations/` at start, in name order, each in a transaction
+with its row in `schema_migrations`, under a PostgreSQL advisory lock so two pods never race. It connects as `harper_admin`, the owner
+of the database and the tables (the cluster creates both roles and the owner); the files create the tables and grant `harper_sync` its
+row-level rights (`0003_sync_grants.sql`), and `harper_sync` has no DDL. While they run (and while the database is down) the admin's
+`/readyz` is 503 and the start is retried every 2 to 30 s; `/healthz` stays 200. `harper-pad-sync` applies nothing: its `/readyz` is 503
+until every embedded migration is recorded in `schema_migrations`, so it never serves a database without its tables or grants. The two
+are versioned together; a new sync image waits for the matching admin.
 
 PostgreSQL does not have to be up at start: the pool connects lazily, `/readyz` reports 503 until it is, and the pod recovers by
 itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and the endpoints to notice, drains in-flight requests
@@ -77,9 +79,10 @@ and renewing, and the NetworkPolicy.
 ## Trying the admin UI
 
 The admin pages run on PostgreSQL, and the end-to-end stack already has one with the production login (TLS 1.3, client certificate,
-no password): the admin container connects as `harper_admin` with its own certificate, so the database enforces its grants (no
-access to notes). The stack only creates the `harper_admin` role (`test/e2e/initdb`, which the cluster does in production);
-`harper-pad-sync` applies `internal/store/migrations/*.sql` itself when it starts, as `harper_sync`, so the stack starts it too.
+no password): the admin container connects as `harper_admin` with its own certificate. That role owns the database and the tables
+and applies `internal/store/migrations/*.sql` when the admin starts; the stack only creates the two roles and the database owner
+(`test/e2e/initdb`, which the cluster does in production). `harper-pad-sync` logs in as `harper_sync`, which has rows only, so the
+grants the tests check are the ones production has (the bootstrap superuser is never used by a service).
 
 ```sh
 make admin-up     # PostgreSQL, harper-pad-sync (applies the schema) and the admin UI: http://127.0.0.1:19001
@@ -106,9 +109,11 @@ The DPoP header and the device token are described but not marked `required` in 
 `make test` runs the unit tests. The handler tests use an in-memory store. The store tests need PostgreSQL and are **skipped** unless
 `TEST_PG_CERTS` points at the stack's certificates; `make test-db` does everything: it starts the stack's PostgreSQL, copies the
 certificates to `.e2e-certs/`, runs `go test -race ./...` and removes the stack. The store tests log in the way the services do
-(libpq variables, `verify-full`, client certificate): once as `harper_sync` to seed rows, and once as `harper_admin`, which is the
-login under test. They check the queries, that a certificate with another common name and a plain connection are refused, and
-that the role gets a permission error on notes and on everything beyond its grants. CI runs `make test-db`.
+(libpq variables, `verify-full`, client certificate): as `harper_admin`, the owner, which applies the migrations and seeds and checks
+rows, and as `harper_sync` for the sync store, which runs under its real, row-level grants. They check the queries, that a certificate
+with another common name and a plain connection are refused, that `harper_sync` gets a permission error on DDL, on deleting, on
+`clients` and on everything beyond its grants, and that the schema is reported current only when every migration is recorded. CI runs
+`make test-db`; the packages run one at a time (`-p 1`) because they share the database.
 
 ## Security scan
 

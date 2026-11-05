@@ -45,6 +45,9 @@ never run on a real desktop yet.
       `harper-sync.portableinfo.cloud` (v1.1.0 at the time of writing) and smoke tested.
 - [x] Enrollment in `harper-pad-sync`: `POST /enroll` (spends the invite, binds the device token to the DPoP key), the DPoP proof check and
       the device authentication the other routes use, the CORS allowlist (`CORS_ALLOWED_ORIGINS`, logs each rejected origin once). Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
+- [x] `harper-pad-admin` owns the tables and applies the migrations; `harper-pad-sync` has row-level rights only and waits for the schema.
+      **Cluster:** make `harper_admin` the owner of the `harper` database (CloudNativePG `initdb.owner`) and the migrator, keep `harper_sync` a plain
+      login role, and if tables already exist owned by another role, transfer them once (`ALTER TABLE ... OWNER TO harper_admin` for every table).
 - [ ] The draft routes in `harper-pad-sync`: `GET /docs`, `GET /docs/<id>` and `PUT /docs/<id>` (compare-and-set, tombstones, the size
       limits), with tests for conflicts, deletes and limits, then `GET`/`DELETE` for the device list the app shows.
 - [ ] The sync module (`lib/sync.js`) with unit tests.

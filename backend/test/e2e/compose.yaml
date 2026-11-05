@@ -34,13 +34,16 @@ services:
       - hba_file=/certs/pg_hba.conf
     environment:
       POSTGRES_DB: harper
-      POSTGRES_USER: harper_sync
+      # The bootstrap superuser: reachable only over the container's local socket (pg_hba.conf from certs.sh refuses it over TCP). The
+      # services log in as harper_admin (the owner of the database and its tables) and harper_sync (rows only), never as this one,
+      # so the grants the tests check are the ones that apply.
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: e2e-only
     volumes:
       - ./certs.sh:/certs.sh:ro,z
       - pgcerts:/certs
-      # First-start initialisation: the admin role, which the cluster creates in production. The schema is not applied here:
-      # harper-pad-sync runs its migrations at start, as harper_sync, as in production.
+      # First-start initialisation: the two roles and the database owner, which the cluster creates in production. The schema is not
+      # applied here: harper-pad-admin applies the migrations at start, as harper_admin, the owner, as in production.
       - ./initdb/01-roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro,z
     # Published on loopback only, for the store tests on the host (make test-db); the certificates are TLS 1.3, client-cert only.
     ports:
@@ -50,7 +53,7 @@ services:
       - /var/lib/postgresql/data
     healthcheck:
       # Over TCP: the init script runs a temporary server that listens on the socket only, so a socket check reports ready too early.
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U harper_sync -d harper"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d harper"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -77,9 +80,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # The admin applies the schema; the sync service reports ready only once it has (it waits, so this is only an ordering hint).
+      admin:
+        condition: service_started
 
-  # The admin UI, logging in to PostgreSQL as harper_admin with its client certificate, like the cluster. Plain HTTP on loopback
-  # (in production Cloudflare terminates TLS); `make admin-up` starts it, `make admin-seed` adds devices.
+  # The admin UI, logging in to PostgreSQL as harper_admin with its client certificate, like the cluster. harper_admin owns the
+  # tables and applies the migrations at start. Plain HTTP on loopback (in production Cloudflare terminates TLS); `make admin-up`
+  # starts it, `make admin-seed` adds devices.
   admin:
     build:
       context: ../..

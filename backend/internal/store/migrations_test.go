@@ -8,7 +8,7 @@ import (
 )
 
 func TestMigrate(t *testing.T) {
-	pgEnv(t, "harper_sync", "client")
+	pgEnv(t, "harper_admin", "admin") // the table owner applies the migrations
 	ctx := context.Background()
 	pool, err := Open(ctx, "")
 	if err != nil {

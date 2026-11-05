@@ -1,7 +1,8 @@
 // Command harper-pad-admin is the admin UI of Harper Pad: Go and HTMX, reached through a Cloudflare Tunnel behind
 // Cloudflare Access (docs/sync.md, "The admin UI").
 //
-// It serves /healthz (liveness) and /readyz (readiness, a PostgreSQL round trip), the admin pages (internal/admin) and Prometheus
+// It applies the schema migrations at start (it is the table owner), serves /healthz (liveness) and /readyz (readiness, a PostgreSQL
+// round trip, 503 until the migrations are applied), the admin pages (internal/admin) and Prometheus
 // metrics on a separate port. It is run as
 // `harper-pad-admin serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
 package main
@@ -44,6 +45,16 @@ func run(args []string) error {
 	m := metrics.New("admin")
 	m.RegisterPool(db)
 	health := server.NewHealth(db)
+	// This service owns the tables (harper_admin) and applies the migrations; harper-pad-sync, which has no DDL rights, waits for them.
+	// PostgreSQL does not have to be up at start, so retry in the background; /readyz is 503 ("starting") until they are applied.
+	health.SetStarting(true)
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go func() {
+		if store.MigrateWithRetry(ctx, db, store.Migrations) {
+			health.SetStarting(false)
+		}
+	}()
 	mux := http.NewServeMux()
 	health.Register(mux)
 

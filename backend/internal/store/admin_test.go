@@ -11,7 +11,6 @@ import (
 
 	"github.com/cthtrifork/harper-pad/backend/internal/admin"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,33 +38,32 @@ func pgEnv(t *testing.T, role, cert string) {
 	}
 }
 
-// adminFixture returns the admin store, connected as harper_admin with its client certificate (so the real grants apply), the
-// pool behind it, and a connection as harper_sync (the schema owner and, in this stack, a superuser) to seed rows. Each test
-// starts from an empty devices and invites table and the single default account; the schema comes from migrations/ (the stack
-// applies it at first start).
+// adminFixture returns the admin store, connected as harper_admin with its client certificate, the pool behind it, and a second
+// connection as the same role to seed rows. harper_admin owns the tables and applies the migrations (as harper-pad-admin does at
+// start); the stack only creates the roles and the database. Each test starts from empty devices and invites tables and the single
+// default account.
 func adminFixture(t *testing.T) (*Admin, *pgxpool.Pool, *pgx.Conn) {
 	t.Helper()
 	ctx := context.Background()
 
-	pgEnv(t, "harper_sync", "client")
+	pgEnv(t, "harper_admin", "admin")
+	pool, err := Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := Migrate(ctx, pool, Migrations); err != nil {
+		t.Fatalf("migrations as harper_admin (is the stack up? make test-db): %v", err)
+	}
 	cfg, err := pgx.ParseConfig("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	owner, err := pgx.ConnectConfig(ctx, cfg)
 	if err != nil {
-		t.Fatalf("connecting as harper_sync (is the stack up? make test-db): %v", err)
-	}
-	t.Cleanup(func() { _ = owner.Close(ctx) })
-	// The schema is made the way harper-pad-sync makes it at start, as the owner (the stack only creates the roles).
-	ownerPool, err := Open(ctx, "")
-	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(ownerPool.Close)
-	if _, err := Migrate(ctx, ownerPool, Migrations); err != nil {
-		t.Fatalf("migrations as harper_sync: %v", err)
-	}
+	t.Cleanup(func() { _ = owner.Close(ctx) })
 	reset := func() {
 		if _, err := owner.Exec(ctx, `TRUNCATE devices, invites; DELETE FROM clients WHERE id <> 1`); err != nil {
 			t.Fatal(err)
@@ -74,12 +72,6 @@ func adminFixture(t *testing.T) (*Admin, *pgxpool.Pool, *pgx.Conn) {
 	reset()
 	t.Cleanup(reset)
 
-	pgEnv(t, "harper_admin", "admin")
-	pool, err := Open(ctx, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
 	a := NewAdmin(pool)
 	a.now = func() time.Time { return t0 }
 	return a, pool, owner
@@ -219,26 +211,6 @@ func TestAdminRefusesInviteWithSeveralAccounts(t *testing.T) {
 	_ = pool.QueryRow(context.Background(), `SELECT count(*) FROM invites`).Scan(&n)
 	if n != 0 {
 		t.Errorf("%d invites were created", n)
-	}
-}
-
-// The admin role must not be able to read notes or change devices beyond renaming: the database enforces it, not the Go code.
-func TestAdminRoleGrants(t *testing.T) {
-	_, pool, _ := adminFixture(t)
-	ctx := context.Background()
-	for _, q := range []string{
-		`SELECT * FROM docs`,
-		`SELECT * FROM meta`,
-		`INSERT INTO devices (id, client_id, name, token_hash, key_thumbprint, created_at, last_seen) VALUES ('x', 1, 'x', 'x', '{}', 0, 0)`,
-		`UPDATE devices SET token_hash = 'x'`,
-		`UPDATE clients SET name = 'x'`,
-		`CREATE TABLE evil (a int)`,
-	} {
-		_, err := pool.Exec(ctx, q)
-		var pgErr *pgconn.PgError
-		if !errors.As(err, &pgErr) || pgErr.Code != "42501" { // insufficient_privilege, not some other failure
-			t.Errorf("%s: err = %v, want a permission error", q, err)
-		}
 	}
 }
 
