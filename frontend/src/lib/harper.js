@@ -1,42 +1,45 @@
-// Load harper.js in a Web Worker and lint text. The wasm is a separate hashed asset fetched at runtime (needs
-// application/wasm from the asset server); it works in WebKitGTK.
-export async function createLinter() {
-  const [{ WorkerLinter }, { slimBinary }] = await Promise.all([import("harper.js"), import("harper.js/slimBinary")]);
-  const linter = new WorkerLinter({ binary: slimBinary });
-  await linter.setup();
+// Harper runs in its own Web Worker (harperWorker.js); this is the page's handle on it. The wasm is a separate hashed asset the worker
+// fetches at runtime (needs application/wasm from the asset server); it works in WebKitGTK. Every method is a message to the worker and
+// returns a promise; `dispose` ends the worker.
+export const createLinter = () => connect(new Worker(new URL("./harperWorker.js", import.meta.url), { type: "module" }));
+
+// The handle on a worker that speaks harperWorker.js's messages (a parameter so the tests can stand in a fake one).
+export async function connect(worker) {
+  const pending = new Map();
+  let next = 1;
+  const fail = (err) => {
+    for (const { reject } of pending.values()) reject(err);
+    pending.clear();
+  };
+  worker.onmessage = ({ data: { id, result, error } }) => {
+    const call = pending.get(id);
+    pending.delete(id);
+    if (error !== undefined) call?.reject(new Error(error));
+    else call?.resolve(result);
+  };
+  worker.onerror = (e) => fail(new Error(e.message || "The Harper worker failed"));
+  const call = (method, ...args) =>
+    new Promise((resolve, reject) => {
+      const id = next++;
+      pending.set(id, { resolve, reject });
+      worker.postMessage({ id, method, args });
+    });
+  const linter = {
+    lintPlain: (text) => call("lintPlain", text),
+    importWords: (words) => call("importWords", words),
+    exportWords: () => call("exportWords"),
+    ignoreLintHash: (hash) => call("ignoreLintHash", hash),
+    exportIgnoredLints: () => call("exportIgnoredLints"),
+    importIgnoredLints: (json) => call("importIgnoredLints", json),
+    clearIgnoredLints: () => call("clearIgnoredLints"),
+    async dispose() {
+      fail(new Error("The linter was disposed"));
+      worker.terminate();
+    },
+  };
+  await call("setup");
   return linter;
 }
 
-// How a Harper suggestion edits the problem range: replace it, remove it, or insert after it.
-const SUGGESTION_KIND = { 0: "replace", 1: "remove", 2: "insert" };
-
-// Lint the text and return plain objects (spans are UTF-16 offsets, as in JS strings and CodeMirror), so neither Vue nor CodeMirror state ever holds
-// wasm-backed Lint instances. Those are freed here.
-export async function lintText(linter, text) {
-  const lints = await linter.lint(text);
-  try {
-    return await Promise.all(
-      lints.map(async (l) => {
-        const span = l.span();
-        const fixes = l.suggestions().map((sug) => {
-          const fix = { kind: SUGGESTION_KIND[sug.kind()] ?? "replace", text: sug.get_replacement_text() };
-          sug.free();
-          return fix;
-        });
-        // The hash identifies this finding in its context. Ignoring needs it later, after the Lint object is freed.
-        const hash = await linter.contextHash(text, l).catch(() => undefined);
-        return {
-          kind: l.lint_kind_pretty(),
-          message: l.message(),
-          problem: l.get_problem_text(),
-          from: span.start,
-          to: span.end,
-          fixes,
-          hash,
-        };
-      }),
-    );
-  } finally {
-    for (const l of lints) l.free();
-  }
-}
+// Lint the text and return plain findings (see harperCore.js).
+export const lintText = (linter, text) => linter.lintPlain(text);

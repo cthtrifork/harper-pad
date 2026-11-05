@@ -24,7 +24,7 @@ func main() {
 		Icon:        app.WindowIcon,
 		Description: "Grammar-checked editor with a scratch pad drawer (" + app.Version() + ")",
 		Services:    svcs.All(),
-		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(frontend)},
+		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(frontend), Middleware: app.AssetMiddleware},
 		// Linux: GTK4 reports the application id as the window's Wayland app_id and X11 class, and
 		// KDE/GNOME match it to the .desktop file of the same name (the launcher icon and grouping).
 		// Keep it equal to the desktop file name and its StartupWMClass in build/linux.
