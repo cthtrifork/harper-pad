@@ -75,7 +75,7 @@ What losing the whole server costs:
 | Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment behind a ClusterIP Service, exposed through the cluster's ingress | Small, one static binary; applies the same draft limits as the app, written separately (see Code layout) |
 | Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service and the admin UI each get their own certificate and a role: the public API's role gets rows only, and the admin's role owns the schema |
 | Schema owner | **`harper_admin` owns the tables and applies the migrations**; `harper_sync`, the public API's role, gets rows only (no DDL, no ownership) | The sync API faces the internet and parses unauthenticated input, so it gets the least. The admin UI is reached only through the tunnel behind Cloudflare Access with OIDC and MFA. Row security (forced, a policy for `harper_sync` only) hides the notes from the admin role in ordinary SQL; the owner can still switch it off. The cost: a compromised admin process could read notes (it could already enroll a device that does), and sync waits for admin to migrate |
-| API framework and proof check | The sync API is [Huma](https://huma.rocks) on the standard library's mux, so the routes and [openapi.yaml](openapi.yaml) come from the same Go types; DPoP proofs are checked by [go-dpop](https://github.com/AxisCommunications/go-dpop) with a ttlcache for replays | Less security code to own, and the description cannot drift (a test fails when it does). The proof is checked before the body is read; see [DPoP](#limiting-the-damage-of-a-stolen-device) |
+| API framework and proof check | The sync API is [Huma](https://huma.rocks) on the standard library's mux, so the routes and [openapi.yaml](openapi.yaml) come from the same Go types; DPoP proofs are checked by [go-dpop](https://github.com/AxisCommunications/go-dpop) with a ttlcache for replays | Less security code to own, and the description is regenerated, not hand-written. The proof is checked before the body is read; see [DPoP](#limiting-the-damage-of-a-stolen-device) |
 | Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port, and the app knows nothing about users or login (Cloudflare does all of it); keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
 | Hosting | Kubernetes. The sync API is exposed through the cluster's existing ingress on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([what this trusts](#what-this-trusts)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
@@ -530,8 +530,7 @@ assigns each draft a version, and it never merges, never makes copies and has no
   same text. The device records the state it last synced for each draft, and "the
   server changed" means the server's state differs from that record. Only equality is tested, never order, so device clocks do not
   matter.
-- **The routes are also described in [openapi.yaml](openapi.yaml)**, generated from the server's Go types (`make openapi` in `backend/`; a test
-  fails when the file is out of date). Where it and this page disagree, one of them is wrong: fix it.
+- **The routes are also described in [openapi.yaml](openapi.yaml)**, generated from the server's Go types (`make openapi` in `backend/`). Where it and this page disagree, one of them is wrong: fix it.
 - **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed. `base` carries
   `updatedAt` too, so a write is checked against the exact state the device saw.
 - **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS
@@ -821,7 +820,7 @@ the DPoP check and the draft routes; the device list routes (`GET` and `DELETE`)
 - [architecture](architecture.md) and `AGENTS.md`: the sync module, the new binary and its layout.
 - [pages](pages.md): the web build's sync origin setting and CORS.
 - A server operations page (run, proxy, back up, rotate, revoke).
-- [openapi.yaml](openapi.yaml) is generated from the server (`make openapi` in `backend/`), not written by hand: it needs no review of its own, only that its test passes.
+- [openapi.yaml](openapi.yaml) is generated from the server (`make openapi` in `backend/`), not written by hand: it needs no review of its own.
 
 ## Option: end-to-end encryption
 

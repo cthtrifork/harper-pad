@@ -98,8 +98,7 @@ PGSSLCERT=.e2e-certs/admin.crt PGSSLKEY=.e2e-certs/admin.key SYNC_PUBLIC_URL=htt
 ## OpenAPI
 
 The routes are described in [`../docs/openapi.yaml`](../docs/openapi.yaml), **generated from the Go request and response types** (the field
-tags carry the constraints and descriptions), not written beside the code. `make openapi` rewrites it; `TestOpenAPIIsUpToDate` fails when
-the committed file differs from what the code describes, so a changed route or field cannot ship with a stale description. Huma serves
+tags carry the constraints and descriptions), not written beside the code. `make openapi` rewrites it; rerun it when a route or field changes. Huma serves
 nothing itself: no documentation page, no `/openapi.json`, no schema routes, and no `$schema` member in bodies (`/docs` is the draft list).
 The DPoP header and the device token are described but not marked `required` in the schema, because a missing credential must be the same
 401 as a wrong one, not the 422 Huma gives a missing required header: the middleware that checks them runs before Huma validates the input.

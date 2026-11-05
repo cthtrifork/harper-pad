@@ -30,8 +30,8 @@ vet: ## go vet
 fmt: ## Format the Go code
 	gofmt -w .
 
-openapi: ## Regenerate ../docs/openapi.yaml from the routes (the test fails when it is out of date)
-	go test -count=1 ./internal/syncapi -run TestOpenAPIIsUpToDate -update
+openapi: ## Regenerate ../docs/openapi.yaml from the routes 
+	go run ./cmd/openapi ../docs/openapi.yaml
 
 E2E_CERTS := $(CURDIR)/.e2e-certs
 E2E_PG_PORT ?= 15432
