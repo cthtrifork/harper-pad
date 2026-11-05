@@ -9,6 +9,9 @@
   ],
   labels: ["dependencies"],
 
+  // Every update type automerges once CI is green; the rules below opt out the ones a person must read.
+  automerge: true,
+
   // PR titles follow the repository convention `type: summary` (.github/workflows/pr-title.yml), so a Renovate PR
   // reads `deps: update dependency knip to v6.44.0` and passes the PR title check. The title type also
   // picks the label (.github/release-drafter.yml), so vulnerability fixes are titled `security:`.
