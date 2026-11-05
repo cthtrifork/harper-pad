@@ -38,7 +38,7 @@ sequenceDiagram
   CF->>Admin: Forward the request
   Admin->>DB: INSERT invite (token hash, expires in 15 min)
   Admin-->>Op: https://sync.example.com/join#35;token (shown once)
-  Op->>Dev: Paste in Settings, Sync, Add this device
+  Op->>Dev: Paste in the Sync chip, Add this device
   Dev->>API: POST /enroll {invite, deviceName} with a DPoP proof
   API->>DB: Spend invite, INSERT device (token hash)
   API-->>Dev: device token
