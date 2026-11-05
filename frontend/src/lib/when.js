@@ -12,8 +12,5 @@ export function whenLabel(ms, now = new Date()) {
   if (days === 1) return "Yesterday";
   if (days < 7) return d.toLocaleDateString(LOCALE, { weekday: "short" });
   const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString(
-    LOCALE,
-    sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" },
-  );
+  return d.toLocaleDateString(LOCALE, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
 }
