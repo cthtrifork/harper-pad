@@ -23,7 +23,7 @@ const message = (err) => String(err?.message || err);
 //
 // A draft can also be saved to a file (Ctrl+Shift+S, then Ctrl+S). That only happens on request, never by the autosave.
 // A draft is created by its first save, so an empty editor leaves none behind.
-export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
+export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } = {}) {
   const current = ref({ id: "", createdAt: 0, format: "markdown", filePath: "" });
   const state = ref("idle"); // idle | dirty | saving | saved | error
   const error = ref("");
@@ -241,15 +241,29 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
     refreshList();
   }
 
-  function showToast(text, undo = null) {
+  // A draft that was deleted here while its Undo is still on offer. When the offer ends (it times out, is closed, or another toast takes its
+  // place) without Undo, the delete is final and `onDeleted(id)` lets sync send the tombstone.
+  let pendingDelete = "";
+  function commitDelete() {
+    const id = pendingDelete;
+    pendingDelete = "";
+    if (id) onDeleted?.(id);
+  }
+  function showToast(text, undo = null, { deleted = "" } = {}) {
+    commitDelete(); // the offer this one replaces has ended
+    pendingDelete = deleted;
     toast.value = { message: text, undo };
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (toast.value = null), TOAST_MS);
+    toastTimer = setTimeout(() => {
+      toast.value = null;
+      commitDelete();
+    }, TOAST_MS);
   }
 
   function dismissToast() {
     clearTimeout(toastTimer);
     toast.value = null;
+    commitDelete();
   }
 
   // Start from what PadService.Startup returned: open the most recent draft, or return `fallback` (the text of a new, unsaved
@@ -356,21 +370,56 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
         editor.value?.load("", "markdown");
       }
     }
-    showToast("Draft deleted", async () => {
-      try {
-        await saveDraft(draft);
-      } catch (err) {
-        showToast(`Could not restore the draft: ${message(err)}`);
-        return;
+    showToast(
+      "Draft deleted",
+      async () => {
+        try {
+          await saveDraft(draft);
+        } catch (err) {
+          showToast(`Could not restore the draft: ${message(err)}`);
+          return;
+        }
+        await refreshList();
+        // Going back to it only when nothing else is being written: an unsaved or changed draft is never replaced.
+        if (wasOpen && !dirty && !current.value.id) await open(draft.id);
+      },
+      { deleted: id },
+    );
+  }
+
+  // Sync removed the open draft because it was deleted on another device (the person chose Remove): show the newest draft that is left, or
+  // an empty editor. The draft is not saved again. (The Undo for it sits beside the sync chip, see useSync, because the drawer is closed.)
+  async function removedElsewhere(draft) {
+    if (draft.id === current.value.id) {
+      clearTimeout(timer);
+      dirty = false;
+      await chain;
+      const newest = (await listDrafts(1, 0)).drafts[0];
+      if (newest) await open(newest.id);
+      else {
+        setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
+        editor.value?.load("", "markdown");
       }
-      await refreshList();
-      // Going back to it only when nothing else is being written: an unsaved or changed draft is never replaced.
-      if (wasOpen && !dirty && !current.value.id) await open(draft.id);
-    });
+    }
+    await refreshList();
+  }
+
+  // Undo of that removal: the draft comes back, is shown, and is uploaded again (an edit survives a delete).
+  async function restore(draft) {
+    try {
+      await saveDraft(draft);
+    } catch (err) {
+      showToast(`Could not restore the draft: ${message(err)}`);
+      return;
+    }
+    await refreshList();
+    await open(draft.id);
+    onSaved?.(draft.id);
   }
 
   async function undo() {
     const t = toast.value;
+    pendingDelete = ""; // Undo: the delete is not final
     dismissToast();
     await t?.undo?.();
   }
@@ -412,6 +461,8 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
     flush,
     canReplace,
     reloadCurrent,
+    removedElsewhere,
+    restore,
     saveFile,
     refreshList,
     setQuery,

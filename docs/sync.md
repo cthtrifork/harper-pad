@@ -377,8 +377,8 @@ There is no timer, no focus pull and no change feed. Sync happens at four moment
 | Moment | What it does |
 |---|---|
 | **Save** | About 2 seconds after typing stops, the device pushes that one draft (`PUT`). An explicit Save (the button, Ctrl+S, also to a file) pushes at once and looks at the server again, so a "Newer on the server" marker is settled even when there was nothing new to save. Offline or on an error the draft stays *changed* and is sent by the next save or by Sync all. |
-| **Delete** | The tombstone is pushed after the app's undo window, so a delete that is undone never reaches the server. |
-| **Opening a note** | The local text shows at once. In the background the device asks for the draft with `If-None-Match`. If the server has a newer state, the draft is unchanged here and the user has not typed, it is swapped in with a short "Updated from the server" notice. Otherwise the local text is left alone and the note gets a "Newer on the server" marker, to be settled by Sync all or the next save. A tombstone or a 404 changes nothing while the note is open. |
+| **Delete** | The tombstone is pushed when the app's undo offer ends (it times out, is closed, or another toast replaces it), so a delete that is undone never reaches the server. A tombstone not yet sent is found by the next Sync all. |
+| **Opening a note** | The local text shows at once. In the background the device asks for the draft with `If-None-Match`. If the server has a newer state, the draft is unchanged here and the user has not typed, it is swapped in with a short "Updated from the server" notice. Otherwise the local text is left alone and the note gets a "Newer on the server" marker, to be settled by Sync all or the next save. A 404 changes nothing. A tombstone for a draft that was changed here changes nothing either (the edit survives). A tombstone for a draft that was **not** changed here is never applied while the note is open: a small popup beside the chip, "Deleted elsewhere", asks **Keep** (the draft is uploaded again on top of the tombstone) or **Remove** (it is removed here, the newest remaining draft is shown, and an **Undo** beside the chip brings it back and uploads it). Escape leaves the question for the next time the note is opened. Sync all, which skips the open draft, asks the same question. |
 | **Sync all** | A button in the drafts drawer. It lists the state of every draft on the server and reconciles both ways. It also runs once after a device enrolls and when the app starts. |
 
 A sync never blocks typing. The status bar shows "Synced", "Syncing", "N pending", "Offline" or "Sign in again". Sync all shows a
@@ -514,7 +514,7 @@ the CORS allowlist and the web build's CSP. It does not prove certificate renewa
 ## Open work
 
 - [ ] `GET` and `DELETE` for the device list the app shows (the admin's revoke already works on the same table).
-- [ ] Undo for the removals Sync all makes (a draft removed because the server has a tombstone is gone for good today).
+- [ ] Undo for the removals Sync all makes to drafts that are not open (they are gone for good today; the open one has Keep, Remove and Undo).
 - [ ] The [end-to-end test](#end-to-end-test), including the "lose the server" check. A draft deleted elsewhere while a device was
       offline can reappear (documented), but nothing else is lost.
 - [ ] The rest of the UI: the device list, a progress line and a pending count on the chip, and a "Newer on the server" marker on the
@@ -530,7 +530,7 @@ the CORS allowlist and the web build's CSP. It does not prove certificate renewa
 Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
 `harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in the web build the client
 (`dpop.js`, `syncEnroll.js`, `syncClient.js`, `syncPlan.js`, `syncRun.js`, `useSync.js`), the `SYNC_ORIGIN` CSP setting, the chip and pop-up,
-the push after a save, Sync all, and opening a note (the "Updated from the server" swap and the "Newer on the server" marker, shown beside the chip). All of it was checked with two Chromium contexts against the compose stack.
+the push after a save, Sync all, and opening a note (the "Updated from the server" swap, the "Newer on the server" marker and the "Deleted elsewhere" question), and the tombstone push after a delete. All of it was checked with two Chromium contexts against the compose stack.
 
 ## Option: end-to-end encryption
 
