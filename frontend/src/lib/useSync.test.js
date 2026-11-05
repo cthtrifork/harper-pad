@@ -385,3 +385,55 @@ test("a delete is pushed at once when its Undo offer ends", async () => {
   assert.deepEqual(methods, ["PUT"]);
   assert.equal(kept.states.get(D.id).deleted, true);
 });
+
+test("Sync on a draft that is unchanged here still asks the server, and swaps in a newer version without pushing anything", async () => {
+  let puts = 0;
+  let swapped = 0;
+  const applied = [];
+  const { sync, kept, ready } = setup({
+    delay: 100000,
+    fetchFn: async (_u, init) => {
+      if (init.method === "PUT") puts++;
+      return reply(200, NEWER)();
+    },
+    draftOverrides: { isChanged: async () => false, applyRemote: async (d) => applied.push(d) },
+  });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await ready();
+  await sync.syncRequested(D.id, { canSwap: () => true, onSwapped: () => swapped++ });
+  assert.equal(puts, 0);
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0].updatedAt, 5, "the server's time is kept, not the clock's");
+  assert.equal(swapped, 1);
+  assert.equal(sync.notice.value.kind, "updated");
+  assert.equal(sync.status.value, "synced");
+});
+
+test("Sync with nothing new on the server changes nothing", async () => {
+  let applied = 0;
+  const { sync, kept, ready } = setup({
+    delay: 100000,
+    fetchFn: reply(304, {}),
+    draftOverrides: { isChanged: async () => false, applyRemote: async () => applied++ },
+  });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await ready();
+  await sync.syncRequested(D.id, {});
+  assert.equal(applied, 0);
+  assert.equal(sync.notice.value, null);
+  assert.equal(sync.status.value, "synced");
+});
+
+test("Sync with the server unreachable says Offline, unlike opening a note, which says nothing", async () => {
+  const down = async () => {
+    throw new TypeError("network down");
+  };
+  const a = setup({ delay: 100000, fetchFn: down, draftOverrides: { isChanged: async () => false } });
+  await a.ready();
+  await a.sync.syncRequested(D.id, {});
+  assert.equal(a.sync.status.value, "offline");
+  const b = setup({ delay: 100000, fetchFn: down, draftOverrides: { isChanged: async () => false } });
+  await b.ready();
+  await b.sync.noteOpened(D.id, {});
+  assert.equal(b.sync.status.value, "synced");
+});

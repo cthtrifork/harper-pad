@@ -44,7 +44,8 @@ and `pprof`, which `production` rejects.
 - `lib/editor/` is the CodeMirror 6 editor: the lint source (`lint.js`, debounced), theme, markdown or plain text mode,
   status bar statistics and the problems list.
 - `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
-  on disk, and the list the drawer shows.
+  on disk, and the list the drawer shows. `lib/statusLine.js` joins that state with the sync state into the one status line in the status bar
+  (the Sync button in the header only acts; the sync chip only shows the connection).
 - Sync (optional, both builds; see [sync](sync.md)): `lib/syncRun.js` (`createSyncer`) is the one place a draft is synced. Its `all()`
   is Sync all, its `one(id)` is the push after a save its `open(id)` is the check when a note is opened (with `keep` and `removeLocal` for the "Deleted elsewhere" choice), and all of them decide with the pure table in `lib/syncPlan.js`, so a conflict is handled
   in one place (`syncOneEngine.test.js` keeps it so). `lib/desktopSync.js` gives the engine the same drafts store on desktop that `webDrafts.js` gives it in the browser, over `SyncService`, so the engine is the same code on both. `lib/syncClient.js` makes the signed requests (`lib/dpop.js` makes the proofs),
