@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Start here. This file is for AI coding agents (and humans) picking up work on **Harper Pad**, a Go + Wails v3
-desktop app: a Harper-checked editor plus a scratch pad drawer. It is early: the editor, Problems panel and drafts drawer work; the Edit / Split / Preview views work for markdown; opening files is not built yet; saving a draft to a file works (Ctrl+Shift+S, then Ctrl+S) (open work: `docs/sync.md`).
+desktop app: a Harper-checked editor plus a scratch pad drawer. The editor, Problems panel, drafts drawer, markdown Edit / Split / Preview views, saving a draft to a file (Ctrl+Shift+S, then Ctrl+S) and optional sync work; opening files is not built. What is left before sync can be switched on is the checklist in `docs/sync.md`.
 
 ## Commands
 
@@ -39,7 +39,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 | Path | What |
 |---|---|
 | `main.go` | Thin entry point: Wails app and window, embeds `frontend/dist` |
-| `backend/` | The optional sync service, its own Go module that shares no code with the app: `harper-pad-sync`, `harper-pad-admin`, PostgreSQL, and the end-to-end stack in `test/e2e/`. Partly built (schema migrations, admin, enrollment, the draft routes; the device list routes are not); see `backend/README.md` and the design in `docs/sync.md` |
+| `backend/` | The optional sync service, its own Go module that shares no code with the app: `harper-pad-sync`, `harper-pad-admin`, PostgreSQL, and the end-to-end stack in `test/e2e/`. Built; see `backend/README.md` and the design in `docs/sync.md` |
 | `internal/app` | The Wails services the frontend calls (`PadService` for startup and the version, `DraftService`, `SyncService` (the sync state for the desktop build), `SettingsService`, `UpdateService`; `service.go` creates them, `database.go` is the one SQLite file the first two share), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
 | `internal/store` | The app's database: one SQLite file (pure Go) with the drafts and the settings, see `docs/storage.md` |
 | `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
@@ -54,4 +54,4 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 - `application.New` must be called before `InitUpdater`, which runs before `Run` (self-update tutorial order); see `docs/self-update.md`, `docs/releasing.md`.
 - UI conventions (button types, tokens, motion, UX rules) are in `docs/design-cheatsheet.html`; open it in a browser and follow it for new UI.
 - How the pieces fit together (frontend hosts, Go service, data flow) is in `docs/architecture.md`.
-- Open work is tracked in the "Open work" section of `docs/sync.md`.
+- What is left for sync is the "Before release" checklist in `docs/sync.md`.

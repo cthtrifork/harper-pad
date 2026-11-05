@@ -2,7 +2,7 @@
 
 An optional sync service so **notes** (scratch pad drafts) follow the user between the desktop app and the iPhone Home Screen
 app. The server is described in the [backend README](../backend/README.md); this page is the design and the protocol the clients
-follow, and [Open work](#open-work) lists what is left.
+follow. The client and the server are built; [Before release](#before-release) lists what is left before it is switched on.
 
 ## Goals and non-goals
 
@@ -114,9 +114,7 @@ Why paste instead of opening the link: on iPhone, a tapped link opens Safari, wh
 Screen app, so the enrollment would land in the wrong place. Pasting inside the installed app avoids it. The URL is only a
 convenient way to carry the address and token in one string; opening it in a browser shows a short "copy this into Harper Pad" page.
 
-States to design: sync off, paste the URL, error (invite expired or used, server unreachable, not HTTPS), first-sync
-progress (merge only), and, in the admin page only, the device list with revoke (see [Open work](#open-work)). Follow the [design cheat sheet](design-cheatsheet.html), keep transitions
-short, and honour reduced motion.
+The device list and revoking live in the admin page only; the app has no device list (see [Decided not to build](#before-release)).
 
 ## Authentication
 
@@ -462,13 +460,10 @@ The groundwork, and the riskiest part, because it touches both storage engines. 
   rewrites cannot lose it; because changes and deletes are derived, what it saves or deletes is seen by the newer build. Tests run
   the previous build's statements against a database with sync state, and upgrade databases written by user_version 1 and 2.
   A build from before `#83` fails on the newer IndexedDB version instead of opening it; there is no way around that.
-- **Device-local sync settings** (server URL, device token, device name, and the device key) are kept apart from the app's own settings and are
-  never uploaded. **Pre-release simplification:** they are one record, `sync-device`, in the existing `kv` object store of the app's
-  IndexedDB (`lib/syncDevice.js`), on the web and on desktop alike, so there is no Go side, no table and no `DB_VERSION` change. The code has
-  never run on a real device and losing data is acceptable until sync is done, so nothing here is built to survive an upgrade: no migration,
-  and no compatibility with older builds for this record. Before release, decide whether the record needs a store of its own, and whether
-  desktop should keep it in SQLite beside the drafts (a webview profile that is cleared would then lose the key and the token, which means
-  "Sign in again"; the drafts would be safe either way).
+- **Device-local sync settings** (server URL, device token, device name and the device key) are one record, `sync-device`, in the
+  existing `kv` object store of the app's IndexedDB (`lib/syncDevice.js`), on the web and on desktop alike, so there is no Go side, no table
+  and no `DB_VERSION` change. They are kept apart from the app's own settings and never uploaded. A cleared webview profile loses the key
+  and the token, which means "Sign in again"; the drafts are safe either way.
 - New host calls go through `backend.js` with both implementations, as [pages](pages.md) requires. New Go service methods mean
   running `make bindings`.
 
@@ -496,22 +491,20 @@ This is a device-token model with DPoP key binding, transport security and no co
 Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data; the [encryption option](#option-end-to-end-encryption) would leave it only
 ciphertext), and traffic analysis (the server sees sizes and times).
 
-## Open work
+## Before release
 
-- [ ] **Check the desktop app in a real window.** The client now runs in the desktop build too: `SyncService` gives the engine the same
-      drafts store over the SQLite file, and the device record stays in the webview's IndexedDB. It was checked in the headless server build (the
-      same frontend and bindings, over HTTP) against the real server, with a web build as the second device. Not checked: a real GTK or WebView2
-      window. Only a real window can show whether the webview keeps the device key and token across a relaunch (Edge on Windows passed in a
-      browser tab; WebKitGTK is open), and what origin the window presents, which goes in `CORS_ALLOWED_ORIGINS` (the sync server logs a rejected
-      origin once, so read it from the log).
-- [ ] Set the repository variable `SYNC_ORIGIN`: the Pages build and both desktop release builds (Linux and Windows) read it, and with it unset
-      sync is off in that build.
-- [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests: the Pages origin, and the desktop window's origin once it is known.
-- [ ] Before release, decide whether the device record needs its own store (on desktop it is in the webview's IndexedDB, as on the web), or
-      belongs in SQLite beside the drafts.
-- [ ] Walk through it on a real iPhone, in the installed Home Screen app (Safari): enrolling by pasting an invite, a push, Sync all, the Keep or
-      Remove dialog, the bottom sheet (fields stay at 16 px, no zoom), and surviving a restart. Everything so far was checked in Chromium
-      only. It needs `SYNC_ORIGIN` and `CORS_ALLOWED_ORIGINS` set and a release deployed (previews do not turn sync on).
+Sync is built and was checked with two Chromium contexts against the compose stack. What is left is configuration and checks on real
+devices:
+
+- [ ] Set the repository variable `SYNC_ORIGIN`: the Pages build and both desktop release builds (Linux and Windows) read it, and with it
+      unset sync is off in that build.
+- [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests: the Pages origin, and the desktop window's origin once it is known (the sync
+      server logs a rejected origin once, so read it from the log).
+- [ ] **Check the desktop app in a real window** (GTK or WebView2; only the headless server build was checked): whether the webview keeps
+      the device key and token across a relaunch (Edge on Windows passed in a browser tab; WebKitGTK is open), and what origin it presents.
+- [ ] Walk through it on a real iPhone, in the installed Home Screen app: enrolling by pasting an invite, a push, Sync all, the Keep or
+      Remove dialog, the bottom sheet (fields stay at 16 px, no zoom), and surviving a restart. It needs the two settings above and a
+      release deployed (previews do not turn sync on).
 
 **Decided not to build** (5 November 2026; each can be reopened):
 
@@ -519,20 +512,12 @@ ciphertext), and traffic analysis (the server sees sizes and times).
   would be authenticated by a device token alone, so one stolen device could revoke all the others.
 - **Undo for what Sync all removes from drafts that are not open.** A delete already had its Undo on the device where it was made, and a
   removal of the open draft has Keep, Remove and Undo. Until another device runs Sync all, editing the draft there brings it back.
-- **A pending count and a progress line on the chip.** Sync all takes a second or two for a normal number of drafts; the spinner and the
-  summary line are enough.
-- **A committed end-to-end test of the sync flows.** They were checked by hand with two Chromium contexts against the compose stack (`make e2e-up`
-  in `backend/`). The CI `e2e` job checks the stack itself (https, readiness, the web app, the database login), and the unit tests drive the
-  real web store against a fake of the server's routes.
-- **A "Newer on the server" marker on the drafts drawer's cards.** Sync all updates every draft that is not open, and the open one shows the
-  marker beside the chip.
-- **A server operations page.** How the server is run and backed up belongs to the cluster's GitOps repository, and the devices can rebuild a
+- **A pending count and a progress line on the chip.** Sync all takes a second or two for a normal number of drafts.
+- **A committed end-to-end test of the sync flows.** The CI `e2e` job checks the stack itself (https, readiness, the web app, the database
+  login), and the unit tests drive the real web store against a fake of the server's routes.
+- **A "Newer on the server" marker on the drafts drawer's cards.** Sync all updates every draft that is not open.
+- **A server operations page.** Running and backing up the server belongs to the cluster's GitOps repository, and the devices can rebuild a
   lost server.
-
-Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
-`harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in both builds the client
-(`dpop.js`, `syncEnroll.js`, `syncClient.js`, `syncPlan.js`, `syncRun.js`, `useSync.js`, and `desktopSync.js` over the Go `SyncService` on desktop), the `SYNC_ORIGIN` CSP setting, the chip and pop-up,
-the push after a save, Sync all, and opening a note (the "Updated from the server" swap, the "Newer on the server" marker and the "Deleted elsewhere" question), and the tombstone push after a delete. All of it was checked with two Chromium contexts against the compose stack.
 
 ## Option: end-to-end encryption
 

@@ -18,27 +18,20 @@ A small desktop writing app for Linux and Windows, also available as a [web app]
    half-written paragraphs are kept by the app and saved as you type, so there is no file name to invent and no folder
    to pick. A draft becomes a file only when you choose "Save as file".
 
-Markdown documents and drafts can also be shown side by side with a rendered preview.
-
-## Status
-
-The window has a CodeMirror editor checked by `harper.js` (WebAssembly in a Web Worker), a Problems panel with fixes,
-the scratch pad drawer of drafts with autosave and search, and in-app updates. The same frontend runs in the browser
-as an installable offline web app ([`docs/pages.md`](docs/pages.md)). Markdown shows side by side with a preview.
+Markdown can be shown side by side with a rendered preview, and the app updates itself from GitHub releases.
 
 ## Web app
 
 The web version is hosted on GitHub Pages at <https://harper.portableinfo.cloud/>. It runs entirely in the browser,
-keeps its data in IndexedDB, works offline after the first load, and can be added to a phone's Home Screen. It is
-follows the releases: a published release replaces the site, and the head of `main` is at `/preview/` (the [Pages workflow](.github/workflows/pages.yml)). See [`docs/pages.md`](docs/pages.md) for how
-the two builds differ and how to deploy.
+keeps its data in IndexedDB, works offline after the first load, and can be added to a phone's Home Screen. A published
+release replaces the site, and the head of `main` is at `/preview/`. See [`docs/pages.md`](docs/pages.md) for how the two builds differ and how to deploy.
 
 ## Sync (optional)
 
-Notes can follow you between the desktop app and the phone through your own server, off by default. The devices stay the
-source of truth; the server is plain storage and can be rebuilt from them. See the [backend](backend/README.md) (`harper-pad-sync` and `harper-pad-admin` on PostgreSQL) and the design in
-[`docs/sync.md`](docs/sync.md), which also lists the open work. The web build has the client when it is built with `SYNC_ORIGIN` (a status bar chip,
-enrolling with an invite link, a push after each save, and Sync all), in the web build and in the desktop app.
+Notes can follow you between the desktop app and the phone through your own server. It is off unless the build sets
+`SYNC_ORIGIN`. The devices stay the source of truth; the server is plain storage and can be rebuilt from them. See the
+[backend](backend/README.md) (`harper-pad-sync` and `harper-pad-admin` on PostgreSQL) and the design in [`docs/sync.md`](docs/sync.md),
+which ends with what is left before it is switched on.
 
 ## Develop
 

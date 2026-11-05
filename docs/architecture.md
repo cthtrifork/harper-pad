@@ -62,5 +62,5 @@ and `pprof`, which `production` rejects.
 3. The same edit schedules a draft save through `backend.js`: `DraftService.SaveDraft` on desktop, IndexedDB on the web.
 4. "Save as file" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
    on the web) and keeps the path on the draft.
-5. In the web build with sync on, about two seconds after a save (at once for an explicit Save) `useSync` asks `createSyncer.one(id)` to push the draft; Sync all
+5. With sync on (either build), about two seconds after a save (at once for an explicit Save) `useSync` asks `createSyncer.one(id)` to push the draft; Sync all
    (a button in the chip's pop-up, also run at start and after enrolling) asks `createSyncer.all()` to reconcile every draft. When a draft is opened, `createSyncer.open(id)` asks the server (one conditional request) whether it holds a newer version, which is swapped in if nothing was typed, or a tombstone, which asks Keep or Remove. A delete is pushed (`one(id)`) when its Undo offer ends.
