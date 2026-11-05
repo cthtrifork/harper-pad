@@ -105,14 +105,6 @@ export class Settings {
              */
             this["ignoredLabels"] = {};
         }
-        if (!("dialect" in $$source)) {
-            /**
-             * Dialect is the English dialect Harper checks for: american, british, australian, canadian or indian.
-             * @member
-             * @type {string}
-             */
-            this["dialect"] = "";
-        }
 
         Object.assign(this, $$source);
     }
