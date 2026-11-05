@@ -63,7 +63,7 @@ func New(publicURL string, origins []string, st Store, v *auth.Verifier) *API {
 // is moved. No schema routes and no `$schema` member in bodies: the document is self-contained.
 func (a *API) config() huma.Config {
 	cfg := huma.DefaultConfig("Harper Pad sync API", "1.0.0")
-	cfg.DocsPath, cfg.OpenAPIPath, cfg.SchemasPath = "/api", "/openapi", ""
+	cfg.DocsPath, cfg.OpenAPIPath, cfg.SchemasPath = "", "/openapi", "" // the page at /api is docsPage (docspage.go)
 	cfg.CreateHooks = nil
 	cfg.Info.Description = "The optional sync service of Harper Pad (docs/sync.md). Every route needs a DPoP proof header; routes other " +
 		"than /enroll also need `Authorization: DPoP <device token>`. The proof is a JWT signed with the device's key (RFC 9449 " +
@@ -82,6 +82,7 @@ func (a *API) config() huma.Config {
 // Register adds the routes to mux and returns nothing: Huma is reachable through Huma() for the tests and the generator.
 func (a *API) Register(mux *http.ServeMux) {
 	a.api = humago.New(mux, a.config())
+	mux.HandleFunc("GET /api", docsPage)
 
 	huma.Register(a.api, huma.Operation{
 		OperationID:   "enroll",
