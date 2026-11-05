@@ -240,3 +240,15 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* "Deleted elsewhere": a short question over the chip, not a modal. */
+.sync-gone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 280px;
+}
+
+.sync-gone .actions {
+  flex-direction: row;
+}

@@ -45,7 +45,7 @@ and `pprof`, which `production` rejects.
 - `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
   on disk, and the list the drawer shows.
 - Sync (optional, web build only for now; see [sync](sync.md)): `lib/syncRun.js` (`createSyncer`) is the one place a draft is synced. Its `all()`
-  is Sync all, its `one(id)` is the push after a save and its `open(id)` is the check when a note is opened, and all three decide with the pure table in `lib/syncPlan.js`, so a conflict is handled
+  is Sync all, its `one(id)` is the push after a save its `open(id)` is the check when a note is opened (with `keep` and `removeLocal` for the "Deleted elsewhere" choice), and all of them decide with the pure table in `lib/syncPlan.js`, so a conflict is handled
   in one place (`syncOneEngine.test.js` keeps it so). `lib/syncClient.js` makes the signed requests (`lib/dpop.js` makes the proofs),
   `lib/syncEnroll.js` enrolls from an invite link, `lib/syncDevice.js` keeps the device record in IndexedDB, `lib/useSync.js` is the state the
   status bar chip (`SyncChip.vue`) shows, and `lib/csp.js` builds the page's policy, which names the sync server when `SYNC_ORIGIN` is set.
@@ -61,4 +61,4 @@ and `pprof`, which `production` rejects.
 4. "Save as file" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
    on the web) and keeps the path on the draft.
 5. In the web build with sync on, about two seconds after a save (at once for an explicit Save) `useSync` asks `createSyncer.one(id)` to push the draft; Sync all
-   (a button in the chip's pop-up, also run at start and after enrolling) asks `createSyncer.all()` to reconcile every draft. When a draft is opened, `createSyncer.open(id)` asks the server (one conditional request) whether it holds a newer version, which is swapped in if nothing was typed.
+   (a button in the chip's pop-up, also run at start and after enrolling) asks `createSyncer.all()` to reconcile every draft. When a draft is opened, `createSyncer.open(id)` asks the server (one conditional request) whether it holds a newer version, which is swapped in if nothing was typed, or a tombstone, which asks Keep or Remove. A delete is pushed (`one(id)`) when its Undo offer ends.

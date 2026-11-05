@@ -68,9 +68,20 @@ function device(server) {
   };
   const drafts = createWebDrafts(open);
   const copies = []; // the conflicted copies the engine reported
-  const syncer = () => createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn, onCopy: (c) => copies.push(c) });
+  const gone = []; // the ids Sync all left alone because they were deleted elsewhere
+  const syncer = () =>
+    createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn, onCopy: (c) => copies.push(c), onGone: (id) => gone.push(id) });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
-  return { drafts, copies, sync: (skip) => syncer().all({ skip }), one: (id) => syncer().one(id), open: (id, o) => syncer().open(id, o) };
+  return {
+    drafts,
+    copies,
+    gone,
+    keep: (id) => syncer().keep(id),
+    removeLocal: (id) => syncer().removeLocal(id),
+    sync: (skip) => syncer().all({ skip }),
+    one: (id) => syncer().one(id),
+    open: (id, o) => syncer().open(id, o),
+  };
 }
 const none = { uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 };
 const sum = (o) => ({ ...none, ...o });
@@ -344,7 +355,7 @@ test("opening a note that was changed here and there only marks it", async () =>
   assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from A"); // nothing was sent
 });
 
-test("a tombstone or a missing draft changes nothing while the note is open", async () => {
+test("a missing draft changes nothing, and a tombstone for an unchanged draft is reported, not applied", async () => {
   const server = fakeServer();
   const a = device(server);
   const b = device(server);
@@ -353,8 +364,8 @@ test("a tombstone or a missing draft changes nothing while the note is open", as
   await b.sync();
   await a.drafts.remove(d.id);
   await a.sync();
-  assert.equal(await b.open(d.id), "none");
-  assert.deepEqual(await texts(b), ["one"]);
+  assert.equal(await b.open(d.id), "deleted"); // nothing was changed here: the person decides
+  assert.deepEqual(await texts(b), ["one"]); // and nothing was removed
 
   const local = await b.drafts.save({ content: "never synced" });
   assert.equal(await b.open(local.id), "none"); // 404: absence is not deletion
@@ -380,4 +391,77 @@ test("a conflict reports the copy it kept, from Sync all and from a save alike",
     assert.match(b.copies[0].content, /^Conflicted copy .*: from A$/);
     assert.ok((await b.drafts.allIds()).includes(b.copies[0].id));
   }
+});
+
+// Deleted on another device while it is open here.
+async function deletedElsewhere() {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "doomed" });
+  await a.sync();
+  await b.sync();
+  await a.drafts.remove(d.id);
+  await a.sync(); // the tombstone is on the server
+  return { server, a, b, id: d.id };
+}
+
+test("Sync all leaves the open draft that was deleted elsewhere alone, and says so", async () => {
+  const { b, id } = await deletedElsewhere();
+  assert.deepEqual(await b.sync(new Set([id])), sum({ skipped: 1 }));
+  assert.deepEqual(b.gone, [id]);
+  assert.deepEqual(await texts(b), ["doomed"]);
+});
+
+test("a tombstone for a draft changed here is not reported: the edit survives", async () => {
+  const { b, id } = await deletedElsewhere();
+  await tick();
+  await b.drafts.save({ id, content: "edited" });
+  assert.equal(await b.open(id), "none");
+  assert.equal(await b.one(id), "uploaded"); // revives it on the server
+});
+
+test("Remove: the draft goes, and is handed back for Undo", async () => {
+  const { b, id } = await deletedElsewhere();
+  const removed = await b.removeLocal(id);
+  assert.equal(removed.content, "doomed");
+  assert.deepEqual(await b.drafts.allIds(), []);
+  assert.deepEqual(await b.sync(), none);
+  assert.equal(await b.removeLocal(id), null); // nothing left to remove
+});
+
+test("Keep: the draft stays and is uploaded on top of the tombstone, and the other device gets it back", async () => {
+  const { server, a, b, id } = await deletedElsewhere();
+  assert.equal(await b.keep(id), "uploaded");
+  assert.equal(server.rows.get(id).deleted, false);
+  assert.equal(JSON.parse(server.rows.get(id).data).content, "doomed");
+  assert.deepEqual(await b.sync(), none);
+  assert.deepEqual(await a.sync(), sum({ downloaded: 1 }));
+  assert.deepEqual(await texts(a), ["doomed"]);
+});
+
+test("Undo after Remove: saving the draft again uploads it, as an edit survives a delete", async () => {
+  const { server, b, id } = await deletedElsewhere();
+  const removed = await b.removeLocal(id);
+  await b.drafts.save({ id, createdAt: removed.createdAt, format: removed.format, content: removed.content });
+  assert.equal(await b.one(id), "uploaded");
+  assert.equal(server.rows.get(id).deleted, false);
+});
+
+test("a delete is pushed by one(id), the way the end of the Undo window does it", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const d = await a.drafts.save({ content: "bye" });
+  await a.one(d.id);
+  await a.drafts.remove(d.id);
+  server.calls.length = 0;
+  assert.equal(await a.one(d.id), "uploaded");
+  assert.deepEqual(server.calls, [`PUT /docs/${d.id}`]);
+  assert.equal(server.rows.get(d.id).deleted, true);
+  // a draft the server never had costs nothing
+  const never = await a.drafts.save({ content: "never synced" });
+  await a.drafts.remove(never.id);
+  server.calls.length = 0;
+  assert.equal(await a.one(never.id), "");
+  assert.deepEqual(server.calls, []);
 });
