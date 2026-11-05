@@ -58,11 +58,12 @@ func New(publicURL string, origins []string, st Store, v *auth.Verifier) *API {
 	return &API{publicURL: strings.TrimRight(publicURL, "/"), origins: set, store: st, verifier: v, logged: map[string]bool{}}
 }
 
-// config is Huma's configuration. Nothing is served by Huma itself: no documentation page, no OpenAPI or schema routes (the
-// document is generated at build time and /docs is the draft list), and no `$schema` member in bodies.
+// config is Huma's configuration. Huma serves the documentation page at /api and the OpenAPI document at /openapi.json and
+// /openapi.yaml; both are public, like /healthz, and describe only the routes. The default /docs is the draft list, so the page
+// is moved. No schema routes and no `$schema` member in bodies: the document is self-contained.
 func (a *API) config() huma.Config {
 	cfg := huma.DefaultConfig("Harper Pad sync API", "1.0.0")
-	cfg.DocsPath, cfg.OpenAPIPath, cfg.SchemasPath = "", "", ""
+	cfg.DocsPath, cfg.OpenAPIPath, cfg.SchemasPath = "/api", "/openapi", ""
 	cfg.CreateHooks = nil
 	cfg.Info.Description = "The optional sync service of Harper Pad (docs/sync.md). Every route needs a DPoP proof header; routes other " +
 		"than /enroll also need `Authorization: DPoP <device token>`. The proof is a JWT signed with the device's key (RFC 9449 " +
