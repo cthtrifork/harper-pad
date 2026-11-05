@@ -61,11 +61,10 @@ cluster's GitOps repository; run one sync replica.
 
 | Path | What |
 |---|---|
-| `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
+| `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands |
 | `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; one page: add a device, pending URLs, devices; no inline script or style, same-origin and CSRF checks). The CSS is one file per concern in `web/static` (`tokens`, `base`, `controls`, `list`, `card`, `motion`, `phone`, linked in that order from `layout.html`; `phone.css` last because it overrides). It reaches the database only through the `Store` interface, implemented on PostgreSQL by `store.Admin` |
-| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool, the migration runner, the admin queries in `admin.go`, the sync queries in `sync.go`, and `migrations/` with the schema from `docs/sync.md`), `auth` (device tokens, and the DPoP proof check done by [go-dpop](https://github.com/AxisCommunications/go-dpop) with a [ttlcache](https://github.com/jellydator/ttlcache) for replays; `authtest` makes proofs the way the web client does), `syncapi` (the routes on [Huma](https://huma.rocks), which serves them on the standard library's mux and describes them in OpenAPI; the CORS allowlist and the device authentication), `admin`, and `protocol` (empty, for the draft types) |
+| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool, the migration runner, the admin queries in `admin.go`, the sync queries in `sync.go`, and `migrations/` with the schema from `docs/sync.md`), `auth` (device tokens, and the DPoP proof check done by [go-dpop](https://github.com/AxisCommunications/go-dpop) with a [ttlcache](https://github.com/jellydator/ttlcache) for replays; `authtest` makes proofs the way the web client does), `syncapi` (the routes on [Huma](https://huma.rocks), which serves them on the standard library's mux and describes them in OpenAPI; the CORS allowlist and the device authentication), `admin`, and `metrics` |
 | `Containerfile.sync`, `Containerfile.admin` | Container images; the build context is this directory |
-| `testdata/protocol/` | Fixtures for the protocol (empty) |
 | `test/e2e/` | The end-to-end stack (`compose.yaml`, `Caddyfile`, `certs.sh`) and the Playwright test |
 
 ## Running in Kubernetes
@@ -174,7 +173,7 @@ controls itself (injection, path traversal and file inclusion, SSRF, error discl
 findings do not fail the job. Every alert is an annotation on the run (an error for FAIL rules, a warning otherwise), a table in the job summary, a SARIF upload to code scanning (`test/zap/sarif.sh`; the Security tab tracks each rule and URL until a run stops finding it) and, on pull requests from this repository, one comment that each run updates (`test/zap/report.sh`); the full reports are the `zap-report` artifact. Locally: `make e2e-up`, then run
 `zap-full-scan.py -t http://sync:8080 -c rules/rules.tsv` from the ZAP image on the `harper-pad-e2e_default` network, with
 `test/zap` mounted at `/zap/wrk/rules`. A scanner cannot see logic flaws in the sync protocol, so this complements the protocol tests
-and does not replace them; once the API has an OpenAPI description, switch to `zap-api-scan.py`.
+and does not replace them.
 
 ## Images
 
