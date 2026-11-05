@@ -152,7 +152,7 @@ The routes are described in [`../docs/openapi.yaml`](../docs/openapi.yaml), **ge
 tags carry the constraints and descriptions), not written beside the code. `make openapi` rewrites it; rerun it when a route or field changes. Huma also serves it:
 the documentation page at `/api`, the document at `/openapi.json` and `/openapi.yaml`. They are public like `/healthz`, need no proof and describe only
 the routes. The page is not at Huma's default `/docs`, which is the draft list; there are no schema routes and no `$schema` member in bodies.
-The page loads its viewer (Stoplight Elements, pinned with integrity hashes) from unpkg.com, so it needs the browser to reach that host.
+The page loads its viewer (Scalar, pinned with an integrity hash; it collapses its sidebar on a phone) from unpkg.com, so it needs the browser to reach that host, and its fonts come from fonts.scalar.com.
 The DPoP header and the device token are described but not marked `required` in the schema, because a missing credential must be the same
 401 as a wrong one, not the 422 Huma gives a missing required header: the middleware that checks them runs before Huma validates the input.
 
