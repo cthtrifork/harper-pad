@@ -21,7 +21,7 @@ concurrency:
 
 env:
   # renovate: datasource=github-releases depName=aquasecurity/trivy
-  TRIVY_VERSION: v0.76.1
+  TRIVY_VERSION: v0.76.2
   # The DB comes from the cache that trivy-cache.yml refreshes daily.
   TRIVY_SKIP_DB_UPDATE: 'true'
 
