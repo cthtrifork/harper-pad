@@ -97,6 +97,11 @@ func (a *API) Register(mux *http.ServeMux) {
 	}, a.enroll)
 
 	a.registerDocs()
+
+	// The root shows the documentation page (Huma serves it at /api).
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/api", http.StatusFound)
+	})
 }
 
 // Huma returns the Huma API the routes are registered on, after Register.
