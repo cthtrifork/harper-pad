@@ -65,7 +65,7 @@ func TestEnroll(t *testing.T) {
 	var name, ua, key string
 	var client, created, seen int64
 	var used *int64
-	err := pool.QueryRow(ctx, `SELECT name, user_agent, public_key, client_id, created_at, last_seen FROM devices WHERE id = 'dev1'`).
+	err := pool.QueryRow(ctx, `SELECT name, user_agent, key_thumbprint, client_id, created_at, last_seen FROM devices WHERE id = 'dev1'`).
 		Scan(&name, &ua, &key, &client, &created, &seen)
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestDeviceByToken(t *testing.T) {
 	}
 
 	d, err := s.DeviceByToken(ctx, auth.HashToken("tok"))
-	if err != nil || d.ID != "dev1" || d.ClientID != 1 || d.PublicKey != `{"key":1}` {
+	if err != nil || d.ID != "dev1" || d.ClientID != 1 || d.KeyThumbprint != `{"key":1}` {
 		t.Fatalf("device = %+v, %v", d, err)
 	}
 	if _, err := s.DeviceByToken(ctx, auth.HashToken("other")); !errors.Is(err, ErrUnknownToken) {

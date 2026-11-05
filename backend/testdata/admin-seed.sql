@@ -1,6 +1,6 @@
 -- Three devices for trying the admin UI against a scratch PostgreSQL (backend/README.md, "Trying the admin UI").
 -- Needs migrations/0001_init.sql applied first. Times are Unix milliseconds, relative to now.
-INSERT INTO devices (id, client_id, name, user_agent, token_hash, public_key, created_at, last_seen)
+INSERT INTO devices (id, client_id, name, user_agent, token_hash, key_thumbprint, created_at, last_seen)
 SELECT v.id, 1, v.name, v.user_agent, sha256(convert_to(v.id, 'UTF8')), '{}',
        ((extract(epoch FROM now() - v.created) * 1000))::bigint,
        ((extract(epoch FROM now() - v.seen) * 1000))::bigint

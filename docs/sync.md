@@ -295,7 +295,7 @@ Possession, [RFC 9449](https://rfc-editor.org/rfc/rfc9449)). The one difference 
 JWT, so the binding to the key is kept in our database instead of in a `cnf.jkt` claim.
 
 At enrollment the device generates an ECDSA P-256 key pair and calls `POST /enroll` with the invite and a DPoP proof signed by the
-new key; the proof's header carries the public key as a JWK. The server checks the proof, spends the invite and stores the key on the
+new key; the proof's header carries the public key as a JWK. The server checks the proof, spends the invite and stores the key's thumbprint on the
 device row, which binds the token to it. It answers with the token and `token_type: "DPoP"`.
 
 Every later request carries `Authorization: DPoP <device token>` and a `DPoP: <proof>` header. The proof is a JWT signed with ES256
@@ -310,7 +310,7 @@ payload  {"jti": "<random id>", "htm": "PUT", "htu": "https://sync.example.com/d
 The server checks, as RFC 9449 section 4.3 lists: exactly one proof; `typ`, `alg` and a well-formed public `jwk`; the signature;
 `htm` and `htu` equal to the request's method and URL (without query or fragment); `iat` within about 60 seconds of its clock;
 `jti` not seen in that window (a small in-memory cache is enough at one replica); `ath` equal to the hash of the presented token;
-and that the `jwk` is the key stored on the token's device row, compared by JWK thumbprint. A token copied without the key is then
+and that the `jwk`'s thumbprint (RFC 7638) equals the one stored on the token's device row. The proof carries the key and its signature is verified against it, so the server stores only the thumbprint. A token copied without the key is then
 useless.
 
 **What differs from RFC 9449.** The proof is the RFC's. What is around it is simpler, because DPoP is the proof part of an OAuth
@@ -351,6 +351,12 @@ Details that are easy to get wrong:
 - **WebCrypto's ECDSA signature is already the JWS `ES256` format** (raw `r‖s`, 64 bytes), so the client needs no DER conversion and
   a JOSE library on the Go side can verify the proof directly. Go's `ecdsa.VerifyASN1` would reject it; use the two 32-byte integers
   with `ecdsa.Verify`, or the library.
+- **Libraries do the proof check, not code in this repository.** [go-dpop](https://github.com/AxisCommunications/go-dpop) (on golang-jwt)
+  checks the compact JWS, `typ`, the signature against the header `jwk`, `htm`, `htu`, `iat` within the window, and that `jti` and `iat`
+  are present, as RFC 9449 section 4.3 lists, and gives the key's thumbprint. A `ttlcache` is the `jti` replay cache. The server adds only
+  what neither does: ES256 only, no private key in the `jwk`, the `ath` hash of the device token, and the order (the proof is checked
+  before the request body is read). The thumbprint is computed from the decoded key, so one key has one identity however its coordinates are spelled in base64url
+  (tested).
 - **Losing the key means re-enrolling.** If the browser or iOS clears storage, the server rejects the proof and the client shows
   "Sign in again", the same recovery as a revoked token. Call `navigator.storage.persist()` (`keepData()`) as the app already does.
 - **Limits:** DPoP does not stop script running in the page, or someone using the unlocked device, because both can ask the key to
@@ -421,7 +427,7 @@ CREATE TABLE devices (
   name       TEXT   NOT NULL,
   user_agent TEXT   NOT NULL DEFAULT '',
   token_hash BYTEA  NOT NULL UNIQUE,              -- SHA-256 of the device token; it alone identifies the device and so its client account
-  public_key TEXT   NOT NULL,                     -- the device's DPoP key (JWK), from the enrollment proof; every later proof must use it
+  key_thumbprint TEXT NOT NULL,                   -- RFC 7638 thumbprint of the device's DPoP key, from the enrollment proof; every later proof must use that key
   created_at BIGINT NOT NULL,
   last_seen  BIGINT NOT NULL
 );

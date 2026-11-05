@@ -88,7 +88,7 @@ func adminFixture(t *testing.T) (*Admin, *pgxpool.Pool, *pgx.Conn) {
 func seedDevice(t *testing.T, owner *pgx.Conn, id, name string, created, seen time.Time) {
 	t.Helper()
 	_, err := owner.Exec(context.Background(),
-		`INSERT INTO devices (id, client_id, name, user_agent, token_hash, public_key, created_at, last_seen)
+		`INSERT INTO devices (id, client_id, name, user_agent, token_hash, key_thumbprint, created_at, last_seen)
 		 VALUES ($1::text, 1, $2, 'Safari', sha256(convert_to($1::text, 'UTF8')), '{}', $3, $4)`,
 		id, name, created.UnixMilli(), seen.UnixMilli())
 	if err != nil {
@@ -229,7 +229,7 @@ func TestAdminRoleGrants(t *testing.T) {
 	for _, q := range []string{
 		`SELECT * FROM docs`,
 		`SELECT * FROM meta`,
-		`INSERT INTO devices (id, client_id, name, token_hash, public_key, created_at, last_seen) VALUES ('x', 1, 'x', 'x', '{}', 0, 0)`,
+		`INSERT INTO devices (id, client_id, name, token_hash, key_thumbprint, created_at, last_seen) VALUES ('x', 1, 'x', 'x', '{}', 0, 0)`,
 		`UPDATE devices SET token_hash = 'x'`,
 		`UPDATE clients SET name = 'x'`,
 		`CREATE TABLE evil (a int)`,
