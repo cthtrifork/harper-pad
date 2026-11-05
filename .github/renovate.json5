@@ -21,6 +21,8 @@
   minimumReleaseAge: "2 days",
   internalChecksFilter: "strict",
   postUpdateOptions: ["gomodTidy"],
+  // The only command a post-upgrade task may run: re-vendoring htmx (packageRules below).
+  allowedCommands: ["^cd backend && go generate \\./internal/admin$"],
   // Commits go through GitHub's API as the GitHub App, so they are verified (signed) without a key.
   platformCommit: "enabled",
 
@@ -98,6 +100,19 @@
       groupName: "wails",
     },
     {
+      // htmx is vendored (backend/internal/admin/web/static), not installed: Renovate bumps the version in the
+      // go:generate line of handler.go and re-runs it, which downloads that release from npm, checks it against the
+      // registry's integrity hash and rewrites the file, so the PR carries the real diff. The page's CSP and
+      // htmx-config depend on htmx's behaviour and CI has no browser test of it, so a person reads the diff.
+      matchDepNames: ["htmx.org"],
+      automerge: false,
+      postUpgradeTasks: {
+        commands: ["cd backend && go generate ./internal/admin"],
+        fileFilters: ["backend/internal/admin/web/static/htmx.*"],
+        executionMode: "update",
+      },
+    },
+    {
       // The runner image is pinned on purpose: it fixes the glibc and WebKitGTK baseline of the
       // release binary. Moving to a new Ubuntu is a decision, not an update.
       matchDatasources: ["github-runners"],
@@ -114,6 +129,14 @@
       managerFilePatterns: ["/(^|/)Makefile$/", "/^\\.github/workflows/[^/]+\\.ya?ml$/"],
       matchStrings: [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+(?:ARG\\s+)?\\S+\\s*(?::=|=|:)\\s*['\"]?(?<currentValue>[^\\s'\"]+)",
+      ],
+    },
+    {
+      // The htmx version in the go:generate line of handler.go, marked by a `// renovate:` comment above it.
+      customType: "regex",
+      managerFilePatterns: ["/^backend/internal/admin/handler\\.go$/"],
+      matchStrings: [
+        "// renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n//go:generate .* -version=(?<currentValue>[0-9.]+)",
       ],
     },
   ],

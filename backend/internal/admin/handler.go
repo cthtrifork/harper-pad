@@ -15,6 +15,11 @@ import (
 	"unicode/utf8"
 )
 
+// The vendored htmx: Renovate bumps the version on the next line and re-runs this (`go generate ./internal/admin`,
+// or `make htmx` in the repository root). See docs/ci.md.
+// renovate: datasource=npm depName=htmx.org
+//go:generate go run ../../tools/vendorhtmx -version=2.0.11 -dir=web/static
+
 //go:embed web/templates web/static
 var webFS embed.FS
 
