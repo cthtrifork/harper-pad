@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
-import { expandSnippet } from "./snippets.js";
+import { expandSnippet, SNIPPET_LIST } from "./snippets.js";
 
 // A state with the caret at `at` (default: the end) in `doc`; returns the document and the selected text after expanding.
 function expand(doc, at = doc.length) {
@@ -74,4 +74,9 @@ test("inside a fenced block it is just text", () => {
 test("spaces around the trigger do not count", () => {
   assert.equal(expand("  <code>").doc, "```\nWrite code here\n```");
   assert.equal(expand("<code>  ").doc, "```\nWrite code here\n```");
+});
+
+test("the help list matches what Enter does", () => {
+  assert.ok(SNIPPET_LIST.length >= 9);
+  for (const s of SNIPPET_LIST) assert.equal(expand(s.trigger).doc, s.before + s.mid + s.after, s.trigger);
 });
