@@ -32,20 +32,14 @@ never run on a real desktop yet.
 
 ## 4. Sync (proposal: `docs/sync.md`)
 
-- [ ] **iPhone check for the device-bound key** (decides whether the device-bound key stays as designed). A throwaway page
-      (`frontend/web/key-test.html`, PR #86, published as a pull request preview, not merged) checks it. **Done on 4 November 2026**
-      on an iPhone, in a Safari tab and as a Home Screen app: key generation, storing only the private `CryptoKey`, `exportKey`
-      refused, raw `r||s` signatures that verify against the saved public key, an HKDF data key and a derived AES-GCM key (for the encryption option), and
-      Argon2id at 32, 64 and 128 MiB (about 0.1 to 0.2 s, no page kill). The keys survived closing and reopening the Home Screen
-      app. `persist()` returned false. Results are recorded in `docs/sync.md`.
-  - [ ] **Still to do:** open the Home Screen app again after a few hours, a day, a week and a phone restart, and look for "Key from
-        an earlier run survived" and the history. If the key is cleared, use the rotation fallback described in `docs/sync.md`.
-        Also open the test page in a browser on each desktop engine (GNOME Web or another WebKitGTK browser for the Linux window,
-        Edge for the Windows window) and check the same results, because the desktop app keeps its key in the webview's IndexedDB
-        with no OS keyring. Close PR #86 when the checks are done.
+- [x] **iPhone check for the device-bound key.** Done on 4 November 2026 with a throwaway page (PR #86, not merged), in a Safari tab and
+      as a Home Screen app; the keys also survived 20.6 hours on 5 November. Results are in `docs/sync.md`. The longer iPhone
+      checks (a week, a phone restart) were dropped.
+- [x] **Desktop engine check for the device-bound key:** Edge on Windows passed on 5 November 2026 (a browser tab, Edge 156: 17 pass,
+      0 fail, `persist()` true). The WebKitGTK check for the Linux window was dropped. Close PR #86 (the throwaway test page).
 - [x] Local groundwork: sync state in its own table/store, hash-based change tracking, apply-remote store methods, additive SQLite
       and IndexedDB (`DB_VERSION` 3) migrations that older builds survive, with tests. The host calls and bindings come with the sync module.
-- [ ] The server: `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
+- [x] The server (deployed at `harper-sync.portableinfo.cloud` from the GitOps repository, `harper-pad-sync` v1.1.0): `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
       devices) behind a Cloudflare Tunnel and Access with OIDC (Cloudflare does all authentication; the app has none), two container
       images, and tests. The Kubernetes manifests are not kept in this repository; write them in the cluster's GitOps repository from
       the "Deploying the server" section of `docs/sync.md`: CloudNativePG `Cluster`, cert-manager certificates (database clients and
