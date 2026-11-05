@@ -193,4 +193,12 @@
   #selection {
     display: none;
   }
+
+  /* The release the web build is from, small, at the bottom right (the spacer is hidden here, so the margin pushes it over). */
+  .status .app-version {
+    display: inline;
+    margin-left: auto;
+    color: var(--mute);
+    font-size: 10px;
+  }
 }

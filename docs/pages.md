@@ -35,6 +35,8 @@ The site follows the versions of the app. `.github/workflows/pages.yml` builds t
 | `/preview/` | the head of `main` | every push to `main` that touches `frontend/` |
 | `/pr-<n>/` | a pull request | the `preview` label, see below |
 
+The release build is stamped with its tag (`APP_VERSION`, set in `pages.yml`), which a phone shows small at the bottom right of the status bar. The desktop app shows its version in the header, and a preview or local build shows none.
+
 Pull requests that touch `frontend/` only build it. To redeploy a release (a failed deploy does not undo the release), run **Pages** from the Actions tab with **Use workflow from** set to the tag; run on a branch it deploys that branch to `/preview/`.
 
 The site is at `https://<owner>.github.io/harper-pad/`, or at the root of the repository's custom domain if Settings > Pages has one (this repository: `harper.portableinfo.cloud`, so the preview is `harper.portableinfo.cloud/preview/`). The workflow asks the Pages settings which (`actions/configure-pages`) and builds with the matching `BASE_PATH`, so changing the domain needs no code change; it needs a new deploy. Until the first release after this change, `/` still holds the last build of `main`.

@@ -43,6 +43,11 @@
   white-space: nowrap;
 }
 
+/* Only a phone shows it (responsive.css): the desktop app has its version in the header. */
+.status .app-version {
+  display: none;
+}
+
 .status .mute {
   color: var(--mute);
 }
