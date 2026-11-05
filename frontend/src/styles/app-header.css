@@ -71,21 +71,10 @@
   background: var(--panel);
 }
 
-.bar .split {
-  position: relative;
+/* Sync (or Save) and the export button side by side. */
+.bar .actions {
   display: flex;
-}
-
-.bar .split .main {
-  border-radius: 6px 0 0 6px;
-}
-
-.bar .split .arrow {
-  width: 28px;
-  justify-content: center;
-  padding: 0;
-  border-left: 0;
-  border-radius: 0 6px 6px 0;
+  gap: 8px;
 }
 
 /* Replace notes.md: the linked file changed outside the app and this press overwrites it, so the one button that says something else. */
@@ -236,4 +225,37 @@
 /* The save button's icon is for phones, where the label is hidden (responsive.css). */
 .bar .save-icon {
   display: none;
+}
+
+/* Press feedback on every icon button: the icon shrinks a little while it is down and springs back (the :active state needs the
+   touchstart listener in main.js on iOS). Sync turns once per press and keeps turning while it is busy; export lifts. */
+.bar .icon,
+.bar .save-icon,
+.bar .export-icon,
+.bar .views .view {
+  transition: transform 0.15s var(--ease);
+}
+
+.bar button:active:not(:disabled) .icon,
+.bar button:active:not(:disabled) .save-icon,
+.bar button:active:not(:disabled) .export-icon {
+  transform: scale(0.82);
+}
+
+.bar .export:active:not(:disabled) .export-icon {
+  transform: translateY(-2px) scale(0.9);
+}
+
+.bar .sync-icon.turn {
+  animation: header-turn 0.5s var(--ease);
+}
+
+.bar .sync-icon.busy {
+  animation: header-turn 0.9s linear infinite;
+}
+
+@keyframes header-turn {
+  to {
+    transform: rotate(360deg);
+  }
 }

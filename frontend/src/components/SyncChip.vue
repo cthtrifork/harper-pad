@@ -101,7 +101,7 @@ onBeforeUnmount(() => {
       <svg v-else-if="status === 'offline'" class="mark" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
       <svg v-else-if="status === 'signin'" class="mark" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8" /><path d="M8 4.8v3.7M8 10.9v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
       <span v-else class="dot" aria-hidden="true"></span>
-      {{ label }}
+      <span class="txt">{{ label }}</span>
     </button>
 
     <Transition name="pop">
