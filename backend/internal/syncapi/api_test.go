@@ -11,62 +11,64 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/auth"
 	"github.com/cthtrifork/harper-pad/backend/internal/auth/authtest"
+	"github.com/cthtrifork/harper-pad/backend/internal/pgtest"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 const publicURL = "https://sync.example.org"
 
-// fakeStore keeps invites and devices in memory with the same rules as store.Sync.
-type fakeStore struct {
-	mu      sync.Mutex
-	invites map[string]string // hash -> device name; deleted when spent
-	devices map[string]store.Device
-	names   map[string]string
-	agents  map[string]string
-	fail    error
+// newDB opens the stack's PostgreSQL as both roles, as the cluster does: harper_admin (the table owner) applies the migrations and
+// makes invites, as the admin UI does; harper_sync (rows only) is the store behind the API. Each test starts with no devices or invites.
+func newDB(t *testing.T) (*store.Admin, *store.Sync) {
+	t.Helper()
+	ctx := context.Background()
+	pgtest.Login(t, "harper_admin", "admin")
+	adminPool, err := store.Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(adminPool.Close)
+	if _, err := store.Migrate(ctx, adminPool, store.Migrations); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adminPool.Exec(ctx, `TRUNCATE devices, invites`); err != nil {
+		t.Fatal(err)
+	}
+	pgtest.Login(t, "harper_sync", "client")
+	syncPool, err := store.Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(syncPool.Close)
+	return store.NewAdmin(adminPool), store.NewSync(syncPool)
 }
 
-func newFake(invite, name string) *fakeStore {
-	return &fakeStore{
-		invites: map[string]string{string(auth.HashToken(invite)): name},
-		devices: map[string]store.Device{}, names: map[string]string{}, agents: map[string]string{},
+// makeInvite makes an enrollment token for a device with that name ("" lets the device choose).
+func makeInvite(t *testing.T, a *store.Admin, name string) string {
+	t.Helper()
+	token, _, err := a.CreateInvite(context.Background(), name, 15*time.Minute)
+	if err != nil {
+		t.Fatal(err)
 	}
+	return token
 }
 
-func (f *fakeStore) Enroll(_ context.Context, inviteHash []byte, id, name, ua, key string, tokenHash []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.fail != nil {
-		return f.fail
-	}
-	n, ok := f.invites[string(inviteHash)]
-	if !ok {
-		return store.ErrInvalidInvite
-	}
-	delete(f.invites, string(inviteHash))
-	if n != "" {
-		name = n
-	}
-	f.devices[string(tokenHash)] = store.Device{ID: id, ClientID: 1, KeyThumbprint: key}
-	f.names[id], f.agents[id] = name, ua
-	return nil
+// brokenStore is a Store whose every call fails, for the paths that must not reach the database or must hide its errors.
+type brokenStore struct{ err error }
+
+func (b brokenStore) Enroll(context.Context, []byte, string, string, string, string, []byte) error {
+	return b.err
 }
 
-func (f *fakeStore) DeviceByToken(_ context.Context, h []byte) (store.Device, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if d, ok := f.devices[string(h)]; ok {
-		return d, nil
-	}
-	return store.Device{}, store.ErrUnknownToken
+func (b brokenStore) DeviceByToken(context.Context, []byte) (store.Device, error) {
+	return store.Device{}, b.err
 }
 
 func newInvite(t *testing.T) string {
@@ -141,12 +143,12 @@ func proof(t *testing.T, k authtest.Key, method, path, token string) string {
 }
 
 func TestEnrollThenAuthenticate(t *testing.T) {
-	invite := newInvite(t)
-	st := newFake(invite, "Kitchen iPad")
-	h, hits := setup(t, st)
+	admin, db := newDB(t)
+	token := makeInvite(t, admin, "Kitchen iPad")
+	h, hits := setup(t, db)
 	k := authtest.NewKey(t)
 
-	rec := do(h, "POST", "/enroll", map[string]string{"invite": invite, "deviceName": "ignored"},
+	rec := do(h, "POST", "/enroll", map[string]string{"invite": token, "deviceName": "ignored"},
 		map[string]string{"DPoP": proof(t, k, "POST", "/enroll", ""), "User-Agent": "Safari/1"})
 	if rec.Code != 200 {
 		t.Fatalf("enroll = %d %s", rec.Code, rec.Body)
@@ -161,10 +163,12 @@ func TestEnrollThenAuthenticate(t *testing.T) {
 	if rec.Header().Get("Cache-Control") != "no-store" {
 		t.Error("enrollment response is cacheable")
 	}
-	for id, name := range st.names {
-		if name != "Kitchen iPad" || st.agents[id] != "Safari/1" {
-			t.Errorf("device stored as %q / %q", name, st.agents[id])
-		}
+	devs, err := admin.Devices(context.Background())
+	if err != nil || len(devs) != 1 || devs[0].Name != "Kitchen iPad" || devs[0].UserAgent != "Safari/1" {
+		t.Errorf("the admin sees %+v, %v", devs, err)
+	}
+	if pending, err := admin.PendingInvites(context.Background(), time.Now()); err != nil || len(pending) != 0 {
+		t.Errorf("pending invites after use: %v, %v", pending, err)
 	}
 
 	// The token works with a proof from the same key and with nothing else.
@@ -190,28 +194,39 @@ func TestEnrollThenAuthenticate(t *testing.T) {
 	if *hits != 1 {
 		t.Errorf("handler ran %d times", *hits)
 	}
+
+	// Revoking the device (harper_admin deletes the row) ends access at once.
+	if err := admin.RevokeDevice(context.Background(), devs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if c := auth(got.DeviceToken, proof(t, k, "GET", "/whoami", got.DeviceToken)); c != 401 {
+		t.Errorf("after revoke = %d, want 401", c)
+	}
 }
 
 func TestEnrollRefusals(t *testing.T) {
-	invite := newInvite(t)
 	k := authtest.NewKey(t)
 	body := func(inv string) any { return map[string]string{"invite": inv, "deviceName": "d"} }
 	hdr := func() map[string]string { return map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")} }
 
 	tests := []struct {
 		name string
-		do   func(h http.Handler) *httptest.ResponseRecorder
+		do   func(h http.Handler, invite string) *httptest.ResponseRecorder
 		want int
 	}{
-		{"unknown invite", func(h http.Handler) *httptest.ResponseRecorder {
+		{"unknown invite", func(h http.Handler, invite string) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", body(newInvite(t)), hdr())
 		}, 401},
-		{"malformed invite", func(h http.Handler) *httptest.ResponseRecorder { return do(h, "POST", "/enroll", body("short"), hdr()) }, 401},
-		{"no proof", func(h http.Handler) *httptest.ResponseRecorder { return do(h, "POST", "/enroll", body(invite), nil) }, 401},
-		{"proof for another path", func(h http.Handler) *httptest.ResponseRecorder {
+		{"malformed invite", func(h http.Handler, invite string) *httptest.ResponseRecorder {
+			return do(h, "POST", "/enroll", body("short"), hdr())
+		}, 401},
+		{"no proof", func(h http.Handler, invite string) *httptest.ResponseRecorder {
+			return do(h, "POST", "/enroll", body(invite), nil)
+		}, 401},
+		{"proof for another path", func(h http.Handler, invite string) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", body(invite), map[string]string{"DPoP": proof(t, k, "POST", "/docs", "")})
 		}, 401},
-		{"two proofs", func(h http.Handler) *httptest.ResponseRecorder {
+		{"two proofs", func(h http.Handler, invite string) *httptest.ResponseRecorder {
 			req := httptest.NewRequest("POST", "/enroll", strings.NewReader(`{"invite":"`+invite+`"}`))
 			req.Header.Add("DPoP", proof(t, k, "POST", "/enroll", ""))
 			req.Header.Add("DPoP", proof(t, k, "POST", "/enroll", ""))
@@ -219,67 +234,66 @@ func TestEnrollRefusals(t *testing.T) {
 			h.ServeHTTP(rec, req)
 			return rec
 		}, 401},
-		{"not json", func(h http.Handler) *httptest.ResponseRecorder { return do(h, "POST", "/enroll", "{", hdr()) }, 400},
-		{"control character in the name (422)", func(h http.Handler) *httptest.ResponseRecorder {
+		{"not json", func(h http.Handler, invite string) *httptest.ResponseRecorder {
+			return do(h, "POST", "/enroll", "{", hdr())
+		}, 400},
+		{"control character in the name (422)", func(h http.Handler, invite string) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", map[string]string{"invite": invite, "deviceName": "a\x01b"}, hdr())
 		}, 422},
-		{"long name (422)", func(h http.Handler) *httptest.ResponseRecorder {
+		{"long name (422)", func(h http.Handler, invite string) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", map[string]string{"invite": invite, "deviceName": strings.Repeat("é", 65)}, hdr())
 		}, 422},
-		{"body too large", func(h http.Handler) *httptest.ResponseRecorder {
+		{"body too large", func(h http.Handler, invite string) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", map[string]string{"invite": invite, "deviceName": strings.Repeat("a", maxEnrollBody)}, hdr())
 		}, 413},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := newFake(invite, "")
-			h, _ := setup(t, st)
-			if rec := tt.do(h); rec.Code != tt.want {
+			admin, db := newDB(t)
+			h, _ := setup(t, db)
+			if rec := tt.do(h, makeInvite(t, admin, "")); rec.Code != tt.want {
 				t.Errorf("= %d %q, want %d", rec.Code, rec.Body, tt.want)
 			}
-			if len(st.devices) != 0 {
-				t.Error("a device was created")
+			if devs, err := admin.Devices(context.Background()); err != nil || len(devs) != 0 {
+				t.Errorf("a device was created: %v, %v", devs, err)
 			}
 		})
 	}
 }
 
 func TestInviteIsSingleUseAndReplayIsRefused(t *testing.T) {
-	invite := newInvite(t)
-	st := newFake(invite, "")
-	h, _ := setup(t, st)
+	admin, db := newDB(t)
+	token := makeInvite(t, admin, "")
+	h, _ := setup(t, db)
 	k := authtest.NewKey(t)
 	p := proof(t, k, "POST", "/enroll", "")
 	hdr := map[string]string{"DPoP": p}
-	if rec := do(h, "POST", "/enroll", map[string]string{"invite": invite}, hdr); rec.Code != 200 {
+	if rec := do(h, "POST", "/enroll", map[string]string{"invite": token}, hdr); rec.Code != 200 {
 		t.Fatalf("first = %d", rec.Code)
 	}
 	// The same request again: the proof is a replay.
-	if rec := do(h, "POST", "/enroll", map[string]string{"invite": invite}, hdr); rec.Code != 401 {
+	if rec := do(h, "POST", "/enroll", map[string]string{"invite": token}, hdr); rec.Code != 401 {
 		t.Errorf("replayed request = %d, want 401", rec.Code)
 	}
 	// A fresh proof with the spent invite: the invite is the reason, and the answer is the same 401.
-	if rec := do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")}); rec.Code != 401 {
+	if rec := do(h, "POST", "/enroll", map[string]string{"invite": token}, map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")}); rec.Code != 401 {
 		t.Errorf("spent invite = %d, want 401", rec.Code)
 	}
-	if len(st.devices) != 1 {
-		t.Errorf("%d devices, want 1", len(st.devices))
+	if devs, err := admin.Devices(context.Background()); err != nil || len(devs) != 1 {
+		t.Errorf("%d devices, want 1 (%v)", len(devs), err)
 	}
 }
 
 func TestStoreFailureIs500WithNoDetail(t *testing.T) {
-	invite := newInvite(t)
-	st := newFake(invite, "")
-	st.fail = context.DeadlineExceeded
-	h, _ := setup(t, st)
-	rec := do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": proof(t, authtest.NewKey(t), "POST", "/enroll", "")})
+	h, _ := setup(t, brokenStore{context.DeadlineExceeded})
+	rec := do(h, "POST", "/enroll", map[string]string{"invite": newInvite(t)}, map[string]string{"DPoP": proof(t, authtest.NewKey(t), "POST", "/enroll", "")})
 	if rec.Code != 500 || strings.Contains(rec.Body.String(), "deadline") {
 		t.Errorf("= %d %q", rec.Code, rec.Body)
 	}
 }
 
 func TestCORS(t *testing.T) {
-	h, _ := setup(t, newFake("x", ""), "https://app.example.org", "wails://wails")
+	h, _ := setup(t, brokenStore{}, "https://app.example.org", "wails://wails")
 	preflight := func(origin string) *httptest.ResponseRecorder {
 		return do(h, "OPTIONS", "/enroll", "", map[string]string{
 			"Origin": origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "dpop,content-type",
@@ -322,7 +336,7 @@ func TestEachRejectedOriginIsLoggedOnce(t *testing.T) {
 	defer slog.SetDefault(prev)
 	v := auth.NewVerifier()
 	defer v.Close()
-	api := New(publicURL, nil, newFake("x", ""), v)
+	api := New(publicURL, nil, brokenStore{}, v)
 	for range 3 {
 		api.logRejected("https://a.example")
 	}
@@ -342,7 +356,7 @@ func TestEachRejectedOriginIsLoggedOnce(t *testing.T) {
 // a request: a broken body, an oversized one and a valid one all get the same answer.
 func TestCredentialsAreCheckedBeforeTheBody(t *testing.T) {
 	invite := newInvite(t)
-	h, _ := setup(t, newFake(invite, ""))
+	h, _ := setup(t, brokenStore{})
 	for name, body := range map[string]string{
 		"broken json": "{",
 		"wrong types": `{"invite": 5}`,
@@ -357,22 +371,21 @@ func TestCredentialsAreCheckedBeforeTheBody(t *testing.T) {
 
 // Every way of failing the credential checks is the same response, byte for byte, so the cause cannot be read from it.
 func TestCredentialFailuresAreIdentical(t *testing.T) {
-	invite := newInvite(t)
+	admin, db := newDB(t)
+	unused := newInvite(t) // well formed, never made
 	k := authtest.NewKey(t)
-	st := newFake(invite, "")
-	h, _ := setup(t, st)
+	h, _ := setup(t, db)
 	good := func() map[string]string { return map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")} }
 
-	spent := newInvite(t)
-	st.invites[string(auth.HashToken(spent))] = ""
+	spent := makeInvite(t, admin, "")
 	if rec := do(h, "POST", "/enroll", map[string]string{"invite": spent}, good()); rec.Code != 200 {
 		t.Fatalf("setup: %d", rec.Code)
 	}
 
 	cases := map[string]*httptest.ResponseRecorder{
-		"no proof":        do(h, "POST", "/enroll", map[string]string{"invite": invite}, nil),
-		"proof for /docs": do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": proof(t, k, "POST", "/docs", "")}),
-		"junk proof":      do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": "a.b.c"}),
+		"no proof":        do(h, "POST", "/enroll", map[string]string{"invite": unused}, nil),
+		"proof for /docs": do(h, "POST", "/enroll", map[string]string{"invite": unused}, map[string]string{"DPoP": proof(t, k, "POST", "/docs", "")}),
+		"junk proof":      do(h, "POST", "/enroll", map[string]string{"invite": unused}, map[string]string{"DPoP": "a.b.c"}),
 		"unknown invite":  do(h, "POST", "/enroll", map[string]string{"invite": newInvite(t)}, good()),
 		"malformed":       do(h, "POST", "/enroll", map[string]string{"invite": "short"}, good()),
 		"spent invite":    do(h, "POST", "/enroll", map[string]string{"invite": spent}, good()),
@@ -397,10 +410,10 @@ func TestCredentialFailuresAreIdentical(t *testing.T) {
 // identity: a proof that spells the enrolled key differently is the same key (the thumbprint comes from the decoded coordinates), and
 // a different key is not.
 func TestARespelledKeyIsTheSameKey(t *testing.T) {
-	invite := newInvite(t)
-	h, _ := setup(t, newFake(invite, ""))
+	admin, db := newDB(t)
+	h, _ := setup(t, db)
 	k := authtest.NewKey(t)
-	rec := do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")})
+	rec := do(h, "POST", "/enroll", map[string]string{"invite": makeInvite(t, admin, "")}, map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")})
 	if rec.Code != 200 {
 		t.Fatalf("enroll = %d", rec.Code)
 	}

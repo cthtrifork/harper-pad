@@ -5,10 +5,12 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/cthtrifork/harper-pad/backend/internal/pgtest"
 )
 
 func TestMigrate(t *testing.T) {
-	pgEnv(t, "harper_admin", "admin") // the table owner applies the migrations
+	pgtest.Login(t, "harper_admin", "admin") // the table owner applies the migrations
 	ctx := context.Background()
 	pool, err := Open(ctx, "")
 	if err != nil {

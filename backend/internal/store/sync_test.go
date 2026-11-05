@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/auth"
+	"github.com/cthtrifork/harper-pad/backend/internal/pgtest"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -23,7 +24,7 @@ func syncFixture(t *testing.T) (*Sync, *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()
 
-	pgEnv(t, "harper_admin", "admin")
+	pgtest.Login(t, "harper_admin", "admin")
 	owner, err := Open(ctx, "")
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +41,7 @@ func syncFixture(t *testing.T) (*Sync, *pgxpool.Pool) {
 	reset()
 	t.Cleanup(reset)
 
-	pgEnv(t, "harper_sync", "client")
+	pgtest.Login(t, "harper_sync", "client")
 	pool, err := Open(ctx, "")
 	if err != nil {
 		t.Fatal(err)
@@ -257,7 +258,7 @@ func TestSyncRoleHasRowRightsOnly(t *testing.T) {
 }
 
 func TestSyncLoginNeedsItsOwnCertificate(t *testing.T) {
-	pgEnv(t, "harper_sync", "wrongcn") // a certificate from the same CA with another common name
+	pgtest.Login(t, "harper_sync", "wrongcn") // a certificate from the same CA with another common name
 	pool, err := Open(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)

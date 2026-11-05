@@ -21,7 +21,7 @@ help: ## List the targets
 build: ## Build both commands into ./bin
 	CGO_ENABLED=0 go build -trimpath -o bin/ ./cmd/...
 
-test: ## Run the tests (the store tests are skipped without the PostgreSQL stack, see test-db)
+test: ## Run the tests (the tests that use PostgreSQL are skipped without the stack, see test-db)
 	go test -count=1 ./...
 
 vet: ## go vet
