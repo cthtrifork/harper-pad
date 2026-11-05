@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -102,14 +103,24 @@ func TestSaveDraftToFileRejectsRelativePath(t *testing.T) {
 }
 
 func TestSuggestName(t *testing.T) {
-	for _, c := range []struct{ title, format, want string }{
-		{"Shopping list", "markdown", "Shopping list.md"},
-		{"a/b\\c:d", "text", "abcd.txt"},
-		{"???", "markdown", "Untitled.md"},
-	} {
-		if got := suggestName(c.title, c.format); got != c.want {
-			t.Errorf("suggestName(%q, %q) = %q, want %q", c.title, c.format, got, c.want)
-		}
+	// The web build's fileName (frontend/src/lib/webFiles.js) runs the same cases.
+	raw, err := os.ReadFile("testdata/filename.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct{ Name, Title, Format, Want string }
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) == 0 {
+		t.Fatal("no fixtures")
+	}
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			if got := suggestName(c.Title, c.Format); got != c.Want {
+				t.Errorf("suggestName(%q, %q) = %q, want %q", c.Title, c.Format, got, c.Want)
+			}
+		})
 	}
 }
 
