@@ -67,6 +67,24 @@ for (const [mode, flags] of Object.entries(MODES)) {
   results[mode] = { median: median.report, scores: Object.fromEntries(CATEGORIES.map(([id]) => [id, med(id)])) };
 }
 
+// TEMPORARY (diagnosis of a simulated first paint of 5.0 s that the browser measured at 0.2 s): save Lighthouse's raw artifacts (trace and
+// network log) of a few extra mobile runs, so the simulation can be replayed offline with `lighthouse --audit-mode`.
+if (process.env.LIGHTHOUSE_DIAG) {
+  for (let i = 1; i <= 3; i++) {
+    const dir = join(out, `diag-${i}`);
+    npx(
+      url,
+      "--quiet",
+      "--output=json",
+      `--output-path=${dir}/report`,
+      `--gather-mode=${dir}`,
+      `--audit-mode=${dir}`,
+      "--only-audits=first-contentful-paint,largest-contentful-paint,total-blocking-time,speed-index,interactive",
+      "--chrome-flags=--headless=new --no-sandbox --disable-gpu",
+    );
+  }
+}
+
 const failures = [];
 const lines = ["### Lighthouse", ""];
 lines.push(`| | ${CATEGORIES.map(([, name]) => name).join(" | ")} |`);
