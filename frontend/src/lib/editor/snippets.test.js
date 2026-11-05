@@ -20,8 +20,14 @@ test("<code> becomes a fenced block with the placeholder selected", () => {
   assert.equal(s.sliceDoc(from, to), "Write code here");
 });
 
-test("after text on the same line the block starts on its own line", () => {
-  assert.equal(type("Try this: ", "<code>").doc.toString(), "Try this: \n```\nWrite code here\n```");
+test("after text on the same line it stays as typed", () => {
+  assert.equal(type("Try this: ", "<code>").doc.toString(), "Try this: <code>");
+});
+
+test("with text after it on the line it stays as typed", () => {
+  const start = EditorState.create({ doc: " tail", extensions: [codeSnippet] });
+  const s = start.update({ changes: { from: 0, insert: "<code>" }, userEvent: "input.type" }).state;
+  assert.equal(s.doc.toString(), "<code> tail");
 });
 
 test("on a line of its own, nothing extra is added", () => {
