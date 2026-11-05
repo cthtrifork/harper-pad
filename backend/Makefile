@@ -40,10 +40,11 @@ e2e-certs: ## Copy the running stack's throwaway certificates into .e2e-certs/ (
 	rm -rf $(E2E_CERTS) && mkdir -p $(E2E_CERTS)
 	for f in $(E2E_CERT_FILES); do $(COMPOSE) -f $(E2E_FILE) exec -T postgres cat /certs/$$f > $(E2E_CERTS)/$$f || exit 1; done
 
+# -p 1: the packages share one database (they truncate devices and invites), so they must not run at the same time.
 test-db: ## Run all tests with PostgreSQL from the stack (TLS and client certificates); the stack is removed afterwards
 	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres
 	$(MAKE) e2e-certs
-	TEST_PG_CERTS=$(E2E_CERTS) TEST_PG_PORT=$(E2E_PG_PORT) go test -count=1 -race ./...; status=$$?; \
+	TEST_PG_CERTS=$(E2E_CERTS) TEST_PG_PORT=$(E2E_PG_PORT) go test -p 1 -count=1 -race ./...; status=$$?; \
 	$(COMPOSE) -f $(E2E_FILE) down -v; exit $$status
 
 admin-up: ## Start PostgreSQL, harper-pad-sync (it applies the schema) and the admin UI (http://127.0.0.1:19001); add devices with admin-seed

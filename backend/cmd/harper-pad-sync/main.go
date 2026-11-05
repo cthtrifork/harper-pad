@@ -1,7 +1,7 @@
 // Command harper-pad-sync is the sync API of Harper Pad (docs/sync.md).
 //
-// Scaffold: it serves /healthz (liveness) and /readyz (readiness, a PostgreSQL round trip) and nothing else yet, plus Prometheus
-// metrics on a separate port. It is run as
+// It serves /healthz (liveness), /readyz (readiness, a PostgreSQL round trip), POST /enroll and Prometheus metrics on a separate
+// port; the draft routes are not built yet. It is run as
 // `harper-pad-sync serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
 package main
 
@@ -15,10 +15,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/cthtrifork/harper-pad/backend/internal/auth"
 	"github.com/cthtrifork/harper-pad/backend/internal/config"
 	"github.com/cthtrifork/harper-pad/backend/internal/metrics"
 	"github.com/cthtrifork/harper-pad/backend/internal/server"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
+	"github.com/cthtrifork/harper-pad/backend/internal/syncapi"
 )
 
 func main() {
@@ -50,21 +52,46 @@ func run(args []string) error {
 	health.SetStarting(true)
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
-	go migrate(ctx, db, health)
+	sync := store.NewSync(db)
+	go migrate(ctx, db, sync, health)
 	mux := http.NewServeMux()
 	health.Register(mux)
-	return server.Run(cfg.ListenAddr, m.Instrument(mux), health, cfg.MetricsAddr, m.Handler())
+	api := syncapi.New(cfg.PublicURL, cfg.AllowedOrigins, sync, auth.NewVerifier())
+	api.Register(mux)
+	if len(cfg.AllowedOrigins) == 0 {
+		slog.Warn("CORS_ALLOWED_ORIGINS is empty: browsers on other origins cannot call the API")
+	}
+	return server.Run(cfg.ListenAddr, m.Instrument(api.CORS(mux)), health, cfg.MetricsAddr, m.Handler())
+}
+
+// purgeInvites deletes long-expired invites once an hour until ctx ends (docs/sync.md: "a periodic delete removes expired invites").
+func purgeInvites(ctx context.Context, sync *store.Sync) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		if n, err := sync.PurgeInvites(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("purging expired invites", "err", err)
+		} else if n > 0 {
+			slog.Info("purged expired invites", "count", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // migrate applies the schema, retrying with a growing delay (2 s up to 30 s) while the database is unreachable or a migration
 // fails, and then lets /readyz pass. A failing file is logged each time and never skipped.
-func migrate(ctx context.Context, db *pgxpool.Pool, health *server.Health) {
+func migrate(ctx context.Context, db *pgxpool.Pool, sync *store.Sync, health *server.Health) {
 	delay := 2 * time.Second
 	for {
 		applied, err := store.Migrate(ctx, db, store.Migrations)
 		if err == nil {
 			slog.Info("migrations applied", "files", applied)
 			health.SetStarting(false)
+			purgeInvites(ctx, sync)
 			return
 		}
 		if ctx.Err() != nil {
