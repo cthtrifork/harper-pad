@@ -41,7 +41,7 @@ All environment variables, read by Wails (`WAILS_MCP_*`); nothing is configured 
 
 ## Headless mode: what works
 
-Checked against `v3.0.0-beta.34` with `-tags server,mcp`: the server starts and the HTTP/JSON-RPC layer works, but server mode has no native webview. `app_info`, `windows_list` and `emit_event` answer; every tool that runs JavaScript in a window (`dom_*`, `js_eval`, `mouse_*`, `keyboard_*`, `call_bound_method`, `wait_for_event`) times out with *"waiting for the page to respond"*. A browser opened on the headless port is not attached to the MCP server. To drive the UI use the desktop build, or Playwright against the headless server.
+As last checked with `-tags server,mcp`, the server starts and the HTTP/JSON-RPC layer works, but server mode has no native webview. `app_info`, `windows_list` and `emit_event` answer; every tool that runs JavaScript in a window (`dom_*`, `js_eval`, `mouse_*`, `keyboard_*`, `call_bound_method`, `wait_for_event`) times out with *"waiting for the page to respond"*. A browser opened on the headless port is not attached to the MCP server. To drive the UI use the desktop build, or Playwright against the headless server.
 
 ## Security
 

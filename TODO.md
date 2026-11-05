@@ -42,7 +42,7 @@ never run on a real desktop yet.
 - [x] The server's infrastructure and the admin service: `harper-pad-admin` (Go + HTMX: enrollment URLs, devices) behind a Cloudflare
       Tunnel and Access with OIDC, two container images, PostgreSQL with client-certificate roles, the schema migrations that
       `harper-pad-sync` runs at start, and the manifests in the cluster's GitOps repository. Deployed at
-      `harper-sync.portableinfo.cloud` (v1.1.0 at the time of writing) and smoke tested.
+      `harper-sync.portableinfo.cloud` and smoke tested.
 - [x] Enrollment in `harper-pad-sync`: `POST /enroll` (spends the invite, binds the device token to the DPoP key), the DPoP proof check and
       the device authentication the other routes use, the CORS allowlist (`CORS_ALLOWED_ORIGINS`, logs each rejected origin once). Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
 - [x] `harper-pad-admin` owns the tables and applies the migrations; `harper-pad-sync` has row-level rights only and waits for the schema.

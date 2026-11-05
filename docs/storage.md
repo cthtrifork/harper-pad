@@ -15,7 +15,7 @@ It holds two things:
 - **Settings:** the personal dictionary and the ignored findings (so far).
 
 `internal/store` is the package; `internal/app` (`DraftService` and `SettingsService`, which share one connection) is its only user. The driver is the pure-Go `modernc.org/sqlite`, so there is
-no cgo and the Windows build is unchanged. It adds about 4 MB to the exe (v1.61.1, SQLite 3.54.1).
+no cgo and the Windows build is unchanged. It adds about 4 MB to the exe.
 
 ## Rules
 
