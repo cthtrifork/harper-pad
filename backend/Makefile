@@ -13,7 +13,7 @@ export PLAYWRIGHT_DIR
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help build test vet fmt test-db admin-up admin-seed admin-down e2e-certs e2e-web e2e-playwright e2e-up e2e-down e2e
+.PHONY: help build test vet fmt openapi test-db admin-up admin-seed admin-down e2e-certs e2e-web e2e-playwright e2e-up e2e-down e2e
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -29,6 +29,9 @@ vet: ## go vet
 
 fmt: ## Format the Go code
 	gofmt -w .
+
+openapi: ## Regenerate ../docs/openapi.yaml from the routes (the test fails when it is out of date)
+	go test -count=1 ./internal/syncapi -run TestOpenAPIIsUpToDate -update
 
 E2E_CERTS := $(CURDIR)/.e2e-certs
 E2E_PG_PORT ?= 15432

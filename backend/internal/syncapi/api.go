@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,6 +13,8 @@ import (
 
 	"github.com/cthtrifork/harper-pad/backend/internal/auth"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 )
 
 const (
@@ -30,12 +31,15 @@ type Store interface {
 	DeviceByToken(ctx context.Context, tokenHash []byte) (store.Device, error)
 }
 
-// API is the sync API: the routes, the CORS allowlist and the device authentication.
+// API is the sync API: the routes, the CORS allowlist and the device authentication. The routes are registered with Huma, which
+// serves them on the standard library's ServeMux and describes them in an OpenAPI document (docs/openapi.yaml, generated from
+// these types by the test in openapi_test.go, so the description cannot drift from the code).
 type API struct {
 	publicURL string
 	origins   map[string]bool
 	store     Store
 	verifier  *auth.Verifier
+	api       huma.API
 
 	mu     sync.Mutex
 	logged map[string]bool
@@ -51,10 +55,46 @@ func New(publicURL string, origins []string, st Store, v *auth.Verifier) *API {
 	return &API{publicURL: strings.TrimRight(publicURL, "/"), origins: set, store: st, verifier: v, logged: map[string]bool{}}
 }
 
-// Register adds the routes to mux.
-func (a *API) Register(mux *http.ServeMux) {
-	mux.HandleFunc("POST /enroll", a.enroll)
+// config is Huma's configuration. Nothing is served by Huma itself: no documentation page, no OpenAPI or schema routes (the
+// document is generated at build time and /docs is the draft list), and no `$schema` member in bodies.
+func (a *API) config() huma.Config {
+	cfg := huma.DefaultConfig("Harper Pad sync API", "1.0.0")
+	cfg.DocsPath, cfg.OpenAPIPath, cfg.SchemasPath = "", "", ""
+	cfg.CreateHooks = nil
+	cfg.Info.Description = "The optional sync service of Harper Pad (docs/sync.md). Every route needs a DPoP proof header; routes other " +
+		"than /enroll also need `Authorization: DPoP <device token>`. The proof is a JWT signed with the device's key (RFC 9449 " +
+		"section 4.2): `typ` `dpop+jwt`, `alg` `ES256`, the public key in the `jwk` header, and the claims `jti`, `htm`, `htu`, " +
+		"`iat` and, with a token, `ath`. Credential failures are all the same 401 and say nothing about the cause."
+	cfg.Servers = []*huma.Server{{URL: a.publicURL}}
+	cfg.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
+		"DPoP": {
+			Type: "apiKey", In: "header", Name: "Authorization",
+			Description: "`Authorization: DPoP <device token>` together with a `DPoP` proof header made with the key the device enrolled with.",
+		},
+	}
+	return cfg
 }
+
+// Register adds the routes to mux and returns nothing: Huma is reachable through Huma() for the tests and the generator.
+func (a *API) Register(mux *http.ServeMux) {
+	a.api = humago.New(mux, a.config())
+
+	huma.Register(a.api, huma.Operation{
+		OperationID:   "enroll",
+		Method:        http.MethodPost,
+		Path:          "/enroll",
+		Summary:       "Enroll a device",
+		Description:   "Spends an invite from the admin UI and issues a device token bound to the key in the DPoP proof. The proof is checked before the body is read. A wrong, spent or expired invite, a bad or replayed proof and a missing proof are all the same 401.",
+		Tags:          []string{"enrollment"},
+		MaxBodyBytes:  maxEnrollBody,
+		DefaultStatus: http.StatusOK,
+		Errors:        []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusRequestEntityTooLarge},
+		Middlewares:   huma.Middlewares{a.requireProof},
+	}, a.enroll)
+}
+
+// Huma returns the Huma API the routes are registered on, after Register.
+func (a *API) Huma() huma.API { return a.api }
 
 // CORS wraps the whole mux. It passes the request on unchanged (the metrics middleware reads the mux's pattern from the same
 // *http.Request). An origin that is not on the allowlist gets no CORS headers, so the browser blocks the response, and it is logged
@@ -103,106 +143,131 @@ func (a *API) logRejected(origin string) {
 	slog.Warn("CORS: origin is not in CORS_ALLOWED_ORIGINS", "origin", origin)
 }
 
-type enrollRequest struct {
-	Invite     string `json:"invite"`
-	DeviceName string `json:"deviceName"`
+type enrollInput struct {
+	// The header is described here and checked by the middleware, which runs before Huma validates the input: a `required` tag
+	// would make a missing proof a 422 that differs from every other credential failure.
+	DPoP      string `header:"DPoP" doc:"DPoP proof signed by the new key (its public key is in the proof's jwk header)"`
+	UserAgent string `header:"User-Agent" doc:"Stored with the device, at most 200 characters"`
+	Body      struct {
+		Invite     string `json:"invite" doc:"The invite token from the enrollment URL fragment: 43 characters of base64url"`
+		DeviceName string `json:"deviceName,omitempty" maxLength:"64" doc:"Used only when the invite carries no name"`
+	}
 }
 
-type enrollResponse struct {
-	DeviceToken string `json:"deviceToken"`
-	TokenType   string `json:"token_type"`
+type enrollOutput struct {
+	CacheControl string `header:"Cache-Control"`
+	Body         struct {
+		DeviceToken string `json:"deviceToken" doc:"256 random bits, base64url. Send it as Authorization: DPoP <token>"`
+		TokenType   string `json:"token_type" enum:"DPoP"`
+	}
 }
 
-// enroll spends an invite and issues a device token bound to the key in the request's DPoP proof (docs/sync.md, "Enrollment").
-// Every failure that is about the credentials is the same 401: a wrong, spent or expired invite, a bad proof and a replayed one.
-func (a *API) enroll(w http.ResponseWriter, r *http.Request) {
-	proof, err := a.verifyProof(r, "")
+// ctxKey keys the values the middleware puts in the request context.
+type ctxKey int
+
+const (
+	proofKey ctxKey = iota
+	deviceKey
+)
+
+// DeviceFrom returns the device that RequireDevice authenticated. The account is its ClientID and is never taken from the request.
+func DeviceFrom(ctx context.Context) (store.Device, bool) {
+	d, ok := ctx.Value(deviceKey).(store.Device)
+	return d, ok
+}
+
+// requireProof is the middleware of /enroll: it checks the DPoP proof before Huma reads or validates the body, so nothing is
+// learned about the request's shape without a valid proof.
+func (a *API) requireProof(ctx huma.Context, next func(huma.Context)) {
+	proof, err := a.verifyProof(ctx, "")
 	if err != nil {
-		unauthorized(w)
+		a.unauthorized(ctx)
 		return
 	}
-	var req enrollRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxEnrollBody)).Decode(&req); err != nil {
-		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
-			reply(w, http.StatusRequestEntityTooLarge, "request too large\n")
-			return
-		}
-		reply(w, http.StatusBadRequest, "bad request\n")
+	next(huma.WithValue(ctx, proofKey, proof))
+}
+
+// RequireDevice is the middleware of every route that needs an enrolled device: it checks the Authorization header and the DPoP
+// proof, finds the device by the token and requires the proof's key to be the key the device enrolled with. The handler reads the
+// device with DeviceFrom.
+func (a *API) RequireDevice(ctx huma.Context, next func(huma.Context)) {
+	scheme, token, ok := strings.Cut(ctx.Header("Authorization"), " ")
+	if !ok || scheme != "DPoP" || token == "" || len(token) > 128 {
+		a.unauthorized(ctx)
 		return
 	}
-	name, ok := cleanName(req.DeviceName)
-	if !ok {
-		reply(w, http.StatusBadRequest, "bad device name\n")
-		return
-	}
-	// An invite is 256 random bits in base64url; anything else cannot be one, and need not reach the database.
-	if raw, err := base64.RawURLEncoding.DecodeString(req.Invite); err != nil || len(raw) != 32 {
-		unauthorized(w)
-		return
-	}
-	token, err := auth.NewToken()
+	proof, err := a.verifyProof(ctx, token)
 	if err != nil {
-		serverError(w, "token", err)
+		a.unauthorized(ctx)
 		return
 	}
-	id, err := auth.NewID()
-	if err != nil {
-		serverError(w, "id", err)
-		return
-	}
-	err = a.store.Enroll(r.Context(), auth.HashToken(req.Invite), id, name, userAgent(r), proof.PublicKey, auth.HashToken(token))
+	dev, err := a.store.DeviceByToken(ctx.Context(), auth.HashToken(token))
 	switch {
-	case errors.Is(err, store.ErrInvalidInvite):
-		unauthorized(w)
+	case errors.Is(err, store.ErrUnknownToken):
+		a.unauthorized(ctx)
 		return
 	case err != nil:
-		serverError(w, "enroll", err)
+		slog.Error("sync api", "what", "device lookup", "err", err)
+		_ = huma.WriteErr(a.api, ctx, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, enrollResponse{DeviceToken: token, TokenType: "DPoP"})
-}
-
-// Authenticated wraps a handler that needs a device: it checks the Authorization header and the DPoP proof, finds the device by
-// the token and requires the proof's key to be the key the device enrolled with. The handler gets the device; the account is
-// device.ClientID and is never taken from the request.
-func (a *API) Authenticated(h func(http.ResponseWriter, *http.Request, store.Device)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
-		if !ok || scheme != "DPoP" || token == "" || len(token) > 128 {
-			unauthorized(w)
-			return
-		}
-		proof, err := a.verifyProof(r, token)
-		if err != nil {
-			unauthorized(w)
-			return
-		}
-		dev, err := a.store.DeviceByToken(r.Context(), auth.HashToken(token))
-		switch {
-		case errors.Is(err, store.ErrUnknownToken):
-			unauthorized(w)
-			return
-		case err != nil:
-			serverError(w, "device lookup", err)
-			return
-		}
-		// The token alone is not enough: the proof must come from the key the device enrolled with.
-		if subtle.ConstantTimeCompare([]byte(proof.PublicKey), []byte(dev.PublicKey)) != 1 {
-			unauthorized(w)
-			return
-		}
-		h(w, r, dev)
+	// The token alone is not enough: the proof must come from the key the device enrolled with.
+	if subtle.ConstantTimeCompare([]byte(proof.PublicKey), []byte(dev.PublicKey)) != 1 {
+		a.unauthorized(ctx)
+		return
 	}
+	next(huma.WithValue(ctx, deviceKey, dev))
 }
 
 // verifyProof checks the request's single DPoP header against its method and URL (from configuration, not from headers).
-func (a *API) verifyProof(r *http.Request, token string) (auth.Proof, error) {
-	vals := r.Header.Values("DPoP")
-	if len(vals) != 1 {
+func (a *API) verifyProof(ctx huma.Context, token string) (auth.Proof, error) {
+	// Exactly one proof (RFC 9449 section 4.3): Header() would return only the first of several, so count them.
+	n := 0
+	ctx.EachHeader(func(name, _ string) {
+		if strings.EqualFold(name, "DPoP") {
+			n++
+		}
+	})
+	if n != 1 {
 		return auth.Proof{}, auth.ErrInvalidProof
 	}
-	return a.verifier.Verify(vals[0], r.Method, a.publicURL+r.URL.Path, token)
+	return a.verifier.Verify(ctx.Header("DPoP"), ctx.Method(), a.publicURL+ctx.URL().Path, token)
+}
+
+func (a *API) unauthorized(ctx huma.Context) {
+	_ = huma.WriteErr(a.api, ctx, http.StatusUnauthorized, "unauthorized")
+}
+
+// enroll spends an invite and issues a device token bound to the key in the request's DPoP proof (docs/sync.md, "Enrollment").
+func (a *API) enroll(ctx context.Context, in *enrollInput) (*enrollOutput, error) {
+	proof, _ := ctx.Value(proofKey).(auth.Proof)
+	name, ok := cleanName(in.Body.DeviceName)
+	if !ok {
+		return nil, huma.Error422UnprocessableEntity("bad device name")
+	}
+	// An invite is 256 random bits in base64url; anything else cannot be one, and need not reach the database. It is the same 401
+	// as a wrong invite: the shape of a token is not something to tell apart.
+	if raw, err := base64.RawURLEncoding.DecodeString(in.Body.Invite); err != nil || len(raw) != 32 {
+		return nil, huma.Error401Unauthorized("unauthorized")
+	}
+	token, err := auth.NewToken()
+	if err != nil {
+		return nil, serverError("token", err)
+	}
+	id, err := auth.NewID()
+	if err != nil {
+		return nil, serverError("id", err)
+	}
+	err = a.store.Enroll(ctx, auth.HashToken(in.Body.Invite), id, name, userAgent(in.UserAgent), proof.PublicKey, auth.HashToken(token))
+	switch {
+	case errors.Is(err, store.ErrInvalidInvite):
+		return nil, huma.Error401Unauthorized("unauthorized")
+	case err != nil:
+		return nil, serverError("enroll", err)
+	}
+	out := &enrollOutput{CacheControl: "no-store"}
+	out.Body.DeviceToken, out.Body.TokenType = token, "DPoP"
+	return out, nil
 }
 
 // cleanName trims a device name and checks it: valid UTF-8, no control characters, at most maxNameLen characters. Empty is fine
@@ -215,31 +280,16 @@ func cleanName(s string) (string, bool) {
 	return s, true
 }
 
-func userAgent(r *http.Request) string {
-	ua := strings.ToValidUTF8(r.UserAgent(), "")
+func userAgent(ua string) string {
+	ua = strings.ToValidUTF8(ua, "")
 	if len(ua) > maxUserAgent {
 		ua = strings.ToValidUTF8(ua[:maxUserAgent], "")
 	}
 	return ua
 }
 
-func unauthorized(w http.ResponseWriter) { reply(w, http.StatusUnauthorized, "unauthorized\n") }
-
-func serverError(w http.ResponseWriter, what string, err error) {
+// serverError logs the cause and returns an error with no detail for the client.
+func serverError(what string, err error) error {
 	slog.Error("sync api", "what", what, "err", err)
-	reply(w, http.StatusInternalServerError, "internal error\n")
-}
-
-func reply(w http.ResponseWriter, status int, body string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	_, _ = w.Write([]byte(body))
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	return huma.Error500InternalServerError("internal error")
 }
