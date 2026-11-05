@@ -4,10 +4,11 @@ package app
 import "github.com/wailsapp/wails/v3/pkg/application"
 
 // Services is the set of Wails services the app registers. Each one is a binding the frontend calls (see
-// frontend/bindings): PadService for the app itself, DraftService, SettingsService and UpdateService for the rest.
+// frontend/bindings): PadService for the app itself, DraftService, SyncService, SettingsService and UpdateService for the rest.
 type Services struct {
 	Pad      *PadService
 	Drafts   *DraftService
+	Sync     *SyncService
 	Settings *SettingsService
 	Update   *UpdateService
 }
@@ -20,6 +21,7 @@ func newServices(db *database) *Services {
 	return &Services{
 		Pad:      &PadService{drafts: drafts},
 		Drafts:   drafts,
+		Sync:     &SyncService{db: db},
 		Settings: &SettingsService{db: db},
 		Update:   &UpdateService{},
 	}
@@ -30,6 +32,7 @@ func (s *Services) All() []application.Service {
 	return []application.Service{
 		application.NewService(s.Pad),
 		application.NewService(s.Drafts),
+		application.NewService(s.Sync),
 		application.NewService(s.Settings),
 		application.NewService(s.Update),
 	}

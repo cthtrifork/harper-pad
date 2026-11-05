@@ -189,6 +189,8 @@ jobs:
       - name: Build
         env:
           VERSION: ${{ needs.meta.outputs.version }}
+          # The sync server's https origin (a repository variable, empty when sync is off): the page's policy names it (docs/sync.md).
+          SYNC_ORIGIN: ${{ vars.SYNC_ORIGIN }}
           CGO_ENABLED: '1'
           GOOS: linux
           GOARCH: amd64
@@ -296,6 +298,9 @@ jobs:
           package-manager-cache: false
 
       - name: Install the wails3 CLI and build the frontend
+        env:
+          # The sync server's https origin (a repository variable, empty when sync is off): the page's policy names it (docs/sync.md).
+          SYNC_ORIGIN: ${{ vars.SYNC_ORIGIN }}
         run: |
           CGO_ENABLED=0 go install -tags server github.com/wailsapp/wails/v3/cmd/wails3@"$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)"
           export PATH="$(go env GOPATH)/bin:$PATH"

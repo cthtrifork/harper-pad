@@ -5,11 +5,13 @@
 import * as DraftService from "./draftservice.js";
 import * as PadService from "./padservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as SyncService from "./syncservice.js";
 import * as UpdateService from "./updateservice.js";
 export {
     DraftService,
     PadService,
     SettingsService,
+    SyncService,
     UpdateService
 };
 

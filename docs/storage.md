@@ -14,14 +14,14 @@ It holds two things:
 - **Drafts:** notes, task lists and half-written text that live inside the app.
 - **Settings:** the personal dictionary and the ignored findings (so far).
 
-`internal/store` is the package; `internal/app` (`DraftService` and `SettingsService`, which share one connection) is its only user. The driver is the pure-Go `modernc.org/sqlite`, so there is
+`internal/store` is the package; `internal/app` (`DraftService`, `SyncService` and `SettingsService`, which share one connection) is its only user. The driver is the pure-Go `modernc.org/sqlite`, so there is
 no cgo and the Windows build is unchanged. It adds about 4 MB to the exe.
 
 ## Rules
 
 1. **All SQL lives in Go functions in `internal/store`.** Queries are constants with `?` parameters; user text is never put into SQL
    text (search escapes `%`, `_` and `\` and passes the pattern as a parameter).
-2. **The frontend reaches the data only through `DraftService` and `SettingsService` methods** (`ListDrafts`, `SaveDraft`, `LoadSettings`, ...), through the
+2. **The frontend reaches the data only through `DraftService`, `SyncService` and `SettingsService` methods** (`ListDrafts`, `SaveDraft`, `LoadSettings`, ...), through the
    generated Wails bindings. Each method is one specific operation with typed input and output. The app registers no generic data
    service, so nothing can send SQL from JavaScript.
 
@@ -105,10 +105,12 @@ searching many drafts ever gets slow, an FTS5 index can be added alongside the t
 
 ## Sync state
 
-The `sync_state` table and the Go store methods that use it (`Changes`, `ApplyRemote`, `ApplyRemoteDelete`) are the desktop half of the
-local groundwork. The desktop frontend does not call them yet: sync runs in the web build only, where the same records live in IndexedDB
-(the `sync` object store, one record per draft) and the device's server, token and signing key are one `sync-device` record in the `kv`
-store. Until the desktop build is wired, nothing is written to `sync_state`. See [sync](sync.md#changes-to-local-storage).
+The `sync_state` table and the Go store methods that use it (`AllIDs`, `IsChanged`, `Changes`, `SyncState`, `MarkSynced`, `ApplyRemote`,
+`ApplyRemoteDelete`) are what the desktop build syncs with. The page reaches them through `SyncService` (a thin binding, no SQL in the page), and
+the web build keeps the same records in IndexedDB (the `sync` object store, one record per draft). The two implement one definition of a
+changed draft, a hash that differs from the recorded one, and one definition of a valid draft; fixtures under `internal/store/testdata/` check
+both. The device's server, token and signing key are one `sync-device` record in the webview's or browser's IndexedDB (the `kv` store) on both
+builds; nothing in SQLite holds a secret. With sync off, `sync_state` stays empty. See [sync](sync.md#changes-to-local-storage).
 
 ## Settings: the dictionary and ignored findings
 

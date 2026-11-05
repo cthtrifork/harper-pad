@@ -38,7 +38,7 @@ the two builds differ and how to deploy.
 Notes can follow you between the desktop app and the phone through your own server, off by default. The devices stay the
 source of truth; the server is plain storage and can be rebuilt from them. See the [backend](backend/README.md) (`harper-pad-sync` and `harper-pad-admin` on PostgreSQL) and the design in
 [`docs/sync.md`](docs/sync.md), which also lists the open work. The web build has the client when it is built with `SYNC_ORIGIN` (a status bar chip,
-enrolling with an invite link, a push after each save, and Sync all); the desktop build does not have it yet.
+enrolling with an invite link, a push after each save, and Sync all), in the web build and in the desktop app.
 
 ## Develop
 

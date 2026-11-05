@@ -7,6 +7,54 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * Changes is what differs from the server's last known state.
+ */
+export class Changes {
+    /**
+     * Creates a new Changes instance.
+     * @param {Partial<Changes>} [$$source = {}] - The source object to create the Changes.
+     */
+    constructor($$source = {}) {
+        if (!("changed" in $$source)) {
+            /**
+             * Changed are the drafts to upload: new ones, and ones whose text or format differ from the last sync.
+             * @member
+             * @type {string[]}
+             */
+            this["changed"] = [];
+        }
+        if (!("deleted" in $$source)) {
+            /**
+             * Deleted are the ids of drafts deleted here that the server still has.
+             * @member
+             * @type {string[]}
+             */
+            this["deleted"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Changes instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {Changes}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType0;
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("changed" in $$parsedSource) {
+            $$parsedSource["changed"] = $$createField0_0($$parsedSource["changed"]);
+        }
+        if ("deleted" in $$parsedSource) {
+            $$parsedSource["deleted"] = $$createField1_0($$parsedSource["deleted"]);
+        }
+        return new Changes(/** @type {Partial<Changes>} */($$parsedSource));
+    }
+}
+
+/**
  * Draft is one stored draft. Timestamps are Unix milliseconds.
  */
 export class Draft {
@@ -107,7 +155,7 @@ export class List {
      * @returns {List}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType1;
+        const $$createField0_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("drafts" in $$parsedSource) {
             $$parsedSource["drafts"] = $$createField0_0($$parsedSource["drafts"]);
@@ -207,12 +255,64 @@ export class Summary {
      * @returns {Summary}
      */
     static createFrom($$source = {}) {
-        const $$createField7_0 = $$createType3;
+        const $$createField7_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tasks" in $$parsedSource) {
             $$parsedSource["tasks"] = $$createField7_0($$parsedSource["tasks"]);
         }
         return new Summary(/** @type {Partial<Summary>} */($$parsedSource));
+    }
+}
+
+/**
+ * SyncState is what the server held for a draft at the last sync. Version is the base of the next write.
+ */
+export class SyncState {
+    /**
+     * Creates a new SyncState instance.
+     * @param {Partial<SyncState>} [$$source = {}] - The source object to create the SyncState.
+     */
+    constructor($$source = {}) {
+        if (!("hash" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hash"] = "";
+        }
+        if (!("updatedAt" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["updatedAt"] = 0;
+        }
+        if (!("deleted" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["deleted"] = false;
+        }
+        if (!("version" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["version"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SyncState instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {SyncState}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SyncState(/** @type {Partial<SyncState>} */($$parsedSource));
     }
 }
 
@@ -255,7 +355,8 @@ export class Task {
 }
 
 // Private type creation functions
-const $$createType0 = Summary.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = Task.createFrom;
-const $$createType3 = $Create.Array($$createType2);
+const $$createType0 = $Create.Array($Create.Any);
+const $$createType1 = Summary.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = Task.createFrom;
+const $$createType4 = $Create.Array($$createType3);

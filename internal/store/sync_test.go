@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -290,5 +291,66 @@ func TestPreviousBuildCanUseTheDatabase(t *testing.T) {
 	c := changes(t, s2)
 	if !reflect.DeepEqual(c.Changed, []string{a.ID}) || !reflect.DeepEqual(c.Deleted, []string{b.ID}) {
 		t.Errorf("an edit and a delete made by the old build: %+v", c)
+	}
+}
+
+// IsChanged is the same definition as Changes, for one draft: the two must agree for every draft, whatever happened to it.
+func TestIsChangedAgreesWithChanges(t *testing.T) {
+	s, _ := open(t)
+	tick(s)
+	a, _ := s.Save(Draft{Content: "one"})
+	b, _ := s.Save(Draft{Content: "two"})
+	agree := func(step string) {
+		t.Helper()
+		want := map[string]bool{}
+		for _, id := range changes(t, s).Changed {
+			want[id] = true
+		}
+		ids, err := s.AllIDs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range ids {
+			got, err := s.IsChanged(id)
+			if err != nil || got != want[id] {
+				t.Errorf("%s: IsChanged(%s) = %v, %v; Changes says %v", step, id, got, err, want[id])
+			}
+		}
+	}
+	agree("new drafts")
+	for _, d := range []Draft{a, b} {
+		if err := s.MarkSynced(d.ID, SyncState{Hash: ContentHash(d.Format, d.Content), UpdatedAt: d.UpdatedAt, Version: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	agree("after syncing")
+	if _, err := s.Save(Draft{ID: a.ID, Content: "one more"}); err != nil {
+		t.Fatal(err)
+	}
+	agree("an edit")
+	if _, err := s.Save(Draft{ID: b.ID, Content: "two", Format: FormatText}); err != nil {
+		t.Fatal(err)
+	}
+	agree("a format change")
+	if got, err := s.IsChanged("0123456789abcdef0123456789abcdef"); got || err != nil {
+		t.Errorf("a draft that is not stored is not changed: %v, %v", got, err)
+	}
+}
+
+func TestAllIDsInOrder(t *testing.T) {
+	s, _ := open(t)
+	if ids, err := s.AllIDs(); err != nil || ids == nil || len(ids) != 0 {
+		t.Fatalf("an empty database: %v, %v", ids, err)
+	}
+	tick(s)
+	a, _ := s.Save(Draft{Content: "one"})
+	tick(s)
+	b, _ := s.Save(Draft{Content: "two"})
+	// Ids sort by creation time and then by their random bytes, so two drafts made in the same millisecond have no fixed order between them.
+	want := []string{a.ID, b.ID}
+	sort.Strings(want)
+	ids, err := s.AllIDs()
+	if err != nil || !reflect.DeepEqual(ids, want) {
+		t.Errorf("AllIDs = %v, %v, want %v", ids, err, want)
 	}
 }
