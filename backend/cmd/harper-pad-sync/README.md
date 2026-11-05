@@ -14,8 +14,7 @@ Settings, health checks and tests are in the [backend README](../../README.md).
 | `PUT /docs/<id>` | Write if the stored state matches `base`, otherwise `409` with the server's current copy; a delete is a tombstone |
 | `GET /healthz`, `GET /readyz`, `:9102/metrics` | Probes and Prometheus metrics |
 
-The routes are described in [`docs/openapi.yaml`](../../../docs/openapi.yaml), generated from the Go types. Not built yet: the device
-list routes (`GET` and `DELETE`).
+The routes are described in [`docs/openapi.yaml`](../../../docs/openapi.yaml), generated from the Go types.
 
 ## How it works
 

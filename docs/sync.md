@@ -1,9 +1,8 @@
 # Sync (design)
 
-Status: **partly built.** An optional sync service so **notes** (scratch pad drafts) follow the user between the desktop app and
-the iPhone Home Screen app. Built, in `backend/` and the cluster: the database and roles, schema migrations, the admin service,
-enrollment, the DPoP check and the draft routes. Not built: the device list routes, the client sync module and the app's UI, so
-nothing in the app uses the server yet ([Open work](#open-work)). When done, this page becomes the reference.
+An optional sync service so **notes** (scratch pad drafts) follow the user between the desktop app and the iPhone Home Screen
+app. The server is described in the [backend README](../backend/README.md); this page is the design and the protocol the clients
+follow, and [Open work](#open-work) lists what is left.
 
 ## Goals and non-goals
 
