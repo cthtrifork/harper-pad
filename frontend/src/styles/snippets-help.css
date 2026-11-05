@@ -119,6 +119,11 @@
   font-size: 12px;
 }
 
+.snippets .about.done {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .snippets .mock {
   display: block;
   white-space: pre;

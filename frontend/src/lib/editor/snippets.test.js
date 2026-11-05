@@ -111,3 +111,12 @@ test("a link goes into the text, replacing a selection", () => {
 test("an unknown trigger inserts nothing", () => {
   assert.equal(insert("x", "<nope>", 1), null);
 });
+
+test("inside a fenced block a snippet goes after the block, so several stack", () => {
+  const first = insert("Hello", "<sh>", 5);
+  // The first one leaves its placeholder selected; the next goes after the block, not over the placeholder.
+  const state = EditorState.create({ doc: first.doc, selection: { anchor: 10, head: 25 }, extensions: [markdown()] });
+  const next = state.update(insertSnippet(state, "<link>")).state;
+  assert.equal(next.doc.toString(), `${first.doc}\n[text](https://)`);
+  assert.equal(next.sliceDoc(next.selection.main.from, next.selection.main.to), "text");
+});
