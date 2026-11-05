@@ -48,8 +48,9 @@ never run on a real desktop yet.
 - [x] `harper-pad-admin` owns the tables and applies the migrations; `harper-pad-sync` has row-level rights only and waits for the schema.
       **Cluster:** make `harper_admin` the owner of the `harper` database (CloudNativePG `initdb.owner`) and the migrator, keep `harper_sync` a plain
       login role, and if tables already exist owned by another role, transfer them once (`ALTER TABLE ... OWNER TO harper_admin` for every table).
-- [ ] The draft routes in `harper-pad-sync`: `GET /docs`, `GET /docs/<id>` and `PUT /docs/<id>` (compare-and-set, tombstones, the size
-      limits), with tests for conflicts, deletes and limits, then `GET`/`DELETE` for the device list the app shows.
+- [x] The draft routes in `harper-pad-sync`: `GET /docs`, `GET /docs/<id>` and `PUT /docs/<id>` (compare-and-set, tombstones, the size
+      limits), with tests for conflicts, deletes, limits, account isolation and concurrent writers (against PostgreSQL in `make test-db`).
+- [ ] `GET` and `DELETE` for the device list the app shows (and the admin's revoke already works on the same table).
 - [ ] The sync module (`lib/sync.js`) with unit tests.
 - [ ] The end-to-end test (`docs/sync.md`, "End-to-end test"): a compose stack with PostgreSQL, `harper-pad-sync` built from
       `backend/Containerfile.sync`, and Caddy providing https (`app.localhost` serves the web build, `sync.localhost` proxies to the

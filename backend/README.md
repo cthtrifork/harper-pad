@@ -2,7 +2,7 @@
 
 The optional sync service for Harper Pad: `harper-pad-sync` (the API) and `harper-pad-admin` (Go + HTMX, for enrollment URLs
 and devices), on PostgreSQL. The design is in [`docs/sync.md`](../docs/sync.md). **What works so far: the health endpoints, the admin
-pages, the schema migrations and device enrollment (`POST /enroll`, plus the device authentication the draft routes will use)**. The draft routes (list, get, put) and the client are not built yet; this directory
+pages, the schema migrations, device enrollment (`POST /enroll`) and the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`)**. The device list routes and the client are not built yet; this directory
 is filled in following the build order in that document.
 
 This is its own Go module (`github.com/cthtrifork/harper-pad/backend`) and shares no code with the desktop app. The Kubernetes

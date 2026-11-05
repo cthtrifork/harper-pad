@@ -39,7 +39,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 | Path | What |
 |---|---|
 | `main.go` | Thin entry point: Wails app and window, embeds `frontend/dist` |
-| `backend/` | The optional sync service, its own Go module that shares no code with the app: `harper-pad-sync`, `harper-pad-admin`, PostgreSQL, and the end-to-end stack in `test/e2e/`. Partly built (schema migrations, admin, enrollment; the draft routes are not); see `backend/README.md` and the design in `docs/sync.md` |
+| `backend/` | The optional sync service, its own Go module that shares no code with the app: `harper-pad-sync`, `harper-pad-admin`, PostgreSQL, and the end-to-end stack in `test/e2e/`. Partly built (schema migrations, admin, enrollment, the draft routes; the device list routes are not); see `backend/README.md` and the design in `docs/sync.md` |
 | `internal/app` | The Wails services the frontend calls (`PadService` for startup and the version, `DraftService`, `SettingsService`, `UpdateService`; `service.go` creates them, `database.go` is the one SQLite file the first two share), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
 | `internal/store` | The app's database: one SQLite file (pure Go) with the drafts and the settings, see `docs/storage.md` |
 | `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
