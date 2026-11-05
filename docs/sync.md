@@ -149,12 +149,12 @@ Three different attackers need different answers, and the design treats them sep
 |---|---|---|
 | **Copies the token** from a log, a proxy or a script, but cannot copy the key | The device token | **DPoP** (below): the token is useless without a fresh proof from the key |
 | **Copies the device's own storage** (a disk image, a backup, a profile folder) | The token **and**, on a Chromium-based engine, a usable key | DPoP does **not** help here (see "What DPoP does not cover" below). Revocation, and disk encryption on the device |
-| **Uses the unlocked device** (or script running in the page) | The token, the key, and the drafts themselves | Revocation and the strict CSP. Nothing else can stop a legitimate client being used, and its edits and deletions sync to the other devices; there is no server-side undo in v1 (see [Later](#later)) |
+| **Uses the unlocked device** (or script running in the page) | The token, the key, and the drafts themselves | Revocation and the strict CSP. Nothing else can stop a legitimate client being used, and its edits and deletions sync to the other devices; there is no server-side undo in v1 |
 
-**Device list, notices and revocation (cover all three):**
+**Device list and revocation (cover all three):**
 
 - **A device list** with name, created, last-seen, and the user agent, in the admin UI, where a device is also revoked.
-- **A notice** (a banner on the next open of each device) when a device enrolls or is revoked.
+
 
 **DPoP: a device-bound signing key.** The device proves it holds a key on every request, as in DPoP (Demonstrating Proof of
 Possession, [RFC 9449](https://rfc-editor.org/rfc/rfc9449)). The one difference from the RFC is that the token is opaque and not a
@@ -317,7 +317,7 @@ How it is used:
 
 - **The client account comes from the token, never from the request.** The server looks the device token up in `devices` and takes
   `client_id` from that row. The protocol has no `client_id` field, so a device cannot name another account, and every query on
-  `docs`, `devices`, `invites` and `keybag` has `client_id = <the device's>` in its `WHERE`. Devices never see the id.
+  `docs`, `devices` and `invites` (and the `keybag` table of the encryption option, if it is ever built) has `client_id = <the device's>` in its `WHERE`. Devices never see the id.
 - **Listing is one indexed query on the primary key:** `SELECT id, version, updated_at, deleted FROM docs WHERE client_id = $1 AND
   id > $2 ORDER BY id LIMIT $3`. Ids sort by creation, so it pages cleanly, and it carries no text.
 - **A write is one transaction with compare-and-set:** lock the draft's row (`SELECT ... FOR UPDATE`), check that its version and
@@ -330,10 +330,10 @@ How it is used:
   the new `devices` row copies the `client_id`. Deleting old invites is the admin service's job, not the public API's: creating an
   invite also deletes the ones that expired more than a day ago (in the same statement), so the sync service runs no background job
   and holds no purge code.
-- **Revoking a device deletes its row.** The "new device added" banner comes from `created_at`.
+- **Revoking a device deletes its row.**
 - **v1 has one client account,** inserted by the initial migration (`name` `default`). Nothing creates another: there is no endpoint
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector next to
-  the device name, and per-account operators (see Later).
+  the device name, and per-account operators.
 - **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
 - **The 2 MiB check** is the CHECK on `docs.data`, the server's only size limit (the API maps its refusal to 413 and only caps the request body at that size plus 4 KiB). It is a backstop. The app enforces the 1 MiB draft limit; 2 MiB leaves room for the JSON wrapper and a base64 envelope (the encryption option), which is 4/3 of the plaintext.
 
@@ -496,29 +496,12 @@ This is a device-token model with DPoP key binding, transport security and no co
 Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data; the [encryption option](#option-end-to-end-encryption) would leave it only
 ciphertext), and traffic analysis (the server sees sizes and times).
 
-## End-to-end test
-
-Not built, and not planned for now (see [Open work](#open-work)); the flows below were checked by hand. A Playwright script drives real Chromium against a compose stack (`backend/test/e2e/`; in CI it follows
-`scripts/screenshots.sh`): PostgreSQL, `harper-pad-sync` built from `backend/Containerfile.sync`, `harper-pad-admin` (it owns the
-database and applies the migrations) and Caddy for https (`app.localhost` serves the web build, `sync.localhost` proxies to the
-service, `tls internal`, high port, trusted through `--ignore-certificate-errors-spki-list` rather than `ignoreHTTPSErrors`). Page and
-API are different https origins, so CORS, the CSP `connect-src` and the "https only" rule are exercised. Two browser contexts are
-devices A and B; the test inserts invite rows into PostgreSQL as the table owner instead of using the admin UI. The same stack runs
-the Go store tests (`make test-db`) and the admin UI for development (`make admin-up`).
-
-Checks, in order: enrollment (and a spent invite); a save pushes; Sync all and opening a note (a plain update, no "Conflicted copy");
-**lose the server** (wipe the database, re-enroll both devices, Sync all rebuilds identical drafts with no conflicted copies); later,
-offline edits on both devices, a revoked token showing "Sign in again", and isolation between two accounts. Needs the sync origin in
-the CORS allowlist and the web build's CSP. It does not prove certificate renewal, the real ingress, Cloudflare Access or WebKit.
-
 ## Open work
 
-- [ ] A "Newer on the server" marker on the drafts drawer's cards (opening a note already shows it beside the chip). Follow
-      `docs/design-cheatsheet.html`: short eased transitions, reduced motion honoured.
 - [ ] **The desktop build.** The client (chip, pop-up, push after a save, Sync all, opening a note, the Keep or Remove dialog) exists for the web
       build only. The desktop build needs Go bindings for the sync state (`sync_state`, `Changes`, `ApplyRemote`) first, and a decision on
       where its device record lives (below).
-- [ ] A server operations page (run, proxy, back up, rotate, revoke), and the repository variable `SYNC_ORIGIN` set for the Pages build.
+- [ ] Set the repository variable `SYNC_ORIGIN` for the Pages build.
 - [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
 - [ ] Before release, decide whether the device record needs its own store, and whether desktop keeps it in SQLite.
 - [ ] Check that WebKitGTK keeps a non-extractable key across a relaunch (Edge on Windows passed).
@@ -534,8 +517,13 @@ the CORS allowlist and the web build's CSP. It does not prove certificate renewa
   removal of the open draft has Keep, Remove and Undo. Until another device runs Sync all, editing the draft there brings it back.
 - **A pending count and a progress line on the chip.** Sync all takes a second or two for a normal number of drafts; the spinner and the
   summary line are enough.
-- **A committed end-to-end test.** The flows were checked by hand with two Chromium contexts against the compose stack (below); CI runs the
-  unit tests, which drive the real web store against a fake of the server's routes, and the server's own tests.
+- **A committed end-to-end test of the sync flows.** They were checked by hand with two Chromium contexts against the compose stack (`make e2e-up`
+  in `backend/`). The CI `e2e` job checks the stack itself (https, readiness, the web app, the database login), and the unit tests drive the
+  real web store against a fake of the server's routes.
+- **A "Newer on the server" marker on the drafts drawer's cards.** Sync all updates every draft that is not open, and the open one shows the
+  marker beside the chip.
+- **A server operations page.** How the server is run and backed up belongs to the cluster's GitOps repository, and the devices can rebuild a
+  lost server.
 
 Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
 `harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in the web build the client
@@ -562,7 +550,4 @@ no new kind of server. Ids, versions, times, the deleted flag and blob sizes sta
 
 ## Later
 
-- **Server-side version history:** a command on the server host, not in the admin UI, which must not read or write notes.
 - **Syncing settings:** the dictionary (set union) and the ignore list; they need their own table and merge rules.
-- **More client accounts:** an admin action, an account selector, per-account operators, quotas and the isolation checks above.
-- **Sharing between accounts** (OIDC, short-lived tokens with refresh) and **merging text** with a CRDT such as Yjs.

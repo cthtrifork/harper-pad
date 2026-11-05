@@ -1,5 +1,5 @@
-// End-to-end test (docs/sync.md, "End-to-end test"). Run with `make e2e` from backend/. Scaffold: the three smoke checks run
-// against the stub service; the real checks are listed as todo.
+// End-to-end checks of the stack (see docs/ci.md): the sync service over https, readiness, the web app, and the database login. Run with
+// `make e2e` from backend/. The sync flows are not tested here.
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { APP_URL, compose, launch, newDevice, SYNC_URL, waitForSync } from "./helpers.mjs";
@@ -81,18 +81,4 @@ describe("PostgreSQL client-certificate login (docs/sync.md, \"Database access\"
     const r = psql("sslmode=disable");
     assert.notEqual(r.code, 0, r.out);
   });
-});
-
-describe("sync", () => {
-  // The checks follow docs/sync.md, "End-to-end test". Every request carries a DPoP proof from the page's own key, so the checks
-  // exercise the proof as well as the sync logic.
-  test.todo("enrollment: device A pastes an invite URL and gets a token bound to its key; the same invite fails the second time");
-  test.todo("save pushes: a draft made on A is in PostgreSQL shortly after the save");
-  test.todo(
-    "Sync all and opening a note: B, enrolled with its own invite, has the draft; an edit on A reaches B when B opens the note as a plain update with no conflicted copy; a draft created on A after B enrolled appears on B after Sync all",
-  );
-  test.todo("lose the server: wipe the database, restart the sync service, re-enroll both devices, and Sync all rebuilds the drafts without conflicted copies");
-  test.todo(
-    "later: an offline edit on both devices makes a local conflicted copy; a revoked token shows Sign in again and keeps the drafts; with a second client account, neither account sees the other's drafts or devices",
-  );
 });
