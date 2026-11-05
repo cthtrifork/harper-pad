@@ -64,6 +64,7 @@ func New(publicURL string, origins []string, st Store, v *auth.Verifier) *API {
 func (a *API) config() huma.Config {
 	cfg := huma.DefaultConfig("Harper Pad sync API", "1.0.0")
 	cfg.DocsPath, cfg.OpenAPIPath, cfg.SchemasPath = "/api", "/openapi", ""
+	cfg.DocsRenderer = huma.DocsRendererScalar // Huma's default, Stoplight Elements, has a fixed sidebar that fills a phone screen
 	cfg.CreateHooks = nil
 	cfg.Info.Description = "The optional sync service of Harper Pad (docs/sync.md). Every route needs a DPoP proof header; routes other " +
 		"than /enroll also need `Authorization: DPoP <device token>`. The proof is a JWT signed with the device's key (RFC 9449 " +
