@@ -1,6 +1,7 @@
 // The drafts in the browser (the web build, which has no Go side): the same operations as DraftService's methods, kept in
 // IndexedDB. A draft's text and its summary are two records in one transaction, so listing reads only the small summaries and
 // never the text, as the desktop database does. IDs, limits and messages match internal/store.
+import { openDB } from "idb";
 import { contentHash } from "./contentHash.js";
 import { summarize } from "./summarize.js";
 
@@ -24,21 +25,16 @@ export function upgrade(db) {
   if (!db.objectStoreNames.contains("sync")) db.createObjectStore("sync", { keyPath: "id" });
 }
 
-// Opens the database at DB_VERSION, creating or upgrading it. When the stored database is already newer (another build of the app on the
-// same origin migrated it, for instance a preview of a branch), the browser refuses with a VersionError; this build then opens it as it
-// is, which works as long as the newer migrations only added things (the usual case). `idb` is the IDBFactory, a parameter for the tests.
-export function openDatabase(idb = indexedDB) {
-  return new Promise((resolve, reject) => {
-    const req = idb.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => upgrade(req.result);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => {
-      if (req.error?.name !== "VersionError") return reject(req.error);
-      const current = idb.open(DB_NAME);
-      current.onsuccess = () => resolve(current.result);
-      current.onerror = () => reject(current.error);
-    };
-  });
+// Opens the database at DB_VERSION, creating or upgrading it. When the stored database is already newer (another build on the same
+// origin migrated it, for instance a preview of a branch), the browser refuses with a VersionError; this build then opens it as it
+// is, which works as long as the newer migrations only added things (the usual case).
+export async function openDatabase() {
+  try {
+    return await openDB(DB_NAME, DB_VERSION, { upgrade });
+  } catch (err) {
+    if (err?.name !== "VersionError") throw err;
+    return openDB(DB_NAME);
+  }
 }
 
 // 32 hex characters that sort by creation: 6 bytes of the time in milliseconds, then 10 random bytes.
@@ -52,19 +48,6 @@ function newId(now) {
   }
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
-
-const done = (tx) =>
-  new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error ?? new Error("the transaction was aborted"));
-  });
-
-const request = (req) =>
-  new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
 
 // `open` is backend.js's openDb: it resolves to an open database, which the caller closes.
 export function createWebDrafts(open) {
@@ -88,7 +71,7 @@ export function createWebDrafts(open) {
 
   async function get(id) {
     return withDb(async (db) => {
-      const d = await request(db.transaction("drafts").objectStore("drafts").get(id));
+      const d = await db.get("drafts", id);
       if (!d) throw new Error("draft not found");
       return d;
     });
@@ -107,14 +90,12 @@ export function createWebDrafts(open) {
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
       const drafts = tx.objectStore("drafts");
-      const existing = await request(drafts.get(id));
+      const existing = await drafts.get(id);
       // Saving an id that is no longer stored restores it (undoing a delete), keeping its creation time when one is given.
       const createdAt = existing?.createdAt ?? (input.id && input.createdAt > 0 ? input.createdAt : now);
       // The file link is only ever set by setFilePath, as on the Go side, so saving the text keeps it.
       const d = { id, format, content, createdAt, updatedAt: now, filePath: existing?.filePath ?? "" };
-      drafts.put(d);
-      tx.objectStore("summaries").put(summaryOf(d));
-      await done(tx);
+      await Promise.all([drafts.put(d), tx.objectStore("summaries").put(summaryOf(d)), tx.done]);
       return d;
     });
   }
@@ -124,12 +105,10 @@ export function createWebDrafts(open) {
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
       const drafts = tx.objectStore("drafts");
-      const d = await request(drafts.get(id));
+      const d = await drafts.get(id);
       if (!d) throw new Error("draft not found");
       d.filePath = filePath;
-      drafts.put(d);
-      tx.objectStore("summaries").put(summaryOf(d));
-      await done(tx);
+      await Promise.all([drafts.put(d), tx.objectStore("summaries").put(summaryOf(d)), tx.done]);
       return d;
     });
   }
@@ -137,9 +116,7 @@ export function createWebDrafts(open) {
   async function remove(id) {
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
-      tx.objectStore("drafts").delete(id);
-      tx.objectStore("summaries").delete(id);
-      await done(tx);
+      await Promise.all([tx.objectStore("drafts").delete(id), tx.objectStore("summaries").delete(id), tx.done]);
     });
   }
 
@@ -147,23 +124,15 @@ export function createWebDrafts(open) {
   async function page(db, matches, limit, offset) {
     limit = Math.min(limit > 0 ? limit : DEFAULT_LIMIT, MAX_LIMIT);
     offset = Math.max(offset || 0, 0);
-    const store = db.transaction("summaries").objectStore("summaries");
-    const total = matches ? matches.size : await request(store.count());
+    const store = db.transaction("summaries").store;
+    const total = matches ? matches.size : await store.count();
     const drafts = [];
     let skipped = 0;
-    await new Promise((resolve, reject) => {
-      const req = store.index("byUpdated").openCursor(null, "prev");
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => {
-        const cur = req.result;
-        if (!cur || drafts.length >= limit) return resolve();
-        if (!matches || matches.has(cur.value.id)) {
-          if (skipped < offset) skipped++;
-          else drafts.push(cur.value);
-        }
-        cur.continue();
-      };
-    });
+    for (let cur = await store.index("byUpdated").openCursor(null, "prev"); cur && drafts.length < limit; cur = await cur.continue()) {
+      if (matches && !matches.has(cur.value.id)) continue;
+      if (skipped < offset) skipped++;
+      else drafts.push(cur.value);
+    }
     return { drafts, total };
   }
 
@@ -177,16 +146,9 @@ export function createWebDrafts(open) {
     if (!q) return list(limit, 0);
     return withDb(async (db) => {
       const matches = new Set();
-      await new Promise((resolve, reject) => {
-        const req = db.transaction("drafts").objectStore("drafts").openCursor();
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => {
-          const cur = req.result;
-          if (!cur) return resolve();
-          if (cur.value.content.toLowerCase().includes(q)) matches.add(cur.value.id);
-          cur.continue();
-        };
-      });
+      for await (const cur of db.transaction("drafts").store) {
+        if (cur.value.content.toLowerCase().includes(q)) matches.add(cur.value.id);
+      }
       return page(db, matches, limit, 0);
     });
   }
@@ -202,7 +164,7 @@ export function createWebDrafts(open) {
   // draft saved or deleted by an older build, which knows nothing of the store, is seen too. Same rules as internal/store/sync.go.
 
   async function syncState(id) {
-    return withDb(async (db) => (await request(db.transaction("sync").objectStore("sync").get(id))) ?? null);
+    return withDb(async (db) => (await db.get("sync", id)) ?? null);
   }
 
   // Records what the server now holds for a draft: {hash, updatedAt, deleted, version}. Pass the hash of the text that was sent.
@@ -210,14 +172,16 @@ export function createWebDrafts(open) {
     if (!ID.test(id)) throw new Error(`"${id}" is not a draft id`);
     return withDb(async (db) => {
       const tx = db.transaction("sync", "readwrite");
-      tx.objectStore("sync").put({
-        id,
-        hash: state.hash ?? "",
-        updatedAt: state.updatedAt,
-        deleted: !!state.deleted,
-        version: state.version,
-      });
-      await done(tx);
+      await Promise.all([
+        tx.objectStore("sync").put({
+          id,
+          hash: state.hash ?? "",
+          updatedAt: state.updatedAt,
+          deleted: !!state.deleted,
+          version: state.version,
+        }),
+        tx.done,
+      ]);
     });
   }
 
@@ -225,7 +189,7 @@ export function createWebDrafts(open) {
   async function changes() {
     const { ids, states } = await withDb(async (db) => {
       const tx = db.transaction(["drafts", "sync"]);
-      const [ids, records] = await Promise.all([request(tx.objectStore("drafts").getAllKeys()), request(tx.objectStore("sync").getAll())]);
+      const [ids, records] = await Promise.all([tx.objectStore("drafts").getAllKeys(), tx.objectStore("sync").getAll()]);
       return { ids: ids.sort(), states: new Map(records.map((r) => [r.id, r])) };
     });
     const changed = [];
@@ -235,7 +199,7 @@ export function createWebDrafts(open) {
         changed.push(id);
         continue;
       }
-      const d = await withDb((db) => request(db.transaction("drafts").objectStore("drafts").get(id)));
+      const d = await withDb((db) => db.get("drafts", id));
       if (d && (await contentHash(d.format, d.content)) !== state.hash) changed.push(id);
     }
     const here = new Set(ids);
@@ -259,7 +223,7 @@ export function createWebDrafts(open) {
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries", "sync"], "readwrite");
       const drafts = tx.objectStore("drafts");
-      const existing = await request(drafts.get(input.id));
+      const existing = await drafts.get(input.id);
       const d = {
         id: input.id,
         format,
@@ -268,10 +232,12 @@ export function createWebDrafts(open) {
         updatedAt: input.updatedAt,
         filePath: existing?.filePath ?? "",
       };
-      drafts.put(d);
-      tx.objectStore("summaries").put(summaryOf(d));
-      tx.objectStore("sync").put({ id: d.id, hash, updatedAt: d.updatedAt, deleted: false, version });
-      await done(tx);
+      await Promise.all([
+        drafts.put(d),
+        tx.objectStore("summaries").put(summaryOf(d)),
+        tx.objectStore("sync").put({ id: d.id, hash, updatedAt: d.updatedAt, deleted: false, version }),
+        tx.done,
+      ]);
       return d;
     });
   }
@@ -281,10 +247,12 @@ export function createWebDrafts(open) {
     if (!ID.test(id)) throw new Error(`"${id}" is not a draft id`);
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries", "sync"], "readwrite");
-      tx.objectStore("drafts").delete(id);
-      tx.objectStore("summaries").delete(id);
-      tx.objectStore("sync").put({ id, hash: "", updatedAt, deleted: true, version });
-      await done(tx);
+      await Promise.all([
+        tx.objectStore("drafts").delete(id),
+        tx.objectStore("summaries").delete(id),
+        tx.objectStore("sync").put({ id, hash: "", updatedAt, deleted: true, version }),
+        tx.done,
+      ]);
     });
   }
 

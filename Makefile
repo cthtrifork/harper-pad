@@ -20,7 +20,7 @@ help: ## List the targets
 test: ## Run the Go tests as CI does
 	go test $(RACE) -count=1 ./...
 
-test-frontend: ## Run the frontend's unit tests (Node's test runner; no npm install needed)
+test-frontend: ## Run the frontend's unit tests (Node's test runner; needs `npm ci` in frontend/)
 	cd frontend && npm test
 
 fmt: ## Format the Go code
