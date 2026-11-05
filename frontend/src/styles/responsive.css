@@ -179,10 +179,9 @@
     min-height: 40vh;
   }
 
-  /* Status bar: wraps to a second line instead of running off the screen; the timings, the cursor position, the selection and the autocorrect switch (the header shows when it is on) are not worth the room. */
+  /* Status bar: stays on one line (status-bar.css); the timings, the cursor position, the selection and the autocorrect switch (the header shows when it is on) are not worth the room. */
   .status {
-    flex-wrap: wrap;
-    gap: 4px 12px;
+    gap: 8px 12px;
     padding: 6px 12px;
   }
 
@@ -192,6 +191,25 @@
   #autocorrect-state,
   #selection {
     display: none;
+  }
+
+  /* The bar is one line, so when it also carries the "newer on the server" text or the Start fresh link there is no room for the counts. */
+  .status:has(.sync-marker) #doc-stats,
+  .status:has(#start-fresh) #doc-stats,
+  .status:has(#start-fresh) .sync-marker .txt {
+    display: none;
+  }
+
+  /* The character count is the first thing to go on a phone; the word count stays. */
+  #doc-stats .chars {
+    display: none;
+  }
+
+  /* On narrow phones the marker is its dot, with the text in its tooltip. */
+  @media (max-width: 400px) {
+    .status .sync-marker .txt {
+      display: none;
+    }
   }
 
   /* The release the web build is from, small, at the bottom right (the spacer is hidden here, so the margin pushes it over). */

@@ -53,14 +53,14 @@ function fmt(ms) {
     <!-- "Harper ready" and the timings are start-up information: they go once the first edit has been saved (`startup` false). Loading and a
          failure always show, and so does the problem count, which says Harper is working. -->
     <span v-if="showState" :class="['state', state]">{{ state === "loading" ? "Starting Harper, you can already type..." : `Harper ${state}` }}</span>
-    <span v-if="state === 'ready' && mode !== 'preview'">{{ problemCount }} {{ problemCount === 1 ? "problem" : "problems" }}</span>
+    <span v-if="state === 'ready' && mode !== 'preview'" class="problems">{{ problemCount }} {{ problemCount === 1 ? "problem" : "problems" }}</span>
     <!-- Autocorrect's state, and a one-click switch for it while the Problems panel (where its card is) is closed. A filled dot is on, a
          hollow one is off, so the state does not depend on colour alone. -->
     <button v-if="state === 'ready' && mode !== 'preview'" id="autocorrect-state" type="button" class="auto-chip" :class="{ on: autocorrect }" role="switch" :aria-checked="autocorrect" aria-label="Autocorrect" @click="emit('toggle-autocorrect')">
       <span class="dot" aria-hidden="true"></span>Autocorrect {{ autocorrect ? "on" : "off" }}
     </button>
     <SyncChip v-if="sync?.configured" :sync="sync" />
-    <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span>
+    <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}<span class="chars">, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span></span>
     <span v-if="state === 'ready' && startup" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
     <span v-if="saveError" class="state failed clip" :title="saveError">{{ saveError }}</span>
     <span v-if="draftStatus" id="draft-status" :class="['state', 'clip', draftState === 'error' ? 'failed' : 'mute']" :title="draftStatus">{{ draftStatus }}</span>
