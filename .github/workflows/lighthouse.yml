@@ -71,7 +71,7 @@ jobs:
             lighthouse/lighthouse-*.html
             lighthouse/lighthouse-*.json
             lighthouse/summary.md
-            lighthouse/diag-*/*.json # TEMPORARY
+            lighthouse/diag-*/*.json
           if-no-files-found: error
           retention-days: 14
 
