@@ -163,6 +163,12 @@ function toggleDrawer() {
 
 // On a phone the drafts are a full-width sheet over the editor: picking or creating a draft leaves it, so the text (and the
 // keyboard that comes with focusing it) is not hidden behind the sheet.
+// The help page's shortcut: the snippet goes in at the cursor. On a phone the drawer covers the editor, so it closes.
+function insertSnippet(trigger) {
+  editor.value?.insertSnippet(trigger);
+  if (narrow.matches && showDrawer.value) toggleDrawer();
+}
+
 async function pickDraft(action, id) {
   await action(id);
   if (narrow.matches && showDrawer.value) {
@@ -357,6 +363,7 @@ onBeforeUnmount(() => {
         @search="drafts.setQuery"
         @more="drafts.showMore"
         @undo="drafts.undo"
+        @snippet="insertSnippet"
         @close="toggleDrawer"
       />
       </Transition>

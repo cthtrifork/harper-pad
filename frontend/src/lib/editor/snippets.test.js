@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
-import { expandSnippet, SNIPPET_LIST } from "./snippets.js";
+import { expandSnippet, insertSnippet, SNIPPET_LIST } from "./snippets.js";
 
 // A state with the caret at `at` (default: the end) in `doc`; returns the document and the selected text after expanding.
 function expand(doc, at = doc.length) {
@@ -79,4 +79,35 @@ test("spaces around the trigger do not count", () => {
 test("the help list matches what Enter does", () => {
   assert.ok(SNIPPET_LIST.length >= 9);
   for (const s of SNIPPET_LIST) assert.equal(expand(s.trigger).doc, s.before + s.mid + s.after, s.trigger);
+});
+
+// Insert `trigger` with the cursor (or selection) at from..to in `doc`.
+function insert(doc, trigger, from, to = from) {
+  const state = EditorState.create({ doc, selection: { anchor: from, head: to }, extensions: [markdown()] });
+  const spec = insertSnippet(state, trigger);
+  if (!spec) return null;
+  const next = state.update(spec).state;
+  const { from: a, to: b } = next.selection.main;
+  return { doc: next.doc.toString(), selected: next.sliceDoc(a, b) };
+}
+
+test("the help page inserts a block at the start of a line as it is", () => {
+  const r = insert("a\n\nb", "<sh>", 2);
+  assert.equal(r.doc, "a\n```sh\nWrite code here\n```\nb");
+  assert.equal(r.selected, "Write code here");
+});
+
+test("a block goes on its own line when the cursor is mid-line", () => {
+  assert.equal(insert("Try this: ", "<code>", 10).doc, "Try this: \n```\nWrite code here\n```");
+  assert.equal(insert("- [ ] one", "<todo>", 9).doc, "- [ ] one\n- [ ] ");
+});
+
+test("a link goes into the text, replacing a selection", () => {
+  const r = insert("See docs now", "<link>", 4, 8);
+  assert.equal(r.doc, "See [text](https://) now");
+  assert.equal(r.selected, "text");
+});
+
+test("an unknown trigger inserts nothing", () => {
+  assert.equal(insert("x", "<nope>", 1), null);
 });
