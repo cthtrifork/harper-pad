@@ -118,6 +118,9 @@ expect((await page.textContent(".folder")).includes("~/Documents"), "the toolbar
 // Edit it again: the draft is autosaved, the file waits for Ctrl+S.
 await page.keyboard.type(" Mikkel gets the RPM on Monday.");
 await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.includes("not updated"), null, { timeout: 15000 });
+// New draft closed the scratch pad; open it again for the list.
+await page.keyboard.press("Control+j");
+await page.waitForSelector("#drafts-drawer");
 await page.waitForFunction(() => document.querySelectorAll("#drafts-drawer .item").length === 2, null, { timeout: 15000 });
 if (filesDir) {
   expect(readFileSync(path.join(filesDir, "Meeting notes.md"), "utf8").endsWith("Friday."), "the file should not change until Ctrl+S");
@@ -177,8 +180,7 @@ await page.keyboard.insertText(
   ].join("\n"),
 );
 await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
-await page.keyboard.press("Control+j"); // close the scratch pad
-await page.waitForSelector("#drafts-drawer", { state: "detached" });
+await page.waitForSelector("#drafts-drawer", { state: "detached" }); // New draft closed the scratch pad
 await page.getByRole("button", { name: "Split" }).click();
 await page.waitForSelector(".md h1");
 expect((await page.textContent(".md h1")) === "Release checklist", "the preview should show the heading");
