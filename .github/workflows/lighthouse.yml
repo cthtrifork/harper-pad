@@ -57,6 +57,7 @@ jobs:
           CHROME_PATH: /usr/bin/google-chrome
           # renovate: datasource=npm depName=lighthouse
           LIGHTHOUSE_VERSION: 13.6.0
+          LIGHTHOUSE_DIAG: "1" # TEMPORARY, see scripts/lighthouse.mjs
         run: |
           google-chrome --version
           scripts/lighthouse.sh
@@ -70,6 +71,7 @@ jobs:
             lighthouse/lighthouse-*.html
             lighthouse/lighthouse-*.json
             lighthouse/summary.md
+            lighthouse/diag-*/*.json # TEMPORARY
           if-no-files-found: error
           retention-days: 14
 
