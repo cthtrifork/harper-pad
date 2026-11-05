@@ -63,8 +63,18 @@ function snippetChange(body, from, to, lead = "") {
 export function insertSnippet(state, trigger) {
   if (!Object.hasOwn(SNIPPETS, trigger)) return null;
   const { text } = SNIPPETS[trigger];
-  const { from, to } = state.selection.main;
-  const block = /^(```|- |\|)/.test(text);
+  let { from, to } = state.selection.main;
+  // Inside a fenced block (such as the placeholder the last snippet left selected) the snippet goes after the block, so inserting
+  // several in a row stacks them instead of each replacing the one before.
+  let after = false;
+  for (let node = syntaxTree(state).resolveInner(from, 1); node; node = node.parent) {
+    if (node.name === "FencedCode") {
+      from = to = node.to;
+      after = true;
+      break;
+    }
+  }
+  const block = after || /^(```|- |\|)/.test(text);
   const lead = block && state.doc.lineAt(from).from !== from ? "\n" : "";
   return snippetChange(text, from, to, lead);
 }

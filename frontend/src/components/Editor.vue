@@ -102,11 +102,11 @@ defineExpose({
     ),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
-  insertSnippet: (trigger) => {
+  insertSnippet: (trigger, focus = true) => {
     const spec = view && insertSnippet(view.state, trigger);
     if (!spec) return;
     view.dispatch(spec);
-    view.focus();
+    if (focus) view.focus();
   },
   fixAll: () => (view ? fixAllSafe(view) : 0),
   revert: (ids) => (view ? revertFixes(view, ids) : 0),
