@@ -1,12 +1,11 @@
 name: Tag and release
 
-# Releases the head of main under a new version. Run it from the Actions tab ("Run workflow") or with
+# Releases the head of main under a new version. Run it from the Actions tab or with
 #   gh workflow run tag-release.yml                    (next version from the merged PR titles)
 #   gh workflow run tag-release.yml -f tag=v1.0.0      (an exact tag)
 #
-# No tag is pushed from here. release.yml builds the commit and publishes the release with the
-# release's target set to that commit, and GitHub creates the tag at that moment. So a failed build
-# leaves no tag behind, and nothing is left to retry or clean up.
+# No tag is pushed from here: release.yml publishes the release with that commit as its target and GitHub creates the tag then,
+# so a failed build leaves no tag behind.
 run-name: Tag and release ${{ inputs.tag != '' && inputs.tag || '(next version)' }}
 
 on:
@@ -53,10 +52,8 @@ jobs:
           # The commit this run will release, not whatever main has become since.
           commitish: ${{ github.sha }}
 
-      # An explicit tag wins, then the version Release Drafter resolved. release.yml checks that it is a
-      # semantic version. This is a new version only: a tag that exists, whether or not its release was
-      # published, is retried through release.yml (see docs/releasing.md). A failed lookup must not be
-      # mistaken for "no such tag", so only a 404 counts as free.
+      # An explicit tag wins, then the version Release Drafter resolved. This is for a new version only: an existing tag is retried
+      # through release.yml (docs/releasing.md). Only a 404 counts as free, so a failed lookup is not mistaken for "no such tag".
       - name: Check the version is unused
         id: version
         env:

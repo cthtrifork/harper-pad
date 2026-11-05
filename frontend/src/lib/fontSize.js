@@ -1,7 +1,5 @@
-// The text size: a few steps rather than a slider, kept in the browser storage the webview already has (like the autocorrect choices).
-// There are two, "editor" and "preview". The page reads each from a CSS property (--editor-size in px, and --editor-scale, the same as
-// a plain number next to 19) so the editor, the Split source and the Split preview scale together from the editor's size, while the
-// full Preview view has its own.
+// The text size: a few steps rather than a slider, kept in browser storage. "editor" and "preview" are separate; the Split view
+// scales its source and preview together from the editor's size.
 import { scoped } from "./scope.js";
 
 export const SIZES = [16, 19, 22, 26];

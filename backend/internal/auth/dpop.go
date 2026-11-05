@@ -24,12 +24,10 @@ const (
 	maxSeen = 100_000
 )
 
-// Verifier checks DPoP proofs and remembers every accepted proof's jti for as long as it could still be replayed.
+// Verifier checks DPoP proofs and remembers every accepted jti for as long as it could be replayed.
 //
-// The proof itself is checked by github.com/AxisCommunications/go-dpop (on golang-jwt): the compact JWS, `typ`, the header `jwk`,
-// the signature, `htm`, `htu`, `iat` within the window and the jti and iat being present, following RFC 9449 section 4.3. The
-// replay cache is a ttlcache. What is left here is what neither does for this design, which has no OAuth server around the
-// proof: ES256 only, no private key in the jwk, the hash of the device token, and the order of those checks.
+// github.com/AxisCommunications/go-dpop checks the proof itself (RFC 9449 section 4.3) and a ttlcache holds the replay cache. What is
+// left here is what this design needs without an OAuth server: ES256 only, no private key in the jwk, the device token hash.
 type Verifier struct {
 	seen *ttlcache.Cache[string, struct{}]
 }
@@ -56,10 +54,8 @@ type Proof struct {
 	KeyThumbprint string
 }
 
-// Verify checks a proof header value for a request. method and htu are the request's method and URL as the server sees them
-// (the scheme and host come from configuration, never from headers, and htu has no query). accessToken is the device token
-// presented in Authorization, or empty for /enroll, where there is none yet; when it is set the proof's ath must be the base64url
-// SHA-256 of it.
+// Verify checks a proof header value for a request. The scheme and host of htu come from configuration, never from headers.
+// accessToken is the device token from Authorization (empty for /enroll); when set, the proof's ath must be its hash.
 func (v *Verifier) Verify(header, method, htu, accessToken string) (Proof, error) {
 	if len(header) == 0 || len(header) > maxProofBytes {
 		return Proof{}, ErrInvalidProof

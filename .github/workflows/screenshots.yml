@@ -1,16 +1,9 @@
 name: Screenshots
 
-# Renders the UI in Chrome against the headless server build (scripts/screenshots.sh).
-# Screenshots are never committed to main: docs/screenshots is gitignored.
-#
-#   pull_request  Upload each image as its own unzipped artifact (`archive: false`) and embed them in
-#                 one sticky PR comment that is updated on every push. Nothing is pushed. Fork PRs
-#                 (read-only token) get the artifacts on the run page but no comment.
-#   push to main  Force-push the images as one commit on top of main to bot/update-screenshots and
-#                 keep one DRAFT PR open from it ("Screenshots preview"). The PR exists only so the
-#                 current images can be browsed in its "Files changed" tab. It is never merged: it is
-#                 a draft, the CI job `no-screenshots` fails on it, and the workflow turns it back into
-#                 a draft if someone marks it ready. Close it and the next run opens a new one.
+# Renders the UI in Chrome against the headless server build (scripts/screenshots.sh). Screenshots are never committed to main.
+#   pull_request  Upload each image as an artifact and embed them in one sticky PR comment. Fork PRs get the artifacts only.
+#   push to main  Force-push the images to bot/update-screenshots and keep one DRAFT PR open from it, only so the images can be
+#                 browsed in "Files changed". It is never merged: the CI job `no-screenshots` fails on it.
 #
 # It has a paths filter, so do not mark it as a required check.
 on:

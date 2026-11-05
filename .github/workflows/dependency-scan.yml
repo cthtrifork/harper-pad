@@ -1,18 +1,11 @@
 name: Dependency scan
 
-# Scans the PR and its base with Trivy (.github/trivy/dependency-scan.tpl lists the findings) and
-# comments the HIGH and CRITICAL vulnerabilities the PR adds and removes. It runs only when a dependency manifest or lockfile
-# (or this workflow or its template) changes. The comment is informational; the blocking check is the Trivy job in security.yml. It uses
-# a paths filter, so do not mark it as a required check.
+# Scans the PR and its base with Trivy and comments the HIGH and CRITICAL vulnerabilities the PR adds and removes. It runs only when
+# a dependency manifest or lockfile changes. The comment is informational; the blocking check is the Trivy job in security.yml. It
+# has a paths filter, so do not mark it as a required check.
 #
-# It scans the repository files only (go.mod, go.sum and the npm lockfile); the report groups the
-# findings by the file Trivy found them in. There is no container image to scan.
-#
-# Hardening: the scan job runs Trivy over PR-controlled files with a read-only token and no
-# write permissions; only the separate comment job holds pull-requests: write and it never checks
-# out or runs PR code. Trivy is pinned (action by SHA, binary by version). The vulnerability DB comes
-# from the daily cache in trivy-cache.yml; a pull request's own caches are scoped to that PR, so
-# they cannot reach the default branch.
+# Hardening: the scan job reads PR-controlled files with a read-only token; only the separate comment job can write, and it never
+# runs PR code. The vulnerability DB comes from the daily cache in trivy-cache.yml, which a pull request cannot write to.
 on:
   pull_request:
     paths:
@@ -135,10 +128,8 @@ jobs:
         with:
           name: dependency-scan-report
 
-      # One sticky comment, found by header (a hidden marker the action manages). Not
-      # `gh pr comment --edit-last`: that edits the token's newest comment on the pull request, and
-      # lighthouse.yml and screenshots.yml comment as the same bot, so it overwrote their comments,
-      # which they then created again, leaving several copies of this report.
+      # One sticky comment, found by header. Not `gh pr comment --edit-last`: it edits the bot's newest comment, which can be the
+      # lighthouse or screenshots one, so they overwrote each other.
       - name: Comment on pull request
         continue-on-error: true
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5

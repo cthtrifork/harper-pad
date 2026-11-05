@@ -4,16 +4,13 @@ import { forEachDiagnostic } from "@codemirror/lint";
 import { Annotation, StateField } from "@codemirror/state";
 import { addRange, isFinished, isSpacing, nonOverlapping, touches } from "../autocorrect.js";
 
-// Autocorrect in the editor. Three things are remembered in the editor state, so that opening another draft (which starts a fresh
-// state) forgets them:
-//   - touched: the parts of the text the user has typed or pasted. Autocorrect only fixes findings there, never in text that was
-//     already in the draft when it was opened.
-//   - fixes: what autocorrect changed and where it is now, for the Recently fixed list and Undo. An entry is dropped as soon as the
-//     user edits those words themselves.
-//   - batch: the last set of fixes with the text before and after, to tell when Ctrl+Z has taken it back (so it is not fixed again).
+// Autocorrect in the editor. Kept in the editor state, so opening another draft forgets it:
+//   - touched: the text the user typed or pasted. Autocorrect never fixes text that was already in the draft;
+//   - fixes: what was changed, for the Recently fixed list and Undo;
+//   - batch: the last set of fixes, to tell when Ctrl+Z took it back so it is not fixed again.
 
 // Marks a transaction autocorrect made. Its value is the list of fixes, with their positions in the new text.
-export const autoFix = Annotation.define();
+const autoFix = Annotation.define();
 
 let nextId = 1;
 

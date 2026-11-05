@@ -1,16 +1,11 @@
 name: PR title
 
-# Enforces the PR title convention (Conventional Commits: `type(scope)!: summary`) and labels the PR
-# from it. Squash merges use the title as the commit subject and the release notes (.github/release-drafter.yml)
-# group PRs by title type, so a good title is what makes the notes readable.
-#   - check title: amannn/action-semantic-pull-request validates the title. Runs for every PR.
-#   - label: release-drafter's autolabeler adds the label from the title (rules and the type -> label
-#     table in .github/release-drafter.yml) and, with sync-labels, drops a stale one when the title is
-#     edited. Labelling needs write access, so it is skipped for fork PRs.
+# Enforces the PR title convention (`type(scope)!: summary`) and labels the PR from it. Squash merges use the title as the commit
+# subject and the release notes group PRs by its type (.github/release-drafter.yml).
+#   - check title: validates the title. Runs for every PR; make it a required check to enforce it on merge.
+#   - label: release-drafter's autolabeler sets the label and drops a stale one when the title is edited. Skipped for fork PRs.
 #   - Skipped: bot/* branches.
-#   - Make "check title" a required status check in the branch rules to enforce it on merge.
-# synchronize matters: a required status check is attached to the head commit, and update-branches.yml
-# pushes a merge commit to open PRs, so every new head needs its own run or the check stays "Expected".
+# It runs on synchronize because a required check belongs to the head commit, and update-branches.yml pushes a new one.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]

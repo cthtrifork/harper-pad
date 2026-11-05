@@ -3,9 +3,8 @@
 #
 #   scripts/package-windows.sh <version> <out-dir>
 #
-# Writes <out-dir>/harper-pad_windows_amd64.exe: the one Windows file the release ships, and the one the in-app
-# updater installs (see docs/self-update.md; the name is an interface). Runs on a Windows runner (Git Bash) and on
-# Linux too, because the Windows GUI build needs no cgo. Needs the wails3 CLI on PATH.
+# Writes <out-dir>/harper-pad_windows_amd64.exe, the one Windows file the release ships and the in-app updater installs (the name is
+# an interface, see docs/self-update.md). The GUI build needs no cgo, so it also runs on Linux. Needs the wails3 CLI on PATH.
 set -euo pipefail
 
 version="${1:?usage: package-windows.sh <version> <out-dir>}"

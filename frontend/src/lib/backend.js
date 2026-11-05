@@ -1,9 +1,8 @@
-// Where the app keeps its data and asks its host for things. There are two builds of the same frontend:
-//   - desktop (`vite build`): the Go side, through the Wails bindings. The database lives in the user's data folder.
-//   - web (`vite build --mode web`, deployed to GitHub Pages): no Go side. The same data is kept in the browser's IndexedDB.
-// Everything else in the frontend goes through this file, so nothing else needs to know which build it is in.
-//
-// The bindings are imported on demand and only in the desktop build, so the web bundle carries no Wails code.
+// Where the app keeps its data and asks its host for things. Two builds share the frontend:
+//   - desktop: the Go side, through the Wails bindings;
+//   - web (GitHub Pages): no Go side, the same data in IndexedDB.
+// Everything else goes through this file, so nothing else needs to know the build. The bindings are imported on demand, so the web
+// bundle carries no Wails code.
 
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
@@ -93,11 +92,8 @@ export async function saveDraft(draft) {
   return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(draft);
 }
 
-// Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. With `saveAs`, or when the draft was
-// never saved to a file, the user picks the file (`cancelled` is true when they close the dialog); otherwise the file it was
-// saved to before is overwritten. The returned draft carries `filePath`. On desktop the path never comes from the page.
-// When the file was changed by something else since it was last written, nothing is written and `conflict` is true, unless
-// `overwrite` is set.
+// Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. `conflict` is true when something
+// else changed the file since it was written, unless `overwrite` is set.
 export async function saveDraftToFile(draft, saveAs, overwrite = false) {
   if (!isWeb) return (await bindings()).DraftService.SaveDraftToFile(draft, saveAs, overwrite);
   return saveWebFile(

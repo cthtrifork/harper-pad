@@ -1,16 +1,10 @@
 name: Update branches
 
-# Keeps the repository owner's open pull requests current with main: after every push to main, each
-# open PR by the owner (cthtrifork; this is a personal account) whose branch is behind main gets main
-# merged into it (GitHub's "Update branch" button, through the API), so CI runs again on the result
-# and the PR stays mergeable under "Require branches to be up to date". Personal accounts have no
-# merge queue, and GitHub has no setting that does this.
-#   - Skipped: PRs by anyone else (Renovate and the other bots included), PRs from forks, drafts, PRs
-#     with merge conflicts (the update fails and is listed in the job summary), and branches named
-#     renovate/* or bot/*, which Renovate and Renovate owns and rewrite themselves.
-#   - The update is pushed as the Renovate GitHub App (the token needs Contents and Pull requests
-#     write), not as GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no workflows, so CI would not
-#     run on the updated branch.
+# Keeps the owner's open pull requests current with main: after every push to main, each open PR whose branch is behind gets main
+# merged into it, so CI runs again and the PR stays mergeable under "Require branches to be up to date". A personal account has no
+# merge queue.
+#   - Skipped: PRs by anyone else, from forks, drafts, with merge conflicts (listed in the job summary), and renovate/* or bot/*.
+#   - Pushed as the Renovate GitHub App, not GITHUB_TOKEN, because a push with GITHUB_TOKEN starts no workflows.
 #   - Each push to main re-runs CI on every behind PR. That is the price of "always up to date".
 on:
   push:

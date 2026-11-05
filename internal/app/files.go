@@ -63,13 +63,10 @@ func pickSavePath(suggested, dir string) (string, error) {
 	return d.PromptForSingleSelection()
 }
 
-// SaveDraftToFile saves the draft's text to a file, and the draft itself in the database as SaveDraft does, so the draft stays
-// in the scratch pad and remembers the file. With saveAs, or when the draft was never saved to a file, the user picks the file in
-// a dialog; otherwise the file it was saved to before is overwritten. The path is never taken from the page: it comes from the
-// dialog, or from what the database holds for the draft.
+// SaveDraftToFile saves the draft's text to a file as well as to the database. With saveAs, or when the draft has no file yet, the
+// user picks one in a dialog. The path never comes from the page.
 //
-// When the file was changed by something else since this app last wrote it, nothing is written and Conflict is true, unless
-// overwrite is set (the page sets it when the user saves again after being told). A file that is gone is simply written again.
+// When something else changed the file since this app wrote it, nothing is written and Conflict is true, unless overwrite is set.
 func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (FileSave, error) {
 	st, err := s.db.open()
 	if err != nil {
@@ -135,10 +132,9 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 	return FileSave{Draft: saved}, nil
 }
 
-// writeFileAtomic writes to a temporary file beside path and renames it over path, so a crash or a full disk never leaves a
-// half-written file. A symbolic link is followed, so the link stays a link. An existing file keeps its permissions; a new one is
-// readable by everyone, as an editor would make it. When a temporary file cannot be used (a read-only folder holding a writable
-// file, or a rename a program on Windows blocks) an existing file is written in place instead.
+// writeFileAtomic writes to a temporary file beside path and renames it over path, so a crash never leaves a half-written file.
+// Symbolic links are followed and an existing file keeps its permissions. Where a temporary file cannot be used (a read-only
+// folder, a rename Windows blocks) an existing file is written in place instead.
 func writeFileAtomic(path string, data []byte) error {
 	if real, err := filepath.EvalSymlinks(path); err == nil {
 		path = real

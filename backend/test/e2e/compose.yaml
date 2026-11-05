@@ -1,9 +1,9 @@
-# End-to-end stack (docs/sync.md, "End-to-end test"): PostgreSQL, harper-pad-sync and Caddy providing https.
-# Plain compose spec, so `podman compose` and `docker compose` both read it. Test-only credentials; never reuse them.
+# End-to-end stack (docs/sync.md, "End-to-end test"): PostgreSQL, harper-pad-sync and Caddy providing https. A plain compose spec, so
+# podman and docker both read it. Test-only credentials; never reuse them.
 #
 #   https://app.localhost:${E2E_PORT:-18443}   the web build (frontend/dist-web, built by `make e2e-web`)
 #   https://sync.localhost:${E2E_PORT:-18443}  harper-pad-sync, through Caddy
-# Only https is published: unlike the production ingress there is no port 80 and no redirect from http.
+# Only https is published: there is no port 80 and no redirect.
 name: harper-pad-e2e
 
 volumes:
@@ -12,10 +12,9 @@ volumes:
 services:
   postgres:
     image: mirror.gcr.io/library/postgres:17
-    # First makes the CA, the server certificate and the client certificates into the pgcerts volume (certs.sh, run as root), then
-    # starts the image's own entrypoint, which drops to the postgres user. TLS is required, and pg_hba.conf (made by certs.sh) lets
-    # the role in only with a client certificate whose common name is the role, as the CloudNativePG cluster does (docs/sync.md,
-    # "Database access"). The password only satisfies the image's init script; no login uses it.
+    # Makes the CA and certificates into the pgcerts volume (certs.sh), then starts the image's entrypoint. TLS is required and the role
+    # logs in only with a client certificate whose common name is the role, as the CloudNativePG cluster does (docs/sync.md, "Database
+    # access"). The password only satisfies the image's init script.
     user: "0:0"
     entrypoint: ["/bin/sh", "-c", "/certs.sh && exec docker-entrypoint.sh \"$$@\"", "sh"]
     command:

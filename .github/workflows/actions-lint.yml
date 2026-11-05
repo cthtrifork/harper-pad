@@ -1,14 +1,11 @@
 name: Actions lint
 
 # Static checks on the workflows themselves:
-#   - zizmor finds security problems in workflows and composite actions (injection, excessive
-#     permissions, cache poisoning, unpinned or impostor action refs, ...).
-#   - gh-pin-actions checks that every `uses:` is pinned to a commit SHA with a version comment, and
-#     that it is the latest release. Pull requests only, and only the workflows the PR adds or changes.
-#   - renovate-config validates .github/renovate.json5 with renovate-config-validator.
-# They run when workflow, action or Renovate files change, and weekly, because new zizmor audits
-# and advisories appear without any change here. They use a paths filter, so do not mark them as
-# required checks.
+#   - zizmor finds security problems in workflows (injection, excessive permissions, unpinned actions, ...).
+#   - gh-pin-actions checks that every `uses:` is pinned to a commit SHA with a version comment, and is the latest release.
+#   - renovate-config validates .github/renovate.json5.
+# They run when workflow, action or Renovate files change, and weekly because new zizmor audits appear without any change here.
+# They have a paths filter, so do not mark them as required checks.
 on:
   pull_request:
     paths:
@@ -67,10 +64,8 @@ jobs:
         with:
           files: .github/workflows/**.{yml,yaml}
 
-      # --latest re-pins every `uses:` in .github/workflows to the newest release (SHA plus version
-      # comment). The tool always rewrites all workflows; the next step only looks at the ones the
-      # pull request adds or changes, so a release of an action elsewhere does not fail unrelated PRs,
-      # and only fails on a different version, not on the tool's SHA to tag rewrite.
+      # --latest re-pins every `uses:` to the newest release. The tool rewrites all workflows, but the next step only checks the ones
+      # the PR changes, so a new release of an action elsewhere does not fail unrelated PRs.
       - name: Pin actions
         if: steps.changed.outputs.any_changed == 'true'
         env:

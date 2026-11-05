@@ -32,11 +32,9 @@ function loadPlaywright() {
   throw new Error("Playwright not found: set PLAYWRIGHT_DIR or install playwright-core globally");
 }
 
-// Caddy signs the two sites with its own local CA (`tls internal`). Instead of ignoring every certificate error, which would also
-// hide a broken chain, a wrong name or an expired certificate (and makes service workers fail), Chromium is told to accept
-// chains that contain Caddy's CA key and nothing else: --ignore-certificate-errors-spki-list takes the SHA-256 of a public key in
-// the chain. Caddy sends the leaf and its intermediate but not the root, so the intermediate's key is the one to give. It is read
-// from the running Caddy.
+// Caddy signs the two sites with its own local CA. Instead of ignoring every certificate error (which would hide a broken chain or a
+// wrong name, and makes service workers fail), Chromium accepts chains containing Caddy's intermediate key
+// (--ignore-certificate-errors-spki-list). Caddy does not send the root, so the intermediate's key is read from the running Caddy.
 function caddyCaSpkiHash() {
   for (let i = 0; i < 30; i++) {
     const r = compose("caddy", ["cat", "/data/caddy/pki/authorities/local/intermediate.crt"]);

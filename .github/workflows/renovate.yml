@@ -1,20 +1,14 @@
 name: Renovate
 
-# Self-hosted Renovate (renovatebot/github-action) keeps dependencies current: Go modules, the
-# frontend npm packages, Docker base images, the SHA-pinned Actions and the versions
-# marked `# renovate:` (Makefile, workflows). It replaces Dependabot. Config: .github/renovate.json5.
-#   - on a schedule (weekdays) and by hand, on the default branch only: opens or updates the update
-#     PRs and the "Dependency Dashboard" issue. Patch and digest updates automerge (renovate.json5).
-#   - on a pull request that changes the config or this workflow: a dry run, which writes nothing and
-#     shows what Renovate would do on the PR's branch in the job summary (the full debug log is in
-#     the step output). Read it to check a config change.
-# The real run authenticates as a GitHub App (renovatebot/github-action "Example with GitHub App"),
-# not with GITHUB_TOKEN: PRs opened with GITHUB_TOKEN do not start other workflows, so CI would not run
-# on them and an automerge would have no checks to wait for. Setup: create a GitHub App with the
-# permissions below, install it on this repository, then add the repository variable
-# RENOVATE_APP_CLIENT_ID and the secret RENOVATE_APP_PRIVATE_KEY (the downloaded .pem). Also require
-# the CI checks in branch protection. App permissions (repository): Contents, Pull requests, Issues,
-# Workflows and Commit statuses read & write; Checks and Dependabot alerts read.
+# Self-hosted Renovate keeps dependencies current (Go modules, npm, Docker images, pinned Actions and `# renovate:` versions).
+# Config: .github/renovate.json5.
+#   - on a schedule and by hand, on the default branch: opens the update PRs and the "Dependency Dashboard" issue.
+#   - on a pull request that changes the config or this workflow: a dry run that only reports in the job summary.
+# The real run authenticates as a GitHub App, not GITHUB_TOKEN: PRs opened with GITHUB_TOKEN start no workflows, so CI would not
+# run on them and an automerge would have no checks to wait for. Setup: create the App with the permissions below, install it, add
+# the variable RENOVATE_APP_CLIENT_ID and the secret RENOVATE_APP_PRIVATE_KEY, and require the CI checks in branch protection.
+# App permissions (repository): Contents, Pull requests, Issues, Workflows and Commit statuses read & write; Checks and
+# Dependabot alerts read.
 on:
   pull_request:
     paths:

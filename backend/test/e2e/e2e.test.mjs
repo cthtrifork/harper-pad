@@ -1,7 +1,5 @@
-// End-to-end test (docs/sync.md, "End-to-end test"). Run with `make e2e` from backend/, which builds the web app, starts the
-// compose stack, runs this file and removes the stack.
-//
-// Scaffold: the three smoke checks run against the stub service; the real checks are listed as todo.
+// End-to-end test (docs/sync.md, "End-to-end test"). Run with `make e2e` from backend/. Scaffold: the three smoke checks run
+// against the stub service; the real checks are listed as todo.
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { APP_URL, compose, launch, newDevice, SYNC_URL, waitForSync } from "./helpers.mjs";

@@ -1,10 +1,8 @@
-// Service worker for the web build (GitHub Pages), so Harper Pad opens offline once it has been loaded.
-// It is not registered by the desktop build.
-//   - Hashed files under assets/ (scripts, fonts, the Harper wasm) never change for a given name: cache first.
-//   - The page itself and the manifest and icons: network first, so a new deploy shows up on the next load; the
-//     cached copy is used when offline.
-//   - The head of main (/preview/) and a pull-request preview (/pr-<number>/) live on the same origin as production and so share its Cache Storage: each gets its own
-//     cache name, and a worker only ever deletes the caches of its own site.
+// Service worker for the web build (GitHub Pages), so Harper Pad opens offline after the first load. The desktop build has none.
+//   - Hashed files under assets/ never change: cache first.
+//   - The page, manifest and icons: network first, so a new deploy shows up on the next load.
+//   - Previews (/preview/, /pr-<number>/) share the origin and its Cache Storage with production, so each gets its own cache name
+//     and a worker only deletes the caches of its own site.
 const PREVIEW = /\/(pr-\d+|preview)\/$/.exec(self.registration.scope)?.[1] ?? "";
 const CACHE = PREVIEW ? `harper-pad-${PREVIEW}-v1` : "harper-pad-v1";
 const isOwn = (key) =>

@@ -1,11 +1,9 @@
 name: CI
 
-# Runs on every pull request and on pushes to main. There is deliberately no workflow-level paths filter, so the
-# aggregate checks "CI / lint" and "CI / test" can be required status checks. Instead the `changes` job works out which
-# parts of the repository a pull request touches, and every real job below runs only when its part changed. A skipped
-# job counts as passing for a required check, and the two aggregate jobs (`lint`, `test`) fail if any job they wait for
-# failed. Jobs that do not depend on each other run in parallel, so wall time is the slowest job. Pushes to main and
-# manual runs always run everything.
+# Runs on every pull request and on pushes to main. There is no workflow-level paths filter, so the aggregate checks "CI / lint" and
+# "CI / test" can be required. Instead the `changes` job works out which parts a PR touches and each job runs only when its part
+# changed; a skipped job counts as passing, and the aggregates fail if any job they wait for failed. Pushes to main and manual runs
+# run everything.
 on:
   pull_request:
   push:
@@ -429,11 +427,9 @@ jobs:
 
   # --- slow jobs ----------------------------------------------------------------------------------------------------
 
-  # The end-to-end test of the sync backend (docs/sync.md, "End-to-end test"): a compose stack with PostgreSQL, the sync
-  # service and Caddy, driven by Playwright with two browser contexts as devices. It runs when the backend or the frontend
-  # changes, because the test uses the real web build. `docker compose` is used here (preinstalled on the runner); the
-  # backend Makefile prefers podman, so COMPOSE is set explicitly. Chrome comes from the runner and only the pinned
-  # playwright-core package is installed, as in screenshots.yml.
+  # The end-to-end test of the sync backend (docs/sync.md, "End-to-end test"): a compose stack driven by Playwright with two browser
+  # contexts as devices. It runs when the backend or frontend changes, because it uses the real web build. COMPOSE is set to
+  # `docker compose` (the Makefile prefers podman); Chrome comes from the runner, as in screenshots.yml.
   e2e:
     name: e2e
     needs: changes

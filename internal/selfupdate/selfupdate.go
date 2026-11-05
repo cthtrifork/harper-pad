@@ -23,15 +23,8 @@ const (
 	ChecksumAsset = "SHA256SUMS"
 )
 
-// Enabled reports whether a build that identifies itself as version should be
-// able to update. This matters: the updater compares versions with x/mod/semver,
-// where an invalid string such as "dev" sorts below every real version, so a
-// development build would otherwise offer to replace itself with the newest
-// release.
-//
-// Release builds are always stamped with the git tag, which the release workflow
-// requires to be vMAJOR.MINOR.PATCH[-prerelease], so a leading "v" plus valid semver
-// is the whole test: "dev", "ci-<sha>" and the like are not release versions.
+// Enabled reports whether a build with this version may update. The updater sorts an invalid version such as "dev" below every
+// release, so a development build would otherwise replace itself with the newest one.
 func Enabled(version string) bool { return semver.IsValid(version) }
 
 // isArchive reports whether an asset name is an archive, a Linux package (.deb, .rpm) or the Windows
@@ -47,11 +40,8 @@ func isArchive(name string) bool {
 	return false
 }
 
-// MatchAsset picks the raw binary for the running platform. Archives and packages are
-// skipped on purpose: the release also ships a tarball and a zip (binary + README + LICENSE), the
-// .deb/.rpm packages and the Windows installer for people, but the updater can only install a single file or an archive with
-// exactly one top-level entry, and the default matcher would take whichever
-// matching asset GitHub lists first.
+// MatchAsset picks the raw binary for the running platform. Archives and packages are skipped on purpose: the updater can only
+// install a single file, and the default matcher would take whichever matching asset GitHub lists first.
 func MatchAsset(req updater.CheckRequest, assets []github.ReleaseAsset) int {
 	var plain []github.ReleaseAsset
 	var origin []int
@@ -70,10 +60,8 @@ func MatchAsset(req updater.CheckRequest, assets []github.ReleaseAsset) int {
 // ErrUnverified is returned for a release that carries no SHA-256 digest.
 var ErrUnverified = errors.New("release has no SHA-256 digest to verify the download against")
 
-// failClosed wraps a provider and refuses releases without a digest. The GitHub
-// provider silently omits verification when the checksum file is missing or has
-// no line for the chosen asset, and the updater would then install unchecked
-// bytes. For a program that replaces its own executable that must be an error.
+// failClosed wraps a provider and refuses releases without a digest. The GitHub provider silently skips verification when the
+// checksum is missing, which for a program that replaces its own executable must be an error.
 type failClosed struct{ updater.Provider }
 
 func (p failClosed) Check(ctx context.Context, req updater.CheckRequest) (*updater.Release, error) {
@@ -103,10 +91,8 @@ func NewProvider(baseURL string) (updater.Provider, error) {
 	return failClosed{gh}, nil
 }
 
-// Installable reports whether the updater could replace the executable at exe. It stages
-// the new binary in a directory beside it, so that directory must be writable. A copy
-// installed by a package manager (/usr/bin) is not, and should be updated by that package
-// manager instead. Inside an AppImage the updater replaces the .AppImage file itself.
+// Installable reports whether the updater could replace the executable at exe. It stages the new binary beside it, so that folder
+// must be writable; a package-manager install (/usr/bin) is not, and is updated by the package manager instead.
 func Installable(exe string) error {
 	if appImage := os.Getenv("APPIMAGE"); appImage != "" {
 		exe = appImage

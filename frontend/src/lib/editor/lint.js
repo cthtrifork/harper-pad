@@ -37,7 +37,7 @@ function toAction(fix) {
 
 // Dispatched to make the linter run again without a text change, for example when Harper has just finished loading or the
 // dictionary or the ignore list changed.
-export const relintEffect = StateEffect.define();
+const relintEffect = StateEffect.define();
 
 // Actions that change what Harper remembers: add the word to the dictionary (spelling only), or ignore this one
 // finding in its context (persist gets its hash and a label, so the list of ignored findings can say what it was). persist() saves the new state; the editor then lints again so the underline goes away.
@@ -65,10 +65,8 @@ function personalActions(harper, f, persist) {
   return actions;
 }
 
-// The lint source: runs Harper on the whole document (debounced by the linter extension) and maps the findings.
-// onResult gets the finding count and how long Harper took, for the status line.
-// `auto` is { prefs(), settle() }: the autocorrect choices, and a promise to wait for before linting (Harper being told to ignore
-// fixes that were undone, so the same finding is not fixed again).
+// The lint source: runs Harper on the whole document and maps the findings. `auto` is { prefs(), settle() }: the autocorrect
+// choices, and a promise to wait for before linting.
 export function harperSource(getHarper, onResult, persist, auto) {
   return linter(
     async (view) => {

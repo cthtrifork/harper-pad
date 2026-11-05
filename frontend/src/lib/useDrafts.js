@@ -10,8 +10,7 @@ import {
   searchDrafts,
 } from "./backend.js";
 
-// How long after the last keystroke the draft is saved (the 300 ms lint is separate). Kept short: a reload before the save has
-// started loses the text, because the flush on pagehide cannot finish writing to IndexedDB while the page is going away.
+// Kept short: the flush on pagehide cannot finish writing to IndexedDB, so a reload before the save has started loses the text.
 const SAVE_DELAY_MS = 100;
 const SEARCH_DELAY_MS = 200;
 const PAGE = 50; // drafts shown at first, and added by "Show more"
@@ -19,16 +18,11 @@ const TOAST_MS = 8000;
 
 const message = (err) => String(err?.message || err);
 
-// The drafts the app keeps for you: which one is open, saving it as you type, and the list in the drawer. `editor` is a ref
-// to the Editor component (getText, load), `drawerOpen` a ref that says whether the list is on screen (it is only fetched
-// then, because each fetch reads every listed draft).
+// The open draft, its autosave and the drawer list. `editor` is a ref to the Editor component, `drawerOpen` says whether the list is
+// on screen (it is only fetched then, because each fetch reads every listed draft).
 //
-// A draft can also be saved to a file (Ctrl+Shift+S the first time, then Ctrl+S): it stays a draft here, autosaved as before, and
-// remembers the file (`filePath`). Until it has been saved to a file, Ctrl+S only saves the draft; afterwards it writes the file.
-// The file is only written on request, never by the autosave.
-//
-// A draft is created by the first save, so an empty editor never leaves an empty draft behind. Saves run one after another,
-// and a save never covers text typed while it was running: that text gets its own save.
+// A draft can also be saved to a file (Ctrl+Shift+S, then Ctrl+S). That only happens on request, never by the autosave.
+// A draft is created by its first save, so an empty editor leaves none behind.
 export function useDrafts(editor, drawerOpen) {
   const current = ref({ id: "", createdAt: 0, format: "markdown", filePath: "" });
   const state = ref("idle"); // idle | dirty | saving | saved | error

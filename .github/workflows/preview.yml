@@ -1,12 +1,10 @@
 name: Preview
 
-# Opt-in preview of a pull request: add the `preview` label and the web version of the branch is published to
-# <site>/pr-<number>/ (https://harper.portableinfo.cloud/pr-123/), and a sticky comment links it. Every push to the branch updates it.
-# Removing the label, or closing or merging the pull request, deletes it. The site and the other previews are not touched.
-# See docs/pages.md for the setup, and for why a preview gets its own storage names.
+# Opt-in preview of a pull request: add the `preview` label and the branch's web version is published to <site>/pr-<number>/, with
+# a sticky comment linking it. Every push updates it; removing the label, or closing or merging the PR, deletes it. See
+# docs/pages.md for the setup and why a preview gets its own storage names.
 #
-# Only for branches of this repository: a pull request from a fork has a read-only token and cannot publish. Adding a label needs
-# triage access, which is the opt-in. The workflow file that runs is the one on the pull request's branch.
+# Only for branches of this repository (a fork's token is read-only). Adding a label needs triage access, which is the opt-in.
 on:
   pull_request:
     types: [labeled, unlabeled, synchronize, reopened, closed]

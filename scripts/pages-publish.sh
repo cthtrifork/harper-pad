@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Publishes to the gh-pages branch, which GitHub Pages serves (Settings > Pages > Source: Deploy from a branch). See docs/pages.md.
+# Publishes to the gh-pages branch, which GitHub Pages serves. See docs/pages.md.
 #
 #   pages-publish.sh site <dir>         replace the site root with <dir> (the latest release); preview/, pr-<n>/, CNAME and .nojekyll stay
 #   pages-publish.sh main <dir>         replace preview/ with <dir> (the head of main)
 #   pages-publish.sh preview <n> <dir>  replace pr-<n>/ with <dir>
 #   pages-publish.sh remove <n>         delete pr-<n>/ (nothing to do if it is not there)
 #
-# PAGES_REMOTE is the git URL to push to (CI puts the workflow token in it); it defaults to `origin`. PAGES_BRANCH defaults to gh-pages.
-# Each call only touches its own part of the branch, so a site deploy and a preview deploy racing each other just retry on top of one another.
+# PAGES_REMOTE is the git URL to push to (default `origin`), PAGES_BRANCH the branch (default gh-pages). Each call only touches its
+# own part of the branch, so racing deploys just retry on top of one another.
 set -euo pipefail
 
 usage="usage: pages-publish.sh site <dir> | main <dir> | preview <n> <dir> | remove <n>"
