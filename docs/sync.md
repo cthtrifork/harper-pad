@@ -535,8 +535,8 @@ assigns each draft a version, and it never merges, never makes copies and has no
 - **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS
   allows `Authorization`, `DPoP`, `Content-Type` and `If-None-Match`.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
-  `data` of a live draft must be the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`) with content of at most 5 MiB
-  (`internal/protocol`); a tombstone must have empty `data`. A page of `GET /docs` is 500 drafts by default and at most 1000 (`limit`);
+  `data` of a live draft must be the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`) and at most 8 MiB, the only size
+  limit (the app enforces its own 5 MB on the text); a tombstone must have empty `data`. A page of `GET /docs` is 500 drafts by default and at most 1000 (`limit`);
   a page shorter than the limit is the last. A 409 on a `PUT` carries `current`, the server's copy, unless the server has none.
 - **Errors** are `application/problem+json` (`title`, `status`, `detail`). A credential failure (no or bad proof, a replayed proof, an
   unknown or revoked token, the wrong key, a wrong, spent or expired invite) is always `{"title":"Unauthorized","status":401,"detail":"unauthorized"}`:
