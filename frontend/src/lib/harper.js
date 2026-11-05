@@ -41,5 +41,5 @@ export async function connect(worker) {
   return linter;
 }
 
-// Lint the text and return plain findings (see harperWorker.js).
+// Lint the text and return plain findings (see harperCore.js).
 export const lintText = (linter, text) => linter.lintPlain(text);
