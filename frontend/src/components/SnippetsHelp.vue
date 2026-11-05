@@ -21,7 +21,7 @@ const emit = defineEmits(["back"]);
           <code class="trigger">{{ s.trigger }}</code>
           <span class="about">{{ s.about }}</span>
         </div>
-        <pre class="mock" aria-label="Result">{{ s.before }}<mark v-if="s.mid">{{ s.mid }}</mark><span v-else class="caret" aria-hidden="true"></span>{{ s.after }}</pre>
+        <pre class="mock">{{ s.before }}<mark v-if="s.mid">{{ s.mid }}</mark><span v-else class="caret" aria-hidden="true"></span>{{ s.after }}</pre>
       </li>
     </ul>
   </section>
