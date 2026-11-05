@@ -46,6 +46,16 @@ type DocWrite struct {
 	Data      string
 }
 
+// docRow reads one draft of the client account; lock adds FOR UPDATE (inside a transaction).
+func docRow(ctx context.Context, q interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, clientID int64, id string, lock string) (Doc, error) {
+	d := Doc{ID: id}
+	err := q.QueryRow(ctx, `SELECT version, created_at, updated_at, deleted, data FROM docs WHERE client_id = $1 AND id = $2 `+lock,
+		clientID, id).Scan(&d.Version, &d.CreatedAt, &d.UpdatedAt, &d.Deleted, &d.Data)
+	return d, err
+}
+
 // ListDocs returns the states of up to limit drafts of the client account whose id sorts after `after`, in id order. Tombstones are
 // included and no text is read.
 func (s *Sync) ListDocs(ctx context.Context, clientID int64, after string, limit int) ([]DocState, error) {
@@ -69,10 +79,7 @@ func (s *Sync) ListDocs(ctx context.Context, clientID int64, after string, limit
 
 // GetDoc returns one draft of the client account, tombstones included.
 func (s *Sync) GetDoc(ctx context.Context, clientID int64, id string) (Doc, error) {
-	d := Doc{ID: id}
-	err := s.db.QueryRow(ctx, `
-		SELECT version, created_at, updated_at, deleted, data FROM docs WHERE client_id = $1 AND id = $2`,
-		clientID, id).Scan(&d.Version, &d.CreatedAt, &d.UpdatedAt, &d.Deleted, &d.Data)
+	d, err := docRow(ctx, s.db, clientID, id, "")
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Doc{}, ErrDocNotFound
 	}
@@ -92,11 +99,7 @@ func (s *Sync) PutDoc(ctx context.Context, clientID int64, id string, base DocBa
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	cur := Doc{ID: id}
-	err = tx.QueryRow(ctx, `
-		SELECT version, created_at, updated_at, deleted, data FROM docs
-		WHERE client_id = $1 AND id = $2 FOR UPDATE`, clientID, id).
-		Scan(&cur.Version, &cur.CreatedAt, &cur.UpdatedAt, &cur.Deleted, &cur.Data)
+	cur, err := docRow(ctx, tx, clientID, id, "FOR UPDATE")
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if base.Version != 0 {
@@ -111,10 +114,7 @@ func (s *Sync) PutDoc(ctx context.Context, clientID int64, id string, base DocBa
 			return Doc{}, err
 		}
 		if tag.RowsAffected() == 0 {
-			err = tx.QueryRow(ctx, `
-				SELECT version, created_at, updated_at, deleted, data FROM docs WHERE client_id = $1 AND id = $2`, clientID, id).
-				Scan(&cur.Version, &cur.CreatedAt, &cur.UpdatedAt, &cur.Deleted, &cur.Data)
-			if err != nil {
+			if cur, err = docRow(ctx, tx, clientID, id, ""); err != nil {
 				return Doc{}, err
 			}
 			return cur, ErrConflict
