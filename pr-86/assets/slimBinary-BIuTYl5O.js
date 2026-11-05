@@ -1,1 +1,0 @@
-import{t as e}from"./BinaryModule-S5UABkWQ-DnNaiHb7.js";var t=``+new URL(`/pr-86/assets/harper_wasm_slim_bg-DKTIi68_.wasm`,``+import.meta.url).href,n=e.create(t,`slim`);export{n as slimBinary};
