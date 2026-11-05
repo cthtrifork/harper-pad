@@ -1,12 +1,8 @@
 name: Backend images
 
-# Checks the two backend container images (backend/Containerfile.sync and .admin) the way the images are
-# shipped: built, scanned with Trivy and started. Nothing is published from here. The release workflow
-# (release.yml) builds and pushes them to ghcr.io when a version is cut, so an image only exists for a
-# released commit. Runs for pull requests that touch backend/ (do not mark it required: it has a paths
-# filter), weekly (a new base-image CVE needs no commit to appear), and by hand. Not on pushes to main:
-# that would build the same images again for nothing the pull request did not already show.
-# See backend/README.md, "Images".
+# Checks the two backend container images (backend/Containerfile.sync and .admin) the way they are shipped: built, scanned with
+# Trivy and started. Nothing is published from here; release.yml pushes them to ghcr.io. Runs for pull requests that touch backend/
+# (not a required check: it has a paths filter), weekly (a new base-image CVE needs no commit) and by hand. See backend/README.md.
 on:
   pull_request:
     paths:

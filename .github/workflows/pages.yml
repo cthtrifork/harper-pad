@@ -1,16 +1,12 @@
 name: Pages
 
-# Builds the web version of the frontend (`vite build --mode web`, see docs/pages.md) and publishes it to the gh-pages branch, which follows
-# the versions of the app:
-#   - /          the latest release. release.yml calls this workflow (workflow_call) once a final release is published, with its tag;
-#                running it by hand on a tag ref (Actions > Pages > Run workflow, "Use workflow from" a tag) redeploys that version.
-#   - /preview/  the head of main, on every push to main that touches the frontend (or a manual run on a branch).
-#   - /pr-<n>/   opt-in previews of a pull request (preview.yml); this workflow leaves them alone.
-# Pull requests only build it, so a broken web build is caught before merge.
-# The site is https://<owner>.github.io/harper-pad/, or the repository's custom domain (Settings > Pages) at its root; the build reads
-# which one from the Pages settings (configure-pages), so nothing here names a domain.
+# Builds the web version of the frontend (docs/pages.md) and publishes it to the gh-pages branch:
+#   - /          the latest release (release.yml calls this once a final release is published). Run by hand on a tag to redeploy it.
+#   - /preview/  the head of main, on every push that touches the frontend.
+#   - /pr-<n>/   opt-in previews of a pull request (preview.yml); left alone here.
+# Pull requests only build it, so a broken web build is caught before merge. The build reads the site URL from the Pages settings.
 #
-# One-time setup: Settings > Pages > Build and deployment > Source: Deploy from a branch, branch gh-pages, folder / (root).
+# One-time setup: Settings > Pages > Source: Deploy from a branch, gh-pages, / (root).
 on:
   pull_request:
     paths:

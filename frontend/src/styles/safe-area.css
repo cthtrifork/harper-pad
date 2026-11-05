@@ -1,8 +1,6 @@
-/* viewport-fit=cover makes the page full screen on an iPhone: it reaches under the home indicator and, turned sideways, under the notch.
-   The header and the status bar keep their panel colour into those areas and pad their content clear of them. With the default status
-   bar style the page starts below the status bar, so the top inset is 0 there (measured on an iPhone with a Dynamic Island); it is still
-   added, in case a device or a style gives one. Every inset is 0 in a desktop window, so nothing changes there. Loaded last to win over
-   the shorthands above. */
+/* viewport-fit=cover makes the page full screen on an iPhone, under the home indicator and (sideways) the notch. The header and status
+   bar keep their panel colour into those areas and pad their content clear of them. Every inset is 0 in a desktop window. Loaded last
+   to win over the shorthands above. */
 .bar {
   height: calc(48px + env(safe-area-inset-top));
   padding-top: env(safe-area-inset-top);
@@ -75,11 +73,9 @@ html {
   }
 }
 
-/* Installed on an iPhone, the page starts below the status bar (the safe-area inset is 0 there; measured on an iPhone with a Dynamic
-   Island: window 812 pt high on an 874 pt screen), but iOS fades the first stretch of the page under the bar, about 24 pt on that
-   phone (seen on a device): buttons and the count badge that start right at the top come out dim and blurry, where the same page in a
-   Safari tab is crisp. The header's top padding keeps its content below that. Only the installed app, in portrait (landscape has no
-   status bar), on the phone layout. --edge-fade is the fade's height as seen on the one device; it is not an Apple value. */
+/* Installed on an iPhone, iOS fades the first stretch of the page under the status bar (about 24 pt on the one phone measured), so
+   buttons at the very top look dim and blurry. The header's top padding keeps its content below that. Only the installed app, in
+   portrait, on the phone layout. --edge-fade is that measured height, not an Apple value. */
 @media ((max-width: 720px) or ((pointer: coarse) and (max-height: 500px))) and (display-mode: standalone) and (orientation: portrait) {
   .bar {
     --edge-fade: 24px;

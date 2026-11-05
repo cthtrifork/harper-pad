@@ -1,10 +1,9 @@
 #!/bin/sh
-# Throwaway certificates for the end-to-end stack, made inside the stack (the postgres image has openssl) and kept in the
-# `pgcerts` volume, so no tool is needed on the host. Test-only; never reuse them. Mirrors the production layout of
-# docs/sync.md, "Database access": one CA, a server certificate, and a client certificate whose common name is the role.
+# Throwaway certificates for the end-to-end stack, made inside the stack and kept in the `pgcerts` volume, so no tool is needed on the
+# host. Test-only; never reuse them. Mirrors docs/sync.md, "Database access": one CA, a server certificate, and client certificates
+# whose common name is the role.
 #
-# The files are made in a work directory on the same volume with their final permissions and then renamed into place, so a
-# service that starts early (podman-compose does not wait for depends_on conditions) never reads a half-made file.
+# The files are made in a work directory and renamed into place, so a service that starts early never reads a half-made file.
 set -eu
 # Several services depend on this one and the runtime may start it again for each of them; a second run would replace the CA
 # that PostgreSQL has already loaded, so do nothing once the last file exists.

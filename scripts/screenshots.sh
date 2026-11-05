@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Renders docs/screenshots/*.png from the headless server build (no GTK, no window).
-# Needs Go, Node 20+ and Playwright. Playwright comes from PLAYWRIGHT_VERSION (pinned in
-# .github/workflows/screenshots.yml; installed into a temp dir) or from a global install. Set
-# SCREENSHOT_BROWSER_CHANNEL=chrome to drive an installed Google Chrome instead of Playwright's Chromium.
+# Renders docs/screenshots/*.png from the headless server build (no GTK, no window). Needs Go, Node 20+ and Playwright (from
+# PLAYWRIGHT_VERSION, pinned in .github/workflows/screenshots.yml, or a global install). Set SCREENSHOT_BROWSER_CHANNEL=chrome to
+# use an installed Google Chrome.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

@@ -1,10 +1,5 @@
-// Package store is the app's database: one SQLite file in the user's data folder that holds the drafts and the settings
-// (the personal dictionary and the ignored findings).
-//
-// It uses the pure-Go driver, so there is no cgo. A row of drafts is an id, two timestamps and the draft itself as a JSON
-// blob; the title, excerpt and task preview are worked out from the content when listing, not stored. Settings are
-// key/value text. The journal is SQLite's default rollback journal, so there are no -wal or -shm files beside the
-// database, and a crash leaves the last committed state.
+// Package store is the app's database: one SQLite file in the user's data folder holding the drafts and the settings. It uses the
+// pure-Go driver (no cgo) and the default rollback journal, so no -wal or -shm files appear beside it.
 package store
 
 import (
@@ -26,11 +21,10 @@ import (
 const schemaVersion = 2
 
 // dsnOptions are applied to every connection the driver opens:
-//   - busy_timeout: wait up to 5 s for a lock (another instance of the app) instead of failing at once;
-//   - foreign_keys: enforce foreign keys if the schema ever gets any (SQLite leaves them off by default);
+//   - busy_timeout: wait for a lock (another instance of the app) instead of failing at once;
+//   - foreign_keys: SQLite leaves them off by default;
 //   - trusted_schema off: SQL functions in views and triggers stored in the file cannot run unless they are safe;
-//   - _txlock=immediate: a transaction takes the write lock when it begins, so it cannot fail halfway with SQLITE_BUSY
-//     when it tries to upgrade from a read to a write.
+//   - _txlock=immediate: a transaction takes the write lock at the start, so it cannot hit SQLITE_BUSY halfway.
 const dsnOptions = "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=trusted_schema(0)&_txlock=immediate"
 
 var (

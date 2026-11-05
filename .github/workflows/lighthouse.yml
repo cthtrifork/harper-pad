@@ -1,13 +1,8 @@
 name: Lighthouse
 
-# Scores the UI (performance, accessibility, best practices, SEO; mobile and desktop) with Lighthouse
-# and fails when a median score drops below the thresholds in scripts/lighthouse.mjs. The audited app
-# is the headless server build (scripts/lighthouse.sh), so it needs no GTK or window.
-#
-# On pull requests it posts the scores as one sticky PR comment (marker `<!-- lighthouse-score -->`,
-# updated on every push) and as the job summary. Fork PRs have a read-only token, so
-# they get the job summary only.
-# It has a paths filter, so do not mark it as a required check.
+# Scores the UI with Lighthouse (mobile and desktop) and fails when a median score drops below the thresholds in
+# scripts/lighthouse.mjs. It audits the headless server build, so it needs no GTK or window. On pull requests it posts the scores as
+# one sticky comment (fork PRs get the job summary only). It has a paths filter, so do not mark it as a required check.
 on:
   pull_request:
     paths:

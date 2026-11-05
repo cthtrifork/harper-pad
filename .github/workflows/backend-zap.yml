@@ -1,13 +1,11 @@
 name: Backend ZAP scan
 
-# OWASP ZAP against the sync backend, for the OWASP Top 10 classes a scanner can see from outside (injection, broken access
-# control, security misconfiguration, SSRF; see backend/test/zap/rules.tsv for the mapping). It starts the end-to-end compose
-# stack (backend/test/e2e) and runs ZAP's full scan (spider, passive and active rules) against harper-pad-sync on the compose
-# network, then keeps the HTML and JSON reports as an artifact, annotates the run, writes a table to the job summary, uploads SARIF to code scanning and keeps one comment on the pull request up to date. Rules marked FAIL in rules.tsv fail the job; everything else is
-# listed in the job summary. The active scan sends attacks, so it only ever targets this throwaway stack. Runs for pull requests that
-# touch backend/ (do not mark it required: it has a paths filter), weekly (new rules appear without any commit) and by hand.
-# What it cannot find: logic flaws in the sync protocol. The scanner knows nothing of it, so the API scan should be
-# pointed at an OpenAPI description once docs/sync.md has one.
+# OWASP ZAP against the sync backend, for the OWASP Top 10 classes a scanner can see from outside (see backend/test/zap/rules.tsv).
+# It starts the end-to-end compose stack and runs ZAP's full scan against harper-pad-sync, then keeps the reports as an artifact,
+# writes the job summary, uploads SARIF and keeps one PR comment up to date. Rules marked FAIL in rules.tsv fail the job. The active
+# scan sends attacks, so it only ever targets this throwaway stack. Runs for pull requests that touch backend/ (not a required
+# check: it has a paths filter), weekly (new rules appear without a commit) and by hand.
+# It cannot find logic flaws in the sync protocol until the API scan is pointed at an OpenAPI description (docs/sync.md).
 on:
   pull_request:
     paths:

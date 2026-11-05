@@ -1,9 +1,7 @@
 name: Release Drafter
 
-# Keeps a draft release up to date as PRs merge: notes grouped by .github/release-drafter.yml and the
-# next version worked out from the merged PR titles. The draft is a preview and the source of the next
-# version for "Tag and release" (when no tag is given); nothing is published from here. release.yml publishes the
-# release, with the build attached, when a release is cut.
+# Keeps a draft release up to date as PRs merge: notes grouped by .github/release-drafter.yml and the next version worked out from
+# the PR titles. The draft is the source of the next version for "Tag and release"; nothing is published from here.
 on:
   push:
     branches: [main]

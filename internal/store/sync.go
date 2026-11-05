@@ -10,18 +10,11 @@ import (
 	"unicode/utf8"
 )
 
-// What the optional sync (docs/sync.md) needs from the local database, kept apart from the drafts so that nothing changes for
-// someone who leaves sync off and so that an older build, which knows nothing of it, can still use the file:
-//
-//   - sync_state has one row per draft the server knows about: the hash of the text and format at the last sync, the server's
-//     updated_at and deleted flag for it, and its version (the base of the next write). It is not a column of drafts because
-//     an older build rewrites a draft row without touching columns it does not know, but it must not be able to lose this.
-//   - A change is found by comparing hashes, never by a flag the app has to remember to set, so an edit made by an older build is
-//     seen too.
-//   - A delete leaves no record of its own: it is a sync_state row with no draft (and deleted = 0), so a delete made by an older
-//     build is a pending delete as well.
+// What the optional sync (docs/sync.md) needs locally. It lives apart from the drafts so that leaving sync off changes nothing and
+// an older build can still use the file. Changes are found by comparing hashes, so edits and deletes made by an older build are
+// seen too; a delete is a sync_state row whose draft is gone.
 
-// syncStateDDL creates the table (see Store.ensureSyncState). There is no foreign key to drafts: a row outlives its draft.
+// syncStateDDL creates the table (see Store.ensureSyncState). No foreign key: a row outlives its draft.
 const syncStateDDL = `CREATE TABLE IF NOT EXISTS sync_state (
 	id         TEXT PRIMARY KEY,
 	hash       TEXT    NOT NULL,
@@ -30,9 +23,7 @@ const syncStateDDL = `CREATE TABLE IF NOT EXISTS sync_state (
 	version    INTEGER NOT NULL
 ) STRICT, WITHOUT ROWID`
 
-// SyncState is what the server held for a draft at the last sync. Hash is ContentHash of the draft then ("" when the server's
-// copy is a tombstone), UpdatedAt the server's updated_at (Unix ms), Deleted whether the server's copy was a tombstone, and Version
-// the server's version, which is the base of the next write.
+// SyncState is what the server held for a draft at the last sync. Version is the base of the next write.
 type SyncState struct {
 	Hash      string
 	UpdatedAt int64
@@ -133,9 +124,8 @@ func (s *Store) Changes() (Changes, error) {
 	return out, del.Err()
 }
 
-// ApplyRemote stores a draft as the server has it: with the server's timestamps (Save would set updated_at to now) and the
-// summary recomputed, and it records the state as synced, so the draft does not count as changed. The file link of an existing
-// draft is kept. It checks what Save checks. The stored draft is returned.
+// ApplyRemote stores a draft as the server has it, with the server's timestamps, and records it as synced. An existing draft keeps
+// its file link.
 func (s *Store) ApplyRemote(d Draft, version int64) (Draft, error) {
 	if err := checkDraft(&d); err != nil {
 		return Draft{}, err
@@ -173,9 +163,8 @@ func (s *Store) ApplyRemote(d Draft, version int64) (Draft, error) {
 	return s.Get(d.ID)
 }
 
-// ApplyRemoteDelete removes a draft because the server's copy is a tombstone, and records that the server has it deleted, so it
-// is not a pending delete. A draft that is not there is not an error. updatedAt is the server's. The file the draft was saved to
-// is not touched, as with any delete.
+// ApplyRemoteDelete removes a draft whose server copy is a tombstone, and records that so it is not a pending delete. A missing
+// draft is not an error, and the file the draft was saved to is left alone.
 func (s *Store) ApplyRemoteDelete(id string, version, updatedAt int64) error {
 	if !idPattern.MatchString(id) {
 		return fmt.Errorf("%q is not a draft id", id)

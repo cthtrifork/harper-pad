@@ -1,16 +1,13 @@
 name: Release
 
-# Publishes a GitHub release (and the two backend container images on ghcr.io) with a Linux amd64 binary, a tarball, a .deb and an .rpm (PGP-signed,
-# with the public key published alongside), a Windows amd64 exe (Authenticode-signed once SignPath is set up), SHA256SUMS, a CycloneDX SBOM and
-# signed attestations (build provenance for the binaries, tarball, packages and SBOM; the SBOM bound to the
-# Linux binary). The in-app updater installs the raw binary of its platform and verifies it against SHA256SUMS, so those
-# names are an interface. Three ways to run it:
-#   - the "Tag and release" workflow calls this one (workflow_call) with a new version and the commit
-#     to release. This is the normal route. The tag does not exist yet: the release is published with
-#     that commit as its target, and GitHub creates the tag then.
-#   - pushing a tag like v1.2.3 (or v1.2.3-rc.1 for a pre-release) from a machine, which triggers it
-#   - running it by hand (workflow_dispatch) on a branch for a dry run that builds but does not
-#     publish. Dispatched on a tag ref it publishes, which also retries a release that failed.
+# Publishes a GitHub release (and the two backend container images on ghcr.io) with signed Linux and Windows binaries, packages,
+# SHA256SUMS, an SBOM and attestations. The in-app updater installs the raw binary of its platform and verifies it against
+# SHA256SUMS, so those asset names are an interface. Three ways to run it:
+#   - the "Tag and release" workflow calls it (workflow_call) with a version and a commit. This is the normal route: the tag does
+#     not exist yet, and GitHub creates it when the release is published.
+#   - pushing a tag like v1.2.3 (or v1.2.3-rc.1) from a machine.
+#   - by hand (workflow_dispatch) on a branch for a dry run that builds but does not publish. On a tag ref it publishes, which
+#     also retries a failed release.
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+*']
@@ -214,10 +211,8 @@ jobs:
           cp "$built" "dist/${APP}_linux_amd64"
           tar -czf "dist/${APP}_${VERSION}_linux_amd64.tar.gz" -C "$(dirname "$built")" "$APP" -C "$PWD" README.md LICENSE
 
-      # The .deb and .rpm come from the same binary, via `wails3 tool package` (nfpm) and
-      # build/linux/nfpm/nfpm.yaml, which also installs the .desktop file and icons. A release is
-      # signed with the PGP key in the RELEASE_GPG_* secrets and fails without it; a dry run on a
-      # branch builds unsigned packages. The key only lives in RUNNER_TEMP for this step.
+      # The .deb and .rpm are built from the same binary with nfpm (build/linux/nfpm/nfpm.yaml). A release is signed with the PGP key
+      # in the RELEASE_GPG_* secrets and fails without it; a dry run builds unsigned packages. The key only lives in RUNNER_TEMP.
       - name: Build and sign the .deb and .rpm
         env:
           VERSION: ${{ needs.meta.outputs.version }}
@@ -244,10 +239,8 @@ jobs:
           fi
           scripts/package-linux.sh "$RUNNER_TEMP/build/${APP}" "$VERSION" dist
 
-      # CycloneDX SBOM from the lockfiles (go.mod/go.sum and frontend/package-lock.json), i.e. the Go
-      # modules and the npm packages bundled into the binary. Named without os/arch so the in-app
-      # updater's asset matcher cannot mistake it for the binary. No vulnerability scanner runs here;
-      # security.yml already does that.
+      # CycloneDX SBOM from the lockfiles: the Go modules and npm packages bundled into the binary. Named without os/arch so the in-app
+      # updater's asset matcher cannot mistake it for the binary. Vulnerabilities are scanned in security.yml, not here.
       - name: Generate SBOM with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -383,10 +376,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # The backend images (backend/Containerfile.sync and .admin, backend/README.md) go out with the other
-  # release artifacts: only for a tagged release, never from a branch push, and only after vet, tests and
-  # govulncheck have passed. backend-image.yml has already built, scanned and started them on every
-  # change. They run beside the binary builds, and the release is only published once they are pushed.
+  # The backend images go out with the other release artifacts: only for a tagged release, and only after vet, tests and
+  # govulncheck have passed (backend-image.yml already built, scanned and started them). The release is published once they are pushed.
   images:
     name: publish image (${{ matrix.name }})
     needs: [meta, checks]
@@ -542,10 +533,9 @@ jobs:
           commitish: ${{ needs.meta.outputs.sha }}
           prerelease: ${{ needs.meta.outputs.prerelease }}
 
-      # Assets go onto the draft and the draft is then published, so the release appears complete (and, with
-      # immutable releases on, is locked with its assets in place). `gh` finds a draft by its pending tag name,
-      # so if release-drafter.yml retargets the draft to another version meanwhile, these calls fail to find it
-      # and nothing is published, instead of publishing the wrong tag.
+      # Assets go onto the draft and the draft is then published, so the release appears complete (and is locked with its assets when
+      # immutable releases are on). `gh` finds a draft by its pending tag name, so if release-drafter.yml retargets the draft meanwhile,
+      # these calls fail instead of publishing the wrong tag.
       - name: Attach the build and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -562,10 +552,8 @@ jobs:
 
           latest=true
           [ "$PRERELEASE" = true ] && latest=false
-          # Publishing creates the tag when it does not exist yet, at the draft's target. --target sets that
-          # to the built commit in the same call, because release-drafter.yml may have moved the draft to
-          # the head of main since the notes step. A tag that already exists is used as it is (the target is
-          # then ignored). The notes are set again from this run's own output.
+          # Publishing creates the tag when it does not exist yet. --target pins it to the built commit, because release-drafter.yml may
+          # have moved the draft to the head of main since the notes step. An existing tag is used as it is.
           printf '%s' "$NOTES" | gh release edit "$TAG" --target "$TARGET" --draft=false \
             --prerelease="$PRERELEASE" --latest="$latest" --title "$TAG" --notes-file -
           echo "Published $TAG"

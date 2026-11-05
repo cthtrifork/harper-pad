@@ -14,14 +14,13 @@ const keepPlaceholder = () => ({
   },
 });
 
-// The Content-Security-Policy of the production page. It lets the page load only its own files and nothing else:
-//   - script-src: our scripts; 'wasm-unsafe-eval' only so Harper's WebAssembly can be compiled (no 'unsafe-eval', no inline scripts);
-//   - style-src: 'unsafe-inline' is needed because CodeMirror and Vue write style attributes and <style> elements at run time;
+// The Content-Security-Policy of the production page: only its own files, nothing else.
+//   - script-src: 'wasm-unsafe-eval' only so Harper's WebAssembly compiles; no 'unsafe-eval', no inline scripts;
+//   - style-src: 'unsafe-inline' because CodeMirror and Vue write styles at run time;
 //   - worker-src: Harper runs in a Web Worker, which may be a blob: URL;
-//   - connect-src: calls to the Go side (same origin) and nothing on the internet;
-//   - object-src, base-uri, form-action: off.
-// A <meta> tag is the one form every webview (WebKitGTK, WebView2) applies to the document. It is added to production builds
-// only, so the dev server's hot reload (inline scripts, a websocket) keeps working. See docs/security.md.
+//   - connect-src: the Go side (same origin) and nothing on the internet.
+// A <meta> tag is the one form every webview applies. Production only, so the dev server's hot reload keeps working.
+// See docs/security.md.
 const POLICY = [
   "default-src 'none'",
   "script-src 'self' 'wasm-unsafe-eval'",
@@ -65,10 +64,8 @@ const webApp = () => {
       }
     },
     transformIndexHtml: () => [
-      // `default`: the status bar is a strip of its own with text that follows light and dark, and the page starts below it (`black` would be
-      // a black strip over the light header; black-translucent's text is always white).
-      // viewport-fit=cover (index.html) and the safe-area insets (styles/safe-area.css) still keep the page clear of the notch, the
-      // home indicator and, in landscape, the sides. theme-color follows the header colour (--panel) for Android and Safari's own bar.
+      // `default`: the status bar gets its own strip that follows light and dark (`black` would sit over the light header).
+      // The safe-area insets (styles/safe-area.css) keep the page clear of the notch and home indicator.
       { tag: "meta", attrs: { name: "theme-color", content: "#eceff3", media: "(prefers-color-scheme: light)" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "theme-color", content: "#181d23", media: "(prefers-color-scheme: dark)" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "mobile-web-app-capable", content: "yes" }, injectTo: "head" },

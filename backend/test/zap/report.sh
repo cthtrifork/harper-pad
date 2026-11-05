@@ -1,8 +1,7 @@
 #!/bin/sh
-# Turns ZAP's JSON report into GitHub output: workflow annotations on stdout and a markdown summary in the file given as $3.
-# Rules marked IGNORE in rules.tsv are left out (ZAP still puts them in its JSON report).
+# Turns ZAP's JSON report into GitHub output: annotations on stdout and a markdown summary in the file given as $3. Rules marked
+# IGNORE in rules.tsv are left out. An alert whose rule is FAIL becomes an ::error, any other alert a ::warning.
 # Usage: report.sh report.json rules.tsv summary.md
-# An alert whose rule is FAIL in rules.tsv becomes an ::error, any other alert a ::warning.
 set -eu
 report=$1 rules=$2 out=$3
 

@@ -9,7 +9,7 @@ import { collectProblems, sameProblems } from "./problems.js";
 import { countDoc, cursorOf } from "./stats.js";
 import { theme } from "./theme.js";
 
-export { collectProblems, countDoc, cursorOf, fixAllSafe, relint };
+export { fixAllSafe, relint };
 
 // Take autocorrect's fixes back (the toast's Undo all, a row's Undo): the text returns and Harper ignores the finding from now on.
 export function revertFixes(view, ids) {
@@ -35,13 +35,9 @@ export function applyFix(view, from, to, i) {
 const editors = new WeakMap();
 const DEFAULT_MODE = { format: "markdown", source: false };
 
-// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading.
-// Callbacks (all optional): `onResult` hears about every lint run; `onProblems` gets the findings when they change; `onStats` the word
-// and character counts at the start and when they change; `onCursor` the caret position and selection size at the start and whenever
-// they change; `onDoc` the whole text at the start and after every change (for the preview); `onEdit` is called after every change the user makes to the text (not when a document is loaded). `persist` saves the
-// dictionary and ignore list after a change. Autocorrect: `getAutocorrect` returns the user's choices (see lib/autocorrect.js);
-// `onFixes` gets the Recently fixed list when it changes, `onFixed` the ids of fixes just applied, `onUserEdit` is called when the user
-// (not autocorrect) changes the text.
+// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading. The `on*` callbacks are all
+// optional and report what the editor shows (results, problems, stats, cursor, the text for the preview, edits, autocorrect fixes);
+// `persist` saves the dictionary and ignore list after a change, `getAutocorrect` returns the user's choices.
 export function createEditor(
   parent,
   {

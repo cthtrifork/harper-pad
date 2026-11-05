@@ -1,10 +1,6 @@
-// Command harper-pad-admin is the admin UI of Harper Pad: Go and HTMX, reached through a Cloudflare Tunnel behind
-// Cloudflare Access (docs/sync.md, "The admin UI").
-//
-// It applies the schema migrations at start (it is the table owner), serves /healthz (liveness) and /readyz (readiness, a PostgreSQL
-// round trip, 503 until the migrations are applied), the admin pages (internal/admin) and Prometheus
-// metrics on a separate port. It is run as
-// `harper-pad-admin serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
+// Command harper-pad-admin is the admin UI of Harper Pad: Go and HTMX behind Cloudflare Access (docs/sync.md, "The admin UI").
+// It is the table owner, so it applies the schema migrations at start; /readyz is 503 until they are applied. Metrics are on a
+// separate port. See internal/server.
 package main
 
 import (

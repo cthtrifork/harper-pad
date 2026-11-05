@@ -1,8 +1,5 @@
-// Command harper-pad-sync is the sync API of Harper Pad (docs/sync.md).
-//
-// It serves /healthz (liveness), /readyz (readiness: a PostgreSQL round trip, and 503 until harper-pad-admin has applied the schema
-// migrations), POST /enroll and Prometheus metrics on a separate port; the draft routes are not built yet. It has no DDL rights. It is run as
-// `harper-pad-sync serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
+// Command harper-pad-sync is the sync API of Harper Pad (docs/sync.md). It has no DDL rights, so /readyz is 503 until
+// harper-pad-admin has applied the schema migrations. Metrics are on a separate port. See internal/server.
 package main
 
 import (

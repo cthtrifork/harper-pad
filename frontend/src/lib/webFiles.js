@@ -1,7 +1,6 @@
-// Saving a draft to a file in the browser (the web build), the counterpart of DraftService.SaveDraftToFile. The File System Access
-// API (Chrome, Edge) lets the page keep a handle to the file, so later saves overwrite it without asking. Elsewhere (Firefox,
-// Safari) the page can only hand over a copy: through the share sheet where the browser has one (iPhone, iPad: Mail, Messages,
-// Save to Files), else as a download. Either way the draft is never linked to a file there and "Save" keeps updating the draft.
+// Saving a draft to a file in the browser, the counterpart of DraftService.SaveDraftToFile. Chrome and Edge keep a handle to the
+// file, so later saves overwrite it. Elsewhere the page can only hand over a copy (share sheet or download) and the draft is never
+// linked to a file.
 import { summarize } from "./summarize.js";
 
 const TYPES = [

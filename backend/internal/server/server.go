@@ -1,10 +1,8 @@
-// Package server is what both commands share to run in Kubernetes: the health endpoints, a PostgreSQL readiness check and a
-// graceful shutdown on SIGTERM.
+// Package server is what both commands share to run in Kubernetes: health endpoints, a PostgreSQL readiness check and graceful
+// shutdown on SIGTERM.
 //
-//	GET /healthz  liveness: the process is up and serving. It never touches the database, so a database outage does not make the
-//	              kubelet restart a healthy pod.
-//	GET /readyz   readiness: a round trip to PostgreSQL succeeds (the result is cached for 2 s), and the process is not shutting
-//	              down. 503 otherwise.
+//	GET /healthz  liveness. Never touches the database, so an outage does not make the kubelet restart a healthy pod.
+//	GET /readyz   readiness: a PostgreSQL round trip (cached for 2 s) succeeds and the process is not shutting down. 503 otherwise.
 package server
 
 import (
