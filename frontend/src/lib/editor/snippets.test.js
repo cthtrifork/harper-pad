@@ -1,41 +1,77 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
-import { codeSnippet } from "./snippets.js";
+import { expandSnippet } from "./snippets.js";
 
-// Type `text` at the end of `doc`, one character at a time, as the keyboard does.
-function type(doc, text, event = "input.type") {
-  let state = EditorState.create({ doc, selection: { anchor: doc.length }, extensions: [codeSnippet] });
-  for (const ch of text) {
-    const at = state.selection.main.head;
-    state = state.update({ changes: { from: at, insert: ch }, selection: { anchor: at + 1 }, userEvent: event }).state;
-  }
-  return state;
+// A state with the caret at `at` (default: the end) in `doc`; returns the document and the selected text after expanding.
+function expand(doc, at = doc.length) {
+  const state = EditorState.create({ doc, selection: { anchor: at }, extensions: [markdown()] });
+  const spec = expandSnippet(state);
+  if (!spec) return null;
+  const next = state.update(spec).state;
+  const { from, to } = next.selection.main;
+  return { doc: next.doc.toString(), selected: next.sliceDoc(from, to), caret: from };
 }
 
 test("<code> becomes a fenced block with the placeholder selected", () => {
-  const s = type("", "<code>");
-  assert.equal(s.doc.toString(), "```\nWrite code here\n```");
-  const { from, to } = s.selection.main;
-  assert.equal(s.sliceDoc(from, to), "Write code here");
+  const r = expand("<code>");
+  assert.equal(r.doc, "```\nWrite code here\n```");
+  assert.equal(r.selected, "Write code here");
 });
 
-test("after text on the same line it stays as typed", () => {
-  assert.equal(type("Try this: ", "<code>").doc.toString(), "Try this: <code>");
+test("language snippets put the language in the fence", () => {
+  for (const lang of ["sh", "json", "yaml", "toml"]) {
+    assert.equal(expand(`<${lang}>`).doc, `\`\`\`${lang}\nWrite code here\n\`\`\``);
+  }
 });
 
-test("with text after it on the line it stays as typed", () => {
-  const start = EditorState.create({ doc: " tail", extensions: [codeSnippet] });
-  const s = start.update({ changes: { from: 0, insert: "<code>" }, userEvent: "input.type" }).state;
-  assert.equal(s.doc.toString(), "<code> tail");
+test("<todo> leaves the caret after the box", () => {
+  const r = expand("<todo>");
+  assert.equal(r.doc, "- [ ] ");
+  assert.equal(r.selected, "");
+  assert.equal(r.caret, 6);
 });
 
-test("on a line of its own, nothing extra is added", () => {
-  assert.equal(type("Intro\n", "<code>").doc.toString(), "Intro\n```\nWrite code here\n```");
+test("<table> is a table with the first heading selected", () => {
+  const r = expand("<table>");
+  assert.equal(r.doc, "| Column | Column |\n| --- | --- |\n| Cell | Cell |");
+  assert.equal(r.selected, "Column");
+  assert.equal(r.caret, 2);
 });
 
-test("pasted <code> and other tags are left alone", () => {
-  assert.equal(type("", "<code>", "input.paste").doc.toString(), "<code>");
-  assert.equal(type("", "<codex>").doc.toString(), "<codex>");
-  assert.equal(type("", "<b>").doc.toString(), "<b>");
+test("<link> and <img> select the text to fill in", () => {
+  const link = expand("<link>");
+  assert.equal(link.doc, "[text](https://)");
+  assert.equal(link.selected, "text");
+  const img = expand("<img>");
+  assert.equal(img.doc, "![alt](https://)");
+  assert.equal(img.selected, "alt");
+});
+
+test("only the line with the caret changes", () => {
+  assert.equal(expand("Intro\n\n<code>\nafter", 13).doc, "Intro\n\n```\nWrite code here\n```\nafter");
+});
+
+test("a trigger with other text on its line is left alone", () => {
+  assert.equal(expand("Try: <code>"), null);
+  assert.equal(expand("<code> tail"), null);
+  assert.equal(expand("<code> tail", 6), null); // caret before the tail
+  assert.equal(expand("<code>x"), null);
+});
+
+test("unknown tags and a range selection are left alone", () => {
+  assert.equal(expand("<codex>"), null);
+  assert.equal(expand("<b>"), null);
+  const state = EditorState.create({ doc: "<code>", selection: { anchor: 0, head: 6 }, extensions: [markdown()] });
+  assert.equal(expandSnippet(state), null);
+});
+
+test("inside a fenced block it is just text", () => {
+  assert.equal(expand("```\n<code>\n```", 9), null);
+});
+
+test("spaces around the trigger do not count", () => {
+  assert.equal(expand("  <code>").doc, "```\nWrite code here\n```");
+  assert.equal(expand("<code>  ").doc, "```\nWrite code here\n```");
 });

@@ -51,7 +51,7 @@ and `pprof`, which `production` rejects.
   `lib/syncEnroll.js` enrolls from an invite link, `lib/syncDevice.js` keeps the device record in IndexedDB, `lib/useSync.js` is the state the
   status bar chip (`SyncChip.vue`) shows, and `lib/csp.js` builds the page's policy, which names the sync server when `SYNC_ORIGIN` is set.
 - `Preview.vue` renders markdown for the Split and Preview views (`marked` parses it); text from drafts or Harper never goes
-  through `v-html` or `innerHTML`. `CodeBlock.vue` colours fenced code (`sh`/`bash`, `json`, `yaml`, `toml`) with the lazy parsers in `lib/highlight.js`, as spans of text; other languages stay plain. To add one, add a loader and aliases there.
+  through `v-html` or `innerHTML`. `CodeBlock.vue` colours fenced code (`sh`/`bash`, `json`, `yaml`, `toml`) with the lazy parsers in `lib/highlight.js`, as spans of text; other languages stay plain. To add one, add a loader and aliases there. `lib/editor/snippets.js` expands a trigger alone on a line (`<code>`, `<sh>`, `<json>`, `<yaml>`, `<toml>`, `<todo>`, `<table>`, `<link>`, `<img>`) when Enter is pressed; to add one, add a line to its `SNIPPETS` table.
 - `ToastBar.vue` is the one toast (a message and one action: Undo, Open copy), used for autocorrect's "Fixed N things" and for what sync says. `DeletedElsewhereDialog.vue` is the one modal, a forced Keep or Remove for a note deleted on another device (`docs/design-cheatsheet.html` lists it as the exception to "no modals").
 - Styles are plain CSS, one file per component, in `frontend/src/styles`.
 
