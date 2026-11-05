@@ -25,8 +25,8 @@ const (
 	// MaxContentBytes caps one draft, so a paste of something huge cannot fill the disk.
 	MaxContentBytes = 5 << 20
 
-	defaultLimit = 50
-	maxLimit     = 500
+	defaultLimit = 500
+	maxLimit     = 1000
 )
 
 var (

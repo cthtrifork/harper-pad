@@ -292,7 +292,7 @@ After enrollment every request carries `Authorization: DPoP <device token>` and 
 - On a 401 the client stops syncing and shows "Sign in again", which goes back to **Add this device** with a new invite. This also
   covers iOS clearing a Home Screen app's storage.
 - An `Authorization` header, not a cookie, so a page on another site cannot make the browser attach credentials (no CSRF).
-- Bad tokens and bad invites get the same generic 401 and are rate limited.
+- Bad tokens and bad invites get the same generic 401.
 
 Revisit refresh tokens if the design gains multiple users, sharing, a third-party client, a native iOS app that can use the
 Keychain, or an identity provider. The `Authorization` header and the DPoP proof are the same, so the change would be on the server.
@@ -510,7 +510,7 @@ How it is used:
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector next to
   the device name, and per-account operators (see Later).
 - **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
-- **The 8 MiB check** is a backstop. The app enforces the 5 MB draft limit, and a base64 envelope (the encryption option) would be larger than the plaintext.
+- **The 8 MiB check** is the CHECK on `docs.data`, the server's only size limit (the API maps its refusal to 413 and only caps the request body at that size plus 4 KiB). It is a backstop. The app enforces the 5 MB draft limit, and a base64 envelope (the encryption option) would be larger than the plaintext.
 
 The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `$1`-style parameters.
 
@@ -537,8 +537,8 @@ assigns each draft a version, and it never merges, never makes copies and has no
 - **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS
   allows `Authorization`, `DPoP`, `Content-Type` and `If-None-Match`.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
-  `data` of a live draft must be the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`) and at most 8 MiB, the only size
-  limit (the app enforces its own 5 MB on the text); a tombstone must have empty `data`. A page of `GET /docs` is 500 drafts by default and at most 1000 (`limit`);
+  `data` of a live draft must be the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`) and, in size, whatever the database's CHECK allows (8 MiB; the
+  server has no other size check, a refusal comes back as 413, and the app enforces its own 5 MB on the text); a tombstone must have empty `data`. A page of `GET /docs` is 500 drafts by default and at most 1000 (`limit`);
   a page shorter than the limit is the last. A 409 on a `PUT` carries `current`, the server's copy, unless the server has none.
 - **Errors** are `application/problem+json` (`title`, `status`, `detail`). A credential failure (no or bad proof, a replayed proof, an
   unknown or revoked token, the wrong key, a wrong, spent or expired invite) is always `{"title":"Unauthorized","status":401,"detail":"unauthorized"}`:
@@ -742,9 +742,9 @@ This is a device-token model with DPoP key binding, transport security and no co
 | Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles: the public API's sync role gets rows only, the admin role owns the schema, and row security keeps notes from the admin role's ordinary SQL ([Database access](#database-access)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from the ingress controller; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role owns the tables; row security hides the notes from ordinary SQL but not from DDL that switches it off, and admin access can also enroll a device, and **a device reads the notes** (v1). See [the admin UI](#the-admin-ui). |
-| Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
+| Guessing | 256-bit tokens and generic 401s on `/enroll` and on bad tokens; the ingress rate-limits per client IP (see Deployment). |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin (`CORS_ALLOWED_ORIGINS`, exact match), not `*`, and only the headers and methods the API uses. An origin that is not listed gets no CORS headers (a preflight is a 403) and is logged once, which is how the desktop webview's real origin is read off the server. `Authorization` and `DPoP` headers, not cookies. |
-| Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
+| Abuse and size | A body cap, the 8 MiB `CHECK` on a draft's text, and strict field formats. The server has no per-account quota and no limit on changes per request. |
 | Content-Security-Policy | `connect-src` is `'self'`, plus the sync origin when the build sets `SYNC_ORIGIN`, and nothing else changes: the build setting `SYNC_ORIGIN` (an https origin, no path; a bad value fails the build), read by `frontend/vite.config.js` for both builds and passed by the Pages workflow from a repository variable. Unset, the policy is unchanged. See [security](security.md). |
 | Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted, and the device key sits in the same profile as the token (no OS keyring, by design). On Chromium engines a copied profile carries a usable key as well as the token (tested); the other engines are not tested. The local drafts are plain text in any case. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |
@@ -771,7 +771,7 @@ this one (this section is their specification):
   certificate from cert-manager and these middlewares: HTTP to HTTPS redirect, HSTS and security headers, a rate limit per client
   IP, and a body cap slightly above the largest allowed request. CORS stays in the app, with its explicit allowlist (`CORS_ALLOWED_ORIGINS`). The app takes
   the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but the ingress controller connect. The
-  in-memory rate limiter and the DPoP `jti` replay cache are per pod: move them to PostgreSQL before running more than one replica.
+  DPoP `jti` replay cache is per pod: move it to PostgreSQL before running more than one replica.
 - **`harper-pad-admin`:** one replica and **no Service**. The app listens on 127.0.0.1 next to a `cloudflared` sidecar (a native
   sidecar where supported, so the tunnel is up before the app and outlives it). The remotely managed tunnel (token in a Secret,
   `TUNNEL_TOKEN`) maps the admin hostname to `http://localhost:<port>`. A sidecar rather than Cloudflare's separate Deployment, so

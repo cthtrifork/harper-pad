@@ -226,15 +226,24 @@ func TestConcurrentUpdates(t *testing.T) {
 	}
 }
 
-// What the database refuses, whatever the service checks: ids that are not 32 hex characters and text over 8 MiB.
+// What the database refuses, whatever the service checks: ids that are not 32 hex characters and text over MaxDocData (8 MiB).
 func TestDocConstraints(t *testing.T) {
 	s, _ := docsFixture(t)
 	ctx := context.Background()
 	if _, err := s.PutDoc(ctx, 1, "not-an-id", DocBase{}, DocWrite{UpdatedAt: 1, Data: "x"}); err == nil || errors.Is(err, ErrConflict) {
 		t.Errorf("bad id accepted: %v", err)
 	}
-	if _, err := s.PutDoc(ctx, 1, docA, DocBase{}, DocWrite{UpdatedAt: 1, Data: strings.Repeat("x", 8<<20+1)}); err == nil || errors.Is(err, ErrConflict) {
-		t.Errorf("9 MiB accepted: %v", err)
+	// MaxDocData is what the CHECK allows: that much is stored, one byte more comes back as ErrTooLarge, as an insert and as an update.
+	d, err := s.PutDoc(ctx, 1, docA, DocBase{}, DocWrite{UpdatedAt: 1, Data: strings.Repeat("x", MaxDocData)})
+	if err != nil {
+		t.Fatalf("MaxDocData bytes refused: %v", err)
+	}
+	over := DocWrite{UpdatedAt: 2, Data: strings.Repeat("x", MaxDocData+1)}
+	if _, err := s.PutDoc(ctx, 1, docA, DocBase{Version: d.Version, UpdatedAt: d.UpdatedAt}, over); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("update over the limit: %v, want ErrTooLarge", err)
+	}
+	if _, err := s.PutDoc(ctx, 1, docB, DocBase{}, over); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("insert over the limit: %v, want ErrTooLarge", err)
 	}
 }
 
