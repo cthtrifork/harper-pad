@@ -1,4 +1,4 @@
-# Backend (scaffold)
+# Backend
 
 The optional sync service for Harper Pad: `harper-pad-sync` (the API) and `harper-pad-admin` (Go + HTMX, for enrollment URLs
 and devices), on PostgreSQL. The design is in [`docs/sync.md`](../docs/sync.md). **What works so far: the health endpoints, the admin

@@ -1,9 +1,11 @@
 # Sync (design)
 
-Status: **proposal, not built.** This page describes an optional sync service so **notes** (the scratch pad drafts)
-follow the user between the desktop app and the iPhone Home Screen app. Nothing here is in the code yet. When it is
-built, this page becomes the reference and [storage](storage.md), [security](security.md) and [architecture](architecture.md)
-get the matching changes (see [Documentation changes](#documentation-changes)).
+Status: **partly built.** This page describes an optional sync service so **notes** (the scratch pad drafts) follow the user
+between the desktop app and the iPhone Home Screen app. Built so far, in `backend/` and the cluster: the database and its roles, the
+schema migrations, the admin service, device enrollment and the DPoP check. Not built: the draft routes, the client sync module and
+the app's UI, so nothing in the app uses the server yet ([Build order](#build-order) and `TODO.md` track it). When it is all built,
+this page becomes the reference and [storage](storage.md), [security](security.md) and [architecture](architecture.md) get the
+matching changes (see [Documentation changes](#documentation-changes)).
 
 ## Goals and non-goals
 
@@ -71,8 +73,9 @@ What losing the whole server costs:
 | Decision | Choice | Why |
 |---|---|---|
 | Server | A new Go service, `harper-pad-sync`, as a Kubernetes Deployment behind a ClusterIP Service, exposed through the cluster's ingress | Small, one static binary; applies the same draft limits as the app, written separately (see Code layout) |
-| Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service and the admin UI each get their own certificate and a role, the admin one with least privilege |
+| Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service and the admin UI each get their own certificate and a role: the public API's role gets rows only, and the admin's role owns the schema |
 | Schema owner | **`harper_admin` owns the tables and applies the migrations**; `harper_sync`, the public API's role, gets rows only (no DDL, no ownership) | The sync API faces the internet and parses unauthenticated input, so it gets the least. The admin UI is reached only through the tunnel behind Cloudflare Access with OIDC and MFA. Row security (forced, a policy for `harper_sync` only) hides the notes from the admin role in ordinary SQL; the owner can still switch it off. The cost: a compromised admin process could read notes (it could already enroll a device that does), and sync waits for admin to migrate |
+| API framework and proof check | The sync API is [Huma](https://huma.rocks) on the standard library's mux, so the routes and [openapi.yaml](openapi.yaml) come from the same Go types; DPoP proofs are checked by [go-dpop](https://github.com/AxisCommunications/go-dpop) with a ttlcache for replays | Less security code to own, and the description cannot drift (a test fails when it does). The proof is checked before the body is read; see [DPoP](#limiting-the-damage-of-a-stolen-device) |
 | Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port, and the app knows nothing about users or login (Cloudflare does all of it); keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
 | Hosting | Kubernetes. The sync API is exposed through the cluster's existing ingress on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([what this trusts](#what-this-trusts)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
@@ -131,8 +134,8 @@ flowchart LR
 
 | Component | Runs as | Reachable from | Does |
 |---|---|---|---|
-| `harper-pad-sync` | Deployment and ClusterIP Service | The cluster's ingress only (NetworkPolicy) | The API: enroll, list, get and put drafts |
-| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices |
+| `harper-pad-sync` | Deployment and ClusterIP Service | The cluster's ingress only (NetworkPolicy) | The API: enroll (built), list, get and put drafts (not yet). No DDL rights; it waits until the schema is current |
+| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices; owns the tables and applies the schema migrations at start |
 | PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the sync and admin pods (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
 | cert-manager | Cluster add-on | Nothing | Issues the database client certificates and the sync domain's TLS certificate |
 | Cloudflare | External | The internet | Carries the admin tunnel and runs Access on the admin hostname. Not in the sync path |
@@ -149,7 +152,9 @@ No workload has a database password. PostgreSQL requires TLS and a client certif
 verify the server certificate (`sslmode=verify-full`). cert-manager issues one certificate per role (common name equal to the
 role name, from the CA given to the cluster as `spec.certificates.clientCASecret`), `pg_hba` requires `cert` over `hostssl`, and
 a NetworkPolicy lets only the sync and admin pods reach port 5432. The app reads the certificate files once at start; Stakater
-Reloader restarts the pods when cert-manager renews them, so there is no reload code. This is deployed and working.
+Reloader restarts the pods when cert-manager renews them, so there is no reload code. The certificate setup is deployed. The ownership
+below (the admin role owns the database, the sync role gets rows only) needs `harper_admin` to be the database owner in the cluster
+(CloudNativePG `initdb.owner`); tables that already exist under another owner are transferred once.
 
 | Role | Used by | Allowed |
 |---|---|---|
@@ -325,7 +330,7 @@ payload  {"jti": "<random id>", "htm": "PUT", "htu": "https://sync.example.com/d
 ```
 
 The server checks, as RFC 9449 section 4.3 lists: exactly one proof; `typ`, `alg` and a well-formed public `jwk`; the signature;
-`htm` and `htu` equal to the request's method and URL (without query or fragment); `iat` within about 60 seconds of its clock;
+`htm` and `htu` equal to the request's method and URL (the server's URL has no query or fragment, and the proof's `htu` must not have one); `iat` within about 60 seconds of its clock;
 `jti` not seen in that window (a small in-memory cache is enough at one replica); `ath` equal to the hash of the presented token;
 and that the `jwk`'s thumbprint (RFC 7638) equals the one stored on the token's device row. The proof carries the key and its signature is verified against it, so the server stores only the thumbprint. A token copied without the key is then
 useless.
@@ -421,7 +426,7 @@ CREATE TABLE meta (
   value TEXT NOT NULL                             -- 'schema_version'
 );
 
-CREATE TABLE clients (                            -- client accounts: one row in v1, inserted by the first migration
+CREATE TABLE clients (                            -- client accounts: one row in v1, inserted by the initial migration
   id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,   -- client_id
   name       TEXT   NOT NULL,
   created_at BIGINT NOT NULL
@@ -499,7 +504,7 @@ How it is used:
   invite also deletes the ones that expired more than a day ago (in the same statement), so the sync service runs no background job
   and holds no purge code.
 - **Revoking a device deletes its row.** The "new device added" banner comes from `created_at`.
-- **v1 has one client account,** inserted by the first migration (`name` `default`). Nothing creates another: there is no endpoint
+- **v1 has one client account,** inserted by the initial migration (`name` `default`). Nothing creates another: there is no endpoint
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector next to
   the device name, and per-account operators (see Later).
 - **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
@@ -528,8 +533,12 @@ assigns each draft a version, and it never merges, never makes copies and has no
 - **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed. `base` carries
   `updatedAt` too, so a write is checked against the exact state the device saw.
 - **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS
-  allows `Authorization`, `DPoP` and `Content-Type`.
+  allows `Authorization`, `DPoP`, `Content-Type` and `If-None-Match`.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
+- **Errors** are `application/problem+json` (`title`, `status`, `detail`). A credential failure (no or bad proof, a replayed proof, an
+  unknown or revoked token, the wrong key, a wrong, spent or expired invite) is always `{"title":"Unauthorized","status":401,"detail":"unauthorized"}`:
+  the same bytes whatever the cause. A body that is not JSON is a 400, a field that fails validation a 422, a body over the limit a 413.
+  The proof is checked before the body is read, so a request without a valid proof gets the 401 whatever its body.
 
 ### When sync happens
 
@@ -719,12 +728,12 @@ This is a device-token model with DPoP key binding, transport security and no co
 | Who can read the data | The server and its operator; content is not end-to-end encrypted. Cloudflare is not in the sync path and sees only the admin UI. Protect the cluster with encrypted volumes and tight access to the namespace, and keep request bodies out of logs (the ingress access logs must not include bodies). The settings screen says this plainly. |
 | Stolen device token | Revoke that device in the admin UI. DPoP makes a token that leaks without its key useless; a copy of the device's own storage is not covered (and on Chromium engines carries the key). The token grants only its client account's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
-| Isolation between client accounts | The account is taken from the token's device row and never from the request; every query on account data filters on it; one account per server in v1, so it is a guard for the future. Before a second account is created, consider PostgreSQL row-level security as a second layer (`FORCE ROW LEVEL SECURITY`, because the sync role owns the tables, and a `SET LOCAL` of the account per transaction), and test that two accounts cannot see each other's drafts or devices. |
-| Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles for sync and admin, the admin one with least privilege ([Database access](#database-access)). |
+| Isolation between client accounts | The account is taken from the token's device row and never from the request; every query on account data filters on it; one account per server in v1, so it is a guard for the future. Before a second account is created, narrow the row security that already guards `docs` (its `sync_rows` policy for the sync role says `USING (true)` today) to the account, with a `SET LOCAL` of it per transaction (the sync role does not own the tables, so policies apply to it), and test that two accounts cannot see each other's drafts or devices. |
+| Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles: the public API's sync role gets rows only, the admin role owns the schema, and row security keeps notes from the admin role's ordinary SQL ([Database access](#database-access)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from the ingress controller; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role owns the tables; row security hides the notes from ordinary SQL but not from DDL that switches it off, and admin access can also enroll a device, and **a device reads the notes** (v1). See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens; rate limits and generic 401s on `/enroll` and on bad tokens. |
-| Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin, not `*`, and only the headers and methods the API uses. `Authorization` and `DPoP` headers, not cookies. |
+| Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin (`CORS_ALLOWED_ORIGINS`, exact match), not `*`, and only the headers and methods the API uses. An origin that is not listed gets no CORS headers (a preflight is a 403) and is logged once, which is how the desktop webview's real origin is read off the server. `Authorization` and `DPoP` headers, not cookies. |
 | Abuse and size | Request and field limits as in the app, a per-server quota, and a limit on changes per request. |
 | Content-Security-Policy | `connect-src` is `'self'` today. Add the sync origin only when sync is configured (a build-time setting for the web build; the desktop page is embedded, so it needs the origin in its policy too), and change nothing else. See [security](security.md). |
 | Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted, and the device key sits in the same profile as the token (no OS keyring, by design). On Chromium engines a copied profile carries a usable key as well as the token (tested); the other engines are not tested. The local drafts are plain text in any case. |
@@ -739,14 +748,18 @@ Everything runs in one Kubernetes namespace, `harper-pad`, described by manifest
 this one (this section is their specification):
 
 - **PostgreSQL:** a CloudNativePG `Cluster` with one instance (one user, and devices can rebuild the server, so no high
-  availability), with certificate authentication as above. No backup or restore: every device holds a full copy, and a new empty
+  availability), with certificate authentication as above; `harper_admin` is the database owner (`initdb.owner`) and `harper_sync` a plain
+  login role, both managed roles with their own certificates. No backup or restore: every device holds a full copy, and a new empty
   server is repopulated by Sync all.
-- **Migrations:** the sync service applies them at start under its own role, behind a PostgreSQL advisory lock so only one pod
-  migrates. It refuses to start against a newer schema than it knows. The admin service starts only against a schema it
-  recognises and does not migrate.
+- **Migrations:** the admin service applies them at start as `harper_admin`, the owner, each file in a transaction with its record in
+  `schema_migrations` and behind a PostgreSQL advisory lock so only one pod migrates; a failing file is retried, never skipped. The sync
+  service applies nothing and has no DDL rights: its `/readyz` is 503 until every migration it was built with is recorded, so it never
+  serves a database without its tables or grants. A sync pod built before the newest migration keeps serving (migrations are additive).
+  The two images are released together; the sync Deployment is `Recreate`, so a new sync image is down until the matching admin has
+  migrated.
 - **`harper-pad-sync`:** one replica and a ClusterIP Service. Traefik routes the sync domain to it with a Let's Encrypt
   certificate from cert-manager and these middlewares: HTTP to HTTPS redirect, HSTS and security headers, a rate limit per client
-  IP, and a body cap slightly above the largest allowed request. CORS stays in the app, with its explicit allowlist. The app takes
+  IP, and a body cap slightly above the largest allowed request. CORS stays in the app, with its explicit allowlist (`CORS_ALLOWED_ORIGINS`). The app takes
   the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but the ingress controller connect. The
   in-memory rate limiter and the DPoP `jti` replay cache are per pod: move them to PostgreSQL before running more than one replica.
 - **`harper-pad-admin`:** one replica and **no Service**. The app listens on 127.0.0.1 next to a `cloudflared` sidecar (a native
@@ -759,7 +772,8 @@ this one (this section is their specification):
 - **Pod hardening:** non-root, read-only root filesystem, no capabilities, runtime-default seccomp, no Kubernetes API token,
   resource limits, images pinned by digest.
 - **Configuration and health:** `PUBLIC_URL` must be `https:` or the service refuses to start (the app takes the scheme from it,
-  not from a forwarded header). `/healthz` is liveness; `/readyz` checks the database.
+  not from a forwarded header). `/healthz` is liveness and never touches the database. `/readyz` checks the database and, for the sync service, that the schema is
+  current. `CORS_ALLOWED_ORIGINS` (sync) lists the browser origins allowed to call the API; it is empty by default, which allows none.
 
 Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI.
 
@@ -770,7 +784,8 @@ work as one: a Playwright script driving real Chromium against a compose stack (
 it follows `scripts/screenshots.sh`).
 
 - **Stack:** PostgreSQL, `harper-pad-sync` built from its real `backend/Containerfile.sync`, `harper-pad-admin` (plain HTTP on
-  loopback, logging in as `harper_admin` with its own client certificate), and Caddy for HTTPS. The compose file works with both
+  loopback, logging in as `harper_admin` with its own client certificate; it owns the database and applies the migrations, and
+  `harper-pad-sync` waits for it), and Caddy for HTTPS. The compose file works with both
   `podman compose` and `docker compose`. The same stack runs the Go store tests (`make test-db`) and the admin UI for development
   (`make admin-up`), so the database login under test is the production one.
 - **HTTPS:** Caddy (`tls internal`, high port for rootless) serves `https://app.localhost:18443` (the web build) and
@@ -779,7 +794,7 @@ it follows `scripts/screenshots.sh`).
   Certificates are really checked: Chromium trusts only Caddy's intermediate through `--ignore-certificate-errors-spki-list`
   (no `ignoreHTTPSErrors`, which would hide a broken chain and break service workers).
 - **Devices and invites:** two Chromium contexts, each with its own IndexedDB, act as devices A and B. The test inserts invite
-  rows into PostgreSQL itself (same SHA-256 token hash, bound to the default `client_id`) instead of going through the admin UI,
+  rows into PostgreSQL itself, as the table owner, (same SHA-256 token hash, bound to the default `client_id`) instead of going through the admin UI,
   which sits behind Access. The admin UI has its own Go handler tests (`backend/internal/admin`) and no end-to-end test yet.
 - **Checks, in order:**
   1. **Enrollment:** A pastes an invite URL and gets a token; reusing the invite fails.
@@ -792,7 +807,8 @@ it follows `scripts/screenshots.sh`).
      kept; with a second client account, neither sees the other's drafts or devices.
 - **Database login:** the compose PostgreSQL requires TLS 1.3 and a client certificate whose common name is the role, from a
   throwaway CA (`certs.sh`). The test checks that TLS without a certificate, a certificate with another common name and a plain
-  connection are refused.
+  connection are refused. The bootstrap superuser is never used by a service: `harper_admin` owns the tables and `harper_sync` has
+  rows only, so the store tests run under the grants production has.
 - **Needs:** the page origin in the CORS allowlist and the sync origin in the web build's CSP `connect-src`.
 - **Does not prove:** certificate renewal and the Reloader restart, the real ingress and its certificate, Cloudflare and
   Access, and Safari or WebKit behaviour.
@@ -810,6 +826,9 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 5. **Docs and policy:** the changes below, and the CSP change.
 6. **Option, not planned:** end-to-end encryption ([the option](#option-end-to-end-encryption)). The device list is in steps 2 and 4.
 
+**Where it stands:** step 1 is done. Step 2 has the database roles and certificates, the migrations, the admin container, enrollment and
+the DPoP check; the draft endpoints are not built. Steps 3 to 6 have not started. `TODO.md` has the open items.
+
 ## Documentation changes
 
 - [security](security.md): replace "no accounts, no server and no network use beyond the update check" with the opt-in
@@ -818,6 +837,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 - [architecture](architecture.md) and `AGENTS.md`: the sync module, the new binary and its layout.
 - [pages](pages.md): the web build's sync origin setting and CORS.
 - A server operations page (run, proxy, back up, rotate, revoke).
+- [openapi.yaml](openapi.yaml) is generated from the server (`make openapi` in `backend/`), not written by hand: it needs no review of its own, only that its test passes.
 
 ## Option: end-to-end encryption
 
