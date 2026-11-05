@@ -11,7 +11,7 @@ desktop app: a Harper-checked editor plus a scratch pad drawer. It is early: the
 make frontend     # Vue app -> frontend/dist; required before any go build/run, not before vet/test
 make format       # gofmt plus Biome
 make test         # go test -race -count=1 ./...
-make test-frontend # the frontend unit tests (node --test, no npm install); shares fixtures with the Go tests
+make test-frontend # the frontend unit tests (node --test, needs `npm ci` in frontend/); shares fixtures with the Go tests
 make vet          # go vet, with and without -tags production
 make build-server # headless build (CGO_ENABLED=0, -tags server,production), no GTK
 make run-mcp      # desktop app with Wails MCP server on 127.0.0.1:9099 (dev only, docs/mcp.md)

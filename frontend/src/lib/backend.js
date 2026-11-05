@@ -21,16 +21,12 @@ const emptySettings = () => ({ version: 1, words: [], ignored: "" });
 
 const STORE = "kv";
 
-const openDb = () => openDatabase();
+const openDb = openDatabase;
 
 async function idbGet(key) {
   const db = await openDb();
   try {
-    return await new Promise((resolve, reject) => {
-      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
+    return await db.get(STORE, key);
   } finally {
     db.close();
   }
@@ -39,13 +35,7 @@ async function idbGet(key) {
 async function idbPut(key, value) {
   const db = await openDb();
   try {
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(value, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
+    await db.put(STORE, value, key);
   } finally {
     db.close();
   }

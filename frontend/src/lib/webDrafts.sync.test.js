@@ -1,21 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { IDBFactory } from "fake-indexeddb";
+import "fake-indexeddb/auto";
 import { contentHash } from "./contentHash.js";
-import { openFake } from "./testIdb.js";
-import { createWebDrafts, upgrade } from "./webDrafts.js";
+import { createWebDrafts, openDatabase } from "./webDrafts.js";
 
+// A fresh, empty IndexedDB for each test. `raw` runs a function against the open database, as an older build of the app would.
 function setup() {
-  const fake = openFake();
-  upgrade(fake.db);
-  return { ...fake, drafts: createWebDrafts(fake.open) };
+  globalThis.indexedDB = new IDBFactory();
+  const raw = async (work) => {
+    const db = await openDatabase();
+    try {
+      return await work(db);
+    } finally {
+      db.close();
+    }
+  };
+  return { raw, drafts: createWebDrafts(openDatabase) };
 }
 
 const sync = async (drafts, d, version = 1) =>
   drafts.markSynced(d.id, { hash: await contentHash(d.format, d.content), updatedAt: d.updatedAt, version });
 
-test("upgrade adds the sync store and keeps the others", () => {
-  const { stores } = setup();
-  assert.deepEqual([...stores.keys()].sort(), ["drafts", "kv", "summaries", "sync"]);
+test("a new database has the sync store next to the others", async () => {
+  const { raw } = setup();
+  assert.deepEqual([...(await raw((db) => db.objectStoreNames))].sort(), ["drafts", "kv", "summaries", "sync"]);
 });
 
 test("nothing is pending with sync off, and a delete leaves no pending delete", async () => {
@@ -68,7 +77,7 @@ test("applyRemote keeps the server's times and the file link, and is not a chang
 });
 
 test("applyRemote checks what save checks", async () => {
-  const { drafts, stores } = setup();
+  const { drafts, raw } = setup();
   const id = "0123456789abcdef0123456789abcdef";
   const ok = { id, content: "x", createdAt: 1, updatedAt: 1 };
   for (const bad of [
@@ -80,7 +89,7 @@ test("applyRemote checks what save checks", async () => {
   ]) {
     await assert.rejects(drafts.applyRemote({ ...ok, ...bad }, 1), undefined, JSON.stringify(Object.keys(bad)));
   }
-  assert.equal(stores.get("drafts").size, 0, "a rejected draft was stored");
+  assert.equal(await raw((db) => db.count("drafts")), 0, "a rejected draft was stored");
 });
 
 test("applyRemoteDelete removes the draft and records the server's tombstone", async () => {
@@ -95,14 +104,16 @@ test("applyRemoteDelete removes the draft and records the server's tombstone", a
 
 // A build from before sync (version 2) does not know the sync store. What it does to a draft must still be seen.
 test("an older build's save and delete are seen by the newer one", async () => {
-  const { drafts, stores } = setup();
+  const { drafts, raw } = setup();
   const a = await drafts.save({ content: "one" });
   const b = await drafts.save({ content: "two" });
   await sync(drafts, a);
   await sync(drafts, b);
   // What the older build does, by hand: it rewrites the draft record whole and deletes without a trace.
-  stores.get("drafts").set(a.id, { ...a, content: "edited by the old build", updatedAt: a.updatedAt + 1 });
-  stores.get("drafts").delete(b.id);
-  stores.get("summaries").delete(b.id);
+  await raw(async (db) => {
+    await db.put("drafts", { ...a, content: "edited by the old build", updatedAt: a.updatedAt + 1 });
+    await db.delete("drafts", b.id);
+    await db.delete("summaries", b.id);
+  });
   assert.deepEqual(await drafts.changes(), { changed: [a.id], deleted: [b.id] });
 });

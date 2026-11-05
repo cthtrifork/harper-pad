@@ -375,6 +375,10 @@ jobs:
           node-version-file: .tool-versions
           package-manager-cache: false
 
+      - name: Install the frontend dependencies
+        run: npm ci --ignore-scripts
+        working-directory: frontend
+
       - name: Test the frontend
         run: make test-frontend
 
