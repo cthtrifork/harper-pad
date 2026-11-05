@@ -68,4 +68,4 @@ before anything is published. `ci.yml` has a `windows` job (vet, tests and the e
 
 The Linux sandbox that wrote this could cross-compile the exe but not run it. What was exercised: the cross-build, `go vet`
 for Windows, and the build and start check on GitHub's Windows runner. Running the app on a real desktop (window, fonts,
-HiDPI, the updater replacing a running exe) and the SignPath step have to be tried by hand: see `TODO.md`.
+HiDPI, the updater replacing a running exe) and the SignPath step have to be tried by hand.
