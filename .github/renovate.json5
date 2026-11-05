@@ -34,6 +34,11 @@
   // Security advisories from OSV.dev as well as GitHub's own alerts (the GitHub App's Dependabot
   // alerts permission; without it Renovate logs "Cannot access vulnerability alerts").
   osvVulnerabilityAlerts: true,
+
+  // Rate limits, explicit instead of Renovate's defaults (2 PRs an hour, 10 open): a burst of releases opens
+  // a handful of PRs per run without flooding CI, and the open-PR cap stops a stale backlog from growing.
+  prHourlyLimit: 5,
+  prConcurrentLimit: 10,
   vulnerabilityAlerts: {
     labels: ["dependencies", "security"],
     semanticCommitType: "security",
