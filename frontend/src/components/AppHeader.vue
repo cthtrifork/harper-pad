@@ -66,9 +66,7 @@ function onMain() {
          the status line in the status bar, not here. The export button beside it chooses a file (or opens the share sheet on iPhone and iPad). -->
     <span class="actions">
       <button type="button" class="tool main" :class="{ replace: replacingFile }" :aria-label="mainLabel" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
-        <svg v-if="syncOn" class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        <span v-else-if="syncBusy" class="spin" aria-hidden="true"></span>
-        <svg v-else class="save-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7M5 7l3 3 3-3M3 12.5h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <span class="label">{{ mainLabel }}</span> <span v-if="!replacingFile" class="kbd">Ctrl+S</span>
       </button>
       <button type="button" class="tool export" :aria-label="exportLabel" :title="exportLabel" :disabled="!canSave" @click="emit('save', true)">
