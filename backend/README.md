@@ -45,7 +45,7 @@ Prometheus reach port 9102 and a PodMonitor; both live in the gitops repository.
 **Migrations.** `harper-pad-admin` applies the files in `internal/store/migrations/` at start, in name order, each in a transaction
 with its row in `schema_migrations`, under a PostgreSQL advisory lock so two pods never race. It connects as `harper_admin`, the owner
 of the database and the tables (the cluster creates both roles and the owner); the files create the tables and grant `harper_sync` its
-row-level rights (`0003_sync_grants.sql`), and `harper_sync` has no DDL. While they run (and while the database is down) the admin's
+row-level rights, and `harper_sync` has no DDL. All of it is one initial file, `0001_init.sql`, because nothing had run an earlier version. `docs` has row security forced with a policy for `harper_sync` only, so the admin role sees no note in ordinary SQL (the owner can still switch it off). While they run (and while the database is down) the admin's
 `/readyz` is 503 and the start is retried every 2 to 30 s; `/healthz` stays 200. `harper-pad-sync` applies nothing: its `/readyz` is 503
 until every embedded migration is recorded in `schema_migrations`, so it never serves a database without its tables or grants. The two
 are versioned together; a new sync image waits for the matching admin.
@@ -112,7 +112,7 @@ certificates to `.e2e-certs/`, runs `go test -race ./...` and removes the stack.
 (libpq variables, `verify-full`, client certificate): as `harper_admin`, the owner, which applies the migrations and seeds and checks
 rows, and as `harper_sync` for the sync store, which runs under its real, row-level grants. They check the queries, that a certificate
 with another common name and a plain connection are refused, that `harper_sync` gets a permission error on DDL, on deleting, on
-`clients` and on everything beyond its grants, and that the schema is reported current only when every migration is recorded. CI runs
+`clients` and on everything beyond its grants, that the admin role sees and can write no note (row security), and that the schema is reported current only when every migration is recorded. CI runs
 `make test-db`; the packages run one at a time (`-p 1`) because they share the database.
 
 ## Security scan

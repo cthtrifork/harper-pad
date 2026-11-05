@@ -217,8 +217,9 @@ func TestHashMatchesTheAdminInviteHash(t *testing.T) {
 // The public API's role has the rows it needs and nothing more: no DDL, no ownership, no reading accounts or the migration records'
 // content beyond what it checks, no deleting. The database enforces it, not the Go code.
 func TestSyncRoleHasRowRightsOnly(t *testing.T) {
-	s, _ := syncFixture(t)
+	s, owner := syncFixture(t)
 	ctx := context.Background()
+	t.Cleanup(func() { _, _ = owner.Exec(ctx, `TRUNCATE docs`) })
 	for _, q := range []string{
 		`SELECT * FROM clients`,
 		`SELECT * FROM meta`,
@@ -304,4 +305,54 @@ func (m mergeFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	}
 	y, _ := fs.ReadDir(m.b, name)
 	return append(x, y...), nil
+}
+
+// Row security keeps the notes away from the admin role, which owns the tables: with FORCE it applies to the owner too, and the only
+// policy is for harper_sync. The admin sees no row and cannot write one. (It is a seatbelt: the owner can still change policies or
+// switch row security off, so this is not claimed to stop whoever holds the owner's credential.)
+func TestAdminRoleCannotSeeOrWriteNotes(t *testing.T) {
+	s, owner := syncFixture(t) // owner is the harper_admin pool
+	ctx := context.Background()
+	t.Cleanup(func() { _, _ = owner.Exec(ctx, `TRUNCATE docs`) })
+
+	var rls, forced bool
+	if err := owner.QueryRow(ctx, `SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'docs'`).Scan(&rls, &forced); err != nil || !rls || !forced {
+		t.Fatalf("row security on docs: enabled %v, forced %v, %v", rls, forced, err)
+	}
+
+	if _, err := s.db.Exec(ctx, `INSERT INTO docs (client_id, id, version, created_at, updated_at, data) VALUES (1, repeat('b', 32), 1, 0, 0, 'a note')`); err != nil {
+		t.Fatal(err)
+	}
+	count := func(p *pgxpool.Pool) int {
+		var n int
+		if err := p.QueryRow(ctx, `SELECT count(*) FROM docs`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if got := count(s.db); got != 1 {
+		t.Fatalf("harper_sync sees %d notes, want 1", got)
+	}
+	if got := count(owner); got != 0 {
+		t.Errorf("harper_admin sees %d notes, want 0", got)
+	}
+	var data string
+	if err := owner.QueryRow(ctx, `SELECT data FROM docs WHERE id = repeat('b', 32)`).Scan(&data); err == nil {
+		t.Errorf("harper_admin read a note: %q", data)
+	}
+	// Writes: an insert is refused, an update or delete matches no row.
+	_, err := owner.Exec(ctx, `INSERT INTO docs (client_id, id, version, created_at, updated_at) VALUES (1, repeat('c', 32), 1, 0, 0)`)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
+		t.Errorf("harper_admin insert into docs: %v, want a row-security error", err)
+	}
+	for _, q := range []string{`UPDATE docs SET data = 'changed'`, `DELETE FROM docs`} {
+		tag, err := owner.Exec(ctx, q)
+		if err != nil || tag.RowsAffected() != 0 {
+			t.Errorf("%s as harper_admin: %v rows, %v, want 0 rows", q, tag.RowsAffected(), err)
+		}
+	}
+	if err := s.db.QueryRow(ctx, `SELECT data FROM docs WHERE id = repeat('b', 32)`).Scan(&data); err != nil || data != "a note" {
+		t.Errorf("the note after the admin's attempts: %q, %v", data, err)
+	}
 }

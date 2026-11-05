@@ -1,5 +1,7 @@
--- Schema of docs/sync.md, "Server schema (PostgreSQL)". Applied by harper-pad-sync as the harper_sync role, which then owns the
--- tables. Times are Unix milliseconds. The admin role gets exactly the grants at the end: no access to docs or meta.
+-- Schema of docs/sync.md, "Server schema (PostgreSQL)". Applied by harper-pad-admin as the harper_admin role, which owns the database
+-- and so the tables. Times are Unix milliseconds. The one file holds the whole initial schema: nothing has run an earlier version.
+-- Later changes are new files; a file that changes rows of docs must lift the row security below for its own statements, because the
+-- owner cannot see them either.
 
 CREATE TABLE meta (
   key   TEXT PRIMARY KEY,
@@ -24,14 +26,14 @@ CREATE TABLE docs (
 );
 
 CREATE TABLE devices (
-  id         TEXT   PRIMARY KEY,
-  client_id  BIGINT NOT NULL REFERENCES clients (id),
-  name       TEXT   NOT NULL,
-  user_agent TEXT   NOT NULL DEFAULT '',
-  token_hash BYTEA  NOT NULL UNIQUE,                   -- SHA-256 of the device token
-  public_key TEXT   NOT NULL,                          -- the device's DPoP key (JWK)
-  created_at BIGINT NOT NULL,
-  last_seen  BIGINT NOT NULL
+  id             TEXT   PRIMARY KEY,
+  client_id      BIGINT NOT NULL REFERENCES clients (id),
+  name           TEXT   NOT NULL,
+  user_agent     TEXT   NOT NULL DEFAULT '',
+  token_hash     BYTEA  NOT NULL UNIQUE,               -- SHA-256 of the device token
+  key_thumbprint TEXT   NOT NULL,                      -- RFC 7638 thumbprint of the device's DPoP key, from the enrollment proof
+  created_at     BIGINT NOT NULL,
+  last_seen      BIGINT NOT NULL
 );
 CREATE INDEX devices_client_idx ON devices (client_id);
 
@@ -47,7 +49,19 @@ CREATE TABLE invites (
 INSERT INTO meta (key, value) VALUES ('schema_version', '1');
 INSERT INTO clients (name, created_at) VALUES ('default', (extract(epoch FROM now()) * 1000)::bigint);
 
-GRANT SELECT ON clients TO harper_admin;
-GRANT SELECT, INSERT, DELETE ON invites TO harper_admin;
-GRANT SELECT, DELETE ON devices TO harper_admin;
-GRANT UPDATE (name) ON devices TO harper_admin;
+-- harper_sync is the role of the public API: rows only, no DDL and no ownership. Each grant is what a query in internal/store/sync.go
+-- needs, and nothing else; the draft routes add theirs in a later file.
+GRANT SELECT ON schema_migrations TO harper_sync;       -- to know the schema is current before it reports ready
+GRANT SELECT, INSERT ON devices TO harper_sync;         -- enrollment inserts, authentication looks up by token hash
+GRANT UPDATE (last_seen) ON devices TO harper_sync;     -- and records that the device was seen
+GRANT SELECT ON invites TO harper_sync;
+GRANT UPDATE (used_at) ON invites TO harper_sync;       -- spending an invite
+GRANT SELECT, INSERT, UPDATE ON docs TO harper_sync;    -- drafts are compare-and-set rows; a deletion is an update (a tombstone)
+
+-- Row security keeps the notes out of the admin role's reach: FORCE applies it to the table owner too, and the only policy is for
+-- harper_sync, so harper_admin sees no row of docs and cannot write one, whatever SQL the admin app runs (an injected statement
+-- included). It is a seatbelt, not a wall: the owner can still change policies or switch row security off, which is DDL, so anyone who
+-- holds the owner's credential can read notes. docs/sync.md, "Database access", says so.
+ALTER TABLE docs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE docs FORCE ROW LEVEL SECURITY;
+CREATE POLICY sync_rows ON docs FOR ALL TO harper_sync USING (true) WITH CHECK (true);
