@@ -742,7 +742,7 @@ This is a device-token model with DPoP key binding, transport security and no co
 | Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles: the public API's sync role gets rows only, the admin role owns the schema, and row security keeps notes from the admin role's ordinary SQL ([Database access](#database-access)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from the ingress controller; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role owns the tables; row security hides the notes from ordinary SQL but not from DDL that switches it off, and admin access can also enroll a device, and **a device reads the notes** (v1). See [the admin UI](#the-admin-ui). |
-| Guessing | 256-bit tokens and generic 401s on `/enroll` and on bad tokens; the ingress rate-limits per client IP (see Deployment). |
+| Guessing | 256-bit tokens and generic 401s on `/enroll` and on bad tokens; rate limiting, if any, is at the ingress (GitOps repository). |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin (`CORS_ALLOWED_ORIGINS`, exact match), not `*`, and only the headers and methods the API uses. An origin that is not listed gets no CORS headers (a preflight is a 403) and is logged once, which is how the desktop webview's real origin is read off the server. `Authorization` and `DPoP` headers, not cookies. |
 | Abuse and size | A body cap, the 8 MiB `CHECK` on a draft's text, and strict field formats. The server has no per-account quota and no limit on changes per request. |
 | Content-Security-Policy | `connect-src` is `'self'`, plus the sync origin when the build sets `SYNC_ORIGIN`, and nothing else changes: the build setting `SYNC_ORIGIN` (an https origin, no path; a bad value fails the build), read by `frontend/vite.config.js` for both builds and passed by the Pages workflow from a repository variable. Unset, the policy is unchanged. See [security](security.md). |
@@ -754,36 +754,10 @@ ciphertext), and traffic analysis (the server sees sizes and times).
 
 ## Deploying the server
 
-Everything runs in one Kubernetes namespace, `harper-pad`, described by manifests in the cluster's GitOps repository, not in
-this one (this section is their specification):
-
-- **PostgreSQL:** a CloudNativePG `Cluster` with one instance (one user, and devices can rebuild the server, so no high
-  availability), with certificate authentication as above; `harper_admin` is the database owner (`initdb.owner`) and `harper_sync` a plain
-  login role, both managed roles with their own certificates. No backup or restore: every device holds a full copy, and a new empty
-  server is repopulated by Sync all.
-- **Migrations:** the admin service applies them at start as `harper_admin`, the owner, each file in a transaction with its record in
-  `schema_migrations` and behind a PostgreSQL advisory lock so only one pod migrates; a failing file is retried, never skipped. The sync
-  service applies nothing and has no DDL rights: its `/readyz` is 503 until every migration it was built with is recorded, so it never
-  serves a database without its tables or grants. A sync pod built before the newest migration keeps serving (migrations are additive).
-  The two images are released together; the sync Deployment is `Recreate`, so a new sync image is down until the matching admin has
-  migrated.
-- **`harper-pad-sync`:** one replica and a ClusterIP Service. Traefik routes the sync domain to it with a Let's Encrypt
-  certificate from cert-manager and these middlewares: HTTP to HTTPS redirect, HSTS and security headers, a rate limit per client
-  IP, and a body cap slightly above the largest allowed request. CORS stays in the app, with its explicit allowlist (`CORS_ALLOWED_ORIGINS`). The app takes
-  the client IP from `X-Forwarded-For` only because the NetworkPolicy lets nothing but the ingress controller connect. The
-  DPoP `jti` replay cache is per pod: move it to PostgreSQL before running more than one replica.
-- **`harper-pad-admin`:** one replica and **no Service**. The app listens on 127.0.0.1 next to a `cloudflared` sidecar (a native
-  sidecar where supported, so the tunnel is up before the app and outlives it). The remotely managed tunnel (token in a Secret,
-  `TUNNEL_TOKEN`) maps the admin hostname to `http://localhost:<port>`. A sidecar rather than Cloudflare's separate Deployment, so
-  no other pod can reach the app; the cost is that the two restart together.
-- **NetworkPolicies:** default deny for ingress and egress, then allow DNS, the sync and admin pods to PostgreSQL on 5432,
-  ingress to the sync pods from the ingress controller only (none to admin), and the admin pod out to Cloudflare. Nothing else
-  leaves the sync pods. The network plugin has to enforce NetworkPolicy.
-- **Pod hardening:** non-root, read-only root filesystem, no capabilities, runtime-default seccomp, no Kubernetes API token,
-  resource limits, images pinned by digest.
-- **Configuration and health:** `PUBLIC_URL` must be `https:` or the service refuses to start (the app takes the scheme from it,
-  not from a forwarded header). `/healthz` is liveness and never touches the database. `/readyz` checks the database and, for the sync service, that the schema is
-  current. `CORS_ALLOWED_ORIGINS` (sync) lists the browser origins allowed to call the API; it is empty by default, which allows none.
+The Kubernetes manifests (PostgreSQL, the sync and admin Deployments, NetworkPolicies, ingress and Cloudflare Access) are kept in the
+cluster's GitOps repository, not here. The settings and health checks the services need are in [`backend/README.md`](../backend/README.md).
+Two things the manifests must respect: run one sync replica, because the DPoP `jti` replay cache is per pod (move it to PostgreSQL
+before running more), and let only the ingress controller reach the sync pods, because the app takes the client IP from `X-Forwarded-For`.
 
 Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI.
 
