@@ -5,10 +5,10 @@ import { SyncError } from "./syncEnroll.js";
 
 // One signed request. `device` is the record from syncDevice. Resolves to {status, body} for any answer except a 401, which means the
 // server no longer accepts this device (revoked, or its key was lost): "signin". A server that cannot be reached is "unreachable".
-export async function signedRequest({ device, method, path, body, fetchFn = fetch.bind(globalThis) }) {
+export async function signedRequest({ device, method, path, body, headers: extra = {}, fetchFn = fetch.bind(globalThis) }) {
   const url = `${device.server}${path}`;
   const proof = await createProof({ privateKey: device.privateKey, publicJwk: device.publicJwk, method, url, token: device.token });
-  const headers = { Authorization: `DPoP ${device.token}`, DPoP: proof };
+  const headers = { ...extra, Authorization: `DPoP ${device.token}`, DPoP: proof };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   let res;
   try {
@@ -63,6 +63,20 @@ export async function getDoc({ device, id, fetchFn }) {
   if (status === 404) return null;
   if (status !== 200 || typeof body?.data !== "string") throw new SyncError("server", `The server answered ${status}.`);
   return body;
+}
+
+// The server's validator for a draft's state, as it writes it in an ETag: "<updatedAt>-<0 or 1 for deleted>".
+export const etagOf = (state) => `"${state.updatedAt}-${state.deleted ? 1 : 0}"`;
+
+// Asks for a draft only if the server's state differs from `state` (the one recorded at the last sync, or null for none). Resolves to
+// {kind: "unchanged"} (a 304), {kind: "missing"} (the server has no such draft) or {kind: "doc", doc}.
+export async function getDocIfChanged({ device, id, state, fetchFn }) {
+  const headers = state ? { "If-None-Match": etagOf(state) } : {};
+  const { status, body } = await signedRequest({ device, method: "GET", path: `/docs/${id}`, headers, fetchFn });
+  if (status === 304) return { kind: "unchanged" };
+  if (status === 404) return { kind: "missing" };
+  if (status !== 200 || typeof body?.data !== "string") throw new SyncError("server", `The server answered ${status}.`);
+  return { kind: "doc", doc: body };
 }
 
 // Deletes a draft on the server: a tombstone on top of `state`, the server's state for it. Same answers as pushDraft.

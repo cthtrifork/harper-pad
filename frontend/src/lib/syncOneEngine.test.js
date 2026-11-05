@@ -26,7 +26,7 @@ test("only syncRun.js imports the decision table", () => {
 
 test("only syncRun.js uploads or downloads drafts", () => {
   const users = files
-    .filter((f) => /\b(pushDraft|pushTombstone|getDoc|listDocs)\b/.test(f.text.replace(/\/\/.*$/gm, "")))
+    .filter((f) => /\b(pushDraft|pushTombstone|getDoc|getDocIfChanged|listDocs)\b/.test(f.text.replace(/\/\/.*$/gm, "")))
     .map((f) => f.name)
     .sort();
   assert.deepEqual(users, ["lib/syncClient.js", "lib/syncRun.js"]);

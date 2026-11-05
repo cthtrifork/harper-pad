@@ -51,7 +51,9 @@ const sync = useSync({
   skip: () => new Set([drafts.current.value.id].filter(Boolean)),
   onChanged: () => drafts.refreshList(),
 });
-const drafts = useDrafts(editor, showDrawer, { onSaved: sync.draftSaved });
+// A draft that was opened is checked against the server in the background (a newer version is swapped in when nothing was typed).
+const checkOpened = (id) => sync.noteOpened(id, { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() });
+const drafts = useDrafts(editor, showDrawer, { onSaved: sync.draftSaved, onOpened: checkOpened });
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
 // goes away on its own, and at once when the user edits the text themselves.
@@ -254,7 +256,11 @@ const removeWord = (word) =>
 const focusFromClick = (e) => e.target === pane.value && editor.value?.focusEnd();
 
 onMounted(async () => {
-  sync.init().catch(() => {}); // a device that cannot be read just shows "Sync off"
+  // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
+  sync
+    .init()
+    .then(() => drafts.current.value.id && checkOpened(drafts.current.value.id))
+    .catch(() => {});
   window.addEventListener("keydown", onKeydown);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();

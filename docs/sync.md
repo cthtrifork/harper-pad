@@ -398,7 +398,7 @@ A conflict is settled **on the device**, by comparing, and only when it is not c
 compares its own text now, the state it recorded at the last sync (the sync state, below) and the server's
 current state. The same table applies to a save that comes back 409, to opening a note (where only the "newer there" row can apply
 on its own) and to Sync all. **In the code it is one place**: `createSyncer` in `frontend/src/lib/syncRun.js` (the table itself is the pure
-`decide` in `syncPlan.js`). Sync all is its `all()` and the push after a save is its `one(id)`; a test (`syncOneEngine.test.js`) fails if
+`decide` in `syncPlan.js`). Sync all is its `all()`, the push after a save is its `one(id)` and opening a note is its `open(id)`; a test (`syncOneEngine.test.js`) fails if
 another module starts deciding or uploading drafts.
 
 | This device | The server | What happens |
@@ -513,12 +513,12 @@ the CORS allowlist and the web build's CSP. It does not prove certificate renewa
 ## Open work
 
 - [ ] `GET` and `DELETE` for the device list the app shows (the admin's revoke already works on the same table).
-- [ ] Opening a note in the sync module: ask for the draft with `If-None-Match`, swap a newer one in when the draft is unchanged here and not
-      being typed in ("Updated from the server"), otherwise mark it "Newer on the server". Undo for the removals Sync all makes.
+- [ ] Undo for the removals Sync all makes (a draft removed because the server has a tombstone is gone for good today).
 - [ ] The [end-to-end test](#end-to-end-test), including the "lose the server" check. A draft deleted elsewhere while a device was
       offline can reappear (documented), but nothing else is lost.
-- [ ] The rest of the UI: the device list, a progress line and a pending count on the chip, and the "Newer on the server" marker in the
-      drafts drawer. The status chip, the enroll pop-up, push after a save and Sync all exist, **for the web build only**: the desktop build
+- [ ] The rest of the UI: the device list, a progress line and a pending count on the chip, and a "Newer on the server" marker on the
+      drafts drawer's cards (opening a note already shows it beside the chip). The status chip, the enroll pop-up, push after a save, Sync all and
+      opening a note exist, **for the web build only**: the desktop build
       needs Go bindings for the sync state (`sync_state`, `Changes`, `ApplyRemote`) first. Follow `docs/design-cheatsheet.html`, short eased
       transitions, reduced motion honoured.
 - [ ] A server operations page (run, proxy, back up, rotate, revoke), and the repository variable `SYNC_ORIGIN` set for the Pages build.
@@ -529,7 +529,7 @@ the CORS allowlist and the web build's CSP. It does not prove certificate renewa
 Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
 `harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in the web build the client
 (`dpop.js`, `syncEnroll.js`, `syncClient.js`, `syncPlan.js`, `syncRun.js`, `useSync.js`), the `SYNC_ORIGIN` CSP setting, the chip and pop-up,
-the push after a save and Sync all. All of it was checked with two Chromium contexts against the compose stack.
+the push after a save, Sync all, and opening a note (the "Updated from the server" swap and the "Newer on the server" marker, shown beside the chip). All of it was checked with two Chromium contexts against the compose stack.
 
 ## Option: end-to-end encryption
 
