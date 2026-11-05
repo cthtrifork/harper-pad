@@ -39,12 +39,15 @@ never run on a real desktop yet.
       0 fail, `persist()` true). The WebKitGTK check for the Linux window was dropped. Close PR #86 (the throwaway test page).
 - [x] Local groundwork: sync state in its own table/store, hash-based change tracking, apply-remote store methods, additive SQLite
       and IndexedDB (`DB_VERSION` 3) migrations that older builds survive, with tests. The host calls and bindings come with the sync module.
-- [x] The server (deployed at `harper-sync.portableinfo.cloud` from the GitOps repository, `harper-pad-sync` v1.1.0): `harper-pad-sync` (enrollment, sync, devices; every table carries `client_id`, one client account in v1), the `harper-pad-admin` Go + HTMX service (enrollment URLs,
-      devices) behind a Cloudflare Tunnel and Access with OIDC (Cloudflare does all authentication; the app has none), two container
-      images, and tests. The Kubernetes manifests are not kept in this repository; write them in the cluster's GitOps repository from
-      the "Deploying the server" section of `docs/sync.md`: CloudNativePG `Cluster`, cert-manager certificates (database clients and
-      the sync domain), the ingress route and middlewares for the sync API, NetworkPolicies, the admin pod with its `cloudflared`
-      sidecar.
+- [x] The server's infrastructure and the admin service: `harper-pad-admin` (Go + HTMX: enrollment URLs, devices) behind a Cloudflare
+      Tunnel and Access with OIDC, two container images, PostgreSQL with client-certificate roles, the schema migrations that
+      `harper-pad-sync` runs at start, and the manifests in the cluster's GitOps repository. Deployed at
+      `harper-sync.portableinfo.cloud` (v1.1.0 at the time of writing) and smoke tested.
+- [x] Enrollment in `harper-pad-sync`: `POST /enroll` (spends the invite, binds the device token to the DPoP key), the DPoP proof check and
+      the device authentication the other routes use, the CORS allowlist (`CORS_ALLOWED_ORIGINS`, logs each rejected origin once), the
+      hourly purge of expired invites. Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
+- [ ] The draft routes in `harper-pad-sync`: `GET /docs`, `GET /docs/<id>` and `PUT /docs/<id>` (compare-and-set, tombstones, the size
+      limits), with tests for conflicts, deletes and limits, then `GET`/`DELETE` for the device list the app shows.
 - [ ] The sync module (`lib/sync.js`) with unit tests.
 - [ ] The end-to-end test (`docs/sync.md`, "End-to-end test"): a compose stack with PostgreSQL, `harper-pad-sync` built from
       `backend/Containerfile.sync`, and Caddy providing https (`app.localhost` serves the web build, `sync.localhost` proxies to the

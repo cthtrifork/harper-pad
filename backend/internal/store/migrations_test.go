@@ -14,7 +14,7 @@ func TestMigrate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close) // registered first, so it runs after the cleanup below
 
 	// The real migrations: applied once, then nothing to do (also when the stack's database already has them).
 	if _, err := Migrate(ctx, pool, Migrations); err != nil {

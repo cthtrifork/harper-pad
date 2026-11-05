@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLoadSync(t *testing.T) {
 	tests := []struct {
@@ -44,5 +47,34 @@ func TestLoadAdminDefaultsToLoopback(t *testing.T) {
 	}
 	if c.ListenAddr != "127.0.0.1:9001" {
 		t.Errorf("ListenAddr = %q", c.ListenAddr)
+	}
+}
+
+func TestLoadSyncOrigins(t *testing.T) {
+	t.Setenv("PUBLIC_URL", "https://sync.example.org")
+	tests := []struct {
+		list    string
+		want    []string
+		wantErr bool
+	}{
+		{"", nil, false},
+		{"https://app.example.org", []string{"https://app.example.org"}, false},
+		{" https://a.example.org , http://wails.localhost,wails://wails ,", []string{"https://a.example.org", "http://wails.localhost", "wails://wails"}, false},
+		{"*", nil, true},
+		{"https://app.example.org/", nil, true},
+		{"https://app.example.org/path", nil, true},
+		{"app.example.org", nil, true},
+		{"https://user@app.example.org", nil, true},
+	}
+	for _, tt := range tests {
+		t.Setenv("CORS_ALLOWED_ORIGINS", tt.list)
+		c, err := LoadSync()
+		if (err != nil) != tt.wantErr {
+			t.Errorf("%q: err = %v, wantErr %v", tt.list, err, tt.wantErr)
+			continue
+		}
+		if err == nil && strings.Join(c.AllowedOrigins, "|") != strings.Join(tt.want, "|") {
+			t.Errorf("%q: origins = %v, want %v", tt.list, c.AllowedOrigins, tt.want)
+		}
 	}
 }

@@ -1,9 +1,9 @@
 # Backend (scaffold)
 
 The optional sync service for Harper Pad: `harper-pad-sync` (the API) and `harper-pad-admin` (Go + HTMX, for enrollment URLs
-and devices), on PostgreSQL. The design is in [`docs/sync.md`](../docs/sync.md). **Nothing here works yet beyond the health
-endpoints and the admin pages, which run against a PostgreSQL you set up yourself (below)**: this directory is the layout, the stub commands and the end-to-end stack, to be filled in following the build order
-in that document.
+and devices), on PostgreSQL. The design is in [`docs/sync.md`](../docs/sync.md). **What works so far: the health endpoints, the admin
+pages, the schema migrations and device enrollment (`POST /enroll`, plus the device authentication the draft routes will use)**. The draft routes (list, get, put) and the client are not built yet; this directory
+is filled in following the build order in that document.
 
 This is its own Go module (`github.com/cthtrifork/harper-pad/backend`) and shares no code with the desktop app. The Kubernetes
 manifests are not kept in this repository.
@@ -12,7 +12,7 @@ manifests are not kept in this repository.
 |---|---|
 | `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
 | `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; one page: add a device, pending URLs, devices; no inline script or style, same-origin and CSRF checks). The CSS is one file per concern in `web/static` (`tokens`, `base`, `controls`, `list`, `card`, `motion`, `phone`, linked in that order from `layout.html`; `phone.css` last because it overrides). It reaches the database only through the `Store` interface, implemented on PostgreSQL by `store.Admin` |
-| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool, the admin queries in `admin.go`, and `migrations/` with the schema from `docs/sync.md`), and `syncapi`, `admin`, `auth`, `protocol`: empty packages with a package comment each |
+| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool, the migration runner, the admin queries in `admin.go`, the sync queries in `sync.go`, and `migrations/` with the schema from `docs/sync.md`), `auth` (device tokens and the DPoP proof check; `authtest` makes proofs the way the web client does), `syncapi` (the routes, the CORS allowlist and the device authentication), `admin`, and `protocol` (empty, for the draft types) |
 | `Containerfile.sync`, `Containerfile.admin` | Container images; the build context is this directory |
 | `testdata/protocol/` | Fixtures for the protocol (empty) |
 | `test/e2e/` | The end-to-end stack (`compose.yaml`, `Caddyfile`, `certs.sh`) and the Playwright test |
@@ -26,11 +26,13 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 | `LISTEN_ADDR` | Default `:9000` (sync) and `127.0.0.1:9001` (admin, loopback: only its cloudflared sidecar reaches it) |
 | `PUBLIC_URL` | Sync only, required, must be `https:` or the service refuses to start |
 | `SYNC_PUBLIC_URL` | Admin only, required, `https:`: the sync service's public address, which enrollment URLs (`<it>/join#<token>`) are built from |
+| `CORS_ALLOWED_ORIGINS` | Sync only. Comma-separated exact origins (`https://app.example.org`, no trailing slash, never `*`) that browsers may call the API from: the Pages site and the desktop app's webview. Empty allows none. An origin that is not listed is logged once as `CORS: origin is not in CORS_ALLOWED_ORIGINS`, which is how a new client's real origin is found |
 | `METRICS_ADDR` | Where `/metrics` is served, on its own listener so it is never on the public route. Default `:9102` (sync); admin has none unless set, because its pod accepts no traffic except from its own sidecar |
 | `DATABASE_URL` | Optional. When unset, the standard libpq variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`) are read, which is how the cluster does client-certificate login |
 
 | Endpoint | Use it for | |
 |---|---|---|
+| `POST /enroll` | Enrolling a device | `{invite, deviceName}` with a `DPoP` proof signed by the new key. Spends the invite and returns `{deviceToken, token_type: "DPoP"}`. A wrong, spent or expired invite, a bad or replayed proof and a missing proof are all the same `401`; `400` for a malformed body or name, `413` above 4 KiB |
 | `GET /healthz` | `livenessProbe` | The process is serving. Never touches PostgreSQL, so a database outage does not restart healthy pods |
 | `GET /readyz` | `readinessProbe` | A PostgreSQL round trip succeeds (2 s limit, so set `timeoutSeconds: 3`; the result is cached for 2 s and logged only when it changes). 503 while the database is unreachable and while shutting down |
 
