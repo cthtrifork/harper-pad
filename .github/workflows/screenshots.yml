@@ -87,7 +87,7 @@ jobs:
         env:
           SCREENSHOT_BROWSER_CHANNEL: chrome
           # renovate: datasource=npm depName=playwright-core
-          PLAYWRIGHT_VERSION: 1.64.1
+          PLAYWRIGHT_VERSION: 1.65.0
         run: make screenshots
 
       - name: Upload 01-editor-with-problems
