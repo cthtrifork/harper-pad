@@ -50,10 +50,16 @@ const sync = useSync({
   prepare: () => drafts.flush(),
   skip: () => new Set([drafts.current.value.id].filter(Boolean)),
   onChanged: () => drafts.refreshList(),
+  openDraft: (id) => drafts.open(id),
 });
 // A draft that was opened is checked against the server in the background (a newer version is swapped in when nothing was typed).
-const checkOpened = (id) => sync.noteOpened(id, { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() });
-const drafts = useDrafts(editor, showDrawer, { onSaved: sync.draftSaved, onOpened: checkOpened });
+const openHooks = { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() };
+const checkOpened = (id) => sync.noteOpened(id, openHooks);
+// An autosave pushes after a short wait; Save (or Ctrl+S, also to a file) pushes at once and settles the open draft.
+const drafts = useDrafts(editor, showDrawer, {
+  onSaved: (id, how) => (how?.explicit ? sync.saveRequested(id, openHooks) : sync.draftSaved(id)),
+  onOpened: checkOpened,
+});
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
 // goes away on its own, and at once when the user edits the text themselves.

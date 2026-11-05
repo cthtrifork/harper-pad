@@ -376,7 +376,7 @@ There is no timer, no focus pull and no change feed. Sync happens at four moment
 
 | Moment | What it does |
 |---|---|
-| **Save** | About 2 seconds after typing stops, the device pushes that one draft (`PUT`). Offline or on an error the draft stays *changed* and is sent by the next save or by Sync all. |
+| **Save** | About 2 seconds after typing stops, the device pushes that one draft (`PUT`). An explicit Save (the button, Ctrl+S, also to a file) pushes at once and looks at the server again, so a "Newer on the server" marker is settled even when there was nothing new to save. Offline or on an error the draft stays *changed* and is sent by the next save or by Sync all. |
 | **Delete** | The tombstone is pushed after the app's undo window, so a delete that is undone never reaches the server. |
 | **Opening a note** | The local text shows at once. In the background the device asks for the draft with `If-None-Match`. If the server has a newer state, the draft is unchanged here and the user has not typed, it is swapped in with a short "Updated from the server" notice. Otherwise the local text is left alone and the note gets a "Newer on the server" marker, to be settled by Sync all or the next save. A tombstone or a 404 changes nothing while the note is open. |
 | **Sync all** | A button in the drafts drawer. It lists the state of every draft on the server and reconciles both ways. It also runs once after a device enrolls and when the app starts. |
@@ -430,7 +430,8 @@ prefixed with "Conflicted copy" and the time. The device's own text keeps its id
 typing in ([the principles](#the-client-is-the-source-of-truth), rule 3). The device then pushes its own text on top of the server's
 version. The copy is an ordinary draft: it syncs like any other, so other devices receive the text under the original id and the copy
 as a new draft. Nothing is lost, and the user decides which to keep and deletes the other. The server never makes copies and never
-merges text.
+merges text. The user is told: a line beside the status chip, "Kept the server version as a copy", with an **Open copy** button, for about
+twelve seconds (a conflict found by a save, by opening a note or by Sync all alike).
 
 ### First sync
 

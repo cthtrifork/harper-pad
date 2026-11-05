@@ -20,9 +20,9 @@ export async function signedRequest({ device, method, path, body, headers: extra
       referrerPolicy: "no-referrer",
     });
   } catch {
-    throw new SyncError("unreachable", "The server could not be reached.");
+    throw new SyncError("unreachable", "Server not reachable.");
   }
-  if (res.status === 401) throw new SyncError("signin", "The server no longer accepts this device.");
+  if (res.status === 401) throw new SyncError("signin", "Signed out.");
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 
@@ -41,7 +41,7 @@ export async function pushDraft({ device, draft, state, fetchFn }) {
   });
   if (status === 200 && Number.isInteger(body?.version)) return { result: "ok", version: body.version };
   if (status === 409) return { result: "conflict" };
-  throw new SyncError("server", `The server answered ${status}.`);
+  throw new SyncError("server", `Server error (${status}).`);
 }
 
 // The state of every draft the server holds, without their text: [{id, version, updatedAt, deleted}], tombstones included. Pages of 500
@@ -50,7 +50,7 @@ export async function listDocs({ device, fetchFn }) {
   const out = [];
   for (let after = ""; ; ) {
     const { status, body } = await signedRequest({ device, method: "GET", path: `/docs?after=${after}&limit=500`, fetchFn });
-    if (status !== 200 || !Array.isArray(body)) throw new SyncError("server", `The server answered ${status}.`);
+    if (status !== 200 || !Array.isArray(body)) throw new SyncError("server", `Server error (${status}).`);
     out.push(...body);
     if (body.length < 500) return out;
     after = body[body.length - 1].id;
@@ -61,7 +61,7 @@ export async function listDocs({ device, fetchFn }) {
 export async function getDoc({ device, id, fetchFn }) {
   const { status, body } = await signedRequest({ device, method: "GET", path: `/docs/${id}`, fetchFn });
   if (status === 404) return null;
-  if (status !== 200 || typeof body?.data !== "string") throw new SyncError("server", `The server answered ${status}.`);
+  if (status !== 200 || typeof body?.data !== "string") throw new SyncError("server", `Server error (${status}).`);
   return body;
 }
 
@@ -75,7 +75,7 @@ export async function getDocIfChanged({ device, id, state, fetchFn }) {
   const { status, body } = await signedRequest({ device, method: "GET", path: `/docs/${id}`, headers, fetchFn });
   if (status === 304) return { kind: "unchanged" };
   if (status === 404) return { kind: "missing" };
-  if (status !== 200 || typeof body?.data !== "string") throw new SyncError("server", `The server answered ${status}.`);
+  if (status !== 200 || typeof body?.data !== "string") throw new SyncError("server", `Server error (${status}).`);
   return { kind: "doc", doc: body };
 }
 
@@ -91,5 +91,5 @@ export async function pushTombstone({ device, id, state, updatedAt, fetchFn }) {
   });
   if (status === 200 && Number.isInteger(body?.version)) return { result: "ok", version: body.version };
   if (status === 409) return { result: "conflict" };
-  throw new SyncError("server", `The server answered ${status}.`);
+  throw new SyncError("server", `Server error (${status}).`);
 }

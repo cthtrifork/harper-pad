@@ -18,12 +18,12 @@ export function parseInviteUrl(text) {
   try {
     url = new URL(String(text).trim());
   } catch {
-    throw new SyncError("bad-url", "That is not a link. Paste the whole address the admin page showed.");
+    throw new SyncError("bad-url", "Not a link. Paste the full invite address.");
   }
-  if (url.protocol !== "https:") throw new SyncError("not-https", "The server address must start with https://.");
+  if (url.protocol !== "https:") throw new SyncError("not-https", "The address must start with https://.");
   const invite = url.hash.slice(1);
   if (url.pathname !== "/join" || !/^[A-Za-z0-9_-]{43}$/.test(invite)) {
-    throw new SyncError("bad-url", "That link is not an invite. Paste the whole address the admin page showed.");
+    throw new SyncError("bad-url", "Not an invite link.");
   }
   return { server: url.origin, invite };
 }
@@ -47,15 +47,14 @@ export async function enrollDevice({ text, deviceName, store, fetchFn = fetch.bi
       referrerPolicy: "no-referrer",
     });
   } catch {
-    throw new SyncError("unreachable", "The server could not be reached. Check the address and your connection.");
+    throw new SyncError("unreachable", "Server not reachable.");
   }
-  if (res.status === 401)
-    throw new SyncError("rejected", "The invite was not accepted. It may have expired or been used; ask for a new one.");
-  if (!res.ok) throw new SyncError("server", `The server answered ${res.status}. Try again later.`);
+  if (res.status === 401) throw new SyncError("rejected", "Invite not accepted. It may be used or expired.");
+  if (!res.ok) throw new SyncError("server", `Server error (${res.status}). Try again later.`);
 
   const body = await res.json().catch(() => null);
   if (typeof body?.deviceToken !== "string" || body.token_type !== "DPoP") {
-    throw new SyncError("server", "The server's answer was not what this app expects.");
+    throw new SyncError("server", "Unexpected answer from the server.");
   }
   await store.save({ server, token: body.deviceToken, deviceName: name, ...key });
   return { server, deviceName: name };

@@ -67,9 +67,10 @@ function device(server) {
     return openDatabase();
   };
   const drafts = createWebDrafts(open);
-  const syncer = () => createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn });
+  const copies = []; // the conflicted copies the engine reported
+  const syncer = () => createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn, onCopy: (c) => copies.push(c) });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
-  return { drafts, sync: (skip) => syncer().all({ skip }), one: (id) => syncer().one(id), open: (id, o) => syncer().open(id, o) };
+  return { drafts, copies, sync: (skip) => syncer().all({ skip }), one: (id) => syncer().one(id), open: (id, o) => syncer().open(id, o) };
 }
 const none = { uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 };
 const sum = (o) => ({ ...none, ...o });
@@ -233,7 +234,7 @@ test("the summary names only what happened", () => {
     summaryText(sum({ uploaded: 3, downloaded: 2, conflicted: 1, removed: 1 })),
     "3 uploaded, 2 downloaded, 1 conflicted copy, 1 removed",
   );
-  assert.equal(summaryText(sum({ conflicted: 2, failed: 1 })), "2 conflicted copies, 1 could not be synced");
+  assert.equal(summaryText(sum({ conflicted: 2, failed: 1 })), "2 conflicted copies, 1 failed");
   assert.match(conflictedCopy("text", new Date(2026, 10, 5, 9, 7)), /^Conflicted copy 2026-11-05 09:07: text$/);
 });
 
@@ -358,4 +359,25 @@ test("a tombstone or a missing draft changes nothing while the note is open", as
   const local = await b.drafts.save({ content: "never synced" });
   assert.equal(await b.open(local.id), "none"); // 404: absence is not deletion
   assert.ok((await texts(b)).includes("never synced"));
+});
+
+test("a conflict reports the copy it kept, from Sync all and from a save alike", async () => {
+  for (const how of ["all", "one"]) {
+    const server = fakeServer();
+    const a = device(server);
+    const b = device(server);
+    const d = await a.drafts.save({ content: "start" });
+    await a.sync();
+    await b.sync();
+    await tick();
+    await a.drafts.save({ id: d.id, content: "from A" });
+    await a.one(d.id);
+    await tick();
+    await b.drafts.save({ id: d.id, content: "from B" });
+    if (how === "all") await b.sync();
+    else await b.one(d.id);
+    assert.equal(b.copies.length, 1, how);
+    assert.match(b.copies[0].content, /^Conflicted copy .*: from A$/);
+    assert.ok((await b.drafts.allIds()).includes(b.copies[0].id));
+  }
 });
