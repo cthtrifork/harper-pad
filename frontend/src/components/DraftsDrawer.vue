@@ -1,5 +1,6 @@
 <script setup>
-import { ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { TEMPLATES } from "../lib/templates.js";
 import { whenLabel } from "../lib/when.js";
 
 const props = defineProps({
@@ -64,6 +65,43 @@ function swipeEnd(e) {
   }, 150);
 }
 
+// The arrow beside "New draft": a menu of templates. A click elsewhere or Escape closes it (and Escape gives the focus back to the arrow).
+const menu = ref(false);
+const split = ref(null);
+const arrow = ref(null);
+
+function create(template) {
+  menu.value = false;
+  emit("create", template);
+}
+
+function onPointerDown(e) {
+  if (menu.value && !split.value?.contains(e.target)) menu.value = false;
+}
+function onKeydown(e) {
+  if (e.key === "Escape" && menu.value) {
+    menu.value = false;
+    arrow.value?.focus();
+  }
+}
+// Arrow keys move through the items; Enter or Space on an item is its click.
+function onMenuKeydown(e) {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  e.preventDefault();
+  const items = [...e.currentTarget.querySelectorAll("[role=menuitem]")];
+  const i = items.indexOf(document.activeElement);
+  items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+}
+watch(menu, (on) => on && nextTick(() => split.value?.querySelector("[role=menuitem]")?.focus()));
+onMounted(() => {
+  window.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("keydown", onKeydown);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("pointerdown", onPointerDown);
+  window.removeEventListener("keydown", onKeydown);
+});
+
 function open(id) {
   if (!swiped) emit("open", id);
   swiped = false;
@@ -78,7 +116,19 @@ const baseName = (path) => path.split(/[\\/]/).pop();
     <header>
       <h2>Drafts</h2>
       <div class="actions">
-        <button type="button" class="primary" @click="emit('create')">New draft</button>
+        <span ref="split" class="split">
+          <button type="button" class="primary main" @click="create('empty')">New draft</button>
+          <button type="button" class="primary arrow" aria-label="New draft from a template" aria-haspopup="menu" :aria-expanded="menu" ref="arrow" @click="menu = !menu">
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
+          </button>
+          <Transition name="pop">
+            <span v-if="menu" class="menu templates" role="menu" aria-label="Start from" @keydown="onMenuKeydown">
+              <button v-for="t in TEMPLATES" :key="t.id" type="button" role="menuitem" class="option" @click="create(t.id)">
+                <span class="name">{{ t.label }}<small>{{ t.hint }}</small></span>
+              </button>
+            </span>
+          </Transition>
+        </span>
         <button type="button" class="close" aria-label="Close the drafts list" @click="emit('close')">
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" /></svg>
         </button>

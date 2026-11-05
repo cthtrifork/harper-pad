@@ -352,7 +352,7 @@ onBeforeUnmount(() => {
         :query="drafts.query.value"
         :toast="drafts.toast.value"
         @open="(id) => pickDraft(drafts.open, id)"
-        @create="pickDraft(drafts.create)"
+        @create="(template) => pickDraft(drafts.create, template)"
         @remove="drafts.remove"
         @search="drafts.setQuery"
         @more="drafts.showMore"

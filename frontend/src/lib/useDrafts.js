@@ -1,4 +1,5 @@
 import { computed, ref } from "vue";
+import { templateText } from "./templates.js";
 import {
   deleteDraft,
   getDraft,
@@ -328,14 +329,18 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     editor.value?.load(d.content, d.format);
   }
 
-  async function create() {
+  // A new, empty draft, or one that starts from a template (see lib/templates.js). The template text is not saved until it is edited,
+  // so choosing one and walking away leaves no draft behind.
+  async function create(template = "empty") {
     await flush();
-    if (!current.value.id && (editor.value?.getText() ?? "").trim() === "") {
+    const text = templateText(template);
+    if (!text && !current.value.id && (editor.value?.getText() ?? "").trim() === "") {
       editor.value?.focus();
       return;
     }
     setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
-    editor.value?.load("", "markdown");
+    editor.value?.load(text, "markdown");
+    if (text) editor.value?.focusEnd();
   }
 
   // Delete a draft, with an undo that puts it back exactly as it was (same id, text and creation time).
