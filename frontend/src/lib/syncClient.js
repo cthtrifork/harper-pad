@@ -57,9 +57,10 @@ export async function listDocs({ device, fetchFn }) {
   }
 }
 
-// One draft with its text: {id, version, createdAt, updatedAt, deleted, data}.
+// One draft with its text: {id, version, createdAt, updatedAt, deleted, data}, or null when the server has no such draft.
 export async function getDoc({ device, id, fetchFn }) {
   const { status, body } = await signedRequest({ device, method: "GET", path: `/docs/${id}`, fetchFn });
+  if (status === 404) return null;
   if (status !== 200 || typeof body?.data !== "string") throw new SyncError("server", `The server answered ${status}.`);
   return body;
 }

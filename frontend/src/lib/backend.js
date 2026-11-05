@@ -72,6 +72,7 @@ export const syncDrafts = web
       save: web.save,
       allIds: web.allIds,
       changes: web.changes,
+      isChanged: web.isChanged,
       syncState: web.syncState,
       markSynced: web.markSynced,
       applyRemote: web.applyRemote,
