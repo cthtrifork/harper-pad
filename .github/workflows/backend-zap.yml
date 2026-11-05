@@ -48,6 +48,10 @@ jobs:
           mkdir -p frontend/dist-web
           docker compose -f backend/test/e2e/compose.yaml up -d --build --wait
 
+      # harper-pad-admin applies the schema (it owns the tables); harper-pad-sync is not ready until it has.
+      - name: Wait for the schema
+        run: make -C backend wait-schema
+
       # The scan runs in a container on the stack's network and talks to the service directly (plain http, as Caddy does).
       # -m limits the spider, -T the whole scan (minutes). Exit 1 means a FAIL rule fired, 2 only warnings; anything above 2 is ZAP
       # itself failing. The status is kept for the last step, so the report and the comment are written first.

@@ -4,39 +4,51 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/auth"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// syncFixture returns the sync store connected as harper_sync (its client certificate, so the real ownership applies) with the
-// schema migrated and the devices and invites tables empty. The pool is for seeding and checking rows.
+// syncFixture returns the sync store connected as harper_sync (its client certificate, so its real, row-level grants apply) and the
+// pool of the table owner, harper_admin, which applies the migrations (as harper-pad-admin does at start), seeds rows and checks
+// them. The devices and invites tables are empty at the start of each test.
 func syncFixture(t *testing.T) (*Sync, *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()
+
+	pgEnv(t, "harper_admin", "admin")
+	owner, err := Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(owner.Close)
+	if _, err := Migrate(ctx, owner, Migrations); err != nil {
+		t.Fatal(err)
+	}
+	reset := func() {
+		if _, err := owner.Exec(ctx, `TRUNCATE devices, invites`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reset()
+	t.Cleanup(reset)
+
 	pgEnv(t, "harper_sync", "client")
 	pool, err := Open(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	if _, err := Migrate(ctx, pool, Migrations); err != nil {
-		t.Fatal(err)
-	}
-	reset := func() {
-		if _, err := pool.Exec(ctx, `TRUNCATE devices, invites`); err != nil {
-			t.Fatal(err)
-		}
-	}
-	reset()
-	t.Cleanup(reset)
 	s := NewSync(pool)
 	s.now = func() time.Time { return t0 }
-	return s, pool
+	return s, owner
 }
 
 func seedInvite(t *testing.T, pool *pgxpool.Pool, token, name string, expires time.Time) []byte {
@@ -200,4 +212,96 @@ func TestHashMatchesTheAdminInviteHash(t *testing.T) {
 	if len(a) != 32 || !bytes.Equal(a, auth.HashToken("abc")) {
 		t.Error("hash is not stable")
 	}
+}
+
+// The public API's role has the rows it needs and nothing more: no DDL, no ownership, no reading accounts or the migration records'
+// content beyond what it checks, no deleting. The database enforces it, not the Go code.
+func TestSyncRoleHasRowRightsOnly(t *testing.T) {
+	s, _ := syncFixture(t)
+	ctx := context.Background()
+	for _, q := range []string{
+		`SELECT * FROM clients`,
+		`SELECT * FROM meta`,
+		`INSERT INTO clients (name, created_at) VALUES ('x', 0)`,
+		`INSERT INTO invites (token_hash, client_id, created_at, expires_at) VALUES ('x', 1, 0, 0)`,
+		`INSERT INTO schema_migrations (name, applied_at) VALUES ('9999_x', 0)`,
+		`UPDATE devices SET name = 'x'`,
+		`UPDATE devices SET token_hash = 'x'`,
+		`UPDATE invites SET expires_at = 0`,
+		`DELETE FROM devices`,
+		`DELETE FROM invites`,
+		`DELETE FROM docs`,
+		`TRUNCATE docs`,
+		`CREATE TABLE evil (a int)`,
+		`ALTER TABLE devices ADD COLUMN evil int`,
+		`DROP TABLE devices`,
+	} {
+		_, err := s.db.Exec(ctx, q)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "42501" { // insufficient_privilege, not some other failure
+			t.Errorf("%s: err = %v, want a permission error", q, err)
+		}
+	}
+	// What it does need works, including a foreign-key insert (the check runs as the table owner, so no grant on clients).
+	if _, err := s.db.Exec(ctx, `INSERT INTO docs (client_id, id, version, created_at, updated_at, data) VALUES (1, repeat('a', 32), 1, 0, 0, 'x')`); err != nil {
+		t.Errorf("insert into docs: %v", err)
+	}
+	if _, err := s.db.Exec(ctx, `UPDATE docs SET version = 2, deleted = true, data = '' WHERE id = repeat('a', 32)`); err != nil {
+		t.Errorf("tombstone update: %v", err)
+	}
+	var n int
+	if err := s.db.QueryRow(ctx, `SELECT count(*) FROM docs`).Scan(&n); err != nil || n != 1 {
+		t.Errorf("select docs: %d, %v", n, err)
+	}
+}
+
+func TestSyncLoginNeedsItsOwnCertificate(t *testing.T) {
+	pgEnv(t, "harper_sync", "wrongcn") // a certificate from the same CA with another common name
+	pool, err := Open(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(context.Background()); err == nil {
+		t.Error("harper_sync logged in with another role's certificate")
+	}
+}
+
+func TestSchemaCurrent(t *testing.T) {
+	s, _ := syncFixture(t)
+	ctx := context.Background()
+	ok, err := SchemaCurrent(ctx, s.db, Migrations)
+	if err != nil || !ok {
+		t.Fatalf("after the migrations: %v, %v", ok, err)
+	}
+	// A binary that expects a file the database has not got is not current.
+	newer := fstest.MapFS{"migrations/9999_future.sql": {Data: []byte("SELECT 1")}}
+	for name, f := range map[string]fs.FS{"embedded": Migrations, "embedded plus one": mergeFS{Migrations, newer}} {
+		ok, err := SchemaCurrent(ctx, s.db, f)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if want := name == "embedded"; ok != want {
+			t.Errorf("%s: current = %v, want %v", name, ok, want)
+		}
+	}
+}
+
+// mergeFS lists the files of both file systems under migrations/ (only Glob, which SchemaCurrent uses, is needed).
+type mergeFS struct{ a, b fs.FS }
+
+func (m mergeFS) Open(name string) (fs.File, error) {
+	if f, err := m.a.Open(name); err == nil {
+		return f, nil
+	}
+	return m.b.Open(name)
+}
+
+func (m mergeFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	x, err := fs.ReadDir(m.a, name)
+	if err != nil {
+		return nil, err
+	}
+	y, _ := fs.ReadDir(m.b, name)
+	return append(x, y...), nil
 }

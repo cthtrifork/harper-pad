@@ -1,7 +1,7 @@
 // Command harper-pad-sync is the sync API of Harper Pad (docs/sync.md).
 //
-// It serves /healthz (liveness), /readyz (readiness, a PostgreSQL round trip), POST /enroll and Prometheus metrics on a separate
-// port; the draft routes are not built yet. It is run as
+// It serves /healthz (liveness), /readyz (readiness: a PostgreSQL round trip, and 503 until harper-pad-admin has applied the schema
+// migrations), POST /enroll and Prometheus metrics on a separate port; the draft routes are not built yet. It has no DDL rights. It is run as
 // `harper-pad-sync serve` (a bare invocation does the same) and stops gracefully on SIGTERM. See internal/server.
 package main
 
@@ -47,13 +47,13 @@ func run(args []string) error {
 	m := metrics.New("sync")
 	m.RegisterPool(db)
 	health := server.NewHealth(db)
-	// The tables and the grants to harper_admin are made by the migrations, run here as harper_sync. PostgreSQL does not have
-	// to be up at start, so retry in the background; /readyz is 503 ("starting") until they are applied.
+	// The tables and the grants are made by harper-pad-admin, which owns them. This service has no DDL rights: /readyz is 503
+	// ("starting") until the schema is current.
 	health.SetStarting(true)
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	sync := store.NewSync(db)
-	go migrate(ctx, db, health)
+	go waitForSchema(ctx, db, health)
 	mux := http.NewServeMux()
 	health.Register(mux)
 	verifier := auth.NewVerifier()
@@ -66,26 +66,34 @@ func run(args []string) error {
 	return server.Run(cfg.ListenAddr, m.Instrument(api.CORS(mux)), health, cfg.MetricsAddr, m.Handler())
 }
 
-// migrate applies the schema, retrying with a growing delay (2 s up to 30 s) while the database is unreachable or a migration
-// fails, and then lets /readyz pass. A failing file is logged each time and never skipped.
-func migrate(ctx context.Context, db *pgxpool.Pool, health *server.Health) {
-	delay := 2 * time.Second
+// waitForSchema keeps /readyz at 503 until the schema is current. harper-pad-admin owns the tables and applies the migrations
+// (docs/sync.md, "Database access"); this service has no DDL rights and only waits for them, so it never serves a database that
+// lacks its tables or its grants. It checks every 2 s, so it also copes with the database being down at start.
+func waitForSchema(ctx context.Context, db *pgxpool.Pool, health *server.Health) {
+	var lastErr string
+	waiting := false
 	for {
-		applied, err := store.Migrate(ctx, db, store.Migrations)
-		if err == nil {
-			slog.Info("migrations applied", "files", applied)
+		ok, err := store.SchemaCurrent(ctx, db, store.Migrations)
+		if ok {
+			slog.Info("schema is current")
 			health.SetStarting(false)
 			return
 		}
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Error("migrations failed, retrying", "err", err, "in", delay)
+		switch {
+		case err != nil && err.Error() != lastErr:
+			lastErr = err.Error()
+			slog.Warn("waiting for the schema: cannot check it", "err", err)
+		case err == nil && !waiting:
+			slog.Info("waiting for harper-pad-admin to apply the migrations")
+		}
+		waiting = true
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(delay):
+		case <-time.After(2 * time.Second):
 		}
-		delay = min(delay*2, 30*time.Second)
 	}
 }

@@ -13,7 +13,7 @@ export PLAYWRIGHT_DIR
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help build test vet fmt openapi test-db admin-up admin-seed admin-down e2e-certs e2e-web e2e-playwright e2e-up e2e-down e2e
+.PHONY: help build test vet fmt openapi test-db admin-up wait-schema admin-seed admin-down e2e-certs e2e-web e2e-playwright e2e-up e2e-down e2e
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -50,15 +50,19 @@ test-db: ## Run all tests with PostgreSQL from the stack (TLS and client certifi
 	TEST_PG_CERTS=$(E2E_CERTS) TEST_PG_PORT=$(E2E_PG_PORT) go test -p 1 -count=1 -race ./...; status=$$?; \
 	$(COMPOSE) -f $(E2E_FILE) down -v; exit $$status
 
-admin-up: ## Start PostgreSQL, harper-pad-sync (it applies the schema) and the admin UI (http://127.0.0.1:19001); add devices with admin-seed
-	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres sync admin
+# The schema is applied by harper-pad-admin, as harper_admin (the table owner), when it starts; the sync service waits for it.
+admin-up: ## Start PostgreSQL, the admin UI (it applies the schema; http://127.0.0.1:19001) and harper-pad-sync; add devices with admin-seed
+	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait postgres admin sync
+	$(MAKE) wait-schema
+
+wait-schema: ## Wait until harper-pad-admin has applied the migrations to the running stack
 	@for i in $$(seq 1 30); do \
-		$(COMPOSE) -f $(E2E_FILE) exec -T postgres psql -U harper_sync -d harper -tAc "SELECT 1 FROM schema_migrations LIMIT 1" 2>/dev/null | grep -q 1 && exit 0; \
+		$(COMPOSE) -f $(E2E_FILE) exec -T postgres psql -U harper_admin -d harper -tAc "SELECT count(*) FROM schema_migrations" 2>/dev/null | grep -q '^[1-9]' && exit 0; \
 		sleep 1; \
-	done; echo "the schema was not applied: see '$(COMPOSE) -f $(E2E_FILE) logs sync'"; exit 1
+	done; echo "the schema was not applied: see '$(COMPOSE) -f $(E2E_FILE) logs admin'"; exit 1
 
 admin-seed: ## Add three devices to the running stack (testdata/admin-seed.sql)
-	$(COMPOSE) -f $(E2E_FILE) exec -T postgres psql -U harper_sync -d harper -v ON_ERROR_STOP=1 < testdata/admin-seed.sql
+	$(COMPOSE) -f $(E2E_FILE) exec -T postgres psql -U harper_admin -d harper -v ON_ERROR_STOP=1 < testdata/admin-seed.sql
 
 admin-down: ## Stop the stack and delete its data
 	$(COMPOSE) -f $(E2E_FILE) down -v
@@ -68,8 +72,9 @@ e2e-web: ## Build the web app for the end-to-end stack (served by Caddy at the r
 # TODO: the web build also needs the sync origin (https://sync.localhost:18443) in its CORS/CSP settings once the
 # build-time setting exists (docs/sync.md, open questions).
 
-e2e-up: ## Start PostgreSQL, harper-pad-sync and Caddy
+e2e-up: ## Start PostgreSQL, the admin service (applies the schema), harper-pad-sync and Caddy
 	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait
+	$(MAKE) wait-schema
 
 e2e-down: ## Stop the end-to-end stack and delete its data
 	$(COMPOSE) -f $(E2E_FILE) down -v
@@ -80,6 +85,6 @@ e2e-playwright: ## Install the pinned playwright-core into .playwright/ when PLA
 	fi
 
 e2e: e2e-web e2e-playwright ## Run the end-to-end test; the stack is always removed afterwards, and its logs are printed on failure
-	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait && node --test "test/e2e/*.test.mjs"; status=$$?; \
+	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait && $(MAKE) wait-schema && node --test "test/e2e/*.test.mjs"; status=$$?; \
 	if [ $$status -ne 0 ]; then $(COMPOSE) -f $(E2E_FILE) logs --no-color --tail 100; fi; \
 	$(COMPOSE) -f $(E2E_FILE) down -v; exit $$status
