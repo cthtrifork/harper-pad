@@ -63,7 +63,7 @@ func run(args []string) error {
 	if len(cfg.AllowedOrigins) == 0 {
 		slog.Warn("CORS_ALLOWED_ORIGINS is empty: browsers on other origins cannot call the API")
 	}
-	return server.Run(cfg.ListenAddr, m.Instrument(api.CORS(mux)), health, cfg.MetricsAddr, m.Handler())
+	return server.Run(cfg.ListenAddr, m.Instrument(api.CORS(syncapi.JSONNotFound(mux))), health, cfg.MetricsAddr, m.Handler())
 }
 
 // waitForSchema keeps /readyz at 503 until the schema is current. harper-pad-admin owns the tables and applies the migrations
