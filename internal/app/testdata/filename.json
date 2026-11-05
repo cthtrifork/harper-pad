@@ -1,0 +1,68 @@
+[
+  {
+    "name": "plain",
+    "title": "Shopping list",
+    "format": "markdown",
+    "want": "Shopping list.md"
+  },
+  {
+    "name": "text format",
+    "title": "a/b\\c:d",
+    "format": "text",
+    "want": "abcd.txt"
+  },
+  {
+    "name": "nothing left",
+    "title": "???",
+    "format": "markdown",
+    "want": "Untitled.md"
+  },
+  {
+    "name": "empty",
+    "title": "",
+    "format": "text",
+    "want": "Untitled.txt"
+  },
+  {
+    "name": "dashes and dots at the ends",
+    "title": "-- Notes. ",
+    "format": "markdown",
+    "want": "Notes.md"
+  },
+  {
+    "name": "only dots",
+    "title": "...",
+    "format": "markdown",
+    "want": "Untitled.md"
+  },
+  {
+    "name": "dots inside stay",
+    "title": "v1.2 plan",
+    "format": "markdown",
+    "want": "v1.2 plan.md"
+  },
+  {
+    "name": "cut at 60 characters",
+    "title": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffffffgggg",
+    "format": "markdown",
+    "want": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeeffffffffff.md"
+  },
+  {
+    "name": "cut counts characters, not UTF-16 units",
+    "title": "𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀",
+    "format": "markdown",
+    "want": "𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀.md"
+  },
+  {
+    "name": "letters from other scripts stay",
+    "title": "Æble og ærter",
+    "format": "markdown",
+    "want": "Æble og ærter.md"
+  },
+  {
+    "name": "space before the cut is trimmed",
+    "title": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeefffffffff gggg",
+    "format": "text",
+    "want": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeefffffffff.txt"
+  }
+]

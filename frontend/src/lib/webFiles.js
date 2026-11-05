@@ -8,12 +8,13 @@ const TYPES = [
   { description: "Text", accept: { "text/plain": [".txt"] } },
 ];
 
-const fileName = (title, format) => {
+// The file name offered for a draft. The same as suggestName in internal/app/files.go; both run internal/app/testdata/filename.json.
+export const fileName = (title, format) => {
+  const cleaned = title.replace(/[^\p{L}\p{N}._ -]+/gu, "").replace(/^[ .-]+|[ .-]+$/g, "");
   const name =
-    title
-      .replace(/[^\p{L}\p{N}._ -]+/gu, "")
-      .trim()
+    Array.from(cleaned || "Untitled")
       .slice(0, 60)
+      .join("")
       .trim() || "Untitled";
   return `${name}${format === "text" ? ".txt" : ".md"}`;
 };
