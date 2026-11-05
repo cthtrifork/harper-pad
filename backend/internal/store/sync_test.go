@@ -193,21 +193,6 @@ func TestDeviceByToken(t *testing.T) {
 	}
 }
 
-func TestPurgeInvites(t *testing.T) {
-	s, pool := syncFixture(t)
-	seedInvite(t, pool, "long gone", "", t0.Add(-25*time.Hour))
-	seedInvite(t, pool, "just expired", "", t0.Add(-time.Hour))
-	seedInvite(t, pool, "pending", "", t0.Add(time.Minute))
-	n, err := s.PurgeInvites(context.Background())
-	if err != nil || n != 1 {
-		t.Fatalf("purged %d, %v, want 1", n, err)
-	}
-	var left int
-	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM invites`).Scan(&left); err != nil || left != 2 {
-		t.Errorf("%d invites left, %v", left, err)
-	}
-}
-
 func TestHashMatchesTheAdminInviteHash(t *testing.T) {
 	// The admin store stores sha256 of the token string; Enroll looks it up with auth.HashToken. They must agree, or no
 	// enrollment could ever succeed (the integration test in syncapi covers it end to end).

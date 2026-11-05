@@ -467,8 +467,9 @@ How it is used:
 - **Tombstones clear the text,** so a deleted note's content is not kept on the server. They are kept forever.
 - **Spending an invite is one statement,** so two devices cannot use it at once:
   `UPDATE invites SET used_at = $now WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $now RETURNING client_id, device_name`;
-  the new `devices` row copies the `client_id`. A
-  periodic delete removes expired invites.
+  the new `devices` row copies the `client_id`. Deleting old invites is the admin service's job, not the public API's: creating an
+  invite also deletes the ones that expired more than a day ago (in the same statement), so the sync service runs no background job
+  and holds no purge code.
 - **Revoking a device deletes its row.** The "new device added" banner comes from `created_at`.
 - **v1 has one client account,** inserted by the first migration (`name` `default`). Nothing creates another: there is no endpoint
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector next to
