@@ -57,8 +57,7 @@
 }
 
 /* Nearly fixed: they give up room only a little, after the text above has, so a long message does not squeeze them. */
-.status > #doc-stats,
-.status > .app-version {
+.status > #doc-stats {
   flex-shrink: 1;
 }
 
@@ -79,11 +78,6 @@
 .status:has(#start-fresh) > #cursor-pos,
 .status:has(#start-fresh) > #selection,
 .status:has(#start-fresh) > .spacer {
-  display: none;
-}
-
-/* Only a phone shows it (responsive.css): the desktop app has its version in the header. */
-.status .app-version {
   display: none;
 }
 

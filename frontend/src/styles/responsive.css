@@ -206,19 +206,13 @@
   }
 
   /* A quiet footer: the header already shows the problem count, so the footer keeps the sync dot (its name is in aria-label; the
-     words come back when sync needs attention), the draft status, the word count, the format switch and, at the far right, the release the web build is from. */
+     words come back when sync needs attention), the draft status, the word count and the format switch. The version is in the drafts drawer. */
   .status {
     gap: 12px;
   }
 
   .status > .problems {
     display: none;
-  }
-
-  .status .app-version {
-    display: inline;
-    color: var(--mute);
-    font-size: 10px;
   }
 
   .status .sync-chip:not(.offline, .signin) .txt {

@@ -426,3 +426,8 @@
 .drawer .item.dragging.settling .card {
   transition: transform 0.15s var(--ease);
 }
+
+.drawer .version {
+  color: var(--mute);
+  font-size: 11px;
+}
