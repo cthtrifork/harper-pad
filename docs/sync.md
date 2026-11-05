@@ -511,19 +511,23 @@ the CORS allowlist and the web build's CSP. It does not prove certificate renewa
 ## Open work
 
 - [ ] `GET` and `DELETE` for the device list the app shows (the admin's revoke already works on the same table).
-- [ ] The sync module (`lib/sync.js`) with unit tests: pure logic against fixtures with Node's runner.
+- [ ] Opening a note in the sync module: ask for the draft with `If-None-Match`, swap a newer one in when the draft is unchanged here and not
+      being typed in ("Updated from the server"), otherwise mark it "Newer on the server". Undo for the removals Sync all makes.
 - [ ] The [end-to-end test](#end-to-end-test), including the "lose the server" check. A draft deleted elsewhere while a device was
       offline can reappear (documented), but nothing else is lost.
-- [ ] The rest of the UI: the device list and the **Sync all** button in the drafts drawer (progress line, one-line summary, undoable
-      removals, a "Newer on the server" marker). The status chip, the enroll pop-up and push after a save exist (web build only; desktop needs bindings for the sync state first): follow `docs/design-cheatsheet.html`, short eased transitions, reduced motion honoured.
-- [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md` (`sync_state`, the `user_version` rule), `architecture.md`,
-      `pages.md` (sync origin, CORS), `AGENTS.md`, and a server operations page (run, proxy, back up, rotate, revoke).
+- [ ] The rest of the UI: the device list, a progress line and a pending count on the chip, and the "Newer on the server" marker in the
+      drafts drawer. The status chip, the enroll pop-up, push after a save and Sync all exist, **for the web build only**: the desktop build
+      needs Go bindings for the sync state (`sync_state`, `Changes`, `ApplyRemote`) first. Follow `docs/design-cheatsheet.html`, short eased
+      transitions, reduced motion honoured.
+- [ ] A server operations page (run, proxy, back up, rotate, revoke), and the repository variable `SYNC_ORIGIN` set for the Pages build.
 - [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
 - [ ] Before release, decide whether the device record needs its own store, and whether desktop keeps it in SQLite.
 - [ ] Check that WebKitGTK keeps a non-extractable key across a relaunch (Edge on Windows passed).
 
 Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
-`harper-sync.portableinfo.cloud`), enrollment, and the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`).
+`harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in the web build the client
+(`dpop.js`, `syncEnroll.js`, `syncClient.js`, `syncPlan.js`, `syncRun.js`, `useSync.js`), the `SYNC_ORIGIN` CSP setting, the chip and pop-up,
+the push after a save and Sync all. All of it was checked with two Chromium contexts against the compose stack.
 
 ## Option: end-to-end encryption
 

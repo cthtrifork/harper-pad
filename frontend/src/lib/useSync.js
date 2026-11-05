@@ -1,22 +1,38 @@
 import { computed, ref } from "vue";
 import { pushDraft } from "./syncClient.js";
+import { runSync, summaryText } from "./syncRun.js";
 import { parseInviteUrl, enrollDevice, SyncError } from "./syncEnroll.js";
 
 // How long after a save the draft is pushed (docs/sync.md, "When sync happens"): long enough that typing is one push, not many.
 const PUSH_DELAY_MS = 2000;
 
-// What the sync chip shows, and the work behind it: enrolling this device and pushing a draft after it is saved. First slice: the web
-// build only, and only pushes (Sync all, opening a note and conflicts are later steps, see docs/sync.md).
+// What the sync chip shows, and the work behind it: enrolling this device, pushing a draft after it is saved, and Sync all. Web build
+// only for now; opening a note is a later step (docs/sync.md).
 //
 //   status: off | synced | syncing | pending | offline | signin
 //
 // `origin` is the sync server this build was made for (SYNC_ORIGIN, "" when none: then nothing shows). `deviceStore` is syncDevice from
-// backend.js, `drafts` the web store's {get, syncState, markSynced}, and `hash` is contentHash.
-export function useSync({ origin, deviceStore, drafts, hash, fetchFn, delay = PUSH_DELAY_MS }) {
+// backend.js, `drafts` the web store (see runSync), and `hash` is contentHash. For Sync all: `prepare` saves what is typed first,
+// `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and `autoSync`
+// runs it when the app starts and after enrolling.
+export function useSync({
+  origin,
+  deviceStore,
+  drafts,
+  hash,
+  fetchFn,
+  delay = PUSH_DELAY_MS,
+  autoSync = true,
+  prepare = async () => {},
+  skip = () => new Set(),
+  onChanged = () => {},
+}) {
   const configured = !!origin && !!deviceStore && !!drafts;
   const status = ref("off");
   const error = ref(""); // the last message for the pop-up, "" when there is none
   const info = ref(null); // {server, deviceName} while enrolled
+  const summary = ref(""); // what the last Sync all did, "3 uploaded, 2 downloaded"
+  const lastSync = ref(0); // when it finished, ms
   const enrolled = computed(() => info.value !== null);
 
   let device = null;
@@ -29,6 +45,7 @@ export function useSync({ origin, deviceStore, drafts, hash, fetchFn, delay = PU
     device = await deviceStore.load();
     info.value = device ? { server: device.server, deviceName: device.deviceName } : null;
     status.value = device ? "synced" : "off";
+    if (device && autoSync) syncAll();
   }
 
   async function enroll(text, deviceName) {
@@ -53,6 +70,7 @@ export function useSync({ origin, deviceStore, drafts, hash, fetchFn, delay = PU
     await deviceStore.clear();
     device = null;
     error.value = "";
+    summary.value = "";
     await init();
   }
 
@@ -76,19 +94,45 @@ export function useSync({ origin, deviceStore, drafts, hash, fetchFn, delay = PU
       try {
         if ((await push(id)) === "conflict") result = "conflict";
       } catch (err) {
-        if (err instanceof SyncError && err.code === "unreachable") {
-          status.value = "offline";
-          return;
-        }
-        if (err instanceof SyncError && err.code === "signin") {
-          status.value = "signin";
-          error.value = "This device was signed out. Paste a new invite link to start syncing again.";
-          return;
-        }
+        if (stopped(err)) return;
         result = "error";
       }
     }
     status.value = result === "ok" ? "synced" : "pending";
+  }
+
+  // The sign-in and offline states shared by a push and a Sync all. True when the error was one of them.
+  function stopped(err) {
+    if (!(err instanceof SyncError)) return false;
+    if (err.code === "unreachable") status.value = "offline";
+    else if (err.code === "signin") {
+      status.value = "signin";
+      error.value = "This device was signed out. Paste a new invite link to start syncing again.";
+    } else return false;
+    return true;
+  }
+
+  // Sync all: both ways, for every draft (see runSync). One at a time, after any push that is already going.
+  function syncAll() {
+    chain = chain.then(async () => {
+      if (!device || status.value === "signin") return;
+      error.value = "";
+      status.value = "syncing";
+      try {
+        await prepare();
+        const sum = await runSync({ device, drafts, fetchFn, skip: skip() });
+        summary.value = summaryText(sum);
+        lastSync.value = Date.now();
+        status.value = sum.failed ? "pending" : "synced";
+        if (sum.downloaded || sum.removed || sum.conflicted) onChanged();
+      } catch (err) {
+        if (!stopped(err)) {
+          status.value = "pending";
+          error.value = "Sync did not finish. Try again.";
+        }
+      }
+    });
+    return chain;
   }
 
   // Call after a draft was saved. It is pushed once typing has stopped for `delay`; a failure leaves it unsynced, which the next save
@@ -102,5 +146,5 @@ export function useSync({ origin, deviceStore, drafts, hash, fetchFn, delay = PU
     }, delay);
   }
 
-  return { configured, status, error, info, enrolled, init, enroll, turnOff, draftSaved };
+  return { configured, status, error, info, enrolled, summary, lastSync, init, enroll, turnOff, draftSaved, syncAll };
 }

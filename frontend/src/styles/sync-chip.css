@@ -195,3 +195,14 @@
     height: 44px;
   }
 }
+
+/* Sync all: the button on the right, "Turn off" on the left, and one line saying what the last run did. */
+.sync-panel .actions.between {
+  justify-content: space-between;
+}
+
+.sync-panel .summary {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--sunken);
+}

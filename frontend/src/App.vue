@@ -42,7 +42,17 @@ const cursor = ref({ line: 1, col: 1, selected: 0 });
 const saveError = ref("");
 const editor = ref(null);
 const showDrawer = ref(false);
-const sync = useSync({ origin: import.meta.env?.SYNC_ORIGIN ?? "", deviceStore: syncDevice, drafts: syncDrafts, hash: contentHash });
+// Sync all saves what is typed first, leaves the draft that is open alone (a download must not change text being typed), and refreshes the
+// list when it changed local drafts. `drafts` is created next; these run later, so it exists by then.
+const sync = useSync({
+  origin: import.meta.env?.SYNC_ORIGIN ?? "",
+  deviceStore: syncDevice,
+  drafts: syncDrafts,
+  hash: contentHash,
+  prepare: () => drafts.flush(),
+  skip: () => new Set([drafts.current.value.id].filter(Boolean)),
+  onChanged: () => drafts.refreshList(),
+});
 const drafts = useDrafts(editor, showDrawer, { onSaved: sync.draftSaved });
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
