@@ -10,7 +10,7 @@ OUT       ?= harper-pad
 MODULE    := github.com/cthtrifork/harper-pad
 
 .DEFAULT_GOAL := help
-.PHONY: help test test-frontend check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server screenshots lighthouse
+.PHONY: help test test-frontend check fmt format lint lint-go lint-frontend tools format-frontend vet frontend bindings wails3-install dev dev-frontend build build-server run run-mcp run-mcp-server run-pprof-server screenshots lighthouse htmx
 
 help: ## List the targets
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-17s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,6 +33,10 @@ format: fmt format-frontend ## Format the Go code and the Vue app
 GOLANGCI_LINT_VERSION := v2.15.0
 # renovate: datasource=go depName=golang.org/x/tools
 GOIMPORTS_VERSION := v0.52.0
+
+# The htmx vendored in backend/internal/admin/web/static. Renovate bumps this and runs `make htmx` (renovate.json5).
+# renovate: datasource=npm depName=htmx.org
+HTMX_VERSION := 2.0.11
 
 lint: lint-go lint-frontend ## golangci-lint plus the frontend's Biome lint and format check (as CI runs them)
 
@@ -96,3 +100,6 @@ screenshots: ## Render docs/screenshots, gitignored (needs Node and Playwright; 
 
 lighthouse: ## Lighthouse scores into ./lighthouse (needs Chrome, CHROME_PATH and LIGHTHOUSE_VERSION)
 	scripts/lighthouse.sh
+
+htmx: ## Vendor htmx $(HTMX_VERSION) from npm (integrity-checked) into the admin UI
+	scripts/update-htmx.sh $(HTMX_VERSION)
