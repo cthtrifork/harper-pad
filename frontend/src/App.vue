@@ -1,12 +1,13 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AppHeader from "./components/AppHeader.vue";
-import AutofixToast from "./components/AutofixToast.vue";
+import DeletedElsewhereDialog from "./components/DeletedElsewhereDialog.vue";
 import DraftsDrawer from "./components/DraftsDrawer.vue";
 import Editor from "./components/Editor.vue";
 import Preview from "./components/Preview.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
+import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
@@ -63,6 +64,20 @@ const drafts = useDrafts(editor, showDrawer, {
   onOpened: checkOpened,
   onDeleted: sync.draftDeleted,
 });
+
+// What sync tells the person in a toast. "Newer on the server" is not one: it stays beside the chip until a save or Sync all settles it.
+const syncToast = computed(() => {
+  const n = sync.notice.value;
+  if (!n || n.kind === "newer") return null;
+  return { ...n, action: n.kind === "copy" ? "Open copy" : n.kind === "removed" ? "Undo" : "", ms: n.kind === "updated" ? 5000 : 12000 };
+});
+function syncToastAction() {
+  const n = sync.notice.value;
+  if (n?.kind === "copy") {
+    sync.openCopy(n.copyId);
+    sync.clearNotice();
+  } else if (n?.kind === "removed") sync.undoRemoved();
+}
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
 // goes away on its own, and at once when the user edits the text themselves.
@@ -371,9 +386,14 @@ onBeforeUnmount(() => {
           <pre v-if="error" class="error">{{ error }}</pre>
         </main>
         </div>
-        <Transition name="autofix">
-          <AutofixToast v-if="toast" :count="toast.ids.length" :tick="toast.tick" @undo="undoToast" @close="toast = null" />
-        </Transition>
+        <div class="toast-stack">
+          <Transition name="toast-bar">
+            <ToastBar v-if="toast" :message="`Fixed ${toast.ids.length} ${toast.ids.length === 1 ? 'thing' : 'things'}`" :action="toast.ids.length === 1 ? 'Undo' : 'Undo all'" :tick="toast.tick" @action="undoToast" @close="toast = null" />
+          </Transition>
+          <Transition name="toast-bar">
+            <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
+          </Transition>
+        </div>
         <Transition name="grow">
           <Preview v-if="mode !== 'edit'" class="side" :source="source" :scroll="paneScroll" :follow="mode === 'split'" />
         </Transition>
@@ -382,6 +402,8 @@ onBeforeUnmount(() => {
         <ProblemsPanel v-if="showProblems && mode !== 'preview'" :problems="problems" :words="personal.words" :ignored="personal.ignored" :fixed="fixed" :autocorrect="autocorrect" @autocorrect="setAutocorrect" @fix-all="editor?.fixAll()" @revert="editor?.revert([$event])" @jump="editor?.jump($event)" @fix="(p, i) => editor?.fix(p, i)" @remove-word="removeWord" @remove-ignored="stopIgnoring" />
       </Transition>
     </div>
+    <!-- A note that was deleted on another device: a modal, so the person has to choose Keep or Remove. -->
+    <DeletedElsewhereDialog v-if="sync.gone.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
     <StatusBar
       :state="state"
       :problem-count="problems.length"

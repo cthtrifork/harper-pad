@@ -11,7 +11,8 @@
 @import "./drafts-drawer.css";
 @import "./problems-panel.css";
 @import "./problems-autofix.css";
-@import "./autofix-toast.css";
+@import "./toast-bar.css";
+@import "./gone-dialog.css";
 @import "./autocorrect-indicators.css";
 @import "./sync-chip.css";
 @import "./responsive.css";

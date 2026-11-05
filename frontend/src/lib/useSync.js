@@ -43,16 +43,16 @@ export function useSync({
   // One syncer for every path, so a conflict is announced the same way wherever it was found.
   const syncer = () => createSyncer({ device, drafts, fetchFn, onCopy: showCopy, onGone: (id) => (gone.value = { id }) });
 
-  // A conflict kept the server's version as a new draft: say so, with a way to open it. It stays a while, or until another note is opened.
+  // A conflict kept the server's version as a new draft: say so, with a way to open it. The toast (App.vue) shows it for a while.
   function showCopy(copy) {
-    clearTimeout(noticeTimer);
-    notice.value = { id: copy.id, kind: "copy", copyId: copy.id, text: "Kept the server version as a copy" };
-    noticeTimer = setTimeout(() => {
-      if (notice.value?.kind === "copy") notice.value = null;
-    }, 12000);
+    notice.value = { id: copy.id, kind: "copy", copyId: copy.id, text: "Kept the server version as a copy", at: Date.now() };
+  }
+
+  // The toast has ended. A "Newer on the server" marker is not a toast: it stays until a save or Sync all settles it.
+  function clearNotice() {
+    if (notice.value?.kind !== "newer") notice.value = null;
   }
   let timer = null;
-  let noticeTimer = null;
   const waiting = new Set();
   let chain = Promise.resolve();
 
@@ -154,7 +154,6 @@ export function useSync({
   // different. `canSwap()` says whether nothing has been typed since; `onSwapped()` shows the draft again after a newer one was stored. An
   // error shows nothing: the local text stays (docs/sync.md, "When sync happens"). Only a refused device changes the chip.
   function noteOpened(id, { canSwap = () => true, onSwapped = () => {} } = {}) {
-    clearTimeout(noticeTimer);
     notice.value = null;
     gone.value = null;
     openHooks = { canSwap, onSwapped };
@@ -176,9 +175,7 @@ export function useSync({
       if (status.value === "offline") status.value = "pending";
       if (out === "updated") {
         onSwapped();
-        notice.value = { id, kind: "updated", text: "Updated from the server" };
-        clearTimeout(noticeTimer);
-        noticeTimer = setTimeout(() => (notice.value = null), 5000);
+        notice.value = { id, kind: "updated", text: "Updated from the server", at: Date.now() };
       } else if (out === "newer") {
         notice.value = { id, kind: "newer", text: "Newer on the server" };
       } else if (out === "deleted") {
@@ -214,8 +211,8 @@ export function useSync({
 
   const openCopy = (id) => openDraft(id);
 
-  // The person's answer to "deleted elsewhere": keep the draft (it is uploaded again), or remove it here too (`onRemoved` shows another note
-  // and offers Undo). Escape, or any other note, leaves the question for the next time the note is opened.
+  // The person's answer to "deleted elsewhere", asked in a modal dialog they cannot leave without choosing: keep the draft (it is uploaded
+  // again), or remove it here too (`onRemoved` shows another note, and an Undo toast follows).
   function keepGone() {
     const g = gone.value;
     if (!g) return Promise.resolve();
@@ -240,12 +237,8 @@ export function useSync({
         const removed = await syncer().removeLocal(g.id);
         if (removed) {
           await onRemoved(removed);
-          // Undo sits beside the chip: the drafts drawer, where the usual Undo shows, is closed.
-          clearTimeout(noticeTimer);
-          notice.value = { id: removed.id, kind: "removed", text: "Removed", draft: removed };
-          noticeTimer = setTimeout(() => {
-            if (notice.value?.kind === "removed") notice.value = null;
-          }, 12000);
+          // Undo is in the toast: the drafts drawer, where the usual Undo shows, is closed.
+          notice.value = { id: removed.id, kind: "removed", text: "Removed", draft: removed, at: Date.now() };
         }
       } catch (err) {
         stopped(err);
@@ -253,8 +246,6 @@ export function useSync({
     });
     return chain;
   }
-  const dismissGone = () => (gone.value = null);
-
   // Undo of "Removed": the draft comes back and is uploaded again.
   function undoRemoved() {
     const n = notice.value;
@@ -286,7 +277,7 @@ export function useSync({
     openCopy,
     keepGone,
     removeGone,
-    dismissGone,
+    clearNotice,
     undoRemoved,
     syncAll,
   };
