@@ -24,13 +24,15 @@ Markdown can be shown side by side with a rendered preview, and the app updates 
 
 The web version is hosted on GitHub Pages at <https://harper.portableinfo.cloud/>. It runs entirely in the browser,
 keeps its data in IndexedDB, works offline after the first load, and can be added to a phone's Home Screen. A published
-release replaces the site, and the head of `main` is at `/preview/`. See [`docs/pages.md`](docs/pages.md) for how the two builds differ and how to deploy.
+release replaces the site, and the head of `main` is at `/preview/`. See [`docs/pages.md`](docs/pages.md) for how the
+two builds differ and how to deploy.
 
 ## Sync (optional)
 
-Notes can follow you between the desktop app and the phone through your own server. It is off unless the build sets
-`SYNC_ORIGIN`. The devices stay the source of truth; the server is plain storage and can be rebuilt from them. See the
-[backend](backend/README.md) (`harper-pad-sync` and `harper-pad-admin` on PostgreSQL) and the design in [`docs/sync.md`](docs/sync.md).
+Notes can follow you between the desktop app and the phone through your own server. It stays off until you enroll a
+device with an invite link from the server's admin page. The devices stay the source of truth; the server is plain
+storage and can be rebuilt from them. See the [backend](backend/README.md) (`harper-pad-sync` and `harper-pad-admin` on
+PostgreSQL) and the design in [`docs/sync.md`](docs/sync.md).
 
 ## Develop
 
