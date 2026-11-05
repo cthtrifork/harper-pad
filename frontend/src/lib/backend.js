@@ -5,6 +5,7 @@
 // bundle carries no Wails code.
 
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
+import { createDesktopSyncDrafts } from "./desktopSync.js";
 import { createDeviceStore } from "./syncDevice.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
@@ -65,7 +66,7 @@ export const syncDevice = createDeviceStore(openDb);
 
 const web = isWeb ? createWebDrafts(openDb) : undefined;
 
-// What sync needs from the drafts store: the web build only for now (desktop has no bindings for it yet).
+// What sync needs from the drafts store: IndexedDB in the browser, the Go services on desktop (desktopSync.js). Same operations either way.
 export const syncDrafts = web
   ? {
       get: web.get,
@@ -78,7 +79,7 @@ export const syncDrafts = web
       applyRemote: web.applyRemote,
       applyRemoteDelete: web.applyRemoteDelete,
     }
-  : null;
+  : createDesktopSyncDrafts(bindings);
 
 // Everything the page needs before it shows the editor, in one call: {demo, open, total, error}. `demo` is the banner text in a
 // desktop development build's demo mode (empty otherwise), `open` the most recent draft with its text (or null), `total` how many

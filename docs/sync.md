@@ -78,7 +78,7 @@ What losing the whole server costs:
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
 | Code layout | `backend/` in this repository, as its **own Go module that shares no code with the app**; the sync client stays in the frontend | The overlap is about 30 lines of draft rules, and a shared module or a single module costs more than writing them twice. The end-to-end test runs the real client against the real server, which is what catches drift. The release workflow gains two artifacts, the sync and admin images |
 | Client accounts | One in v1, modelled as many: a `clients` table, a `client_id` on every row, and every device bound to one account | More accounts later need no schema change. No sharing between accounts, no user management in v1 |
-| Client | One JavaScript sync client used by both builds, on top of `backend.js` (so far the web build only; the modules are listed in [architecture](architecture.md#frontend)) | The web build has no Go side; one implementation means one set of bugs |
+| Client | One JavaScript sync client used by both builds, on top of `backend.js` (the modules are listed in [architecture](architecture.md#frontend)) | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived device token per device, **bound to a device key with DPoP** (a signed proof on every request); no refresh tokens | See [Authentication](#authentication) |
 | Approving new devices | None. A new device needs no confirmation from an enrolled one; the operator creates one short-lived, single-use enrollment URL per device in the admin UI, and that is the approval | The invite is single use and expires in 15 minutes, the operator signs in through Access with MFA, and every device is listed and can be revoked, with a "new device enrolled" notice on the others. Confirmation on an enrolled device would add a flow and a way to get locked out (no enrolled device left) for little extra safety. See [the admin README](../backend/cmd/harper-pad-admin/README.md#access) |
 | Stolen-token hardening | A device list with last-seen, revoking in the admin UI, and **DPoP**, which makes a token that leaks without its key useless but does not cover a copy of the device's own storage | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
@@ -498,13 +498,17 @@ ciphertext), and traffic analysis (the server sees sizes and times).
 
 ## Open work
 
-- [ ] **The desktop build.** The client (chip, pop-up, push after a save, Sync all, opening a note, the Keep or Remove dialog) exists for the web
-      build only. The desktop build needs Go bindings for the sync state (`sync_state`, `Changes`, `ApplyRemote`) first, and a decision on
-      where its device record lives (below).
-- [ ] Set the repository variable `SYNC_ORIGIN` for the Pages build.
-- [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
-- [ ] Before release, decide whether the device record needs its own store, and whether desktop keeps it in SQLite.
-- [ ] Check that WebKitGTK keeps a non-extractable key across a relaunch (Edge on Windows passed).
+- [ ] **Check the desktop app in a real window.** The client now runs in the desktop build too: `SyncService` gives the engine the same
+      drafts store over the SQLite file, and the device record stays in the webview's IndexedDB. It was checked in the headless server build (the
+      same frontend and bindings, over HTTP) against the real server, with a web build as the second device. Not checked: a real GTK or WebView2
+      window. Only a real window can show whether the webview keeps the device key and token across a relaunch (Edge on Windows passed in a
+      browser tab; WebKitGTK is open), and what origin the window presents, which goes in `CORS_ALLOWED_ORIGINS` (the sync server logs a rejected
+      origin once, so read it from the log).
+- [ ] Set the repository variable `SYNC_ORIGIN`: the Pages build and both desktop release builds (Linux and Windows) read it, and with it unset
+      sync is off in that build.
+- [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests: the Pages origin, and the desktop window's origin once it is known.
+- [ ] Before release, decide whether the device record needs its own store (on desktop it is in the webview's IndexedDB, as on the web), or
+      belongs in SQLite beside the drafts.
 - [ ] Walk through it on a real iPhone, in the installed Home Screen app (Safari): enrolling by pasting an invite, a push, Sync all, the Keep or
       Remove dialog, the bottom sheet (fields stay at 16 px, no zoom), and surviving a restart. Everything so far was checked in Chromium
       only. It needs `SYNC_ORIGIN` and `CORS_ALLOWED_ORIGINS` set and a release deployed (previews do not turn sync on).
@@ -526,8 +530,8 @@ ciphertext), and traffic analysis (the server sees sizes and times).
   lost server.
 
 Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
-`harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in the web build the client
-(`dpop.js`, `syncEnroll.js`, `syncClient.js`, `syncPlan.js`, `syncRun.js`, `useSync.js`), the `SYNC_ORIGIN` CSP setting, the chip and pop-up,
+`harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in both builds the client
+(`dpop.js`, `syncEnroll.js`, `syncClient.js`, `syncPlan.js`, `syncRun.js`, `useSync.js`, and `desktopSync.js` over the Go `SyncService` on desktop), the `SYNC_ORIGIN` CSP setting, the chip and pop-up,
 the push after a save, Sync all, and opening a note (the "Updated from the server" swap, the "Newer on the server" marker and the "Deleted elsewhere" question), and the tombstone push after a delete. All of it was checked with two Chromium contexts against the compose stack.
 
 ## Option: end-to-end encryption

@@ -25,18 +25,18 @@ const syncStateDDL = `CREATE TABLE IF NOT EXISTS sync_state (
 
 // SyncState is what the server held for a draft at the last sync. Version is the base of the next write.
 type SyncState struct {
-	Hash      string
-	UpdatedAt int64
-	Deleted   bool
-	Version   int64
+	Hash      string `json:"hash"`
+	UpdatedAt int64  `json:"updatedAt"`
+	Deleted   bool   `json:"deleted"`
+	Version   int64  `json:"version"`
 }
 
 // Changes is what differs from the server's last known state.
 type Changes struct {
 	// Changed are the drafts to upload: new ones, and ones whose text or format differ from the last sync.
-	Changed []string
+	Changed []string `json:"changed"`
 	// Deleted are the ids of drafts deleted here that the server still has.
-	Deleted []string
+	Deleted []string `json:"deleted"`
 }
 
 // ContentHash is the hash a draft is compared by: SHA-256, in hex, of the format, a newline and the text, as UTF-8. The web build
@@ -47,6 +47,48 @@ func ContentHash(format, content string) string {
 	h.Write([]byte{'\n'})
 	h.Write([]byte(content))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// differsFromSynced is the one definition of a changed draft: the server has never had it (no recorded hash), or its hash differs from the
+// recorded one. Changes and IsChanged both use it, as the web store's differsFromSynced does (frontend/src/lib/webDrafts.js).
+func differsFromSynced(format, content, synced string) bool {
+	return synced == "" || ContentHash(format, content) != synced
+}
+
+// AllIDs returns the id of every draft, in id order. Sync all uses it with Changes to decide what to do with each draft.
+func (s *Store) AllIDs() ([]string, error) {
+	rows, err := s.db.Query(`SELECT id FROM drafts ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// IsChanged reports whether one draft differs from what the server last held. A draft that is not stored is not changed. It reads
+// one draft, so it suits the push after a save; Changes is for every draft.
+func (s *Store) IsChanged(id string) (bool, error) {
+	var data, synced string
+	err := s.db.QueryRow(`SELECT d.data, COALESCE(t.hash, '') FROM drafts d LEFT JOIN sync_state t ON t.id = d.id WHERE d.id = ?`, id).Scan(&data, &synced)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	b, err := decode(data)
+	if err != nil {
+		return false, fmt.Errorf("draft %s: %w", id, err)
+	}
+	return differsFromSynced(b.Format, b.Content, synced), nil
 }
 
 // SyncState returns the recorded state of a draft; ok is false when the server has never been told about it.
@@ -102,7 +144,7 @@ func (s *Store) Changes() (Changes, error) {
 		if err != nil {
 			return Changes{}, fmt.Errorf("draft %s: %w", id, err)
 		}
-		if synced == "" || ContentHash(b.Format, b.Content) != synced {
+		if differsFromSynced(b.Format, b.Content, synced) {
 			out.Changed = append(out.Changed, id)
 		}
 	}
