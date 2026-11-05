@@ -44,6 +44,7 @@ test("the two ways in, Sync all and the push after a save, both come from create
   const users = files.filter((f) => /createSyncer\(/.test(f.text.replace(/\/\/.*$/gm, ""))).map((f) => f.name);
   assert.deepEqual(users.sort(), ["lib/syncRun.js", "lib/useSync.js"]);
   const useSync = files.find((f) => f.name === "lib/useSync.js").text;
-  assert.match(useSync, /syncer\.one\(/);
+  assert.match(useSync, /\.one\(/);
+  assert.match(useSync, /\.open\(/);
   assert.match(useSync, /\.all\(/);
 });

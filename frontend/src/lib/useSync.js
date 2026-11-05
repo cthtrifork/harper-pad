@@ -13,7 +13,7 @@ const PUSH_DELAY_MS = 2000;
 // `origin` is the sync server this build was made for (SYNC_ORIGIN, "" when none: then nothing shows). `deviceStore` is syncDevice from
 // backend.js and `drafts` the web store (see createSyncer: all syncing, conflicts included, is done there, not here). For Sync all: `prepare` saves what is typed first,
 // `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and `autoSync`
-// runs it when the app starts and after enrolling.
+// runs it when the app starts and after enrolling. `openDraft(id)` shows a draft (the conflicted copy, from the notice's "Open copy").
 export function useSync({
   origin,
   deviceStore,
@@ -24,6 +24,7 @@ export function useSync({
   prepare = async () => {},
   skip = () => new Set(),
   onChanged = () => {},
+  openDraft = () => {},
 }) {
   const configured = !!origin && !!deviceStore && !!drafts;
   const status = ref("off");
@@ -35,6 +36,18 @@ export function useSync({
   const enrolled = computed(() => info.value !== null);
 
   let device = null;
+
+  // One syncer for every path, so a conflict is announced the same way wherever it was found.
+  const syncer = () => createSyncer({ device, drafts, fetchFn, onCopy: showCopy });
+
+  // A conflict kept the server's version as a new draft: say so, with a way to open it. It stays a while, or until another note is opened.
+  function showCopy(copy) {
+    clearTimeout(noticeTimer);
+    notice.value = { id: copy.id, kind: "copy", copyId: copy.id, text: "Kept the server version as a copy" };
+    noticeTimer = setTimeout(() => {
+      if (notice.value?.kind === "copy") notice.value = null;
+    }, 12000);
+  }
   let timer = null;
   let noticeTimer = null;
   const waiting = new Set();
@@ -52,8 +65,7 @@ export function useSync({
     error.value = "";
     try {
       // The page may only call the origin its policy names; an invite for another server would be blocked by the browser.
-      if (parseInviteUrl(text).server !== origin)
-        throw new SyncError("other-server", "This invite is for a different server than this app is set up for.");
+      if (parseInviteUrl(text).server !== origin) throw new SyncError("other-server", "This invite is for a different server.");
       await enrollDevice({ text, deviceName, store: deviceStore, fetchFn });
     } catch (err) {
       error.value = err instanceof SyncError ? err.message : "Something went wrong. Try again.";
@@ -79,20 +91,24 @@ export function useSync({
     if (!device) return;
     const ids = [...waiting];
     waiting.clear();
-    const syncer = createSyncer({ device, drafts, fetchFn });
+    const engine = syncer();
     let failed = false;
     status.value = "syncing";
     for (const id of ids) {
       try {
-        const key = await syncer.one(id);
-        if (key === "failed") failed = true;
-        else if (notice.value?.id === id && notice.value.kind === "newer") notice.value = null;
+        if ((await engine.one(id)) === "failed") failed = true;
       } catch (err) {
         if (stopped(err)) return;
         failed = true;
       }
     }
     status.value = failed ? "pending" : "synced";
+    // A "Newer on the server" marker goes only if the server no longer holds something newer: look again.
+    const marked = notice.value;
+    if (marked?.kind === "newer" && ids.includes(marked.id)) {
+      notice.value = null;
+      await checkOpen(marked.id);
+    }
   }
 
   // The sign-in and offline states shared by a push and a Sync all. True when the error was one of them.
@@ -101,7 +117,7 @@ export function useSync({
     if (err.code === "unreachable") status.value = "offline";
     else if (err.code === "signin") {
       status.value = "signin";
-      error.value = "This device was signed out. Paste a new invite link to start syncing again.";
+      error.value = "Signed out. Paste a new invite link.";
     } else return false;
     return true;
   }
@@ -114,7 +130,7 @@ export function useSync({
       status.value = "syncing";
       try {
         await prepare();
-        const sum = await createSyncer({ device, drafts, fetchFn }).all({ skip: skip() });
+        const sum = await syncer().all({ skip: skip() });
         summary.value = summaryText(sum);
         lastSync.value = Date.now();
         status.value = sum.failed ? "pending" : "synced";
@@ -136,25 +152,34 @@ export function useSync({
   function noteOpened(id, { canSwap = () => true, onSwapped = () => {} } = {}) {
     clearTimeout(noticeTimer);
     notice.value = null;
+    openHooks = { canSwap, onSwapped };
     if (!device || status.value === "signin") return Promise.resolve();
-    chain = chain.then(async () => {
-      if (!device) return;
-      try {
-        const out = await createSyncer({ device, drafts, fetchFn }).open(id, { canSwap });
-        // The server answered, so it is reachable again; drafts saved while it was not are still unsent until the next save or Sync all.
-        if (status.value === "offline") status.value = "pending";
-        if (out === "updated") {
-          onSwapped();
-          notice.value = { id, kind: "updated", text: "Updated from the server" };
-          noticeTimer = setTimeout(() => (notice.value = null), 5000);
-        } else if (out === "newer") {
-          notice.value = { id, kind: "newer", text: "Newer on the server" };
-        }
-      } catch (err) {
-        if (err instanceof SyncError && err.code === "signin") stopped(err);
-      }
-    });
+    chain = chain.then(() => checkOpen(id));
     return chain;
+  }
+
+  // The hooks of the last opened note, so a push that finds its draft still marked can look again.
+  let openHooks = {};
+
+  // Asks the server about a draft that is open and shows what it found: a swap, a marker, or nothing. Runs inside the chain.
+  async function checkOpen(id) {
+    if (!device) return;
+    const { canSwap = () => true, onSwapped = () => {} } = openHooks;
+    try {
+      const out = await syncer().open(id, { canSwap });
+      // The server answered, so it is reachable again; drafts saved while it was not are still unsent until the next save or Sync all.
+      if (status.value === "offline") status.value = "pending";
+      if (out === "updated") {
+        onSwapped();
+        notice.value = { id, kind: "updated", text: "Updated from the server" };
+        clearTimeout(noticeTimer);
+        noticeTimer = setTimeout(() => (notice.value = null), 5000);
+      } else if (out === "newer") {
+        notice.value = { id, kind: "newer", text: "Newer on the server" };
+      }
+    } catch (err) {
+      if (err instanceof SyncError && err.code === "signin") stopped(err);
+    }
   }
 
   // Call after a draft was saved. It is pushed once typing has stopped for `delay`; a failure leaves it unsynced, which the next save
@@ -168,5 +193,36 @@ export function useSync({
     }, delay);
   }
 
-  return { configured, status, error, info, enrolled, summary, lastSync, notice, init, enroll, turnOff, draftSaved, noteOpened, syncAll };
+  // The person asked to save (Save, Ctrl+S, also to a file): push now, without the two-second wait, whether or not anything was typed. The
+  // push looks at the server again afterwards (see run), so a "Newer on the server" marker can clear even when there was nothing to save.
+  // `hooks` are noteOpened's.
+  async function saveRequested(id, hooks) {
+    if (!device || status.value === "signin") return;
+    openHooks = hooks ?? openHooks;
+    waiting.add(id);
+    clearTimeout(timer);
+    chain = chain.then(run);
+    await chain;
+  }
+
+  const openCopy = (id) => openDraft(id);
+
+  return {
+    configured,
+    status,
+    error,
+    info,
+    enrolled,
+    summary,
+    lastSync,
+    notice,
+    init,
+    enroll,
+    turnOff,
+    draftSaved,
+    saveRequested,
+    noteOpened,
+    openCopy,
+    syncAll,
+  };
 }

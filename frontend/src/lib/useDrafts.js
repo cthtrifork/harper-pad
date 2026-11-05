@@ -147,7 +147,10 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
   // when they cancel nothing changes. A draft that has never been saved to a file only gets its draft saved (Ctrl+S).
   function saveFile(saveAs = false) {
     if (!available.value) return Promise.resolve();
-    if (!saveAs && !current.value.filePath) return flush();
+    if (!saveAs && !current.value.filePath) {
+      // Save on a draft with no file: the draft is saved already (autosave); the request still asks for a sync now.
+      return flush().then(() => current.value.id && onSaved?.(current.value.id, { explicit: true }));
+    }
     chain = chain.then(() => writeFile(saveAs));
     return chain;
   }
@@ -179,6 +182,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
         error.value = `${fileName.value} was changed outside Harper Pad. Ctrl+S again replaces it, Ctrl+Shift+S saves elsewhere.`;
         if (edits === mine) dirty = false;
         state.value = "error";
+        onSaved?.(current.value.id, { explicit: true }); // the draft itself was saved
         return;
       }
       if (r.cancelled) {
@@ -199,6 +203,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
         state.value = "dirty"; // typed during the save: its own timer is already running
       }
       refreshListSoon();
+      onSaved?.(current.value.id, { explicit: true });
     } catch (err) {
       error.value = `Not saved to a file: ${message(err)}`;
       state.value = "error"; // the text stays dirty, so the next edit or flush tries again

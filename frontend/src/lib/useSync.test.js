@@ -123,7 +123,7 @@ test("offline, signed out and conflict each leave their own status", async () =>
   out.sync.draftSaved(D.id);
   await settle();
   assert.equal(out.sync.status.value, "signin");
-  assert.match(out.sync.error.value, /signed out/);
+  assert.match(out.sync.error.value, /Signed out/);
 
   const clash = setup({ fetchFn: reply(409, { current: {} }) });
   await clash.ready();
@@ -262,4 +262,53 @@ test("a successful check when opening a note lifts Offline to Pending", async ()
   sync.status.value = "offline";
   await sync.noteOpened(D.id);
   assert.equal(sync.status.value, "pending");
+});
+
+const NEWER = {
+  id: D.id,
+  version: 2,
+  createdAt: 1,
+  updatedAt: 5,
+  deleted: false,
+  data: JSON.stringify({ v: 1, format: "markdown", content: "newer" }),
+};
+
+test("Save pushes at once, without the wait, and clears a 'Newer on the server' marker the push settled", async () => {
+  let puts = 0;
+  const { sync, ready } = setup({
+    delay: 100000,
+    fetchFn: async (_u, init) => {
+      if (init.method === "PUT") puts++;
+      return reply(200, { version: 1 })();
+    },
+  });
+  await ready();
+  sync.notice.value = { id: D.id, kind: "newer", text: "Newer on the server" };
+  await sync.saveRequested(D.id, {});
+  assert.equal(puts, 1);
+  assert.equal(sync.notice.value, null);
+  assert.equal(sync.status.value, "synced");
+});
+
+test("Save with nothing to save still settles the marker: the newer version is swapped in", async () => {
+  let swapped = 0;
+  const { sync, kept, ready } = setup({
+    delay: 100000,
+    fetchFn: reply(200, NEWER),
+    draftOverrides: { isChanged: async () => false, applyRemote: async () => {} },
+  });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await ready();
+  sync.notice.value = { id: D.id, kind: "newer", text: "Newer on the server" };
+  await sync.saveRequested(D.id, { canSwap: () => true, onSwapped: () => swapped++ });
+  assert.equal(swapped, 1);
+  assert.equal(sync.notice.value.kind, "updated");
+});
+
+test("'Open copy' opens the conflicted copy", async () => {
+  const opened = [];
+  const { sync, ready } = setup({ openDraft: (id) => opened.push(id) });
+  await ready();
+  sync.openCopy("c".repeat(32));
+  assert.deepEqual(opened, ["c".repeat(32)]);
 });

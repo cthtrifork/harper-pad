@@ -26,8 +26,8 @@ export function summaryText(sum) {
     [sum.downloaded, "downloaded"],
     [sum.conflicted, sum.conflicted === 1 ? "conflicted copy" : "conflicted copies"],
     [sum.removed, "removed"],
-    [sum.failed, "could not be synced"],
-    [sum.skipped, "open, left for next time"],
+    [sum.failed, "failed"],
+    [sum.skipped, "left open"],
   ]
     .filter(([n]) => n > 0)
     .map(([n, what]) => `${n} ${what}`);
@@ -41,7 +41,8 @@ const parseData = (doc) => {
 const stateOf = (doc) => (doc ? { version: doc.version, updatedAt: doc.updatedAt, deleted: !!doc.deleted } : null);
 
 // A server that cannot be reached, or that refuses this device, stops everything with a SyncError; any other failure fails one draft.
-export function createSyncer({ device, drafts, fetchFn, now = () => new Date() }) {
+// `onCopy(copy)` is called with the new draft when a conflict keeps the server's version as a conflicted copy, so the person can be told.
+export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), onCopy = () => {} }) {
   // Uploads a draft on top of `state` (the server's state, or null when it has none) and records the answer. True when it was taken.
   async function upload(draft, state) {
     const out = await pushDraft({ device, draft, state, fetchFn });
@@ -101,6 +102,7 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date() }
     }
     // The server's text is kept as a new draft first, so nothing is lost if the next step fails; then this device's text goes on top.
     const copy = await drafts.save({ format: remote.format, content: conflictedCopy(remote.content, now()) });
+    onCopy(copy);
     const topped = await upload(mine, srv);
     const copied = await upload(copy, null);
     return topped && copied ? "conflicted" : "failed";

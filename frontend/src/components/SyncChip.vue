@@ -88,7 +88,7 @@ onBeforeUnmount(() => {
 
 <template>
   <span ref="root" class="sync">
-    <span v-if="sync.notice.value" class="sync-note" :class="sync.notice.value.kind" role="status" :title="sync.notice.value.kind === 'newer' ? 'Sync all, or your next save, settles it' : ''">{{ sync.notice.value.text }}</span>
+    <span v-if="sync.notice.value" class="sync-note" :class="sync.notice.value.kind" role="status" :title="sync.notice.value.kind === 'newer' ? 'Sync all, or your next save, settles it' : ''">{{ sync.notice.value.text }}<button v-if="sync.notice.value.kind === 'copy'" type="button" class="link" @click="sync.openCopy(sync.notice.value.copyId)">Open copy</button></span>
     <button id="sync-chip" type="button" class="sync-chip" :class="status" :aria-label="`${label}, open sync`" aria-haspopup="dialog" :aria-expanded="open" @click="toggle">
       <svg v-if="status === 'syncing'" class="mark spin" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" /></svg>
       <svg v-else-if="status === 'offline'" class="mark" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
@@ -103,10 +103,10 @@ onBeforeUnmount(() => {
     <Transition name="pop">
       <section v-if="open" class="sync-panel" role="dialog" :aria-label="showForm ? 'Sync this device' : 'Sync'">
         <form v-if="showForm" @submit.prevent="add">
-          <h2>{{ status === "signin" ? "This device was signed out" : "Sync this device" }}</h2>
+          <h2>{{ status === "signin" ? "Signed out" : "Sync this device" }}</h2>
           <p class="mute">
-            <template v-if="status === 'signin'">The server no longer accepts it. Your drafts are all still here. Paste a new invite link to start syncing again.</template>
-            <template v-else>Paste the invite link from the admin page. This device then keeps its drafts in step with your server. Until then, nothing leaves this device.</template>
+            <template v-if="status === 'signin'">Your drafts are safe. Paste a new invite link.</template>
+            <template v-else>Paste the invite link from the admin page.</template>
           </p>
           <label for="sync-invite">Invite link</label>
           <input id="sync-invite" v-model="invite" type="text" class="in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/join#…" :aria-invalid="!!sync.error.value" aria-describedby="sync-error" />
@@ -120,9 +120,9 @@ onBeforeUnmount(() => {
         </form>
         <div v-else>
           <h2>{{ status === "offline" ? "Offline" : `Synced with ${host}` }}</h2>
-          <p class="mute">This device is “{{ sync.info.value?.deviceName }}”. A saved draft is sent about two seconds after you stop typing.</p>
-          <p v-if="status === 'pending'" class="mute">Some drafts could not be sent yet. The next save or Sync all tries again.</p>
-          <p v-if="status === 'offline'" class="mute">The server could not be reached. Drafts stay on this device and are sent when it can be.</p>
+          <p class="mute">This device is “{{ sync.info.value?.deviceName }}”.</p>
+          <p v-if="status === 'pending'" class="mute">Some drafts are not sent yet.</p>
+          <p v-if="status === 'offline'" class="mute">Server not reachable. Drafts are kept here.</p>
           <p v-if="sync.summary.value" id="sync-summary" class="summary" role="status">
             {{ sync.summary.value }}<span v-if="lastSyncText" class="mute"> · {{ lastSyncText }}</span>
           </p>
@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
             <button type="button" class="link" @click="turnOff">Turn off sync on this device</button>
             <button id="sync-all" type="button" class="primary" :disabled="syncing" @click="sync.syncAll()">{{ syncing ? "Syncing…" : "Sync all" }}</button>
           </div>
-          <p class="note mute">Turning it off keeps every draft on this device. The server keeps its copies.</p>
+          <p class="note mute">Drafts stay here, and on the server.</p>
         </div>
       </section>
     </Transition>
