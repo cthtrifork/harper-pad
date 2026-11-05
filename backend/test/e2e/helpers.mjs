@@ -62,18 +62,6 @@ export function newDevice(browser) {
   return browser.newContext();
 }
 
-// TODO: insert an invite row straight into PostgreSQL, with the same SHA-256 token hash the service uses, bound to the default
-// client account (`client_id`) and with a short expiry, through `$COMPOSE -f test/e2e/compose.yaml exec -T postgres psql`. The
-// admin UI is not used: it sits behind Cloudflare Access, and the admin app has no authentication of its own to skip.
-export async function insertInvite(_token, _deviceName) {
-  throw new Error("insertInvite is not implemented yet");
-}
-
-// TODO: wipe the database and restart the sync service, for the "lose the server" check.
-export async function wipeServer() {
-  throw new Error("wipeServer is not implemented yet");
-}
-
 // Runs a command in a service of the compose stack and resolves with its exit code and output, whatever the code is. COMPOSE and
 // E2E_FILE come from the Makefile (`podman compose` or `docker compose`).
 export function compose(service, args) {

@@ -69,8 +69,6 @@ admin-down: ## Stop the stack and delete its data
 
 e2e-web: ## Build the web app for the end-to-end stack (served by Caddy at the root path)
 	cd ../frontend && { [ -d node_modules ] || npm ci --ignore-scripts --no-audit --no-fund; } && BASE_PATH=/ npm run build:web
-# TODO: the web build also needs the sync origin (https://sync.localhost:18443) in its CORS/CSP settings once the
-# build-time setting exists (docs/sync.md, open questions).
 
 e2e-up: ## Start PostgreSQL, the admin service (applies the schema), harper-pad-sync and Caddy
 	$(COMPOSE) -f $(E2E_FILE) up -d --build --wait
