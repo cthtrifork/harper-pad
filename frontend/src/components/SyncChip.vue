@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 // The sync chip in the status bar and its pop-up (docs/sync.md). `sync` is useSync's result. A bottom sheet on a phone (styles/sync-chip.css).
 const props = defineProps({ sync: { type: Object, required: true } });
@@ -47,6 +47,13 @@ function toggle() {
   open.value = !open.value;
 }
 
+// With a mouse, the invite field is ready to paste into. On a phone it is not focused for the person: that would open the keyboard at once.
+watch(open, async (isOpen) => {
+  if (!isOpen || !showForm.value || !window.matchMedia("(pointer: fine)").matches) return;
+  await nextTick();
+  document.getElementById("sync-invite")?.focus();
+});
+
 async function add() {
   if (busy.value || !invite.value.trim()) return;
   busy.value = true;
@@ -74,9 +81,7 @@ function onPointerDown(e) {
   if (open.value && !root.value?.contains(e.target)) open.value = false;
 }
 function onKeydown(e) {
-  if (e.key !== "Escape") return;
-  open.value = false;
-  props.sync.dismissGone();
+  if (e.key === "Escape") open.value = false;
 }
 onMounted(() => {
   window.addEventListener("pointerdown", onPointerDown);
@@ -90,7 +95,7 @@ onBeforeUnmount(() => {
 
 <template>
   <span ref="root" class="sync">
-    <span v-if="sync.notice.value" class="sync-note" :class="sync.notice.value.kind" role="status" :title="sync.notice.value.kind === 'newer' ? 'Sync all, or your next save, settles it' : ''">{{ sync.notice.value.text }}<button v-if="sync.notice.value.kind === 'copy'" type="button" class="link" @click="sync.openCopy(sync.notice.value.copyId)">Open copy</button><button v-if="sync.notice.value.kind === 'removed'" type="button" class="link" @click="sync.undoRemoved()">Undo</button></span>
+    <span v-if="sync.notice.value?.kind === 'newer'" class="sync-marker" role="status" title="Sync all, or your next save, settles it"><span class="dot" aria-hidden="true"></span>{{ sync.notice.value.text }}</span>
     <button id="sync-chip" type="button" class="sync-chip" :class="status" :aria-label="`${label}, open sync`" aria-haspopup="dialog" :aria-expanded="open" @click="toggle">
       <svg v-if="status === 'syncing'" class="mark spin" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" /></svg>
       <svg v-else-if="status === 'offline'" class="mark" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
@@ -99,20 +104,6 @@ onBeforeUnmount(() => {
       {{ label }}
     </button>
 
-    <Transition name="pop">
-      <div v-if="open" class="sync-scrim" aria-hidden="true"></div>
-    </Transition>
-    <!-- Deleted on another device while this note is open: a question, not a modal. It takes no focus; Escape leaves it for later. -->
-    <Transition name="pop">
-      <section v-if="sync.gone.value && !open" id="sync-gone" class="sync-panel sync-gone" role="dialog" aria-label="Deleted elsewhere">
-        <h2>Deleted elsewhere</h2>
-        <p class="mute">This note was deleted on another device.</p>
-        <div class="actions">
-          <button type="button" class="quiet" @click="sync.removeGone()">Remove</button>
-          <button type="button" class="primary" @click="sync.keepGone()">Keep</button>
-        </div>
-      </section>
-    </Transition>
     <Transition name="pop">
       <section v-if="open" class="sync-panel" role="dialog" :aria-label="showForm ? 'Sync this device' : 'Sync'">
         <form v-if="showForm" @submit.prevent="add">
@@ -127,8 +118,10 @@ onBeforeUnmount(() => {
           <label for="sync-name">Device name</label>
           <input id="sync-name" v-model="deviceName" type="text" class="in" maxlength="64" autocomplete="off" />
           <div class="actions">
-            <button type="button" class="quiet" @click="open = false">Cancel</button>
-            <button type="submit" class="primary" :disabled="busy || !invite.trim()">{{ busy ? "Adding…" : "Add this device" }}</button>
+            <button type="submit" class="primary" :class="{ busy }" :disabled="busy || !invite.trim()">
+              <span class="label">Add this device</span>
+              <svg v-if="busy" class="spin" width="14" height="14" viewBox="0 0 10 10" aria-label="Adding" role="img"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" /></svg>
+            </button>
           </div>
         </form>
         <div v-else>
@@ -141,7 +134,10 @@ onBeforeUnmount(() => {
           </p>
           <div class="actions between">
             <button type="button" class="link" @click="turnOff">Turn off sync on this device</button>
-            <button id="sync-all" type="button" class="primary" :disabled="syncing" @click="sync.syncAll()">{{ syncing ? "Syncing…" : "Sync all" }}</button>
+            <button id="sync-all" type="button" class="primary" :class="{ busy: syncing }" :disabled="syncing" @click="sync.syncAll()">
+              <span class="label">Sync all</span>
+              <svg v-if="syncing" class="spin" width="14" height="14" viewBox="0 0 10 10" aria-label="Syncing" role="img"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" /></svg>
+            </button>
           </div>
           <p class="note mute">Drafts stay here, and on the server.</p>
         </div>

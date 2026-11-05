@@ -1,10 +1,20 @@
-/* The "Fixed N things" toast (AutofixToast.vue): it floats over the bottom of the page, fades before it goes. */
-.autofix {
+/* The toast (ToastBar.vue) and the stack it sits in (App.vue): they float over the bottom of the page, one above the other, and fade before
+   they go. */
+.toast-stack {
   position: absolute;
   left: 50%;
   bottom: 20px;
   z-index: 5;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none; /* only the toasts take clicks, not the empty stack */
+}
+
+.toast-bar {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -18,15 +28,15 @@
   transition: opacity 0.3s var(--ease);
 }
 
-.autofix.fading {
+.toast-bar.fading {
   opacity: 0;
 }
 
-.autofix .tick {
+.toast-bar .tick {
   color: var(--ok);
 }
 
-.autofix .undo {
+.toast-bar .act {
   height: 28px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -35,20 +45,20 @@
   color: var(--text);
 }
 
-.autofix .undo:hover {
+.toast-bar .act:hover {
   border-color: var(--mute);
 }
 
 /* Motion (switched off by prefers-reduced-motion, see base.css): it rises in; only opacity and transform are animated. */
-.autofix-enter-active,
-.autofix-leave-active {
+.toast-bar-enter-active,
+.toast-bar-leave-active {
   transition:
     opacity 0.2s var(--ease),
     transform 0.2s var(--ease);
 }
 
-.autofix-enter-from,
-.autofix-leave-to {
+.toast-bar-enter-from,
+.toast-bar-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(8px);
+  transform: translateY(8px);
 }
