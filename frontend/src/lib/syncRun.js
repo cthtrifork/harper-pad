@@ -1,6 +1,9 @@
-// Sync all (docs/sync.md, "Sync all" and "Conflicts"): list what the server holds, decide for every draft what to do with `decide`, and do
-// it. No Vue and no network or storage of its own: `device` and `fetchFn` for the server, `drafts` for the local store (the web store's
-// get, save, allIds, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
+// The one place a draft is synced (docs/sync.md, "Conflicts"): `all()` for Sync all and `one(id)` for the push after a save both go
+// through `settleOne`, so a draft is decided, uploaded, downloaded, removed or kept as a conflicted copy by this code and nothing else.
+// `decide` and `settle` (syncPlan.js) are the pure table; nothing outside this file calls them or uploads a draft.
+//
+// No Vue and no network or storage of its own: `device` and `fetchFn` for the server, `drafts` for the local store (the web store's get, save,
+// allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.js";
 import { getDoc, listDocs, pushDraft, pushTombstone } from "./syncClient.js";
@@ -14,7 +17,9 @@ export function conflictedCopy(content, now = new Date()) {
   return `Conflicted copy ${stamp}: ${content}`;
 }
 
-// "3 uploaded, 2 downloaded, 1 conflicted copy" for a result of runSync.
+const emptySum = () => ({ uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 });
+
+// "3 uploaded, 2 downloaded, 1 conflicted copy" for a result of all().
 export function summaryText(sum) {
   const parts = [
     [sum.uploaded, "uploaded"],
@@ -33,18 +38,10 @@ const parseData = (doc) => {
   const blob = JSON.parse(doc.data);
   return { format: blob.format, content: blob.content };
 };
+const stateOf = (doc) => (doc ? { version: doc.version, updatedAt: doc.updatedAt, deleted: !!doc.deleted } : null);
 
-// `skip` is a set of draft ids to leave alone this time (the one open in the editor, so a download cannot change text being typed).
-// Resolves to {uploaded, downloaded, removed, conflicted, failed, skipped}. A server that cannot be reached, or that refuses this device,
-// stops the run with a SyncError; any other failure counts one draft as `failed` and carries on.
-export async function runSync({ device, drafts, fetchFn, skip = new Set(), now = () => new Date() }) {
-  const server = new Map((await listDocs({ device, fetchFn })).map((d) => [d.id, d]));
-  const { changed, deleted } = await drafts.changes();
-  const localIds = new Set(await drafts.allIds());
-  const changedSet = new Set(changed);
-  const ids = [...new Set([...localIds, ...deleted, ...server.keys()])].sort();
-  const sum = { uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 };
-
+// A server that cannot be reached, or that refuses this device, stops everything with a SyncError; any other failure fails one draft.
+export function createSyncer({ device, drafts, fetchFn, now = () => new Date() }) {
   // Uploads a draft on top of `state` (the server's state, or null when it has none) and records the answer. True when it was taken.
   async function upload(draft, state) {
     const out = await pushDraft({ device, draft, state, fetchFn });
@@ -58,62 +55,92 @@ export async function runSync({ device, drafts, fetchFn, skip = new Set(), now =
     return true;
   }
 
-  async function one(id) {
+  // Does what `decide` says for one draft. `local` is null or {changed}; `srv` is the server's state ({version, updatedAt, deleted}) or null.
+  // Resolves to the name of the count it adds to ("uploaded", "downloaded", "removed", "conflicted", "failed", "skipped"), "" for nothing
+  // to do, or "stale" when `guessed` is set and the server refused the upload because its state was not the one assumed.
+  async function settleOne(id, local, srv, { skip = false, guessed = false } = {}) {
     const st = await drafts.syncState(id);
-    const srv = server.get(id) ?? null;
     const action = decide({
-      local: localIds.has(id) ? { changed: changedSet.has(id) } : null,
+      local,
       synced: st ? { updatedAt: st.updatedAt, deleted: st.deleted } : null,
       server: srv ? { updatedAt: srv.updatedAt, deleted: srv.deleted } : null,
     });
-    if (action === "none") return;
-    if (skip.has(id) && action !== "upload-tombstone") {
-      sum.skipped++;
-      return;
-    }
+    if (action === "none") return "";
+    if (skip && action !== "upload-tombstone") return "skipped";
 
     if (action === "upload") {
-      if (await upload(await drafts.get(id), srv)) sum.uploaded++;
-      else sum.failed++;
-    } else if (action === "upload-tombstone") {
+      if (await upload(await drafts.get(id), srv)) return "uploaded";
+      return guessed ? "stale" : "failed";
+    }
+    if (action === "upload-tombstone") {
       const at = Date.now();
       const out = await pushTombstone({ device, id, state: srv, updatedAt: at, fetchFn });
-      if (out.result !== "ok") return void sum.failed++;
+      if (out.result !== "ok") return guessed ? "stale" : "failed";
       await drafts.markSynced(id, { hash: "", updatedAt: at, version: out.version, deleted: true });
-      sum.uploaded++;
-    } else if (action === "download") {
-      const doc = await getDoc({ device, id, fetchFn });
-      if (doc.deleted) return;
-      await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
-      sum.downloaded++;
-    } else if (action === "remove-local") {
-      await drafts.applyRemoteDelete(id, srv.version, srv.updatedAt);
-      sum.removed++;
-    } else if (action === "resolve") {
-      const doc = await getDoc({ device, id, fetchFn });
-      const remote = parseData(doc);
-      const mine = await drafts.get(id);
-      const mineHash = await contentHash(mine.format, mine.content);
-      if (settle(mineHash, await contentHash(remote.format, remote.content)) === "adopt") {
-        await drafts.markSynced(id, { hash: mineHash, updatedAt: srv.updatedAt, version: srv.version, deleted: false });
-        return;
-      }
-      // The server's text is kept as a new draft first, so nothing is lost if the next step fails; then this device's text goes on top.
-      const copy = await drafts.save({ format: remote.format, content: conflictedCopy(remote.content, now()) });
-      const topped = await upload(mine, srv);
-      const copied = await upload(copy, null);
-      if (topped && copied) sum.conflicted++;
-      else sum.failed++;
+      return "uploaded";
     }
+    if (action === "download") {
+      const doc = await getDoc({ device, id, fetchFn });
+      if (!doc || doc.deleted) return "";
+      await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
+      return "downloaded";
+    }
+    if (action === "remove-local") {
+      await drafts.applyRemoteDelete(id, srv.version, srv.updatedAt);
+      return "removed";
+    }
+    // "resolve": changed on both sides. The same text and format is adopted; different text is a conflict, and nothing is replaced.
+    const doc = await getDoc({ device, id, fetchFn });
+    if (!doc) return "failed";
+    const remote = parseData(doc);
+    const mine = await drafts.get(id);
+    const mineHash = await contentHash(mine.format, mine.content);
+    if (settle(mineHash, await contentHash(remote.format, remote.content)) === "adopt") {
+      await drafts.markSynced(id, { hash: mineHash, updatedAt: srv.updatedAt, version: srv.version, deleted: false });
+      return "";
+    }
+    // The server's text is kept as a new draft first, so nothing is lost if the next step fails; then this device's text goes on top.
+    const copy = await drafts.save({ format: remote.format, content: conflictedCopy(remote.content, now()) });
+    const topped = await upload(mine, srv);
+    const copied = await upload(copy, null);
+    return topped && copied ? "conflicted" : "failed";
   }
 
-  for (const id of ids) {
-    try {
-      await one(id);
-    } catch (err) {
-      if (err?.code === "unreachable" || err?.code === "signin") throw err;
-      sum.failed++;
-    }
-  }
-  return sum;
+  return {
+    // Sync all: every draft, both ways. `skip` is a set of ids to leave alone this time (the draft open in the editor, so a download
+    // cannot change text being typed). Resolves to {uploaded, downloaded, removed, conflicted, failed, skipped}.
+    async all({ skip = new Set() } = {}) {
+      const server = new Map((await listDocs({ device, fetchFn })).map((d) => [d.id, d]));
+      const { changed, deleted } = await drafts.changes();
+      const localIds = new Set(await drafts.allIds());
+      const changedSet = new Set(changed);
+      const sum = emptySum();
+      for (const id of [...new Set([...localIds, ...deleted, ...server.keys()])].sort()) {
+        try {
+          const key = await settleOne(id, localIds.has(id) ? { changed: changedSet.has(id) } : null, server.get(id) ?? null, {
+            skip: skip.has(id),
+          });
+          if (key) sum[key]++;
+        } catch (err) {
+          if (err?.code === "unreachable" || err?.code === "signin") throw err;
+          sum.failed++;
+        }
+      }
+      return sum;
+    },
+
+    // The push after a save: one draft, without listing the server. It assumes the server still holds what the last sync recorded, which
+    // is nearly always true and costs one request; when the server refuses that, it reads the server's real state and settles the draft
+    // by the same rules as Sync all (so a conflict made by a save is handled exactly like one found by Sync all). Resolves to the count
+    // name, as settleOne does, never "stale".
+    async one(id) {
+      const [st, mine] = await Promise.all([drafts.syncState(id), drafts.get(id).catch(() => null)]);
+      const local = mine ? { changed: await drafts.isChanged(id) } : null;
+      const key = await settleOne(id, local, st ? { version: st.version, updatedAt: st.updatedAt, deleted: st.deleted } : null, {
+        guessed: true,
+      });
+      if (key !== "stale") return key;
+      return settleOne(id, local, stateOf(await getDoc({ device, id, fetchFn })));
+    },
+  };
 }

@@ -22,13 +22,14 @@ function setup({ fetchFn, enrolled = true, origin = ORIGIN, ...extra } = {}) {
   const drafts = {
     get: async () => D,
     allIds: async () => [],
+    isChanged: async () => true,
     changes: async () => ({ changed: [], deleted: [] }),
     syncState: async (id) => kept.states.get(id) ?? null,
     markSynced: async (id, s) => {
       kept.states.set(id, s);
     },
   };
-  const sync = useSync({ origin, deviceStore, drafts, hash: contentHash, fetchFn, delay: 5, autoSync: false, ...extra });
+  const sync = useSync({ origin, deviceStore, drafts, fetchFn, delay: 5, autoSync: false, ...extra });
   const ready = async () => {
     if (enrolled) kept.device = { server: ORIGIN, token: "tok", deviceName: "Phone", ...(await generateDeviceKey()) };
     await sync.init();

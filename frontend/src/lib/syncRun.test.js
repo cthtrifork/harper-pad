@@ -6,15 +6,17 @@ import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.js";
 import { listDocs } from "./syncClient.js";
-import { conflictedCopy, runSync, summaryText } from "./syncRun.js";
+import { conflictedCopy, createSyncer, summaryText } from "./syncRun.js";
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 
 function fakeServer() {
   const rows = new Map();
   const json = (status, body) => ({ status, json: async () => body });
+  const calls = [];
   const fetchFn = async (url, init) => {
     const u = new URL(url);
     const method = init.method;
+    calls.push(`${method} ${u.pathname}`);
     if (method === "GET" && u.pathname === "/docs") {
       const after = u.searchParams.get("after") ?? "";
       const limit = Number(u.searchParams.get("limit"));
@@ -44,7 +46,7 @@ function fakeServer() {
     rows.set(id, next);
     return json(200, { version: next.version });
   };
-  return { rows, fetchFn };
+  return { rows, fetchFn, calls };
 }
 
 const key = await generateDeviceKey();
@@ -58,7 +60,9 @@ function device(server) {
     return openDatabase();
   };
   const drafts = createWebDrafts(open);
-  return { drafts, sync: (skip) => runSync({ device: DEVICE, drafts, fetchFn: server.fetchFn, skip }) };
+  const syncer = () => createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn });
+  // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
+  return { drafts, sync: (skip) => syncer().all({ skip }), one: (id) => syncer().one(id) };
 }
 const none = { uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 };
 const sum = (o) => ({ ...none, ...o });
@@ -202,9 +206,9 @@ test("an unreachable or refusing server stops the run", async () => {
   const down = async () => {
     throw new TypeError("x");
   };
-  await assert.rejects(runSync({ device: DEVICE, drafts: a.drafts, fetchFn: down }), { code: "unreachable" });
+  await assert.rejects(createSyncer({ device: DEVICE, drafts: a.drafts, fetchFn: down }).all(), { code: "unreachable" });
   const refuse = async () => ({ status: 401, json: async () => ({}) });
-  await assert.rejects(runSync({ device: DEVICE, drafts: a.drafts, fetchFn: refuse }), { code: "signin" });
+  await assert.rejects(createSyncer({ device: DEVICE, drafts: a.drafts, fetchFn: refuse }).all(), { code: "signin" });
 });
 
 test("the list follows its pages", async () => {
@@ -224,4 +228,63 @@ test("the summary names only what happened", () => {
   );
   assert.equal(summaryText(sum({ conflicted: 2, failed: 1 })), "2 conflicted copies, 1 could not be synced");
   assert.match(conflictedCopy("text", new Date(2026, 10, 5, 9, 7)), /^Conflicted copy 2026-11-05 09:07: text$/);
+});
+
+// The push after a save goes through the same engine as Sync all, so it settles conflicts by the same rules.
+test("a save is pushed with one request, and nothing is listed", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const d = await a.drafts.save({ content: "one" });
+  assert.equal(await a.one(d.id), "uploaded");
+  assert.deepEqual(server.calls, [`PUT /docs/${d.id}`]);
+  assert.equal(await a.one(d.id), ""); // not changed since: nothing is sent
+  assert.equal(server.calls.length, 1);
+  await tick();
+  await a.drafts.save({ id: d.id, content: "two" });
+  assert.equal(await a.one(d.id), "uploaded");
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "two");
+});
+
+test("a save that finds the server changed makes the same conflicted copy as Sync all", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "start" });
+  await a.sync();
+  await b.sync();
+  await tick();
+  await a.drafts.save({ id: d.id, content: "from A" });
+  assert.equal(await a.one(d.id), "uploaded");
+  await tick();
+  await b.drafts.save({ id: d.id, content: "from B" });
+  assert.equal(await b.one(d.id), "conflicted"); // the PUT is refused, the real state is read, and the rules of Sync all apply
+  const mine = await texts(b);
+  assert.equal(mine.length, 2);
+  assert.ok(mine.includes("from B"));
+  assert.ok(mine.some((t) => /^Conflicted copy .*: from A$/.test(t)));
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from B");
+  assert.equal(server.rows.size, 2);
+  assert.deepEqual(await b.sync(), none);
+});
+
+test("a save that finds the same text on the server adopts it, and one that finds the server empty uploads", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "start" });
+  await a.sync();
+  await b.sync();
+  await tick();
+  await a.drafts.save({ id: d.id, content: "same" });
+  await a.one(d.id);
+  await tick();
+  await b.drafts.save({ id: d.id, content: "same" });
+  assert.equal(await b.one(d.id), "");
+  assert.deepEqual(await b.drafts.changes(), { changed: [], deleted: [] });
+
+  server.rows.clear();
+  await tick();
+  await a.drafts.save({ id: d.id, content: "after the loss" });
+  assert.equal(await a.one(d.id), "uploaded");
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "after the loss");
 });

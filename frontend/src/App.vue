@@ -9,7 +9,6 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
-import { contentHash } from "./lib/contentHash.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
@@ -48,7 +47,6 @@ const sync = useSync({
   origin: import.meta.env?.SYNC_ORIGIN ?? "",
   deviceStore: syncDevice,
   drafts: syncDrafts,
-  hash: contentHash,
   prepare: () => drafts.flush(),
   skip: () => new Set([drafts.current.value.id].filter(Boolean)),
   onChanged: () => drafts.refreshList(),

@@ -397,7 +397,9 @@ paged) and, per draft, uploads, downloads, makes a conflicted copy, removes with
 A conflict is settled **on the device**, by comparing, and only when it is not clearly just an update. For each draft the device
 compares its own text now, the state it recorded at the last sync (the sync state, below) and the server's
 current state. The same table applies to a save that comes back 409, to opening a note (where only the "newer there" row can apply
-on its own) and to Sync all.
+on its own) and to Sync all. **In the code it is one place**: `createSyncer` in `frontend/src/lib/syncRun.js` (the table itself is the pure
+`decide` in `syncPlan.js`). Sync all is its `all()` and the push after a save is its `one(id)`; a test (`syncOneEngine.test.js`) fails if
+another module starts deciding or uploading drafts.
 
 | This device | The server | What happens |
 |---|---|---|

@@ -190,6 +190,18 @@ export function createWebDrafts(open) {
     });
   }
 
+  // A draft is changed when the server has never had it, or its text and format hash differently from what the server last held. The one
+  // definition of the word: changes() and isChanged() both use it (docs/sync.md, "Changes to local storage").
+  async function differsFromSynced(d, state) {
+    return !state?.hash || (await contentHash(d.format, d.content)) !== state.hash;
+  }
+
+  // Whether one draft is changed, for the push after a save. A draft that is not stored is not changed.
+  async function isChanged(id) {
+    const { d, state } = await withDb(async (db) => ({ d: await db.get("drafts", id), state: await db.get("sync", id) }));
+    return !!d && differsFromSynced(d, state);
+  }
+
   // What to push: {changed, deleted}, ids. It reads each draft's text to hash it, one at a time, so it is for Sync all.
   async function changes() {
     const { ids, states } = await withDb(async (db) => {
@@ -199,13 +211,8 @@ export function createWebDrafts(open) {
     });
     const changed = [];
     for (const id of ids) {
-      const state = states.get(id);
-      if (!state?.hash) {
-        changed.push(id);
-        continue;
-      }
       const d = await withDb((db) => db.get("drafts", id));
-      if (d && (await contentHash(d.format, d.content)) !== state.hash) changed.push(id);
+      if (d && (await differsFromSynced(d, states.get(id)))) changed.push(id);
     }
     const here = new Set(ids);
     const deleted = [...states.values()]
@@ -261,5 +268,20 @@ export function createWebDrafts(open) {
     });
   }
 
-  return { get, save, setFilePath, remove, list, search, startup, allIds, syncState, markSynced, changes, applyRemote, applyRemoteDelete };
+  return {
+    get,
+    save,
+    setFilePath,
+    remove,
+    list,
+    search,
+    startup,
+    allIds,
+    isChanged,
+    syncState,
+    markSynced,
+    changes,
+    applyRemote,
+    applyRemoteDelete,
+  };
 }
