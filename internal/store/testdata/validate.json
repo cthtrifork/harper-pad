@@ -1,0 +1,10 @@
+[
+  { "name": "valid, default format", "format": "", "contentBytes": 10, "id": "", "error": "" },
+  { "name": "valid text", "format": "text", "contentBytes": 0, "id": "", "error": "" },
+  { "name": "valid, at the limit", "format": "markdown", "contentBytes": 5242880, "id": "", "error": "" },
+  { "name": "unknown format", "format": "pdf", "contentBytes": 1, "id": "", "error": "unknown draft format \"pdf\"" },
+  { "name": "one byte over the limit", "format": "markdown", "contentBytes": 5242881, "id": "", "error": "the draft is 5242881 bytes; the limit is 5242880" },
+  { "name": "id with capitals", "format": "markdown", "contentBytes": 1, "id": "ABCDEF0123456789ABCDEF0123456789", "error": "is not a draft id" },
+  { "name": "id too short", "format": "markdown", "contentBytes": 1, "id": "abc", "error": "\"abc\" is not a draft id" },
+  { "name": "id as stored", "format": "markdown", "contentBytes": 1, "id": "0123456789abcdef0123456789abcdef", "error": "" }
+]

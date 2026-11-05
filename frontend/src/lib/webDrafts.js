@@ -49,6 +49,17 @@ function newId(now) {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
+// The rules Save and ApplyRemote share, as checkDraft in internal/store/sync.go (both run internal/store/testdata/validate.json): a known
+// format (markdown when empty) and at most MAX_CONTENT_BYTES. Returns the format; the id, when given, must be 32 lowercase hex characters.
+function check(input) {
+  const format = input.format || "markdown";
+  if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
+  const bytes = new TextEncoder().encode(input.content ?? "").length;
+  if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
+  if (input.id && !ID.test(input.id)) throw new Error(`"${input.id}" is not a draft id`);
+  return format;
+}
+
 // `open` is backend.js's openDb: it resolves to an open database, which the caller closes.
 export function createWebDrafts(open) {
   async function withDb(work) {
@@ -78,15 +89,10 @@ export function createWebDrafts(open) {
   }
 
   async function save(input) {
-    const format = input.format || "markdown";
-    if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
+    const format = check(input);
     const content = input.content ?? "";
-    const bytes = new TextEncoder().encode(content).length;
-    if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
     const now = Date.now();
-    let id = input.id;
-    if (!id) id = newId(now);
-    else if (!ID.test(id)) throw new Error(`"${id}" is not a draft id`);
+    const id = input.id || newId(now);
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
       const drafts = tx.objectStore("drafts");
@@ -212,11 +218,8 @@ export function createWebDrafts(open) {
 
   // Stores a draft as the server has it, with the server's times (save sets the update time to now), and records it as synced.
   async function applyRemote(input, version) {
-    const format = input.format || "markdown";
-    if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
+    const format = check(input);
     const content = input.content ?? "";
-    const bytes = new TextEncoder().encode(content).length;
-    if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
     if (!ID.test(input.id ?? "")) throw new Error(`"${input.id}" is not a draft id`);
     if (!(input.createdAt > 0 && input.updatedAt > 0)) throw new Error("a synced draft needs its created and updated times");
     const hash = await contentHash(format, content); // before the transaction: it would not wait for this
