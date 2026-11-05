@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import wails from "@wailsio/runtime/plugins/vite";
 import { defineConfig } from "vite";
+import { buildPolicy } from "./src/lib/csp.js";
 
 // Vite empties dist/ on every build. The Go side embeds it, so `go vet` and `go test` need the
 // directory to exist even when nobody has built the frontend; keep the committed placeholder.
@@ -14,29 +15,11 @@ const keepPlaceholder = () => ({
   },
 });
 
-// The Content-Security-Policy of the production page: only its own files, nothing else.
-//   - script-src: 'wasm-unsafe-eval' only so Harper's WebAssembly compiles; no 'unsafe-eval', no inline scripts;
-//   - style-src: 'unsafe-inline' because CodeMirror and Vue write styles at run time;
-//   - worker-src: Harper runs in a Web Worker, which may be a blob: URL;
-//   - connect-src: the Go side (same origin) and nothing on the internet.
-// A <meta> tag is the one form every webview applies. Production only, so the dev server's hot reload keeps working.
-// See docs/security.md.
-const POLICY = [
-  "default-src 'none'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join("; ");
-
-// The web build (GitHub Pages, `vite build --mode web`) gets the same policy plus one directive: the page loads its own web app
-// manifest, which `default-src 'none'` would otherwise block. The desktop policy is unchanged.
-const WEB_POLICY = `${POLICY}; manifest-src 'self'`;
+// The Content-Security-Policy of the production page is built in src/lib/csp.js (see docs/security.md). SYNC_ORIGIN, the sync server's
+// https origin, is added to connect-src when it is set (docs/sync.md) and the policy is unchanged when it is not. A <meta> tag is the one
+// form every webview applies. Production only, so the dev server's hot reload keeps working. The web build (GitHub Pages) adds manifest-src.
+const POLICY = buildPolicy({ syncOrigin: process.env.SYNC_ORIGIN });
+const WEB_POLICY = buildPolicy({ web: true, syncOrigin: process.env.SYNC_ORIGIN });
 
 const contentSecurityPolicy = (policy) => ({
   name: "content-security-policy",

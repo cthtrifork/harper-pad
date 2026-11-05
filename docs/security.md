@@ -34,7 +34,7 @@ specific service methods.
   | `script-src` | `'self' 'wasm-unsafe-eval'` | our scripts only; `'wasm-unsafe-eval'` lets Harper's WebAssembly compile. No inline scripts and no `'unsafe-eval'` |
   | `style-src` | `'self' 'unsafe-inline'` | CodeMirror and Vue write style attributes and `<style>` elements at run time |
   | `img-src` / `font-src` | `'self'` (images also `data:`) | |
-  | `connect-src` | `'self'` | calls to the Go side, and nothing on the internet |
+  | `connect-src` | `'self'`, plus the sync server's origin when the build sets `SYNC_ORIGIN` | calls to the Go side, and nothing on the internet; with sync configured, exactly one more https origin ([sync](sync.md)) |
   | `worker-src` | `'self' blob:` | Harper runs in a Web Worker |
   | `object-src`, `base-uri`, `form-action` | `'none'` | |
   | `manifest-src` | `'self'`, **web build only** | the GitHub Pages build loads its own web app manifest ([`pages.md`](pages.md)); the desktop policy does not have it |
