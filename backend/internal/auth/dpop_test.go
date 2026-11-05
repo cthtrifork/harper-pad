@@ -223,3 +223,44 @@ func TestTokens(t *testing.T) {
 		t.Errorf("id %q", id)
 	}
 }
+
+func TestVerifyIsCompactSerializationOnly(t *testing.T) {
+	k := authtest.NewKey(t)
+	parts := strings.Split(k.Proof(t, nil, claims()), ".")
+	flattened := `{"protected":"` + parts[0] + `","payload":"` + parts[1] + `","signature":"` + parts[2] + `"}`
+	if _, err := verifier().Verify(flattened, "POST", htu, ""); err == nil {
+		t.Error("a flattened JSON serialization was accepted")
+	}
+}
+
+// The base64url text of a coordinate has spare bits in its last character; a decoder that ignores them would let one key be
+// written many ways. Either the proof is refused or it yields the same stored key as the clean spelling, never a second identity.
+func TestOneKeyHasOneStoredForm(t *testing.T) {
+	k := authtest.NewKey(t)
+	clean, err := verifier().Verify(k.Proof(t, nil, claims()), "POST", htu, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwk := k.JWK()
+	x := jwk["x"].(string)
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	last := strings.IndexByte(alphabet, x[len(x)-1])
+	for _, spare := range []int{1, 2, 3} { // the low two bits of the last character carry nothing
+		alt := map[string]any{}
+		for a, b := range jwk {
+			alt[a] = b
+		}
+		alt["x"] = x[:len(x)-1] + string(alphabet[last&^3|(last+spare)&3])
+		if alt["x"] == x {
+			continue
+		}
+		c := claims()
+		c.JTI = "spare" + string(rune('0'+spare))
+		header := map[string]any{"typ": "dpop+jwt", "alg": "ES256", "jwk": alt}
+		got, err := verifier().Verify(k.Proof(t, header, c), "POST", htu, "")
+		// The signature was made with the real key, so verification can only succeed if the decoder read the same coordinate.
+		if err == nil && got.PublicKey != clean.PublicKey {
+			t.Errorf("spare bits %d: a second spelling of the key was accepted as %s", spare, got.PublicKey)
+		}
+	}
+}
