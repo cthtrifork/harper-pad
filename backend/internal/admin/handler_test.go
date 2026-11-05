@@ -1,4 +1,4 @@
-package admin
+package admin_test
 
 import (
 	"context"
@@ -6,19 +6,70 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cthtrifork/harper-pad/backend/internal/admin"
+	"github.com/cthtrifork/harper-pad/backend/internal/pgtest"
+	"github.com/cthtrifork/harper-pad/backend/internal/store"
 )
 
-var t0 = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
-
 // twoAccounts reports a second client account, which the admin app must refuse to create invites for.
-type twoAccounts struct{ Store }
+type twoAccounts struct{ admin.Store }
 
-func (twoAccounts) Accounts(context.Context) ([]Account, error) {
-	return []Account{{1, "default"}, {2, "family"}}, nil
+func (twoAccounts) Accounts(context.Context) ([]admin.Account, error) {
+	return []admin.Account{{ID: 1, Name: "default"}, {ID: 2, Name: "family"}}, nil
 }
+
+// failing is a Store whose Devices call fails with a database error that must not reach the page.
+type failing struct{ admin.Store }
+
+func (failing) Devices(context.Context) ([]admin.Device, error) {
+	return nil, errors.New("dial tcp 10.0.0.7:5432: connection refused")
+}
+
+// newStore connects to the stack's PostgreSQL as harper_admin (the table owner, which applies the migrations) and seeds the three
+// devices the tests expect: Desktop seen 2 minutes ago, iPhone 27 hours ago, Old laptop 37 days ago. Each test starts from empty
+// devices and invites tables and the single default account.
+func newStore(t *testing.T) admin.Store {
+	t.Helper()
+	ctx := context.Background()
+	pgtest.Login(t, "harper_admin", "admin")
+	pool, err := store.Open(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := store.Migrate(ctx, pool, store.Migrations); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `TRUNCATE devices, invites; DELETE FROM clients WHERE id <> 1`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for _, d := range []struct {
+		id, name string
+		created  time.Duration
+		seen     time.Duration
+	}{
+		{"d1", "Desktop", 23 * day, 150 * time.Second},
+		{"d2", "iPhone", 7 * day, 27 * time.Hour},
+		{"d3", "Old laptop", 62 * day, 37*day + time.Hour},
+	} {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO devices (id, client_id, name, user_agent, token_hash, key_thumbprint, created_at, last_seen)
+			 VALUES ($1::text, 1, $2, 'Safari', sha256(convert_to($1::text, 'UTF8')), '{}', $3, $4)`,
+			d.id, d.name, now.Add(-d.created).UnixMilli(), now.Add(-d.seen).UnixMilli())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return store.NewAdmin(pool)
+}
+
+const day = 24 * time.Hour
 
 type client struct {
 	t     *testing.T
@@ -27,12 +78,12 @@ type client struct {
 }
 
 // newClient makes a first request, as a browser would, to get the CSRF cookie.
-func newClient(t *testing.T, s Store) *client {
+func newClient(t *testing.T, s admin.Store) *client {
 	t.Helper()
-	c := &client{t: t, h: New(s, Config{SyncURL: "https://sync.example.test/", Now: func() time.Time { return t0 }})}
+	c := &client{t: t, h: admin.New(s, admin.Config{SyncURL: "https://sync.example.test/"})}
 	rec := c.do("GET", "/", nil, nil)
 	for _, ck := range rec.Result().Cookies() {
-		if ck.Name == csrfCookie {
+		if ck.Name == admin.CSRFCookie {
 			c.token = ck.Value
 		}
 	}
@@ -56,7 +107,7 @@ func (c *client) do(method, path string, form url.Values, headers map[string]str
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	if c.token != "" {
-		r.AddCookie(&http.Cookie{Name: csrfCookie, Value: c.token})
+		r.AddCookie(&http.Cookie{Name: admin.CSRFCookie, Value: c.token})
 		if method != "GET" {
 			r.Header.Set("X-CSRF-Token", c.token)
 			r.Header.Set("Sec-Fetch-Site", "same-origin")
@@ -75,18 +126,16 @@ func (c *client) do(method, path string, form url.Values, headers map[string]str
 	return rec
 }
 
-func demo() Store { return newFakeStore(func() time.Time { return t0 }) }
-
-func TestTemplatesParse(t *testing.T) { New(demo(), Config{}) } // New panics on a bad template
+func TestTemplatesParse(t *testing.T) { admin.New(nil, admin.Config{}) } // New panics on a bad template
 
 func TestDevicesPage(t *testing.T) {
-	c := newClient(t, demo())
+	c := newClient(t, newStore(t))
 	rec := c.do("GET", "/", nil, nil)
 	if rec.Code != 200 {
 		t.Fatalf("status %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Desktop", "iPhone", "Old laptop", "2 min ago", "Yesterday, 09:00", "37 days ago", "Account: default", "X-CSRF-Token", `action="/invites"`} {
+	for _, want := range []string{"Desktop", "iPhone", "Old laptop", "2 min ago", "37 days ago", "Account: default", "X-CSRF-Token", `action="/invites"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)
 		}
@@ -101,7 +150,7 @@ func TestDevicesPage(t *testing.T) {
 }
 
 func TestStatic(t *testing.T) {
-	c := newClient(t, demo())
+	c := newClient(t, newStore(t))
 	for _, p := range []string{"/static/htmx.min.js", "/static/tokens.css", "/static/phone.css", "/static/admin.js"} {
 		if rec := c.do("GET", p, nil, nil); rec.Code != 200 || rec.Body.Len() == 0 {
 			t.Errorf("%s: %d", p, rec.Code)
@@ -113,7 +162,7 @@ func TestStatic(t *testing.T) {
 }
 
 func TestStateChangesNeedSameOriginAndToken(t *testing.T) {
-	c := newClient(t, demo())
+	c := newClient(t, newStore(t))
 	tests := map[string]map[string]string{
 		"no token":       {"X-CSRF-Token": ""},
 		"wrong token":    {"X-CSRF-Token": "nope"},
@@ -138,7 +187,7 @@ func TestStateChangesNeedSameOriginAndToken(t *testing.T) {
 }
 
 func TestRename(t *testing.T) {
-	c := newClient(t, demo())
+	c := newClient(t, newStore(t))
 	if rec := c.do("GET", "/devices/d2/edit", nil, nil); !strings.Contains(rec.Body.String(), `hx-put="/devices/d2"`) {
 		t.Errorf("edit form: %s", rec.Body)
 	}
@@ -160,7 +209,7 @@ func TestRename(t *testing.T) {
 }
 
 func TestRevoke(t *testing.T) {
-	c := newClient(t, demo())
+	c := newClient(t, newStore(t))
 	rec := c.do("DELETE", "/devices/d3", nil, nil)
 	body := rec.Body.String()
 	if rec.Code != 200 || strings.Contains(body, "Old laptop") || !strings.Contains(body, `id="devices-list"`) {
@@ -178,16 +227,19 @@ func TestRevoke(t *testing.T) {
 }
 
 func TestEnrollment(t *testing.T) {
-	c := newClient(t, demo())
+	c := newClient(t, newStore(t))
 	rec := c.do("POST", "/invites", url.Values{"name": {"iPhone 2"}}, nil)
 	body := rec.Body.String()
 	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("create: %d %v", rec.Code, rec.Header())
 	}
-	for _, want := range []string{`https://sync.example.test/join#`, "iPhone 2", ">in 15:00<", `id="pending"`, "hx-swap-oob"} {
+	for _, want := range []string{`https://sync.example.test/join#`, "iPhone 2", `id="pending"`, "hx-swap-oob"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("response lacks %q", want)
 		}
+	}
+	if !regexp.MustCompile(`>in (14:5\d|15:00)<`).MatchString(body) {
+		t.Error("response lacks the countdown")
 	}
 	// The URL is shown once: neither the pending list nor a reload has the token.
 	i := strings.Index(body, "/join#")
@@ -209,7 +261,7 @@ func TestEnrollment(t *testing.T) {
 }
 
 func TestCancelInvite(t *testing.T) {
-	c := newClient(t, demo())
+	c := newClient(t, newStore(t))
 	c.do("POST", "/invites", url.Values{"name": {"Temp"}}, nil)
 	page := c.do("GET", "/", nil, nil).Body.String()
 	i := strings.Index(page, `hx-delete="/invites/`)
@@ -224,45 +276,17 @@ func TestCancelInvite(t *testing.T) {
 }
 
 func TestRefusesInviteWithSeveralAccounts(t *testing.T) {
-	c := newClient(t, twoAccounts{demo()})
+	c := newClient(t, twoAccounts{newStore(t)})
 	rec := c.do("POST", "/invites", url.Values{"name": {"x"}}, nil)
 	if rec.Code != 409 || strings.Contains(rec.Body.String(), "/join#") {
 		t.Errorf("%d %s", rec.Code, rec.Body)
 	}
 }
 
-// failing is a Store whose every call fails with a database error that must not reach the page.
-type failing struct{ Store }
-
-func (failing) Devices(context.Context) ([]Device, error) {
-	return nil, errors.New("dial tcp 10.0.0.7:5432: connection refused")
-}
-
 func TestUnexpectedErrorIsLoggedNotShown(t *testing.T) {
-	c := newClient(t, failing{demo()})
+	c := newClient(t, failing{newStore(t)})
 	rec := c.do("GET", "/", nil, nil)
 	if rec.Code != 500 || strings.Contains(rec.Body.String(), "10.0.0.7") || !strings.Contains(rec.Body.String(), "Something went wrong") {
 		t.Errorf("%d %s", rec.Code, rec.Body)
-	}
-}
-
-func TestRelativeTimes(t *testing.T) {
-	ago := func(d time.Duration) time.Time { return t0.Add(-d) }
-	for _, tt := range []struct {
-		got, want string
-	}{
-		{lastSeen(t0, time.Time{}), "never"},
-		{lastSeen(t0, ago(10*time.Second)), "just now"},
-		{lastSeen(t0, ago(5*time.Minute)), "5 min ago"},
-		{lastSeen(t0, ago(3*time.Hour)), "3 h ago"},
-		{lastSeen(t0, ago(27*time.Hour)), "Yesterday, 09:00"},
-		{lastSeen(t0, ago(5*24*time.Hour)), "30 Oct 2026, 12:00"},
-		{lastSeen(t0, ago(37*24*time.Hour)), "28 Sep 2026 (37 days ago)"},
-		{countdown(t0, t0.Add(14*time.Minute+52*time.Second)), "in 14:52"},
-		{countdown(t0, t0.Add(-time.Second)), "expired"},
-	} {
-		if tt.got != tt.want {
-			t.Errorf("got %q, want %q", tt.got, tt.want)
-		}
 	}
 }

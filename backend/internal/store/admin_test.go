@@ -10,33 +10,12 @@ import (
 	"time"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/admin"
+	"github.com/cthtrifork/harper-pad/backend/internal/pgtest"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var t0 = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
-
-// pgEnv points the libpq variables at the end-to-end stack's PostgreSQL (backend/test/e2e: TLS 1.3, client-certificate login, no
-// passwords), which is how the cluster configures the services; store.Open("") reads them. The certificates are copied out of the
-// stack's volume by `make test-db`. The tests are skipped when TEST_PG_CERTS is not set.
-func pgEnv(t *testing.T, role, cert string) {
-	t.Helper()
-	dir := os.Getenv("TEST_PG_CERTS")
-	if dir == "" {
-		t.Skip("TEST_PG_CERTS is not set: run `make test-db` in backend/ (PostgreSQL with TLS client certificates from the e2e stack)")
-	}
-	port := os.Getenv("TEST_PG_PORT")
-	if port == "" {
-		port = "15432"
-	}
-	for k, v := range map[string]string{
-		"PGHOST": "localhost", "PGPORT": port, "PGDATABASE": "harper", "PGUSER": role, "PGSSLMODE": "verify-full",
-		"PGSSLROOTCERT": dir + "/ca.crt", "PGSSLCERT": dir + "/" + cert + ".crt", "PGSSLKEY": dir + "/" + cert + ".key",
-		"PGPASSWORD": "", "DATABASE_URL": "",
-	} {
-		t.Setenv(k, v)
-	}
-}
 
 // adminFixture returns the admin store, connected as harper_admin with its client certificate, the pool behind it, and a second
 // connection as the same role to seed rows. harper_admin owns the tables and applies the migrations (as harper-pad-admin does at
@@ -46,7 +25,7 @@ func adminFixture(t *testing.T) (*Admin, *pgxpool.Pool, *pgx.Conn) {
 	t.Helper()
 	ctx := context.Background()
 
-	pgEnv(t, "harper_admin", "admin")
+	pgtest.Login(t, "harper_admin", "admin")
 	pool, err := Open(ctx, "")
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +155,7 @@ func TestAdminInvites(t *testing.T) {
 
 // The login itself: PostgreSQL accepts the role only with a client certificate whose common name is the role.
 func TestAdminLoginNeedsItsOwnCertificate(t *testing.T) {
-	pgEnv(t, "harper_admin", "wrongcn") // a certificate from the same CA with another common name
+	pgtest.Login(t, "harper_admin", "wrongcn") // a certificate from the same CA with another common name
 	pool, err := Open(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)

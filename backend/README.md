@@ -58,7 +58,7 @@ itself. On SIGTERM `/readyz` turns 503, the process waits 5 s for Traefik and th
 ```sh
 make help    # list the targets
 make build   # build both commands into ./bin
-make test    # go test ./... (the store tests are skipped without the PostgreSQL stack)
+make test    # go test ./... (the tests that use PostgreSQL are skipped without the stack, see make test-db)
 make test-db # the same, with PostgreSQL from the e2e stack, so the store tests run
 make e2e     # build the web app, start the stack, run the test, remove the stack
 ```
@@ -106,8 +106,9 @@ The DPoP header and the device token are described but not marked `required` in 
 
 ## Tests
 
-`make test` runs the unit tests. The handler tests use an in-memory store. The store tests need PostgreSQL and are **skipped** unless
-`TEST_PG_CERTS` points at the stack's certificates; `make test-db` does everything: it starts the stack's PostgreSQL, copies the
+`make test` runs the tests that need no database. The handler tests (admin and sync API) and the store tests all run on the stack's
+PostgreSQL, with no in-memory copy of the store, and are **skipped** unless `TEST_PG_CERTS` points at the stack's certificates; only a
+small stub that fails on demand stands in for the store, for the paths that must hide a database error. `make test-db` does everything: it starts the stack's PostgreSQL, copies the
 certificates to `.e2e-certs/`, runs `go test -race ./...` and removes the stack. The store tests log in the way the services do
 (libpq variables, `verify-full`, client certificate): as `harper_admin`, the owner, which applies the migrations and seeds and checks
 rows, and as `harper_sync` for the sync store, which runs under its real, row-level grants. They check the queries, that a certificate
