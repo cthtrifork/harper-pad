@@ -5,6 +5,7 @@
 // bundle carries no Wails code.
 
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
+import { createDeviceStore } from "./syncDevice.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
 export const isWeb = import.meta.env.MODE === "web";
@@ -53,6 +54,11 @@ export async function saveSettings(settings) {
   if (!isWeb) return (await bindings()).SettingsService.SaveSettings(settings);
   return idbPut("settings", settings);
 }
+
+// --- Sync device ----------------------------------------------------------------------------------------------------------------
+// The server, token and key this device syncs with: {load, save, clear}. The same on both builds, in the webview's or browser's IndexedDB
+// (see syncDevice.js); it is not part of the Go side.
+export const syncDevice = createDeviceStore(openDb);
 
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
 // The same operations on both builds: DraftService's methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).
