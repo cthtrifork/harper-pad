@@ -72,7 +72,9 @@ for (const [mode, flags] of Object.entries(MODES)) {
 if (process.env.LIGHTHOUSE_DIAG) {
   for (let i = 1; i <= 3; i++) {
     const dir = join(out, `diag-${i}`);
-    npx(
+    mkdirSync(dir, { recursive: true });
+    try {
+      npx(
       url,
       "--quiet",
       "--output=json",
@@ -82,6 +84,9 @@ if (process.env.LIGHTHOUSE_DIAG) {
       "--only-audits=first-contentful-paint,largest-contentful-paint,total-blocking-time,speed-index,interactive",
       "--chrome-flags=--headless=new --no-sandbox --disable-gpu",
     );
+    } catch (err) {
+      console.error(`diagnostic run ${i} failed: ${err.message}`); // never fails the check
+    }
   }
 }
 
