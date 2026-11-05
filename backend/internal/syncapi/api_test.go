@@ -463,3 +463,20 @@ func TestARespelledKeyIsTheSameKey(t *testing.T) {
 		t.Errorf("another key = %d, want 401", c)
 	}
 }
+
+// TestServesOpenAPI: Huma serves the document and a documentation page without a proof, and /docs stays the draft list.
+func TestServesOpenAPI(t *testing.T) {
+	h, _ := setup(t, brokenStore{})
+	for path, want := range map[string]string{"/openapi.json": `"openapi"`, "/openapi.yaml": "openapi:", "/api": "<html"} {
+		rec := do(h, "GET", path, "", nil)
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("GET %s = %d, want 200 containing %q", path, rec.Code, want)
+		}
+	}
+	if rec := do(h, "GET", "/docs", "", nil); rec.Code != 401 {
+		t.Errorf("GET /docs without a proof = %d, want 401: it is the draft list", rec.Code)
+	}
+	if rec := do(h, "GET", "/schemas/Foo.json", "", nil); rec.Code != 404 {
+		t.Errorf("GET /schemas/... = %d, want 404", rec.Code)
+	}
+}
