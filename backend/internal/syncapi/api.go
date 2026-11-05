@@ -29,6 +29,9 @@ const (
 type Store interface {
 	Enroll(ctx context.Context, inviteHash []byte, deviceID, deviceName, userAgent, keyThumbprint string, tokenHash []byte) error
 	DeviceByToken(ctx context.Context, tokenHash []byte) (store.Device, error)
+	ListDocs(ctx context.Context, clientID int64, after string, limit int) ([]store.DocState, error)
+	GetDoc(ctx context.Context, clientID int64, id string) (store.Doc, error)
+	PutDoc(ctx context.Context, clientID int64, id string, base store.DocBase, w store.DocWrite) (store.Doc, error)
 }
 
 // API is the sync API: the routes, the CORS allowlist and the device authentication. The routes are registered with Huma, which
@@ -91,6 +94,8 @@ func (a *API) Register(mux *http.ServeMux) {
 		Errors:        []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusRequestEntityTooLarge},
 		Middlewares:   huma.Middlewares{a.requireProof},
 	}, a.enroll)
+
+	a.registerDocs()
 }
 
 // Huma returns the Huma API the routes are registered on, after Register.

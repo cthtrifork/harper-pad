@@ -38,7 +38,7 @@ func newDB(t *testing.T) (*store.Admin, *store.Sync) {
 	if _, err := store.Migrate(ctx, adminPool, store.Migrations); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := adminPool.Exec(ctx, `TRUNCATE devices, invites`); err != nil {
+	if _, err := adminPool.Exec(ctx, `TRUNCATE devices, invites, docs`); err != nil {
 		t.Fatal(err)
 	}
 	pgtest.Login(t, "harper_sync", "client")
@@ -69,6 +69,18 @@ func (b brokenStore) Enroll(context.Context, []byte, string, string, string, str
 
 func (b brokenStore) DeviceByToken(context.Context, []byte) (store.Device, error) {
 	return store.Device{}, b.err
+}
+
+func (b brokenStore) ListDocs(context.Context, int64, string, int) ([]store.DocState, error) {
+	return nil, b.err
+}
+
+func (b brokenStore) GetDoc(context.Context, int64, string) (store.Doc, error) {
+	return store.Doc{}, b.err
+}
+
+func (b brokenStore) PutDoc(context.Context, int64, string, store.DocBase, store.DocWrite) (store.Doc, error) {
+	return store.Doc{}, b.err
 }
 
 func newInvite(t *testing.T) string {

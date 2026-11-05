@@ -2,8 +2,8 @@
 
 Status: **partly built.** This page describes an optional sync service so **notes** (the scratch pad drafts) follow the user
 between the desktop app and the iPhone Home Screen app. Built so far, in `backend/` and the cluster: the database and its roles, the
-schema migrations, the admin service, device enrollment and the DPoP check. Not built: the draft routes, the client sync module and
-the app's UI, so nothing in the app uses the server yet ([Build order](#build-order) and `TODO.md` track it). When it is all built,
+schema migrations, the admin service, device enrollment, the DPoP check and the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`).
+Not built: the device list routes, the client sync module and the app's UI, so nothing in the app uses the server yet ([Build order](#build-order) and `TODO.md` track it). When it is all built,
 this page becomes the reference and [storage](storage.md), [security](security.md) and [architecture](architecture.md) get the
 matching changes (see [Documentation changes](#documentation-changes)).
 
@@ -466,7 +466,7 @@ CREATE TABLE invites (
 ```
 
 The admin role owns the tables and sets the sync role's grants in the one initial migration (`0001_init.sql`); each grant is what a query
-of the sync service needs, and the draft routes add theirs in a later file. Nothing had run an earlier version, so the whole initial schema
+of the sync service needs; the grants on `docs` for the draft routes are in this file too, so they needed no later migration. Nothing had run an earlier version, so the whole initial schema
 is one file:
 
 ```sql
@@ -535,6 +535,9 @@ assigns each draft a version, and it never merges, never makes copies and has no
 - **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS
   allows `Authorization`, `DPoP`, `Content-Type` and `If-None-Match`.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
+  `data` of a live draft must be the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`) with content of at most 5 MiB
+  (`internal/protocol`); a tombstone must have empty `data`. A page of `GET /docs` is 500 drafts by default and at most 1000 (`limit`);
+  a page shorter than the limit is the last. A 409 on a `PUT` carries `current`, the server's copy, unless the server has none.
 - **Errors** are `application/problem+json` (`title`, `status`, `detail`). A credential failure (no or bad proof, a replayed proof, an
   unknown or revoked token, the wrong key, a wrong, spent or expired invite) is always `{"title":"Unauthorized","status":401,"detail":"unauthorized"}`:
   the same bytes whatever the cause. A body that is not JSON is a 400, a field that fails validation a 422, a body over the limit a 413.
@@ -827,7 +830,7 @@ Each step is its own pull request, from a branch off `origin/main`, and each lea
 6. **Option, not planned:** end-to-end encryption ([the option](#option-end-to-end-encryption)). The device list is in steps 2 and 4.
 
 **Where it stands:** step 1 is done. Step 2 has the database roles and certificates, the migrations, the admin container, enrollment and
-the DPoP check; the draft endpoints are not built. Steps 3 to 6 have not started. `TODO.md` has the open items.
+the DPoP check and the draft routes; the device list routes (`GET` and `DELETE`) are not built. Steps 3 to 6 have not started. `TODO.md` has the open items.
 
 ## Documentation changes
 
