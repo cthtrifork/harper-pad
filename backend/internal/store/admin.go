@@ -125,6 +125,9 @@ func (a *Admin) PendingInvites(ctx context.Context, now time.Time) ([]admin.Invi
 	return out, rows.Err()
 }
 
+// purgeAfter is how long past its expiry an invite row is kept (the admin UI lists only unexpired ones, so this is only housekeeping).
+const purgeAfter = 24 * time.Hour
+
 // CreateInvite inserts an invite for the one client account. The token is 256 random bits, base64url (the URL fragment the
 // device pastes), and only its SHA-256 is stored. With zero or several accounts it fails rather than guess which one to use.
 func (a *Admin) CreateInvite(ctx context.Context, deviceName string, ttl time.Duration) (string, admin.Invite, error) {
@@ -138,11 +141,13 @@ func (a *Admin) CreateInvite(ctx context.Context, deviceName string, ttl time.Du
 	expires := now.Add(ttl)
 
 	// One statement: the account is chosen only when there is exactly one, so a second account cannot slip in between a check
-	// and the insert.
+	// and the insert. The same statement deletes invites that expired more than a day ago, spent or not: housekeeping of invites is
+	// the admin's, and it happens when the operator makes one, so the public sync service has no background job and no purge code.
 	tag, err := a.db.Exec(ctx, `
+		WITH purge AS (DELETE FROM invites WHERE expires_at < $5)
 		INSERT INTO invites (token_hash, client_id, device_name, created_at, expires_at)
 		SELECT $1, id, $2, $3, $4 FROM clients WHERE (SELECT count(*) FROM clients) = 1`,
-		hash[:], deviceName, now.UnixMilli(), expires.UnixMilli())
+		hash[:], deviceName, now.UnixMilli(), expires.UnixMilli(), now.Add(-purgeAfter).UnixMilli())
 	if err != nil {
 		return "", admin.Invite{}, err
 	}

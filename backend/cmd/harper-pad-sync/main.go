@@ -53,10 +53,12 @@ func run(args []string) error {
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	sync := store.NewSync(db)
-	go migrate(ctx, db, sync, health)
+	go migrate(ctx, db, health)
 	mux := http.NewServeMux()
 	health.Register(mux)
-	api := syncapi.New(cfg.PublicURL, cfg.AllowedOrigins, sync, auth.NewVerifier())
+	verifier := auth.NewVerifier()
+	defer verifier.Close()
+	api := syncapi.New(cfg.PublicURL, cfg.AllowedOrigins, sync, verifier)
 	api.Register(mux)
 	if len(cfg.AllowedOrigins) == 0 {
 		slog.Warn("CORS_ALLOWED_ORIGINS is empty: browsers on other origins cannot call the API")
@@ -64,34 +66,15 @@ func run(args []string) error {
 	return server.Run(cfg.ListenAddr, m.Instrument(api.CORS(mux)), health, cfg.MetricsAddr, m.Handler())
 }
 
-// purgeInvites deletes long-expired invites once an hour until ctx ends (docs/sync.md: "a periodic delete removes expired invites").
-func purgeInvites(ctx context.Context, sync *store.Sync) {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
-	for {
-		if n, err := sync.PurgeInvites(ctx); err != nil && ctx.Err() == nil {
-			slog.Error("purging expired invites", "err", err)
-		} else if n > 0 {
-			slog.Info("purged expired invites", "count", n)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-	}
-}
-
 // migrate applies the schema, retrying with a growing delay (2 s up to 30 s) while the database is unreachable or a migration
 // fails, and then lets /readyz pass. A failing file is logged each time and never skipped.
-func migrate(ctx context.Context, db *pgxpool.Pool, sync *store.Sync, health *server.Health) {
+func migrate(ctx context.Context, db *pgxpool.Pool, health *server.Health) {
 	delay := 2 * time.Second
 	for {
 		applied, err := store.Migrate(ctx, db, store.Migrations)
 		if err == nil {
 			slog.Info("migrations applied", "files", applied)
 			health.SetStarting(false)
-			purgeInvites(ctx, sync)
 			return
 		}
 		if ctx.Err() != nil {

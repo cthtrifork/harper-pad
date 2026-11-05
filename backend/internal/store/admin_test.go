@@ -241,3 +241,54 @@ func TestAdminRoleGrants(t *testing.T) {
 		}
 	}
 }
+
+// Creating an invite also deletes the ones that expired more than a day ago, spent or not, in the same statement; nothing else is
+// touched. The public sync service has no purge of its own.
+func TestCreateInvitePurgesLongExpiredInvites(t *testing.T) {
+	a, pool, owner := adminFixture(t)
+	ctx := context.Background()
+	seed := func(token string, expires time.Time, used bool) []byte {
+		h := sha256.Sum256([]byte(token))
+		var usedAt *int64
+		if used {
+			v := t0.UnixMilli()
+			usedAt = &v
+		}
+		if _, err := owner.Exec(ctx,
+			`INSERT INTO invites (token_hash, client_id, device_name, created_at, expires_at, used_at) VALUES ($1, 1, '', $2, $3, $4)`,
+			h[:], t0.Add(-72*time.Hour).UnixMilli(), expires.UnixMilli(), usedAt); err != nil {
+			t.Fatal(err)
+		}
+		return h[:]
+	}
+	gone1 := seed("long gone", t0.Add(-25*time.Hour), false)
+	gone2 := seed("long gone and spent", t0.Add(-48*time.Hour), true)
+	kept1 := seed("just expired", t0.Add(-time.Hour), false)
+	kept2 := seed("spent, not yet old", t0.Add(-2*time.Hour), true)
+	kept3 := seed("pending", t0.Add(10*time.Minute), false)
+
+	if _, _, err := a.CreateInvite(ctx, "new", 15*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	exists := func(h []byte) bool {
+		var n int
+		if err := owner.QueryRow(ctx, `SELECT count(*) FROM invites WHERE token_hash = $1`, h).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+	for name, h := range map[string][]byte{"long gone": gone1, "long gone and spent": gone2} {
+		if exists(h) {
+			t.Errorf("%s was not deleted", name)
+		}
+	}
+	for name, h := range map[string][]byte{"just expired": kept1, "spent, not yet old": kept2, "pending": kept3} {
+		if !exists(h) {
+			t.Errorf("%s was deleted", name)
+		}
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM invites`).Scan(&n); err != nil || n != 4 {
+		t.Errorf("%d invites left, %v, want 4 (3 kept and the new one)", n, err)
+	}
+}

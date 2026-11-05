@@ -89,10 +89,3 @@ func (s *Sync) DeviceByToken(ctx context.Context, tokenHash []byte) (Device, err
 	}
 	return d, err
 }
-
-// PurgeInvites deletes invites that expired more than a day ago, spent or not (the admin UI shows pending ones only, and a spent
-// invite's row has no use after its device exists). It returns how many were removed.
-func (s *Sync) PurgeInvites(ctx context.Context) (int64, error) {
-	tag, err := s.db.Exec(ctx, `DELETE FROM invites WHERE expires_at < $1`, s.now().Add(-24*time.Hour).UnixMilli())
-	return tag.RowsAffected(), err
-}
