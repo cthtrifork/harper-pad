@@ -115,7 +115,7 @@ Screen app, so the enrollment would land in the wrong place. Pasting inside the 
 convenient way to carry the address and token in one string; opening it in a browser shows a short "copy this into Harper Pad" page.
 
 States to design: sync off, paste the URL, error (invite expired or used, server unreachable, not HTTPS), first-sync
-progress (merge only), and the device list with rename and revoke. Follow the [design cheat sheet](design-cheatsheet.html), keep transitions
+progress (merge only), and, in the admin page only, the device list with revoke (see [Open work](#open-work)). Follow the [design cheat sheet](design-cheatsheet.html), keep transitions
 short, and honour reduced motion.
 
 ## Authentication
@@ -498,7 +498,7 @@ ciphertext), and traffic analysis (the server sees sizes and times).
 
 ## End-to-end test
 
-Not built. A Playwright script drives real Chromium against a compose stack (`backend/test/e2e/`; in CI it follows
+Not built, and not planned for now (see [Open work](#open-work)); the flows below were checked by hand. A Playwright script drives real Chromium against a compose stack (`backend/test/e2e/`; in CI it follows
 `scripts/screenshots.sh`): PostgreSQL, `harper-pad-sync` built from `backend/Containerfile.sync`, `harper-pad-admin` (it owns the
 database and applies the migrations) and Caddy for https (`app.localhost` serves the web build, `sync.localhost` proxies to the
 service, `tls internal`, high port, trusted through `--ignore-certificate-errors-spki-list` rather than `ignoreHTTPSErrors`). Page and
@@ -513,19 +513,29 @@ the CORS allowlist and the web build's CSP. It does not prove certificate renewa
 
 ## Open work
 
-- [ ] `GET` and `DELETE` for the device list the app shows (the admin's revoke already works on the same table).
-- [ ] Undo for the removals Sync all makes to drafts that are not open (they are gone for good today; the open one has Keep, Remove and Undo).
-- [ ] The [end-to-end test](#end-to-end-test), including the "lose the server" check. A draft deleted elsewhere while a device was
-      offline can reappear (documented), but nothing else is lost.
-- [ ] The rest of the UI: the device list, a progress line and a pending count on the chip, and a "Newer on the server" marker on the
-      drafts drawer's cards (opening a note already shows it beside the chip). The status chip, the enroll pop-up, push after a save, Sync all and
-      opening a note exist, **for the web build only**: the desktop build
-      needs Go bindings for the sync state (`sync_state`, `Changes`, `ApplyRemote`) first. Follow `docs/design-cheatsheet.html`, short eased
-      transitions, reduced motion honoured.
+- [ ] A "Newer on the server" marker on the drafts drawer's cards (opening a note already shows it beside the chip). Follow
+      `docs/design-cheatsheet.html`: short eased transitions, reduced motion honoured.
+- [ ] **The desktop build.** The client (chip, pop-up, push after a save, Sync all, opening a note, the Keep or Remove dialog) exists for the web
+      build only. The desktop build needs Go bindings for the sync state (`sync_state`, `Changes`, `ApplyRemote`) first, and a decision on
+      where its device record lives (below).
 - [ ] A server operations page (run, proxy, back up, rotate, revoke), and the repository variable `SYNC_ORIGIN` set for the Pages build.
 - [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
 - [ ] Before release, decide whether the device record needs its own store, and whether desktop keeps it in SQLite.
 - [ ] Check that WebKitGTK keeps a non-extractable key across a relaunch (Edge on Windows passed).
+- [ ] Walk through it on a real iPhone, in the installed Home Screen app (Safari): enrolling by pasting an invite, a push, Sync all, the Keep or
+      Remove dialog, the bottom sheet (fields stay at 16 px, no zoom), and surviving a restart. Everything so far was checked in Chromium
+      only. It needs `SYNC_ORIGIN` and `CORS_ALLOWED_ORIGINS` set and a release deployed (previews do not turn sync on).
+
+**Decided not to build** (5 November 2026; each can be reopened):
+
+- **A device list in the app.** The admin page already lists devices and revokes them, behind a stronger login. A revoke from inside the app
+  would be authenticated by a device token alone, so one stolen device could revoke all the others.
+- **Undo for what Sync all removes from drafts that are not open.** A delete already had its Undo on the device where it was made, and a
+  removal of the open draft has Keep, Remove and Undo. Until another device runs Sync all, editing the draft there brings it back.
+- **A pending count and a progress line on the chip.** Sync all takes a second or two for a normal number of drafts; the spinner and the
+  summary line are enough.
+- **A committed end-to-end test.** The flows were checked by hand with two Chromium contexts against the compose stack (below); CI runs the
+  unit tests, which drive the real web store against a fake of the server's routes, and the server's own tests.
 
 Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
 `harper-sync.portableinfo.cloud`), enrollment, the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`), and in the web build the client
