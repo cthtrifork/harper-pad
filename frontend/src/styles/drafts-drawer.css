@@ -36,6 +36,73 @@
   font-weight: 600;
 }
 
+/* "New draft" with an arrow beside it that opens the templates (same shape as Save in the header). */
+.drawer .split {
+  position: relative;
+  display: inline-flex;
+}
+
+.drawer .split .main {
+  border-radius: 6px 0 0 6px;
+}
+
+.drawer .split .arrow {
+  width: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 6px 6px 0;
+  border-left: 1px solid color-mix(in srgb, var(--on-accent) 35%, transparent);
+}
+
+.drawer .split .arrow svg {
+  transition: transform 0.15s var(--ease);
+}
+
+.drawer .split .arrow[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.drawer .split .primary:hover {
+  filter: brightness(1.08);
+}
+
+.drawer .menu.templates {
+  left: auto;
+  right: 0;
+  top: 34px;
+  min-width: 220px;
+  transform-origin: top right;
+}
+
+.drawer .menu.templates .option {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.drawer .menu.templates .option:hover,
+.drawer .menu.templates .option:focus-visible {
+  background: var(--selected);
+}
+
+.drawer .menu.templates .name {
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer .menu.templates small {
+  color: var(--mute);
+  font-size: 12px;
+}
+
 .drawer .close {
   width: 30px;
   height: 30px;
