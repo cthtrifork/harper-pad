@@ -30,7 +30,14 @@ function fakeServer() {
       );
     }
     const id = u.pathname.split("/").pop();
-    if (method === "GET") return rows.has(id) ? json(200, rows.get(id)) : json(404, {});
+    if (method === "GET") {
+      const row = rows.get(id);
+      if (!row) return json(404, {});
+      // The server's validator is "<updatedAt>-<0|1>"; a matching If-None-Match is a 304 with no body.
+      if (init.headers["If-None-Match"] === `"${row.updatedAt}-${row.deleted ? 1 : 0}"`)
+        return { status: 304, json: async () => Promise.reject(new Error("no body")) };
+      return json(200, row);
+    }
     const body = JSON.parse(init.body);
     const row = rows.get(id);
     const cur = row ? { version: row.version, updatedAt: row.updatedAt } : { version: 0, updatedAt: 0 };
@@ -62,7 +69,7 @@ function device(server) {
   const drafts = createWebDrafts(open);
   const syncer = () => createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
-  return { drafts, sync: (skip) => syncer().all({ skip }), one: (id) => syncer().one(id) };
+  return { drafts, sync: (skip) => syncer().all({ skip }), one: (id) => syncer().one(id), open: (id, o) => syncer().open(id, o) };
 }
 const none = { uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 };
 const sum = (o) => ({ ...none, ...o });
@@ -287,4 +294,68 @@ test("a save that finds the same text on the server adopts it, and one that find
   await a.drafts.save({ id: d.id, content: "after the loss" });
   assert.equal(await a.one(d.id), "uploaded");
   assert.equal(JSON.parse(server.rows.get(d.id).data).content, "after the loss");
+});
+
+// Opening a note: the same table, one conditional request.
+test("opening a note that has not changed on the server is one request and a 304", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const d = await a.drafts.save({ content: "one" });
+  await a.sync();
+  server.calls.length = 0;
+  assert.equal(await a.open(d.id), "none");
+  assert.deepEqual(server.calls, [`GET /docs/${d.id}`]);
+});
+
+test("opening a note that is newer on the server swaps it in when nothing was typed", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "one" });
+  await a.sync();
+  await b.sync();
+  await tick();
+  await a.drafts.save({ id: d.id, content: "two" });
+  await a.one(d.id);
+
+  assert.equal(await b.open(d.id, { canSwap: () => false }), "newer"); // typed meanwhile: shown as a marker, nothing replaced
+  assert.deepEqual(await texts(b), ["one"]);
+  assert.equal(await b.open(d.id), "updated");
+  assert.deepEqual(await texts(b), ["two"]);
+  assert.deepEqual(await b.drafts.changes(), { changed: [], deleted: [] });
+  assert.equal(await b.open(d.id), "none");
+});
+
+test("opening a note that was changed here and there only marks it", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "start" });
+  await a.sync();
+  await b.sync();
+  await tick();
+  await a.drafts.save({ id: d.id, content: "from A" });
+  await a.one(d.id);
+  await tick();
+  await b.drafts.save({ id: d.id, content: "from B" }); // not pushed
+  assert.equal(await b.open(d.id), "newer");
+  assert.deepEqual(await texts(b), ["from B"]);
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from A"); // nothing was sent
+});
+
+test("a tombstone or a missing draft changes nothing while the note is open", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "one" });
+  await a.sync();
+  await b.sync();
+  await a.drafts.remove(d.id);
+  await a.sync();
+  assert.equal(await b.open(d.id), "none");
+  assert.deepEqual(await texts(b), ["one"]);
+
+  const local = await b.drafts.save({ content: "never synced" });
+  assert.equal(await b.open(local.id), "none"); // 404: absence is not deletion
+  assert.ok((await texts(b)).includes("never synced"));
 });

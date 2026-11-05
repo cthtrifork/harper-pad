@@ -8,7 +8,7 @@ const ORIGIN = "https://sync.example.com";
 const INVITE = `${ORIGIN}/join#${"A".repeat(43)}`;
 const D = { id: "a".repeat(32), format: "markdown", content: "hello", createdAt: 1, updatedAt: 2 };
 
-function setup({ fetchFn, enrolled = true, origin = ORIGIN, ...extra } = {}) {
+function setup({ fetchFn, enrolled = true, origin = ORIGIN, draftOverrides = {}, ...extra } = {}) {
   const kept = { device: null, states: new Map() };
   const deviceStore = {
     load: async () => kept.device,
@@ -28,6 +28,7 @@ function setup({ fetchFn, enrolled = true, origin = ORIGIN, ...extra } = {}) {
     markSynced: async (id, s) => {
       kept.states.set(id, s);
     },
+    ...draftOverrides,
   };
   const sync = useSync({ origin, deviceStore, drafts, fetchFn, delay: 5, autoSync: false, ...extra });
   const ready = async () => {
@@ -198,4 +199,67 @@ test("a build that starts synced runs Sync all once the device is loaded", async
   await sync.syncAll(); // waits for the run that init started, then runs again; both are fine
   assert.ok(lists >= 1);
   assert.equal(sync.status.value, "synced");
+});
+
+// Opening a note: what the chip's notice says.
+
+test("opening a note: a newer version is swapped in with a short notice; a typed-in one only gets the marker", async () => {
+  const doc = {
+    id: D.id,
+    version: 2,
+    createdAt: 1,
+    updatedAt: 5,
+    deleted: false,
+    data: JSON.stringify({ v: 1, format: "markdown", content: "newer" }),
+  };
+  const stored = [];
+  const mk = () => {
+    return setup({ fetchFn: reply(200, doc), draftOverrides: { isChanged: async () => false, applyRemote: async () => {} } });
+  };
+  const a = mk();
+  a.kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await a.ready();
+  let swapped = 0;
+  await a.sync.noteOpened(D.id, { canSwap: () => true, onSwapped: () => swapped++ });
+  assert.equal(swapped, 1);
+  assert.deepEqual(a.sync.notice.value && [a.sync.notice.value.kind, a.sync.notice.value.text], ["updated", "Updated from the server"]);
+
+  const b = mk();
+  b.kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await b.ready();
+  await b.sync.noteOpened(D.id, { canSwap: () => false, onSwapped: () => stored.push("swapped") });
+  assert.deepEqual(stored, []);
+  assert.equal(b.sync.notice.value.kind, "newer");
+  assert.equal(b.sync.notice.value.text, "Newer on the server");
+});
+
+test("opening a note: an error shows nothing, and the next open clears the old notice", async () => {
+  const { sync, kept, ready } = setup({
+    draftOverrides: { isChanged: async () => false },
+    fetchFn: async () => {
+      throw new TypeError("x");
+    },
+  });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await ready();
+  await sync.noteOpened(D.id);
+  assert.equal(sync.notice.value, null);
+  assert.equal(sync.status.value, "synced"); // offline is not shown for an open
+});
+
+test("a successful check when opening a note lifts Offline to Pending", async () => {
+  const doc = {
+    id: D.id,
+    version: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    deleted: false,
+    data: JSON.stringify({ v: 1, format: "markdown", content: "x" }),
+  };
+  const { sync, kept, ready } = setup({ fetchFn: reply(200, doc), draftOverrides: { isChanged: async () => false } });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await ready();
+  sync.status.value = "offline";
+  await sync.noteOpened(D.id);
+  assert.equal(sync.status.value, "pending");
 });

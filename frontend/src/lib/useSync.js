@@ -31,10 +31,12 @@ export function useSync({
   const info = ref(null); // {server, deviceName} while enrolled
   const summary = ref(""); // what the last Sync all did, "3 uploaded, 2 downloaded"
   const lastSync = ref(0); // when it finished, ms
+  const notice = ref(null); // {id, kind: "updated" | "newer", text} about the open draft, or null
   const enrolled = computed(() => info.value !== null);
 
   let device = null;
   let timer = null;
+  let noticeTimer = null;
   const waiting = new Set();
   let chain = Promise.resolve();
 
@@ -65,6 +67,7 @@ export function useSync({
   async function turnOff() {
     clearTimeout(timer);
     waiting.clear();
+    notice.value = null;
     await deviceStore.clear();
     device = null;
     error.value = "";
@@ -81,7 +84,9 @@ export function useSync({
     status.value = "syncing";
     for (const id of ids) {
       try {
-        if ((await syncer.one(id)) === "failed") failed = true;
+        const key = await syncer.one(id);
+        if (key === "failed") failed = true;
+        else if (notice.value?.id === id && notice.value.kind === "newer") notice.value = null;
       } catch (err) {
         if (stopped(err)) return;
         failed = true;
@@ -113,12 +118,40 @@ export function useSync({
         summary.value = summaryText(sum);
         lastSync.value = Date.now();
         status.value = sum.failed ? "pending" : "synced";
+        if (notice.value?.kind === "newer" && !sum.failed && !sum.skipped) notice.value = null;
         if (sum.downloaded || sum.removed || sum.conflicted) onChanged();
       } catch (err) {
         if (!stopped(err)) {
           status.value = "pending";
           error.value = "Sync did not finish. Try again.";
         }
+      }
+    });
+    return chain;
+  }
+
+  // Call when a draft was opened (its text is already on screen). In the background the server is asked whether it holds something
+  // different. `canSwap()` says whether nothing has been typed since; `onSwapped()` shows the draft again after a newer one was stored. An
+  // error shows nothing: the local text stays (docs/sync.md, "When sync happens"). Only a refused device changes the chip.
+  function noteOpened(id, { canSwap = () => true, onSwapped = () => {} } = {}) {
+    clearTimeout(noticeTimer);
+    notice.value = null;
+    if (!device || status.value === "signin") return Promise.resolve();
+    chain = chain.then(async () => {
+      if (!device) return;
+      try {
+        const out = await createSyncer({ device, drafts, fetchFn }).open(id, { canSwap });
+        // The server answered, so it is reachable again; drafts saved while it was not are still unsent until the next save or Sync all.
+        if (status.value === "offline") status.value = "pending";
+        if (out === "updated") {
+          onSwapped();
+          notice.value = { id, kind: "updated", text: "Updated from the server" };
+          noticeTimer = setTimeout(() => (notice.value = null), 5000);
+        } else if (out === "newer") {
+          notice.value = { id, kind: "newer", text: "Newer on the server" };
+        }
+      } catch (err) {
+        if (err instanceof SyncError && err.code === "signin") stopped(err);
       }
     });
     return chain;
@@ -135,5 +168,5 @@ export function useSync({
     }, delay);
   }
 
-  return { configured, status, error, info, enrolled, summary, lastSync, init, enroll, turnOff, draftSaved, syncAll };
+  return { configured, status, error, info, enrolled, summary, lastSync, notice, init, enroll, turnOff, draftSaved, noteOpened, syncAll };
 }

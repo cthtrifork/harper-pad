@@ -23,7 +23,7 @@ const message = (err) => String(err?.message || err);
 //
 // A draft can also be saved to a file (Ctrl+Shift+S, then Ctrl+S). That only happens on request, never by the autosave.
 // A draft is created by its first save, so an empty editor leaves none behind.
-export function useDrafts(editor, drawerOpen, { onSaved } = {}) {
+export function useDrafts(editor, drawerOpen, { onSaved, onOpened } = {}) {
   const current = ref({ id: "", createdAt: 0, format: "markdown", filePath: "" });
   const state = ref("idle"); // idle | dirty | saving | saved | error
   const error = ref("");
@@ -291,10 +291,22 @@ export function useDrafts(editor, drawerOpen, { onSaved } = {}) {
       const d = await getDraft(id);
       setCurrent(d);
       editor.value?.load(d.content, d.format);
+      onOpened?.(d.id);
     } catch (err) {
       showToast(`Could not open the draft: ${message(err)}`);
       refreshList();
     }
+  }
+
+  // True when nothing is unsaved or being saved, so the stored draft may replace what the editor shows.
+  const canReplace = () => !dirty && state.value !== "saving";
+
+  // Shows the stored version of the open draft again (a newer one was stored by sync). Does nothing if something was typed meanwhile.
+  async function reloadCurrent() {
+    if (!current.value.id || !canReplace()) return;
+    const d = await getDraft(current.value.id);
+    setCurrent(d);
+    editor.value?.load(d.content, d.format);
   }
 
   async function create() {
@@ -393,6 +405,8 @@ export function useDrafts(editor, drawerOpen, { onSaved } = {}) {
     edited,
     setFormat,
     flush,
+    canReplace,
+    reloadCurrent,
     saveFile,
     refreshList,
     setQuery,

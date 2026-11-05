@@ -1,12 +1,12 @@
-// The one place a draft is synced (docs/sync.md, "Conflicts"): `all()` for Sync all and `one(id)` for the push after a save both go
-// through `settleOne`, so a draft is decided, uploaded, downloaded, removed or kept as a conflicted copy by this code and nothing else.
+// The one place a draft is synced (docs/sync.md, "Conflicts"): `all()` for Sync all, `one(id)` for the push after a save and `open(id)` for
+// opening a note all decide with the same table, so a draft is uploaded, downloaded, removed or kept as a conflicted copy by this code only.
 // `decide` and `settle` (syncPlan.js) are the pure table; nothing outside this file calls them or uploads a draft.
 //
 // No Vue and no network or storage of its own: `device` and `fetchFn` for the server, `drafts` for the local store (the web store's get, save,
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.js";
-import { getDoc, listDocs, pushDraft, pushTombstone } from "./syncClient.js";
+import { getDoc, getDocIfChanged, listDocs, pushDraft, pushTombstone } from "./syncClient.js";
 import { decide, settle } from "./syncPlan.js";
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -127,6 +127,30 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date() }
         }
       }
       return sum;
+    },
+
+    // Opening a note: the local text is already on screen; ask the server whether it holds something different (one conditional request,
+    // a 304 when nothing changed) and settle by the same rules. Resolves to "updated" (the draft is unchanged here, `canSwap()` still says
+    // nothing was typed, so the server's newer text was stored and the caller should show it), "newer" (the server has a different state
+    // that was not applied: the draft was changed here, or was being typed in) or "none". A tombstone or a missing draft changes nothing
+    // while the note is open.
+    async open(id, { canSwap = () => true } = {}) {
+      const [st, mine] = await Promise.all([drafts.syncState(id), drafts.get(id).catch(() => null)]);
+      if (!mine) return "none";
+      const local = { changed: await drafts.isChanged(id) };
+      const got = await getDocIfChanged({ device, id, state: st, fetchFn });
+      if (got.kind !== "doc") return "none";
+      const srv = stateOf(got.doc);
+      const action = decide({
+        local,
+        synced: st ? { updatedAt: st.updatedAt, deleted: st.deleted } : null,
+        server: { updatedAt: srv.updatedAt, deleted: srv.deleted },
+      });
+      if (action === "resolve") return "newer";
+      if (action !== "download") return "none";
+      if (!canSwap()) return "newer";
+      await drafts.applyRemote({ id, ...parseData(got.doc), createdAt: got.doc.createdAt, updatedAt: got.doc.updatedAt }, got.doc.version);
+      return "updated";
     },
 
     // The push after a save: one draft, without listing the server. It assumes the server still holds what the last sync recorded, which
