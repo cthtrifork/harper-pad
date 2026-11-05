@@ -17,8 +17,7 @@ const pprofAddrEnv = "HARPER_PAD_PPROF_ADDR"
 const defaultPprofAddr = "127.0.0.1:6060"
 
 // init starts Go's pprof HTTP endpoint (docs/pprof.md). It is compiled in only with the pprof
-// build tag, which pprof_guard.go refuses to combine with production, so a release binary never
-// has it. It uses its own mux, not http.DefaultServeMux, so nothing else shares the listener.
+// build tag. It uses its own mux, not http.DefaultServeMux, so nothing else shares the listener.
 func init() {
 	addr := os.Getenv(pprofAddrEnv)
 	if addr == "" {

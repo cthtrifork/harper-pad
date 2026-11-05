@@ -40,7 +40,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 |---|---|
 | `main.go` | Thin entry point: Wails app and window, embeds `frontend/dist` |
 | `backend/` | The optional sync service, its own Go module that shares no code with the app: `harper-pad-sync`, `harper-pad-admin`, PostgreSQL, and the end-to-end stack in `test/e2e/`. Partly built (schema migrations, admin, enrollment, the draft routes; the device list routes are not); see `backend/README.md` and the design in `docs/sync.md` |
-| `internal/app` | The Wails services the frontend calls (`PadService` for startup and the version, `DraftService`, `SettingsService`, `UpdateService`; `service.go` creates them, `database.go` is the one SQLite file the first two share), tray, icons, updater (`update*.go`), MCP/pprof dev hooks and their build guards |
+| `internal/app` | The Wails services the frontend calls (`PadService` for startup and the version, `DraftService`, `SettingsService`, `UpdateService`; `service.go` creates them, `database.go` is the one SQLite file the first two share), tray, icons, updater (`update*.go`), MCP/pprof dev hooks |
 | `internal/store` | The app's database: one SQLite file (pure Go) with the drafts and the settings, see `docs/storage.md` |
 | `internal/selfupdate` | GitHub-release provider for the in-app updater (release builds only) |
 | `frontend/` | Vue 3 + Vite app; `lib/harper.js` wraps `harper.js`; `lib/backend.js` is the only place that talks to Go (desktop) or IndexedDB (web build for GitHub Pages, `docs/pages.md`); `lib/editor/` is the CodeMirror editor (`lint`, `theme`, `mode`, `stats`, `problems`); generated bindings are committed |
@@ -50,7 +50,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 | `build/windows` | Windows icon, manifest and version info for the exe (`scripts/package-windows.sh`), see `docs/windows.md` |
 | `.github` | Workflows (`ci`, `security`, `release`, `tag-release`, `actions-lint`, `pr-title`, `release-drafter`, `renovate`, `update-branches`, `trivy-cache`, `pages`, `preview` (opt-in PR previews on the site), and the PR reports `dependency-scan`, `screenshots`, `lighthouse`), linters, Renovate |
 
-- Wails' MCP server (`-tags mcp`) and the pprof endpoint (`-tags pprof`) are development only: `mcp_guard.go` and `pprof_guard.go` reject them with `production`, and CI greps the release binary. See `docs/mcp.md`, `docs/pprof.md`.
+- Wails' MCP server (`-tags mcp`) and the pprof endpoint (`-tags pprof`) are development only. See `docs/mcp.md`, `docs/pprof.md`.
 - `application.New` must be called before `InitUpdater`, which runs before `Run` (self-update tutorial order); see `docs/self-update.md`, `docs/releasing.md`.
 - UI conventions (button types, tokens, motion, UX rules) are in `docs/design-cheatsheet.html`; open it in a browser and follow it for new UI.
 - How the pieces fit together (frontend hosts, Go service, data flow) is in `docs/architecture.md`.

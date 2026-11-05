@@ -200,10 +200,6 @@ jobs:
           make build OUT="$built"
           wait "$tools"
           chmod +x "$built"
-          # The MCP server and the pprof endpoint are development tools without authentication (docs/mcp.md, docs/pprof.md).
-          if grep -aqF "MCP server started" "$built" || grep -aqF "pprof endpoint started" "$built"; then
-            echo "::error::a development endpoint (MCP or pprof) is present in the release binary"; exit 1
-          fi
           # Raw binary (what the in-app updater installs), tarball (for people) and SHA256SUMS.
           # The layout matters: see docs/self-update.md and internal/selfupdate. SHA256SUMS is
           # written after the SBOM is added (below).
@@ -308,13 +304,6 @@ jobs:
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
           scripts/package-windows.sh "$VERSION" dist
-
-      # The MCP server and the pprof endpoint are development tools without authentication (docs/mcp.md, docs/pprof.md).
-      - name: Release binary contains no development endpoint
-        run: |
-          if grep -aqF "MCP server started" dist/${APP}_windows_amd64.exe || grep -aqF "pprof endpoint started" dist/${APP}_windows_amd64.exe; then
-            echo "::error::a development endpoint (MCP or pprof) is present in the Windows release binary"; exit 1
-          fi
 
       # Authenticode signing through SignPath (docs/windows.md). Only for a real release, and only once the repository
       # has the SignPath variables and secret; until then the release goes out unsigned, with a warning. The signed

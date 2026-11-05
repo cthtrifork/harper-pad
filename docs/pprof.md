@@ -30,4 +30,3 @@ go tool pprof -sample_index=alloc_space -top allocs.pprof
 Anyone who can reach the port can read goroutine stacks, heap contents and the command line, and can make the process burn CPU.
 
 - Binds to loopback only. A non-loopback `HARPER_PAD_PPROF_ADDR` aborts start-up.
-- **Never in releases.** `internal/app/pprof_guard.go` makes `-tags pprof,production` fail to compile, and CI greps the production binary for the start-up message (`Production build contains no pprof endpoint`).
