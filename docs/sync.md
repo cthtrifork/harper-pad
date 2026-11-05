@@ -74,150 +74,27 @@ What losing the whole server costs:
 | Database | PostgreSQL run by the **CloudNativePG operator** in the same cluster, authenticated with **client certificates** (mTLS), no passwords | cert-manager issues and renews the certificates; the sync service and the admin UI each get their own certificate and a role: the public API's role gets rows only, and the admin's role owns the schema |
 | Schema owner | **`harper_admin` owns the tables and applies the migrations**; `harper_sync`, the public API's role, gets rows only (no DDL, no ownership) | The sync API faces the internet and parses unauthenticated input, so it gets the least. The admin UI is reached only through the tunnel behind Cloudflare Access with OIDC and MFA. Row security (forced, a policy for `harper_sync` only) hides the notes from the admin role in ordinary SQL; the owner can still switch it off. The cost: a compromised admin process could read notes (it could already enroll a device that does), and sync waits for admin to migrate |
 | API framework and proof check | The sync API is [Huma](https://huma.rocks) on the standard library's mux, so the routes and [openapi.yaml](openapi.yaml) come from the same Go types; DPoP proofs are checked by [go-dpop](https://github.com/AxisCommunications/go-dpop) with a ttlcache for replays | Less security code to own, and the description is regenerated, not hand-written. The proof is checked before the body is read; see [DPoP](#limiting-the-damage-of-a-stolen-device) |
-| Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port, and the app knows nothing about users or login (Cloudflare does all of it); keeps administration out of the public API. See [the admin UI](#the-admin-ui) for what this trusts |
-| Hosting | Kubernetes. The sync API is exposed through the cluster's existing ingress on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([what this trusts](#what-this-trusts)) |
+| Admin | A separate tiny Go + HTMX container for enrollment URLs and device management, **reached only through a Cloudflare Tunnel behind Cloudflare Access with OIDC login** | No inbound port, and the app knows nothing about users or login (Cloudflare does all of it); keeps administration out of the public API. See the [admin UI](../backend/cmd/harper-pad-admin/README.md) for what this trusts |
+| Hosting | Kubernetes. The sync API is exposed through the cluster's existing ingress on the user's own domain, with a Let's Encrypt certificate from cert-manager. Only the admin UI goes through a **Cloudflare Tunnel** (a `cloudflared` sidecar in its pod) | iOS trusts the certificate and sync traffic never passes through a third party; Cloudflare handles only the admin pages ([the admin README](../backend/cmd/harper-pad-admin/README.md#access)) |
 | Web build | Stays on GitHub Pages (`harper.portableinfo.cloud`) | Already deployed; sync is a different origin, so CORS and the CSP change |
 | Code layout | `backend/` in this repository, as its **own Go module that shares no code with the app**; the sync client stays in the frontend | The overlap is about 30 lines of draft rules, and a shared module or a single module costs more than writing them twice. The end-to-end test runs the real client against the real server, which is what catches drift. The release workflow gains two artifacts, the sync and admin images |
 | Client accounts | One in v1, modelled as many: a `clients` table, a `client_id` on every row, and every device bound to one account | More accounts later need no schema change. No sharing between accounts, no user management in v1 |
 | Client | One JavaScript sync module used by both builds, on top of `backend.js` | The web build has no Go side; one implementation means one set of bugs |
 | Auth | One opaque, long-lived device token per device, **bound to a device key with DPoP** (a signed proof on every request); no refresh tokens | See [Authentication](#authentication) |
-| Approving new devices | None. A new device needs no confirmation from an enrolled one; the operator creates one short-lived, single-use enrollment URL per device in the admin UI, and that is the approval | The invite is single use and expires in 15 minutes, the operator signs in through Access with MFA, and every device is listed and can be revoked, with a "new device enrolled" notice on the others. Confirmation on an enrolled device would add a flow and a way to get locked out (no enrolled device left) for little extra safety. See [what this trusts](#what-this-trusts) |
+| Approving new devices | None. A new device needs no confirmation from an enrolled one; the operator creates one short-lived, single-use enrollment URL per device in the admin UI, and that is the approval | The invite is single use and expires in 15 minutes, the operator signs in through Access with MFA, and every device is listed and can be revoked, with a "new device enrolled" notice on the others. Confirmation on an enrolled device would add a flow and a way to get locked out (no enrolled device left) for little extra safety. See [the admin README](../backend/cmd/harper-pad-admin/README.md#access) |
 | Stolen-token hardening | A device list with last-seen, revoking in the admin UI, and **DPoP**, which makes a token that leaks without its key useless but does not cover a copy of the device's own storage | See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device) |
 | Encryption of content | None (TLS only). End-to-end encryption is an option, not planned | The server can read the notes; see [the option](#option-end-to-end-encryption) |
 | Sync model | Per-draft sync on save, a check when a note opens, and a **Sync all** button in the drafts drawer (also run once after enrolling and when the app starts). No change feed, cursor, timer or server id | Much less to build and to get wrong; a lost or emptied server is repopulated by the same Sync all |
 | Conflicts | Server-assigned versions; the local text keeps its id and the other version becomes a "conflicted copy" draft | Never loses text, no merge logic, the open editor never changes under the user |
 | Source of truth | The device. The server can be rebuilt from any device | A supporting system must not be able to lose or destroy notes; see [the principles](#the-client-is-the-source-of-truth) |
 
-## Overview
+## Server
 
-```mermaid
-flowchart LR
-  subgraph clients["Devices: source of truth, each with a full local copy"]
-    desktop["Desktop app<br/>Wails + Vue<br/>local SQLite"]
-    pwa["iPhone Home Screen app (PWA)<br/>IndexedDB"]
-  end
-  pages["GitHub Pages<br/>static app code only,<br/>no user data"]
-  operator(["Operator<br/>browser"])
-  idp["OIDC identity provider<br/>with MFA"]
-  cf["Cloudflare<br/>Tunnel + Access (OIDC)<br/>admin hostname only"]
-
-  subgraph cluster["Kubernetes cluster"]
-    cm["cert-manager<br/>database client certificates"]
-    subgraph ns["Namespace harper-pad: default-deny NetworkPolicies"]
-      subgraph apipod["Pod harper-pad-sync"]
-        api["sync API<br/>ClusterIP Service,<br/>exposed by the cluster ingress"]
-      end
-      subgraph adminpod["Pod harper-pad-admin"]
-        cfd["cloudflared sidecar<br/>outbound tunnel"]
-        admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>no login of its own"]
-      end
-      subgraph cnpg["CloudNativePG cluster"]
-        pg[("PostgreSQL<br/>TLS + client-certificate auth")]
-      end
-    end
-  end
-
-  pwa -. "loads the app" .-> pages
-  desktop -->|"https://sync.example.com<br/>DPoP token and proof"| api
-  pwa -->|"https://sync.example.com<br/>DPoP token and proof, CORS: Pages origin"| api
-  operator -->|"https://admin.example.com"| cf
-  cf <-->|"OIDC login"| idp
-  cf <-->|"outbound tunnel"| cfd
-  cfd -->|"localhost"| admin
-  api -->|"mTLS, role harper_sync"| pg
-  admin -->|"mTLS, role harper_admin"| pg
-  cm -. "client certificates" .-> api
-  cm -. "client certificates" .-> admin
-```
-
-
-Each device keeps its own full copy (SQLite on desktop, IndexedDB in the browser) and works without the server. The sync module
-pushes a draft when it is saved, checks the server when a note is opened, and reconciles everything on **Sync all**. The server is
-plain storage with compare-and-set: it assigns a version to each draft and never merges, copies or orders anything across
-drafts, so devices never compare clocks (they only test two states for equality).
-
-### Database access
-
-No workload has a database password. PostgreSQL requires TLS and a client certificate for every connection, and the clients
-verify the server certificate (`sslmode=verify-full`). cert-manager issues one certificate per role (common name equal to the
-role name, from the CA given to the cluster as `spec.certificates.clientCASecret`), `pg_hba` requires `cert` over `hostssl`, and
-a NetworkPolicy lets only the sync and admin pods reach port 5432. The app reads the certificate files once at start; Stakater
-Reloader restarts the pods when cert-manager renews them, so there is no reload code. The certificate setup is deployed. The ownership
-below (the admin role owns the database, the sync role gets rows only) needs `harper_admin` to be the database owner in the cluster
-(CloudNativePG `initdb.owner`); tables that already exist under another owner are transferred once.
-
-| Role | Used by | Allowed |
-|---|---|---|
-| `harper_admin` | `harper-pad-admin` | **Owns the database and the tables and applies the migrations at start**, including the grants to `harper_sync`. Row security on `docs` hides the notes from it (below), but as the owner it can switch that off ([decided](#decisions)) |
-| `harper_sync` | `harper-pad-sync` | **Rows only: no DDL and no ownership.** `docs`: select, insert, update. `devices`: select, insert, and update of `last_seen`. `invites`: select, and update of `used_at`. `schema_migrations`: select. It cannot create, alter or drop anything, read `clients`, or delete a row. Until `harper-pad-admin` has applied the migrations, `/readyz` is 503 and the pod gets no traffic |
-
-The owner's rights are on the admin role, not on the role of the public API, on purpose: the sync API is the process that faces the
-internet and parses unauthenticated input, so it holds the least. The admin UI is not on the public internet in the same way: it is
-reached only through the tunnel, behind Cloudflare Access with OIDC and MFA.
-
-**Row security keeps the notes out of the admin role's reach in ordinary SQL, not against its credential.** `docs` has row security
-enabled and **forced** (so it applies to the owner too), and its only policy is for `harper_sync`. The admin role then sees no row of `docs`
-and cannot write one, whatever SQL the admin app runs, an injected statement included (tested, and shown by hand: it counts 0 rows, reads
-nothing, and its insert is refused). It is a seatbelt and not a wall: the owner can run `ALTER TABLE docs NO FORCE ROW LEVEL SECURITY`
-or change the policy, which is DDL, the one thing this role is for, and then read the notes (also shown by hand). So whoever holds
-the admin's database credential, or can run arbitrary DDL as it, can read notes. A wall would be a migration credential that the running
-admin does not hold (the migrations as an init container, with the owner's certificate mounted only there); it is not built. The price
-of the choice is that a compromised admin *process* could read notes as well as enroll a device (it could already do the second, which gives a
-device that reads every note: see [What this trusts](#what-this-trusts)). The two services are versioned together, so a new sync image waits for the matching admin to
-have applied its migrations; the sync Deployment uses the Recreate strategy, so that wait is downtime if the admin is not deployed with it.
-
-### The admin UI
-
-A small Go server rendering HTML with HTMX, in its own pod so the public API carries no administration code. It listens on
-127.0.0.1, has no Service reachable from outside, and nothing routes to it except its own sidecar. It is reached through a
-**Cloudflare Tunnel**: a `cloudflared` sidecar in the same pod makes an outbound-only connection to Cloudflare and forwards to
-`http://localhost:<port>`, and a **Cloudflare Access** application in front of the tunnel makes the operator sign in with an OIDC
-identity provider before any request reaches the pod. The sync API is not behind Cloudflare; the cluster's ingress serves it.
-
-What it does: **create an enrollment URL** (the one action that needs to be easy), list devices with name, last-seen and user
-agent, rename and revoke.
-It is **one page**: a name field with **Add device** at the top, which shows the new enrollment URL inline (once, with Copy and a
-countdown), then the pending URLs (each with Cancel) and the device list (each with Rename and Revoke). There is no navigation, no
-tiles and no table, so it works at phone width too. It uses the app's own design tokens, light and dark, and its markup and
-styles are in `backend/internal/admin/web`; [`backend/README.md`](../backend/README.md) shows how to run it (`make admin-up`) against the e2e stack's PostgreSQL with client-certificate login. It reads the sync service's public address from its configuration, which is how it builds enrollment
-URLs. It has no feature that reads or writes notes, and row security keeps its database role from seeing them in ordinary SQL. In v1 there is one client
-account, so **Add device** has no account selector, and the admin app refuses to create an invite if it finds more than
-one client account, until a selector exists.
-
-#### Login: Cloudflare Access with OIDC
-
-The admin app has **no login, no sessions, no token verification and no idea who is using it.** Cloudflare does all of the
-authentication:
-
-- **An Access application** for `admin.example.com`, with the OIDC identity provider as its login method. MFA is enforced at the
-  identity provider, the policy allows only your identity (an email or a group at the provider), and the session is short, for
-  example a few hours. Who may reach the admin UI is decided there and nowhere else.
-- **The only way to the app is the tunnel.** The app listens on 127.0.0.1, the pod has no Service and a NetworkPolicy allows no
-  ingress to it, so a request can only arrive through the `cloudflared` sidecar, and the tunnel serves only the admin hostname.
-- **Still needed inside the app, none of it about identity:** a same-origin check on every state-changing request (`Origin` and
-  `Sec-Fetch-Site`) and a CSRF token, because Cloudflare's session is a cookie that a page on another site could otherwise ride; and
-  the same strict Content-Security-Policy as the app (no inline scripts).
-- **No record of who did what.** The app keeps no audit log. Cloudflare's own logs show who signed in and when, and the device
-  list shows each device and when it was last seen.
-
-#### What this trusts
-
-- **Cloudflare terminates TLS for the admin hostname,** so it can see the admin pages, including the enrollment URL shown on
-  the page. It is **not** in the sync path: note text and sync tokens go from the device to the cluster's ingress, never through Cloudflare. The
-  enrollment invite is single use and expires in 15 minutes, and the device it enrolls appears in the device list, so a stolen
-  invite is noticed, but not prevented. If the domain's DNS is on Cloudflare, set the sync hostname to **DNS only** (not proxied),
-  or its traffic would pass through Cloudflare after all.
-- **Admin access is the ability to enroll a device, and in v1 a device can read every note.** The admin's database role owns the
-  tables, and row security on `docs` stops ordinary SQL from reading notes but not DDL that switches it off, so a compromised admin
-  process could also read notes directly: the two routes give the same access. Whoever controls the operator's identity provider account, the
-  Cloudflare account or the Access policy can create an invite and enroll their own device. So MFA at the identity provider and on
-  the Cloudflare account are part of the security of the notes. Mitigations in this design: the "new device enrolled" notice on
-  every device ([hardening](#limiting-the-damage-of-a-stolen-device)), and a new device can read everything it syncs. A new device does not need approval from an enrolled one ([decided](#decisions)): the invite is the approval.
-- **The Access configuration is the whole of the admin UI's access control.** If the Access application or its policy is removed or
-  loosened, or the tunnel's hostname is pointed at the app without an Access application, the admin UI is open to the internet
-  and the app has no second check. The loopback listener and the NetworkPolicy keep every other route closed. Treat the
-  Cloudflare account and the Access policy as part of the security of the notes, and review them like the database.
-
+The server side is built and documented next to the code: [backend](../backend/README.md) (components, database roles and access,
+diagram), [harper-pad-sync](../backend/cmd/harper-pad-sync/README.md) (the API, DPoP, limits, deploying) and
+[harper-pad-admin](../backend/cmd/harper-pad-admin/README.md) (the operator page, Cloudflare Access, enrolling a device). Each device
+keeps its own full copy and works without the server; the server is plain storage with compare-and-set, and devices never compare
+clocks (they only test two states for equality).
 
 ## Enrollment
 
@@ -604,9 +481,9 @@ This is a device-token model with DPoP key binding, transport security and no co
 | Stolen device token | Revoke that device in the admin UI. DPoP makes a token that leaks without its key useless; a copy of the device's own storage is not covered (and on Chromium engines carries the key). The token grants only its client account's data. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Isolation between client accounts | The account is taken from the token's device row and never from the request; every query on account data filters on it; one account per server in v1, so it is a guard for the future. Before a second account is created, narrow the row security that already guards `docs` (its `sync_rows` policy for the sync role says `USING (true)` today) to the account, with a `SET LOCAL` of it per transaction (the sync role does not own the tables, so policies apply to it), and test that two accounts cannot see each other's drafts or devices. |
-| Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles: the public API's sync role gets rows only, the admin role owns the schema, and row security keeps notes from the admin role's ordinary SQL ([Database access](#database-access)). |
+| Database access | TLS and client certificates only, no passwords; certificates issued and renewed by cert-manager; PostgreSQL reachable only from the sync and admin pods by NetworkPolicy; separate roles: the public API's sync role gets rows only, the admin role owns the schema, and row security keeps notes from the admin role's ordinary SQL ([backend README](../backend/README.md#overview)). |
 | Cluster | Default-deny NetworkPolicies; the sync pods reachable only from the ingress controller; the admin pod has no Service and listens on loopback; hardened pods, no Kubernetes API token, images pinned by digest. |
-| Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role owns the tables; row security hides the notes from ordinary SQL but not from DDL that switches it off, and admin access can also enroll a device, and **a device reads the notes** (v1). See [the admin UI](#the-admin-ui). |
+| Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role owns the tables; row security hides the notes from ordinary SQL but not from DDL that switches it off, and admin access can also enroll a device, and **a device reads the notes** (v1). See the [admin UI](../backend/cmd/harper-pad-admin/README.md). |
 | Guessing | 256-bit tokens and generic 401s on `/enroll` and on bad tokens; rate limiting, if any, is at the ingress (GitOps repository). |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin (`CORS_ALLOWED_ORIGINS`, exact match), not `*`, and only the headers and methods the API uses. An origin that is not listed gets no CORS headers (a preflight is a 403) and is logged once, which is how the desktop webview's real origin is read off the server. `Authorization` and `DPoP` headers, not cookies. |
 | Abuse and size | A body cap, the 2 MiB `CHECK` on a draft's text, and strict field formats. The server has no per-account quota and no limit on changes per request. |
@@ -616,15 +493,6 @@ This is a device-token model with DPoP key binding, transport security and no co
 
 Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data; the [encryption option](#option-end-to-end-encryption) would leave it only
 ciphertext), and traffic analysis (the server sees sizes and times).
-
-## Deploying the server
-
-The Kubernetes manifests (PostgreSQL, the sync and admin Deployments, NetworkPolicies, ingress and Cloudflare Access) are kept in the
-cluster's GitOps repository, not here. The settings and health checks the services need are in [`backend/README.md`](../backend/README.md).
-Two things the manifests must respect: run one sync replica, because the DPoP `jti` replay cache is per pod (move it to PostgreSQL
-before running more), and let only the ingress controller reach the sync pods, because the app takes the client IP from `X-Forwarded-For`.
-
-Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devices and revoking are in the admin UI.
 
 ## End-to-end test
 

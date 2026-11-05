@@ -33,6 +33,13 @@ keeps its data in IndexedDB, works offline after the first load, and can be adde
 follows the releases: a published release replaces the site, and the head of `main` is at `/preview/` (the [Pages workflow](.github/workflows/pages.yml)). See [`docs/pages.md`](docs/pages.md) for how
 the two builds differ and how to deploy.
 
+## Sync (optional, in progress)
+
+Notes can later follow you between the desktop app and the phone through your own server, off by default. The devices stay the
+source of truth; the server is plain storage and can be rebuilt from them. The server is built, the app does not use it yet:
+see the [backend](backend/README.md) (`harper-pad-sync` and `harper-pad-admin` on PostgreSQL) and the design in
+[`docs/sync.md`](docs/sync.md), which also lists the open work.
+
 ## Develop
 
 ```sh

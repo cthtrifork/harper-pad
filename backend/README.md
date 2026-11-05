@@ -8,6 +8,58 @@ is filled in following the build order in that document.
 This is its own Go module (`github.com/cthtrifork/harper-pad/backend`) and shares no code with the desktop app. The Kubernetes
 manifests are not kept in this repository.
 
+## Overview
+
+```mermaid
+flowchart LR
+  subgraph clients["Devices: source of truth, each with a full local copy"]
+    desktop["Desktop app<br/>Wails + Vue<br/>local SQLite"]
+    pwa["iPhone Home Screen app (PWA)<br/>IndexedDB"]
+  end
+  pages["GitHub Pages<br/>static app code only,<br/>no user data"]
+  operator(["Operator<br/>browser"])
+  idp["OIDC identity provider<br/>with MFA"]
+  cf["Cloudflare<br/>Tunnel + Access (OIDC)<br/>admin hostname only"]
+
+  subgraph cluster["Kubernetes cluster"]
+    cm["cert-manager<br/>database client certificates"]
+    subgraph ns["Namespace harper-pad: default-deny NetworkPolicies"]
+      subgraph apipod["Pod harper-pad-sync"]
+        api["sync API<br/>ClusterIP Service,<br/>exposed by the cluster ingress"]
+      end
+      subgraph adminpod["Pod harper-pad-admin"]
+        cfd["cloudflared sidecar<br/>outbound tunnel"]
+        admin["admin UI: Go + HTMX<br/>listens on 127.0.0.1<br/>no login of its own"]
+      end
+      subgraph cnpg["CloudNativePG cluster"]
+        pg[("PostgreSQL<br/>TLS + client-certificate auth")]
+      end
+    end
+  end
+
+  pwa -. "loads the app" .-> pages
+  desktop -->|"https://sync.example.com<br/>DPoP token and proof"| api
+  pwa -->|"https://sync.example.com<br/>DPoP token and proof, CORS: Pages origin"| api
+  operator -->|"https://admin.example.com"| cf
+  cf <-->|"OIDC login"| idp
+  cf <-->|"outbound tunnel"| cfd
+  cfd -->|"localhost"| admin
+  api -->|"mTLS, role harper_sync"| pg
+  admin -->|"mTLS, role harper_admin"| pg
+  cm -. "client certificates" .-> api
+  cm -. "client certificates" .-> admin
+```
+
+| Component | Runs as | Reachable from | Does |
+|---|---|---|---|
+| [`harper-pad-sync`](cmd/harper-pad-sync/README.md) | Deployment, ClusterIP Service | The cluster's ingress only | The device API: enroll, draft routes |
+| [`harper-pad-admin`](cmd/harper-pad-admin/README.md) | Deployment with a `cloudflared` sidecar | The admin hostname through Cloudflare Access | Enrollment URLs, devices, schema migrations |
+| PostgreSQL | CloudNativePG `Cluster` | Sync and admin pods only | All server state; TLS and client certificates, no passwords |
+
+Two database roles: `harper_admin` owns the tables and applies the migrations; `harper_sync` has rows only. The devices stay the
+source of truth, so a lost server is rebuilt by re-enrolling them and running Sync all. The Kubernetes manifests live in the
+cluster's GitOps repository; run one sync replica.
+
 | Path | What |
 |---|---|
 | `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
