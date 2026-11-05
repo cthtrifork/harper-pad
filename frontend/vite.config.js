@@ -75,7 +75,11 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
     },
     // The page reads the sync server's origin to know whether sync is set up at all (src/lib/useSync.js); empty hides it.
-    define: { "import.meta.env.SYNC_ORIGIN": JSON.stringify(syncOriginOf(process.env.SYNC_ORIGIN)) },
+    // APP_VERSION is the release tag of the web build (pages.yml); empty in a preview or a local build, and then nothing is shown.
+    define: {
+      "import.meta.env.SYNC_ORIGIN": JSON.stringify(syncOriginOf(process.env.SYNC_ORIGIN)),
+      "import.meta.env.APP_VERSION": JSON.stringify(web ? (process.env.APP_VERSION ?? "") : ""),
+    },
     // The harper.js worker is an ES module; the default "iife" worker format cannot code-split it.
     worker: { format: "es" },
     // The web build has no Go side: no Wails plugin, and no dist/ placeholder to keep.

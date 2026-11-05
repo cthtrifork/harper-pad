@@ -77,6 +77,8 @@ jobs:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}${{ steps.target.outputs.release == 'true' && '/' || '/preview/' }}
           # The sync server's https origin, a repository variable; empty (the default) leaves the policy as it was (docs/sync.md).
           SYNC_ORIGIN: ${{ vars.SYNC_ORIGIN }}
+          # The release tag, shown small at the bottom right on a phone (StatusBar.vue). A preview has none and shows nothing.
+          APP_VERSION: ${{ steps.target.outputs.release == 'true' && (inputs.tag || github.ref_name) || '' }}
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build:web
