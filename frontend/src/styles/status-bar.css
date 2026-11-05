@@ -30,17 +30,56 @@
   font-size: 12px;
 }
 
-/* A long message (an SQL error can be) shrinks with an ellipsis, with the full text in the tooltip; everything else keeps its size,
-   so the Start fresh link and the version never leave the window. */
-.status > :not(.spacer):not(.clip) {
-  flex: none;
+/* The bar is always one line. Text (a state, the counts, an SQL error) shrinks with an ellipsis, the full text being in the tooltip when
+   there is one, and the least important text (the timings, a message) gives way first. Controls keep their size, so the sync chip, the
+   Start fresh link, the format switch and the version never leave the window. */
+.status {
+  flex-wrap: nowrap;
 }
 
-.status > .clip {
+.status > :where(:not(.spacer)) {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.status > .clip,
+.status > .mute {
+  flex-shrink: 100;
+}
+
+/* The state and the sync text give way before the counts do. */
+.status > .state:not(.clip),
+.status > .sync {
+  flex-shrink: 20;
+}
+
+/* Nearly fixed: they give up room only a little, after the text above has, so a long message does not squeeze them. */
+.status > #doc-stats,
+.status > .app-version {
+  flex-shrink: 1;
+}
+
+.status > .problems,
+.status > button {
+  flex: none;
+}
+
+/* The sync chip keeps its size (the automatic minimum width is the chip); only the "newer on the server" text beside it gives way. The
+   pop-up hangs off .sync, so it must not clip. */
+.status > .sync {
+  min-width: auto;
+  overflow: visible;
+}
+
+/* A database that cannot be read (Start fresh) is the one thing to show: the timings and the caret position make room for it. */
+.status:has(#start-fresh) > .mute,
+.status:has(#start-fresh) > #cursor-pos,
+.status:has(#start-fresh) > #selection,
+.status:has(#start-fresh) > .spacer {
+  display: none;
 }
 
 /* Only a phone shows it (responsive.css): the desktop app has its version in the header. */

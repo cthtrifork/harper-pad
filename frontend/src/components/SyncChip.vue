@@ -95,7 +95,7 @@ onBeforeUnmount(() => {
 
 <template>
   <span ref="root" class="sync">
-    <span v-if="sync.notice.value?.kind === 'newer'" class="sync-marker" role="status" title="Sync all, or your next save, settles it"><span class="dot" aria-hidden="true"></span>{{ sync.notice.value.text }}</span>
+    <span v-if="sync.notice.value?.kind === 'newer'" class="sync-marker" role="status" title="Sync all, or your next save, settles it"><span class="dot" aria-hidden="true"></span><span class="txt">{{ sync.notice.value.text }}</span></span>
     <button id="sync-chip" type="button" class="sync-chip" :class="status" :aria-label="`${label}, open sync`" aria-haspopup="dialog" :aria-expanded="open" @click="toggle">
       <svg v-if="status === 'syncing'" class="mark spin" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" /></svg>
       <svg v-else-if="status === 'offline'" class="mark" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
