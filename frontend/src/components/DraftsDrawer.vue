@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch } from "vue";
 import { whenLabel } from "../lib/when.js";
+import SnippetsHelp from "./SnippetsHelp.vue";
 
 const props = defineProps({
   drafts: { type: Array, required: true },
@@ -11,6 +12,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo"]);
 
+const help = ref(false); // the snippets help page replaces the list
 const q = ref(props.query);
 watch(
   () => props.query,
@@ -75,6 +77,8 @@ const baseName = (path) => path.split(/[\\/]/).pop();
 
 <template>
   <aside id="drafts-drawer" class="drawer" aria-label="Drafts">
+    <SnippetsHelp v-if="help" @back="help = false" />
+    <template v-else>
     <header>
       <h2>Drafts</h2>
       <div class="actions">
@@ -137,7 +141,9 @@ const baseName = (path) => path.split(/[\\/]/).pop();
     <footer>
       <span class="mute">{{ total }} {{ total === 1 ? "draft" : "drafts" }}</span>
       <button v-if="total > drafts.length" type="button" class="link" @click="emit('more')">Show more</button>
+      <button type="button" class="link quiet" @click="help = true">Snippets</button>
     </footer>
+    </template>
 
     <Transition name="toast">
       <div v-if="toast" class="toast" role="status">

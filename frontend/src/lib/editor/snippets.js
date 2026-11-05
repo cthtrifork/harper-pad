@@ -2,20 +2,27 @@ import { syntaxTree } from "@codemirror/language";
 import { Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 
-// Snippets for the markdown that is a hunt through the symbol keys on a phone. Type a trigger alone on a line and press Enter: the
+// Snippets for markdown that is slow to type (symbols, pipes, fences), on a phone most of all, but they work on every device. Type a trigger alone on a line and press Enter: the
 // line becomes the text, with the part to fill in selected so the next thing typed replaces it. Enter, not the closing `>`, so the
 // whole line is known to be just the trigger. `@@` marks the selection: the text between two of them, or the caret for just one.
+// `about` is the line the help page shows (components/SnippetsHelp.vue draws the page from this table).
 const SNIPPETS = {
-  "<code>": "```\n@@Write code here@@\n```",
-  "<sh>": "```sh\n@@Write code here@@\n```",
-  "<json>": "```json\n@@Write code here@@\n```",
-  "<yaml>": "```yaml\n@@Write code here@@\n```",
-  "<toml>": "```toml\n@@Write code here@@\n```",
-  "<todo>": "- [ ] @@",
-  "<table>": "| @@Column@@ | Column |\n| --- | --- |\n| Cell | Cell |",
-  "<link>": "[@@text@@](https://)",
-  "<img>": "![@@alt@@](https://)",
+  "<code>": { about: "Code block", text: "```\n@@Write code here@@\n```" },
+  "<sh>": { about: "Shell code block", text: "```sh\n@@Write code here@@\n```" },
+  "<json>": { about: "JSON code block", text: "```json\n@@Write code here@@\n```" },
+  "<yaml>": { about: "YAML code block", text: "```yaml\n@@Write code here@@\n```" },
+  "<toml>": { about: "TOML code block", text: "```toml\n@@Write code here@@\n```" },
+  "<todo>": { about: "Task with a box", text: "- [ ] @@" },
+  "<table>": { about: "Table", text: "| @@Column@@ | Column |\n| --- | --- |\n| Cell | Cell |" },
+  "<link>": { about: "Link", text: "[@@text@@](https://)" },
+  "<img>": { about: "Image", text: "![@@alt@@](https://)" },
 };
+
+// For the help page: each snippet's trigger, what it is, and its text cut into what comes before, what is selected and what follows.
+export const SNIPPET_LIST = Object.entries(SNIPPETS).map(([trigger, { about, text }]) => {
+  const [before, mid = "", after = ""] = text.split("@@");
+  return { trigger, about, before, mid, after };
+});
 
 const IN_CODE = /FencedCode|CodeBlock|InlineCode/;
 
@@ -32,7 +39,7 @@ export function expandSnippet(state) {
     main.head < line.from + line.text.trimEnd().length
   )
     return null;
-  const body = SNIPPETS[key];
+  const { text: body } = SNIPPETS[key];
   for (let node = syntaxTree(state).resolveInner(line.from, 1); node; node = node.parent) {
     if (IN_CODE.test(node.name)) return null;
   }

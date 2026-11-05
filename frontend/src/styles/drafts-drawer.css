@@ -318,6 +318,14 @@
   color: var(--c-style);
 }
 
+.drawer .link.quiet {
+  color: var(--mute);
+}
+
+.drawer .link.quiet:hover {
+  color: var(--text);
+}
+
 .drawer .link.strong {
   font-weight: 600;
   color: var(--accent);

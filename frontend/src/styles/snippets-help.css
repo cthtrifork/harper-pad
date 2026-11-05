@@ -1,0 +1,116 @@
+.snippets {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  animation: snippets-in 0.18s var(--ease);
+}
+
+@keyframes snippets-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snippets {
+    animation: none;
+  }
+}
+
+.drawer .snippets header {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 16px 4px;
+}
+
+.snippets h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.snippets .back {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mute);
+}
+
+.snippets .back:hover {
+  border-color: var(--line);
+  background: var(--raised);
+  color: var(--text);
+}
+
+.snippets .hint {
+  margin: 0;
+  padding: 4px 16px 12px;
+  color: var(--mute);
+}
+
+.snippets ul {
+  margin: 0;
+  padding: 0 16px 16px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.snippets li {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+}
+
+.snippets .row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.snippets .trigger {
+  color: var(--c-style);
+  font: 13px var(--font-mono);
+}
+
+.snippets .about {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.snippets .mock {
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--sunken);
+  font: 12px / 1.6 var(--font-mono);
+}
+
+.snippets .mock mark {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: inherit;
+}
+
+.snippets .caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 1.1em;
+  margin: 0 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+}
