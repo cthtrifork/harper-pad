@@ -39,8 +39,10 @@ and `pprof`, which `production` rejects.
 ## Frontend
 
 - `App.vue` composes the header, the editor, the Problems panel, the status bar and the drafts drawer.
-- `lib/harper.js` loads `harper.js` in a Web Worker (WebAssembly) after the first paint and turns its lints into plain
-  objects, so no wasm-backed value is held by Vue or CodeMirror.
+- `lib/harper.js` starts Harper in its own Web Worker (`lib/harperWorker.js`, WebAssembly) after the first paint; the page
+  talks to it with plain messages. The worker turns its lints into plain objects, so no wasm-backed value is held by Vue or
+  CodeMirror. It does not use harper.js's `WorkerLinter`: that also builds a serializer on the main thread, which fetched
+  and compiled the 20 MB wasm a second time on the page and was most of Lighthouse's blocking time (TBT).
 - `lib/editor/` is the CodeMirror 6 editor: the lint source (`lint.js`, debounced), theme, markdown or plain text mode,
   status bar statistics and the problems list.
 - `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
