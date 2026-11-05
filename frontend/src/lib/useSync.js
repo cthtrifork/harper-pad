@@ -166,7 +166,7 @@ export function useSync({
   let openHooks = {};
 
   // Asks the server about a draft that is open and shows what it found: a swap, a marker, or nothing. Runs inside the chain.
-  async function checkOpen(id) {
+  async function checkOpen(id, { loud = false } = {}) {
     if (!device) return;
     const { canSwap = () => true, onSwapped = () => {} } = openHooks;
     try {
@@ -182,7 +182,8 @@ export function useSync({
         gone.value = { id };
       }
     } catch (err) {
-      if (err instanceof SyncError && err.code === "signin") stopped(err);
+      // Opening a note shows nothing for an unreachable server (the local text stays); a Sync the person asked for says so.
+      if (loud || (err instanceof SyncError && err.code === "signin")) stopped(err);
     }
   }
 
@@ -206,6 +207,21 @@ export function useSync({
     waiting.add(id);
     clearTimeout(timer);
     chain = chain.then(run);
+    await chain;
+  }
+
+  // Sync (the button, Ctrl+S): push the draft if it changed, then ask the server about it whether or not anything was pushed, so a newer
+  // version or a delete made on another device is found. The push alone would not: for a draft that is unchanged here it assumes the
+  // server is unchanged too. Nothing is written locally unless the server had something newer (see checkOpen). `hooks` are noteOpened's.
+  async function syncRequested(id, hooks) {
+    if (!device || status.value === "signin") return;
+    openHooks = hooks ?? openHooks;
+    waiting.add(id);
+    clearTimeout(timer);
+    chain = chain.then(async () => {
+      await run();
+      if (status.value === "synced") await checkOpen(id, { loud: true });
+    });
     await chain;
   }
 
@@ -273,6 +289,7 @@ export function useSync({
     draftSaved,
     draftDeleted,
     saveRequested,
+    syncRequested,
     noteOpened,
     openCopy,
     keepGone,

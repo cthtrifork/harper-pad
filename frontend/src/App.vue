@@ -13,6 +13,7 @@ import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
+import { statusLine } from "./lib/statusLine.js";
 import { useDrafts } from "./lib/useDrafts.js";
 import { useSync } from "./lib/useSync.js";
 
@@ -60,10 +61,30 @@ const openHooks = { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.
 const checkOpened = (id) => sync.noteOpened(id, openHooks);
 // An autosave pushes after a short wait; Save (or Ctrl+S, also to a file) pushes at once and settles the open draft.
 const drafts = useDrafts(editor, showDrawer, {
-  onSaved: (id, how) => (how?.explicit ? sync.saveRequested(id, openHooks) : sync.draftSaved(id)),
+  onSaved: (id, how) => (how?.explicit ? sync.syncRequested(id, openHooks) : sync.draftSaved(id)),
   onOpened: checkOpened,
   onDeleted: sync.draftDeleted,
 });
+
+// The status line: where the open draft's text is and who has it, joined from the draft and the sync (lib/statusLine.js).
+const statusLineNow = computed(() =>
+  statusLine({
+    draft: { state: drafts.state.value, text: drafts.status.value, fileState: drafts.fileState.value, fileName: drafts.fileName.value },
+    sync: { enrolled: sync.enrolled.value, status: sync.status.value, newer: sync.notice.value?.kind === "newer" },
+  }),
+);
+// The button only acts: Sync when sync is on, Save when it is off (disabled while there is nothing to save).
+const syncBusy = computed(() => sync.status.value === "syncing");
+// A draft that has just opened says nothing about saving until something is typed; pressing Sync or Save asks for an answer, so it shows.
+const syncAsked = ref(false);
+function onSave(saveAs = false) {
+  syncAsked.value = true;
+  return drafts.saveFile(saveAs);
+}
+watch(
+  () => drafts.current.value.id,
+  () => (syncAsked.value = false),
+);
 
 // What sync tells the person in a toast. "Newer on the server" is not one: it stays beside the chip until a save or Sync all settles it.
 const syncToast = computed(() => {
@@ -161,11 +182,18 @@ function toggleDrawer() {
   }
 }
 
-// On a phone the drafts are a full-width sheet over the editor: picking or creating a draft leaves it, so the text (and the
-// keyboard that comes with focusing it) is not hidden behind the sheet.
-async function pickDraft(action, id) {
+// The help page's shortcut: the snippet goes in at the cursor and the drawer stays open, so several can be inserted in a row. On a
+// phone the editor is not focused either: that would open the keyboard over the list.
+function insertSnippet(trigger) {
+  editor.value?.insertSnippet(trigger, !narrow.matches);
+}
+
+// A new draft always leaves the drawer (you are about to write in it). Opening another draft leaves it on a phone only, where the
+// drafts are a full-width sheet over the editor and would hide the text (and the keyboard that comes with focusing it); on a wide
+// screen the drawer stays open beside the editor.
+async function pickDraft(action, id, { always = false } = {}) {
   await action(id);
-  if (narrow.matches && showDrawer.value) {
+  if ((always || narrow.matches) && showDrawer.value) {
     toggleDrawer();
     nextTick(() => editor.value?.focus());
   }
@@ -192,8 +220,8 @@ function resizeText(dir) {
   if (which === "editor") editor.value?.remeasure();
 }
 
-// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S saves: to the draft until the text has been saved to a file, then to
-// the file; Ctrl+Shift+S always asks for a file.
+// Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S is Sync (Save when sync is off): it saves the draft, writes its file if it
+// has one and the draft changed, and asks the server about it; Ctrl+Shift+S always asks for a file.
 function onKeydown(e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const key = e.key.toLowerCase();
@@ -202,7 +230,7 @@ function onKeydown(e) {
     toggleDrawer();
   } else if (key === "s") {
     e.preventDefault(); // not the browser's "save page"
-    drafts.saveFile(e.shiftKey);
+    onSave(e.shiftKey);
   } else if (key === "+" || key === "=" || key === "-" || key === "_" || key === "0") {
     e.preventDefault(); // not the webview's own zoom, which would scale the whole window
     resizeText(key === "0" ? 0 : key === "-" || key === "_" ? -1 : 1);
@@ -331,6 +359,10 @@ onBeforeUnmount(() => {
       :file-name="drafts.fileName.value"
       :file-dir="drafts.fileDir.value"
       :can-save="drafts.available.value"
+      :sync-on="sync.enrolled.value"
+      :sync-busy="syncBusy"
+      :needs-save="drafts.needsSave.value"
+      :replacing-file="drafts.replacingFile.value"
       :sharing="sharing"
       :is-markdown="isMarkdown"
       :mode="mode"
@@ -338,7 +370,7 @@ onBeforeUnmount(() => {
       :autocorrect="autocorrect.on"
       @toggle-drawer="toggleDrawer"
       @toggle-problems="toggleProblems"
-      @save="drafts.saveFile"
+      @save="onSave"
       @view="setView"
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
@@ -352,11 +384,12 @@ onBeforeUnmount(() => {
         :query="drafts.query.value"
         :toast="drafts.toast.value"
         @open="(id) => pickDraft(drafts.open, id)"
-        @create="pickDraft(drafts.create)"
+        @create="pickDraft(drafts.create, undefined, { always: true })"
         @remove="drafts.remove"
         @search="drafts.setQuery"
         @more="drafts.showMore"
         @undo="drafts.undo"
+        @snippet="insertSnippet"
         @close="toggleDrawer"
       />
       </Transition>
@@ -413,7 +446,8 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="typedRef || drafts.state.value === 'error' ? drafts.status.value : ''"
+      :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' ? statusLineNow.text : ''"
+      :draft-tone="statusLineNow.tone"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"
       :mode="mode"

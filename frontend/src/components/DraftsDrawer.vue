@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch } from "vue";
 import { whenLabel } from "../lib/when.js";
+import SnippetsHelp from "./SnippetsHelp.vue";
 
 const props = defineProps({
   drafts: { type: Array, required: true },
@@ -9,8 +10,9 @@ const props = defineProps({
   query: { type: String, default: "" },
   toast: { type: Object, default: null },
 });
-const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo"]);
+const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet"]);
 
+const help = ref(false); // the snippets help page replaces the list
 const q = ref(props.query);
 watch(
   () => props.query,
@@ -69,12 +71,16 @@ function open(id) {
   swiped = false;
 }
 
+// The release the web build was made from (the desktop app shows its version in the header).
+const version = import.meta.env?.APP_VERSION ?? "";
 const iso = (ms) => new Date(ms).toISOString();
 const baseName = (path) => path.split(/[\\/]/).pop();
 </script>
 
 <template>
   <aside id="drafts-drawer" class="drawer" aria-label="Drafts">
+    <SnippetsHelp v-if="help" @back="help = false" @insert="(t) => emit('snippet', t)" />
+    <template v-else>
     <header>
       <h2>Drafts</h2>
       <div class="actions">
@@ -134,10 +140,22 @@ const baseName = (path) => path.split(/[\\/]/).pop();
     </TransitionGroup>
     <p v-else class="empty">{{ query.trim() ? `No drafts match "${query.trim()}".` : "No drafts yet. Start typing and it is saved here." }}</p>
 
+    <!-- Snippets is a page of its own, so it is a row you can tap, not a word in the footer. -->
+    <button type="button" class="snippets-row" @click="help = true">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <span class="text">
+        <span class="name">Snippets</span>
+        <span class="about">Type a short code to insert text</span>
+      </span>
+      <svg class="go" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5l3.5 3.5-3.5 3.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    </button>
+
     <footer>
       <span class="mute">{{ total }} {{ total === 1 ? "draft" : "drafts" }}</span>
       <button v-if="total > drafts.length" type="button" class="link" @click="emit('more')">Show more</button>
+      <span v-if="version" class="version" title="Version">{{ version }}</span>
     </footer>
+    </template>
 
     <Transition name="toast">
       <div v-if="toast" class="toast" role="status">

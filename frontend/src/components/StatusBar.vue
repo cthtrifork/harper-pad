@@ -13,6 +13,7 @@ const props = defineProps({
   saveError: { type: String, default: "" },
   draftStatus: { type: String, default: "" },
   draftState: { type: String, default: "" },
+  draftTone: { type: String, default: "mute" }, // mute | ok | accent | bad: how the status line is coloured (text is never the only signal)
   canStartFresh: { type: Boolean, default: false },
   mode: { type: String, default: "edit" }, // edit | split | preview: the preview has no problems, caret or selection
   isMarkdown: { type: Boolean, default: false },
@@ -20,8 +21,6 @@ const props = defineProps({
   sync: { type: Object, default: null }, // useSync's result; the chip shows only when sync is set up in this build
   autocorrect: { type: Boolean, default: false }, // autocorrect is on (its switch is in the Problems panel, so it shows here too)
 });
-// The release the web build was made from, shown small at the bottom right on a phone (the desktop app shows its version in the header).
-const version = import.meta.env?.APP_VERSION ?? "";
 const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect"]);
 
 // "Harper ready" shows for a few seconds, then gives its place to the format switch.
@@ -63,7 +62,7 @@ function fmt(ms) {
     <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}<span class="chars">, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span></span>
     <span v-if="state === 'ready' && startup" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
     <span v-if="saveError" class="state failed clip" :title="saveError">{{ saveError }}</span>
-    <span v-if="draftStatus" id="draft-status" :class="['state', 'clip', draftState === 'error' ? 'failed' : 'mute']" :title="draftStatus">{{ draftStatus }}</span>
+    <span v-if="draftStatus" id="draft-status" :class="['state', 'clip', draftTone === 'bad' || draftState === 'error' ? 'failed' : draftTone === 'ok' ? 'good' : draftTone === 'accent' ? 'accent' : 'mute']" :title="draftStatus" role="status" aria-live="polite">{{ draftStatus }}</span>
     <button v-if="canStartFresh" id="start-fresh" type="button" class="link" title="Moves the unreadable database aside (it is kept, not deleted) and starts a new one" @click="emit('start-fresh')">Start fresh</button>
     <span class="spacer"></span>
     <span v-if="mode !== 'preview'" id="cursor-pos">Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
@@ -73,6 +72,5 @@ function fmt(ms) {
     <button v-if="!showState" id="format-btn" type="button" class="fmt-btn" :aria-label="isMarkdown ? 'Format: Markdown. Switch to plain text' : 'Format: plain text. Switch to Markdown'" :title="isMarkdown ? 'Markdown (click for plain text)' : 'Plain text (click for Markdown)'" @click="emit('format', isMarkdown ? 'text' : 'markdown')">
       {{ isMarkdown ? "M\u2193" : "Aa" }}
     </button>
-    <span v-if="version" id="app-version" class="app-version" title="Version">{{ version }}</span>
   </footer>
 </template>

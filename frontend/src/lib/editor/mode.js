@@ -2,6 +2,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView, highlightActiveLine, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { snippets } from "./snippets.js";
 
 // The markdown source view: line numbers, a highlighted current line, and the markup (`#`, `**`, `- [ ]`) dimmed so the words
 // stand out. Plain text gets none of it.
@@ -38,6 +39,6 @@ const markdownTheme = EditorView.theme({
 // `mode` is { format: "markdown" | "text", source: boolean }; `source` is the Split view's source pane.
 export function modeExtensions({ format, source }) {
   if (format === "text") return [];
-  const base = [markdown(), syntaxHighlighting(markdownStyle)];
+  const base = [markdown(), syntaxHighlighting(markdownStyle), snippets];
   return source ? [...base, markdownTheme, sourceTheme, lineNumbers(), highlightActiveLine()] : base;
 }

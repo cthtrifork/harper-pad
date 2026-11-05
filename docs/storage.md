@@ -73,8 +73,9 @@ sync_state (id TEXT PRIMARY KEY, hash TEXT, updated_at INTEGER,   -- only for th
   (`json_extract(data, '$.content') LIKE ...`), so the text is scanned there and not copied into Go. If searching gets slow with a
   very large collection, an FTS5 index can be added alongside the table.
 - **A draft saved to a file stays a draft.** Ctrl+Shift+S asks for a file once (`DraftService.SaveDraftToFile`): the text is written there
-  (a temporary file beside it, then a rename) and `file_path` records it. After that Ctrl+S overwrites the file; before it, Ctrl+S only
-  saves the draft. The autosave never writes the file. If the file was changed by something else since our last write (its mtime differs from `file_mtime`), Ctrl+S saves the draft but not the file and says so; the next Ctrl+S replaces it. A file that was deleted is written again. The path is set only by `SetFilePath` after the save dialog, never taken from
+  (a temporary file beside it, then a rename) and `file_path` records it. After that Ctrl+S (Sync, or Save when sync is off) writes the file, but only when the draft changed since the file was written, so an
+  untouched file keeps its modified time; before a file is linked, Ctrl+S only saves the draft. The autosave never writes the file. A save never rewrites a
+  draft whose text and format are what is already stored, so its timestamp only moves when the text does. If the file was changed by something else since our last write (its mtime differs from `file_mtime`), Ctrl+S saves the draft but not the file and says so; the next Ctrl+S replaces it. A file that was deleted is written again. The path is set only by `SetFilePath` after the save dialog, never taken from
   the page: `Save` ignores `Draft.FilePath`, and `SaveDraftToFile` reads the stored path, so the page cannot make Go write to a path it
   chose. Deleting a draft does not touch its file, and undoing the delete restores the text without the link.
 - Settings are text values; `SettingsService` decides what they hold. `SetSettings` saves several in one transaction.

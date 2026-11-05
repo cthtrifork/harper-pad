@@ -9,6 +9,7 @@
 @import "./editor.css";
 @import "./preview.css";
 @import "./drafts-drawer.css";
+@import "./snippets-help.css";
 @import "./problems-panel.css";
 @import "./problems-autofix.css";
 @import "./toast-bar.css";

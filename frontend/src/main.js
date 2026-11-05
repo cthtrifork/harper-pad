@@ -8,6 +8,8 @@ import "./styles/index.css";
 // the editor with its text: no empty editor that fills in afterwards, and no layout shift. It is one call to the Go side, or one read
 // of IndexedDB, and the window already has its background colour while it waits.
 const start = await startup().catch((err) => ({ demo: "", open: null, total: 0, error: String(err?.message || err) }));
+// iOS only applies :active (the press feedback on buttons) once a touch listener exists.
+document.addEventListener("touchstart", () => {}, { passive: true });
 createApp(App, { start }).mount("#app");
 
 // The web build works offline after the first load (public/sw.js). The desktop build has no service worker.

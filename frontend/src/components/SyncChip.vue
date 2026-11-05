@@ -6,9 +6,10 @@ const props = defineProps({ sync: { type: Object, required: true } });
 
 const LABELS = {
   off: "Sync off",
-  synced: "Synced",
-  syncing: "Syncing…",
-  pending: "Pending",
+  // The chip is the connection only (what happened to the draft is the status line's job, see lib/statusLine.js).
+  synced: "Sync on",
+  syncing: "Sync on",
+  pending: "Sync on",
   offline: "Offline",
   signin: "Sign in again",
 };
@@ -95,13 +96,12 @@ onBeforeUnmount(() => {
 
 <template>
   <span ref="root" class="sync">
-    <span v-if="sync.notice.value?.kind === 'newer'" class="sync-marker" role="status" title="Sync all, or your next save, settles it"><span class="dot" aria-hidden="true"></span><span class="txt">{{ sync.notice.value.text }}</span></span>
     <button id="sync-chip" type="button" class="sync-chip" :class="status" :aria-label="`${label}, open sync`" aria-haspopup="dialog" :aria-expanded="open" @click="toggle">
       <svg v-if="status === 'syncing'" class="mark spin" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" /></svg>
       <svg v-else-if="status === 'offline'" class="mark" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
       <svg v-else-if="status === 'signin'" class="mark" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8" /><path d="M8 4.8v3.7M8 10.9v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
       <span v-else class="dot" aria-hidden="true"></span>
-      {{ label }}
+      <span class="txt">{{ label }}</span>
     </button>
 
     <Transition name="pop">

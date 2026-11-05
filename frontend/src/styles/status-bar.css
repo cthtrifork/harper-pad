@@ -57,8 +57,7 @@
 }
 
 /* Nearly fixed: they give up room only a little, after the text above has, so a long message does not squeeze them. */
-.status > #doc-stats,
-.status > .app-version {
+.status > #doc-stats {
   flex-shrink: 1;
 }
 
@@ -82,11 +81,6 @@
   display: none;
 }
 
-/* Only a phone shows it (responsive.css): the desktop app has its version in the header. */
-.status .app-version {
-  display: none;
-}
-
 .status .mute {
   color: var(--mute);
 }
@@ -97,6 +91,15 @@
 
 .status .state.failed {
   color: var(--bad);
+}
+
+.status .state.good {
+  color: var(--ok);
+}
+
+.status .state.accent {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .status .link {

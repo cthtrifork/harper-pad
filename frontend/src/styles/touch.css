@@ -17,8 +17,7 @@
   }
 
   .close,
-  .del,
-  .tool.arrow {
+  .del {
     min-width: 44px;
   }
 }
