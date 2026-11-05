@@ -3,6 +3,9 @@
 //
 //	GET /healthz  liveness. Never touches the database, so an outage does not make the kubelet restart a healthy pod.
 //	GET /readyz   readiness: a PostgreSQL round trip (cached for 2 s) succeeds and the process is not shutting down. 503 otherwise.
+//
+// They are served on the metrics listener (METRICS_ADDR, :9102 for harper-pad-sync), not on the public port, so the internet cannot
+// see whether the database is up. With METRICS_ADDR empty they fall back to the public port.
 package server
 
 import (
@@ -26,12 +29,14 @@ type Pinger interface {
 const (
 	pingTimeout     = 2 * time.Second // the probes should set timeoutSeconds above this
 	shutdownTimeout = 20 * time.Second
-	// readyCacheTTL bounds the database round trips: /readyz is also reachable through the public route, so a flood of requests
-	// must not become a flood of queries. It stays well below the kubelet's probe period.
+	// readyCacheTTL bounds the database round trips: when the health endpoints are on the public route (METRICS_ADDR empty) a flood
+	// of requests must not become a flood of queries. It stays well below the kubelet's probe period.
 	readyCacheTTL = 2 * time.Second
-	// shutdownDelay lets the endpoint controller and Traefik see the failing /readyz before the listener closes.
-	shutdownDelay = 5 * time.Second
 )
+
+// shutdownDelay lets the endpoint controller and Traefik see the failing /readyz before the listener closes. A variable so the
+// test of Run does not wait for it.
+var shutdownDelay = 5 * time.Second
 
 // Health serves the liveness and readiness endpoints.
 type Health struct {
@@ -108,7 +113,9 @@ func reply(w http.ResponseWriter, status int, body string) {
 
 // Run serves handler on addr until SIGTERM or SIGINT, then marks the process not ready, waits shutdownDelay for the
 // load balancers to notice, and drains in-flight requests for up to shutdownTimeout. When metricsAddr is not empty, metrics is
-// served there on its own listener (so it never shares the public route) and stops with the main one.
+// served there on its own listener together with /healthz and /readyz (so none of them shares the public route) and stops with
+// the main one. The commands register the health endpoints on the public handler only when metricsAddr is empty, so the probes
+// are never lost.
 func Run(addr string, handler http.Handler, h *Health, metricsAddr string, metrics http.Handler) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -135,6 +142,7 @@ func Run(addr string, handler http.Handler, h *Health, metricsAddr string, metri
 			return err
 		}
 		mux := http.NewServeMux()
+		h.Register(mux)
 		mux.Handle("GET /metrics", metrics)
 		msrv = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 		go func() { errc <- msrv.Serve(mln) }()

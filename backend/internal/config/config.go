@@ -14,7 +14,8 @@ type Common struct {
 	// DatabaseURL is DATABASE_URL, or empty: the standard libpq variables (PGHOST, PGSSLCERT, ...) are then read by the driver,
 	// which is how the cluster configures client-certificate login.
 	DatabaseURL string
-	// MetricsAddr is METRICS_ADDR, where /metrics is served on its own listener; empty turns metrics off.
+	// MetricsAddr is METRICS_ADDR, where /metrics, /healthz and /readyz are served on their own listener, so none of them is on the
+	// public port; empty turns metrics off and puts the probes on the public port.
 	MetricsAddr string
 }
 

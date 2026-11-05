@@ -2,7 +2,7 @@
 // `make e2e` from backend/. The sync flows are not tested here.
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { APP_URL, compose, launch, newDevice, SYNC_URL, waitForSync } from "./helpers.mjs";
+import { APP_URL, compose, launch, newDevice, SYNC_OPS_URL, SYNC_URL, waitForSync } from "./helpers.mjs";
 
 let browser;
 
@@ -19,17 +19,22 @@ describe("the stack", () => {
   test("the sync service answers over https through Caddy", async () => {
     const device = await newDevice(browser);
     const page = await device.newPage();
-    const res = await page.goto(`${SYNC_URL}/healthz`);
-    assert.equal(res?.status(), 200);
-    assert.match(await page.textContent("body"), /ok/);
+    const res = await page.goto(`${SYNC_URL}/docs`); // the draft list: a request without a proof is refused, so the API is reached
+    assert.equal(res?.status(), 401);
     await device.close();
   });
 
-  test("readiness: the sync service reaches PostgreSQL", async () => {
+  test("liveness and readiness are on the ops port, not the public one", async () => {
+    const live = await fetch(`${SYNC_OPS_URL}/healthz`);
+    assert.equal(live.status, 200);
+    assert.match(await live.text(), /ok/);
+    // readiness: the sync service reaches PostgreSQL
+    assert.equal((await fetch(`${SYNC_OPS_URL}/readyz`)).status, 200);
     const device = await newDevice(browser);
     const page = await device.newPage();
-    const res = await page.goto(`${SYNC_URL}/readyz`);
-    assert.equal(res?.status(), 200);
+    for (const path of ["/healthz", "/readyz"]) {
+      assert.equal((await page.goto(`${SYNC_URL}${path}`))?.status(), 404, `${path} must not be public`);
+    }
     await device.close();
   });
 
