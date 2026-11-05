@@ -143,7 +143,10 @@ const baseName = (path) => path.split(/[\\/]/).pop();
     <footer>
       <span class="mute">{{ total }} {{ total === 1 ? "draft" : "drafts" }}</span>
       <button v-if="total > drafts.length" type="button" class="link" @click="emit('more')">Show more</button>
-      <button type="button" class="link quiet" @click="help = true">Snippets</button>
+      <button type="button" class="link to-snippets" @click="help = true">
+        Snippets
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5l3.5 3.5-3.5 3.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </button>
       <span v-if="version" class="version" title="Version">{{ version }}</span>
     </footer>
     </template>
