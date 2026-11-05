@@ -357,6 +357,8 @@ Where the private key lives:
 | Web (iPhone Home Screen app, browsers) | `crypto.subtle.generateKey` with `extractable: false`; **only the private `CryptoKey`** is stored in IndexedDB (storing a whole `CryptoKeyPair` is not needed; the iPhone test showed it is accepted there, but older WebKit rejected it); the public key goes to the server in the enrollment proof. `extractable: false` stops script from exporting the key bytes; it does not encrypt the key on disk |
 | Desktop (Linux, Windows) | **The same as the web build.** The window is a webview (WebKitGTK on Linux, WebView2 on Windows), so the same WebCrypto key is created there and stored in the webview's IndexedDB. There is no OS keyring, Credential Manager, TPM or key file, and no Go signing method: the sync module is the same code everywhere. Still to check: that both webviews keep a non-extractable key across a relaunch (`TODO.md`) |
 
+Where it is kept: the private key, the public JWK and the token are one record in the `kv` store (see [Changes to local storage](#changes-to-local-storage)).
+
 Details that are easy to get wrong:
 
 - **What DPoP does not cover.** `extractable: false` is an API rule, not a promise about the disk. **Tested on Chromium:** after a
@@ -716,8 +718,13 @@ The groundwork, and the riskiest part, because it touches both storage engines. 
   rewrites cannot lose it; because changes and deletes are derived, what it saves or deletes is seen by the newer build. Tests run
   the previous build's statements against a database with sync state, and upgrade databases written by user_version 1 and 2.
   A build from before `#83` fails on the newer IndexedDB version instead of opening it; there is no way around that.
-- **Device-local sync settings** (server URL, device token, device name) are kept apart from the app's own settings and are
-  never uploaded. On desktop that is a separate table or key set; in the browser a separate IndexedDB key.
+- **Device-local sync settings** (server URL, device token, device name, and the device key) are kept apart from the app's own settings and are
+  never uploaded. **Pre-release simplification:** they are one record, `sync-device`, in the existing `kv` object store of the app's
+  IndexedDB (`lib/syncDevice.js`), on the web and on desktop alike, so there is no Go side, no table and no `DB_VERSION` change. The code has
+  never run on a real device and losing data is acceptable until sync is done, so nothing here is built to survive an upgrade: no migration,
+  and no compatibility with older builds for this record. Before release, decide whether the record needs a store of its own, and whether
+  desktop should keep it in SQLite beside the drafts (a webview profile that is cleared would then lose the key and the token, which means
+  "Sign in again"; the drafts would be safe either way).
 - New host calls go through `backend.js` with both implementations, as [pages](pages.md) requires. New Go service methods mean
   running `make bindings`.
 
