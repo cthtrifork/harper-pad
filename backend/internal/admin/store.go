@@ -37,8 +37,9 @@ type Account struct {
 	Name string
 }
 
-// Store is everything the admin UI needs from the database, and matches the grants of the harper_admin role: invites
-// (insert, select, delete), devices (select, rename, delete), clients (select). There is no way to read a note.
+// Store is everything the admin UI needs from the database: invites
+// (insert, select, delete), devices (select, rename, delete), clients (select). There is no way to read a note, and the database
+// keeps its role from reading one either (row security on docs, see migrations/0001_init.sql).
 type Store interface {
 	Accounts(ctx context.Context) ([]Account, error)
 	Devices(ctx context.Context) ([]Device, error)
