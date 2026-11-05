@@ -1,6 +1,6 @@
 # harper-pad-sync. Build context is backend/. Image platform: linux/amd64 only. The build stage runs on the build host's own
 # platform and cross-compiles for TARGETARCH.
-FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26-trixie AS build
+FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.27-trixie AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./

@@ -1,4 +1,4 @@
-FROM mirror.gcr.io/library/golang:1.26-trixie AS go
+FROM mirror.gcr.io/library/golang:1.27-trixie AS go
 FROM mirror.gcr.io/library/node:26-trixie-slim AS node
 
 FROM mcr.microsoft.com/devcontainers/base:trixie
