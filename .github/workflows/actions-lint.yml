@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # renovate: datasource=pypi depName=zizmor
-          ZIZMOR_VERSION: 1.31.1
+          ZIZMOR_VERSION: 1.32.0
         run: |
           python3 -m pip install --user "zizmor==${ZIZMOR_VERSION}"
           "$HOME/.local/bin/zizmor" --persona pedantic --format plain .
@@ -107,5 +107,5 @@ jobs:
       - name: Validate the Renovate config
         env:
           # renovate: datasource=npm depName=renovate
-          RENOVATE_VERSION: 44.201.0
+          RENOVATE_VERSION: 44.206.3
         run: npx --yes --package "renovate@${RENOVATE_VERSION}" -- renovate-config-validator --strict .github/renovate.json5
