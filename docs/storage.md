@@ -103,6 +103,13 @@ it back with its creation time, which is how "undo delete" works.
 Search is `LIKE` on the content (`json_extract`), with `%`, `_` and `\` taken literally. It ignores case for ASCII letters only. If
 searching many drafts ever gets slow, an FTS5 index can be added alongside the table.
 
+## Sync state
+
+The `sync_state` table and the Go store methods that use it (`Changes`, `ApplyRemote`, `ApplyRemoteDelete`) are the desktop half of the
+local groundwork. The desktop frontend does not call them yet: sync runs in the web build only, where the same records live in IndexedDB
+(the `sync` object store, one record per draft) and the device's server, token and signing key are one `sync-device` record in the `kv`
+store. Until the desktop build is wired, nothing is written to `sync_state`. See [sync](sync.md#changes-to-local-storage).
+
 ## Settings: the dictionary and ignored findings
 
 Harper (`harper.js`) is the source of truth during a run. At start `lib/personal.js` loads the saved words and the ignore list into it

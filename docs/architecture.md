@@ -44,6 +44,11 @@ and `pprof`, which `production` rejects.
   status bar statistics and the problems list.
 - `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
   on disk, and the list the drawer shows.
+- Sync (optional, web build only for now; see [sync](sync.md)): `lib/syncRun.js` (`createSyncer`) is the one place a draft is synced. Its `all()`
+  is Sync all and its `one(id)` is the push after a save, and both decide with the pure table in `lib/syncPlan.js`, so a conflict is handled
+  in one place (`syncOneEngine.test.js` keeps it so). `lib/syncClient.js` makes the signed requests (`lib/dpop.js` makes the proofs),
+  `lib/syncEnroll.js` enrolls from an invite link, `lib/syncDevice.js` keeps the device record in IndexedDB, `lib/useSync.js` is the state the
+  status bar chip (`SyncChip.vue`) shows, and `lib/csp.js` builds the page's policy, which names the sync server when `SYNC_ORIGIN` is set.
 - `Preview.vue` renders markdown for the Split and Preview views (`marked` parses it); text from drafts or Harper never goes
   through `v-html` or `innerHTML`.
 - Styles are plain CSS, one file per component, in `frontend/src/styles`.
@@ -55,3 +60,5 @@ and `pprof`, which `production` rejects.
 3. The same edit schedules a draft save through `backend.js`: `DraftService.SaveDraft` on desktop, IndexedDB on the web.
 4. "Save as file" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
    on the web) and keeps the path on the draft.
+5. In the web build with sync on, about two seconds after a save `useSync` asks `createSyncer.one(id)` to push the draft; Sync all
+   (a button in the chip's pop-up, also run at start and after enrolling) asks `createSyncer.all()` to reconcile every draft.

@@ -50,14 +50,14 @@ The sync backend is also scanned with OWASP ZAP in CI ([`backend/README.md`](../
 | Area | State |
 |---|---|
 | Broken access control | No users. In the release app the bindings are reachable only from the app's own window. The dev/CI server mode (`-tags server`, not in releases) serves the same calls over HTTP on localhost; Wails 3.1.0 guards it: `/wails/runtime` takes only POSTs from its own origin (`Origin` and `Sec-Fetch-Site` are checked), the WebSocket is same-origin unless `WebSocketOriginPatterns` or `WebSocketAllowAllOrigins` say otherwise, and a loopback bind rejects an unexpected `Host` header (DNS rebinding). So a web page open in the user's browser cannot call the bindings. What it does not have is authentication: a non-browser client on the same machine (no `Origin`, no `Sec-Fetch-Site`) is allowed, so run server mode only on a machine you trust, and never set `WebSocketAllowAllOrigins`. |
-| Cryptographic failures | No secrets are handled. Drafts and settings are plain text in a file readable only by the user (mode 0600 on Linux; the user's profile on Windows). The app does not encrypt them; use disk encryption for sensitive notes. |
+| Cryptographic failures | Without sync, no secrets are handled. With sync (web build), the device token and a non-extractable signing key sit in the browser's IndexedDB, unencrypted ([sync](sync.md#limiting-the-damage-of-a-stolen-device)). Drafts and settings are plain text in a file readable only by the user (mode 0600 on Linux; the user's profile on Windows). The app does not encrypt them; use disk encryption for sensitive notes. |
 | Insecure design | Inputs are bounded (1 MiB per draft, 10,000 dictionary words, strict ids and formats). |
 | Security misconfiguration | The Wails MCP server and the pprof endpoint are refused in production builds (`mcp_guard.go`, `pprof_guard.go`) and CI greps the binary for them. The Content-Security-Policy above. |
 | Vulnerable and outdated components | `govulncheck` runs before every release, Trivy and CodeQL on pull requests, Renovate keeps modules and actions current, and each release has an SBOM. |
-| Authentication failures | Not applicable. |
+| Authentication failures | Not applicable without sync. With sync, every request carries a device token and a DPoP proof signed by the device's key, and a device can be revoked ([sync](sync.md#authentication)). |
 | Software and data integrity | The updater only installs a release that lists a SHA-256 for the file (it refuses one without), from `api.github.com`. That detects corruption, not a hostile release: see [self-update](self-update.md#security). Releases carry signed attestations, the Linux packages are signed, GitHub Actions are pinned by commit, and the Windows exe is signed once SignPath is set up ([windows](windows.md#code-signing)). |
 | Logging and monitoring | Logs hold paths and errors, never draft text. |
-| Server-side request forgery | The only outbound request is the update check, fixed to GitHub. The "What is new" link is a fixed `github.com` URL (the latest release page). |
+| Server-side request forgery | The outbound requests are the update check, fixed to GitHub, and, only in a build made with `SYNC_ORIGIN`, the one sync server the page's policy names. The page can reach no other origin. The "What is new" link is a fixed `github.com` URL (the latest release page). |
 
 ## What Wails' own documentation says
 
