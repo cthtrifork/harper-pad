@@ -21,6 +21,8 @@
   minimumReleaseAge: "2 days",
   internalChecksFilter: "strict",
   postUpdateOptions: ["gomodTidy"],
+  // The only command a post-upgrade task may run: the htmx vendoring script (packageRules below).
+  allowedCommands: ["^scripts/update-htmx\\.sh [0-9]+\\.[0-9]+\\.[0-9]+$"],
   // Commits go through GitHub's API as the GitHub App, so they are verified (signed) without a key.
   platformCommit: "enabled",
 
@@ -98,6 +100,19 @@
       groupName: "wails",
     },
     {
+      // htmx is vendored (backend/internal/admin/web/static), not installed: Renovate bumps HTMX_VERSION in the
+      // Makefile and runs the script that downloads that release from npm, checks it against the registry's
+      // integrity hash and rewrites the file, so the PR carries the real diff. The page's CSP and htmx-config
+      // depend on htmx's behaviour and CI has no browser test of it, so a person reads the diff: no automerge.
+      matchDepNames: ["htmx.org"],
+      automerge: false,
+      postUpgradeTasks: {
+        commands: ["scripts/update-htmx.sh {{{newVersion}}}"],
+        fileFilters: ["backend/internal/admin/web/static/htmx.*"],
+        executionMode: "update",
+      },
+    },
+    {
       // The runner image is pinned on purpose: it fixes the glibc and WebKitGTK baseline of the
       // release binary. Moving to a new Ubuntu is a decision, not an update.
       matchDatasources: ["github-runners"],
@@ -108,8 +123,8 @@
   customManagers: [
     {
       // Versions with no manager of their own: a `# renovate: datasource=<ds> depName=<name>` comment on
-      // the line above a `KEY := value`, `KEY=value` or `KEY: value` line. Used for the Go dev tools in
-      // the Makefile, and zizmor and the gh-pin-actions extension in actions-lint.yml.
+      // the line above a `KEY := value`, `KEY=value` or `KEY: value` line. Used for the Go dev tools and the htmx
+      // version in the Makefile, and zizmor and the gh-pin-actions extension in actions-lint.yml.
       customType: "regex",
       managerFilePatterns: ["/(^|/)Makefile$/", "/^\\.github/workflows/[^/]+\\.ya?ml$/"],
       matchStrings: [
