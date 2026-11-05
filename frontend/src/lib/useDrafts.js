@@ -35,8 +35,9 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   const home = ref(""); // the user's home folder, from the backend
   const fileState = ref("none"); // none | unknown (linked, not written in this session) | synced | stale (edited since the file was written)
 
-  let overwriteOk = false; // set after a save was refused because the file changed outside the app: the next save replaces it
+  const overwriteOk = ref(false); // set after a save was refused because the file changed outside the app: the next save replaces it
   let dirty = false;
+  let stored = null; // {text, format} the saved draft holds, so a save that would change nothing is skipped and the timestamp stays
   let edits = 0;
   let timer = null;
   let chain = Promise.resolve();
@@ -69,13 +70,20 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     return "";
   });
 
+  // Whether Save (sync off) has anything to do: unsaved text, a failed save, or a file the draft has moved on from. The button is disabled
+  // when this is false, which is how it shows there is nothing to save.
+  const needsSave = computed(
+    () => ["dirty", "saving", "error"].includes(state.value) || (!!current.value.filePath && fileState.value === "stale"),
+  );
+
   const asCurrent = (d) => ({ id: d.id, createdAt: d.createdAt, format: d.format, filePath: d.filePath ?? "" });
 
   function setCurrent(d) {
     current.value = asCurrent(d);
     fileState.value = current.value.filePath ? "unknown" : "none";
-    overwriteOk = false;
+    overwriteOk.value = false;
     dirty = false;
+    stored = d.id && typeof d.content === "string" ? { text: d.content, format: d.format } : null;
     state.value = d.id ? "saved" : "idle";
   }
 
@@ -112,6 +120,13 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
       state.value = "idle";
       return;
     }
+    // Typing something and then undoing it leaves the text as it was stored: writing it again would only move the draft's timestamp
+    // (and so its place in the list, and past the server's copy) without changing anything.
+    if (current.value.id && stored && stored.text === text && stored.format === current.value.format) {
+      dirty = false;
+      state.value = "saved";
+      return;
+    }
     state.value = "saving";
     try {
       const d = await saveDraft({
@@ -120,6 +135,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
         content: text,
         createdAt: current.value.createdAt,
       });
+      stored = { text: d.content ?? text, format: d.format };
       current.value = asCurrent(d);
       if (edits === mine) {
         dirty = false;
@@ -145,10 +161,11 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
 
   // Write the text to its file, and save the draft with it. With `saveAs`, or when the draft has no file yet, the user picks the file;
   // when they cancel nothing changes. A draft that has never been saved to a file only gets its draft saved (Ctrl+S).
+  // This is Sync (Ctrl+S): it saves the draft, writes the linked file only if the draft changed since the file was written (an untouched
+  // file keeps its modified time), and always asks sync to look at the server (`onSaved` with `explicit`).
   function saveFile(saveAs = false) {
     if (!available.value) return Promise.resolve();
-    if (!saveAs && !current.value.filePath) {
-      // Save on a draft with no file: the draft is saved already (autosave); the request still asks for a sync now.
+    if (!saveAs && !(current.value.filePath && fileState.value === "stale")) {
       return flush().then(() => current.value.id && onSaved?.(current.value.id, { explicit: true }));
     }
     chain = chain.then(() => writeFile(saveAs));
@@ -171,14 +188,14 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
           filePath: current.value.filePath,
         },
         saveAs,
-        overwriteOk && !saveAs,
+        overwriteOk.value && !saveAs,
       );
-      overwriteOk = false;
+      overwriteOk.value = false;
       if (r.conflict) {
         // The draft is saved, the file is not: say so, and let the next Ctrl+S replace the file.
         current.value = asCurrent(r.draft);
         fileState.value = "stale";
-        overwriteOk = true;
+        overwriteOk.value = true;
         error.value = `${fileName.value} was changed outside Harper Pad. Ctrl+S again replaces it, Ctrl+Shift+S saves elsewhere.`;
         if (edits === mine) dirty = false;
         state.value = "error";
@@ -189,6 +206,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
         state.value = before === "saving" ? "saved" : before;
         return;
       }
+      stored = { text: r.draft.content ?? text, format: r.draft.format };
       current.value = asCurrent(r.draft);
       if (!current.value.filePath) {
         // The browser could only download a copy: the draft is saved, but not linked to a file.
@@ -447,6 +465,9 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     current,
     status,
     state,
+    fileState,
+    needsSave,
+    replacingFile: computed(() => overwriteOk.value && current.value.filePath !== ""), // the next Sync replaces a file that changed outside
     fileName,
     fileDir,
     list,

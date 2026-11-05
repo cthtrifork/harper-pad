@@ -99,6 +99,15 @@
   color: var(--bad);
 }
 
+.status .state.good {
+  color: var(--ok);
+}
+
+.status .state.accent {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .status .link {
   font: inherit;
   color: var(--c-style);

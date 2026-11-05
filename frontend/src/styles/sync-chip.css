@@ -63,30 +63,6 @@
   }
 }
 
-/* "Newer on the server" is a state, not a toast: plain status text with a filled dot, until a save or Sync all settles it. */
-.sync-marker {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text);
-}
-
-.sync-marker .txt {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sync-marker .dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
 /* The pop-up. From the status bar it opens upward (the bar is at the bottom of the window); on a phone it is a bottom sheet. */
 .sync-panel {
   position: absolute;

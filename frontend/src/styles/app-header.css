@@ -88,6 +88,12 @@
   border-radius: 0 6px 6px 0;
 }
 
+/* Replace notes.md: the linked file changed outside the app and this press overwrites it, so the one button that says something else. */
+.bar .tool.replace {
+  border-color: var(--bad);
+  font-weight: 600;
+}
+
 .bar .tool:disabled {
   color: var(--mute);
   cursor: not-allowed;
