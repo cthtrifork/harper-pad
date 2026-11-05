@@ -103,7 +103,7 @@ Every device, including the first, enrolls the same way.
    random bits, valid for about 15 minutes and for one use, and is stored only as a hash. It is in the URL **fragment** so it is not
    sent in the request line and not written to access logs. The invite belongs to a client account (the only one in v1), and the
    device it enrolls is bound to that account for good.
-2. On the device: Settings, Sync, **Add this device**, then paste the URL. The URL carries the server address and the token, so
+2. On the device: open the **Sync chip** in the status bar, paste the URL and choose **Add this device**. The URL carries the server address and the token, so
    there is no separate server field.
 3. The app generates a signing key pair whose private key never leaves the device ([DPoP](#limiting-the-damage-of-a-stolen-device)),
    and calls `POST /enroll` with the invite token, a device name and a DPoP proof signed by the new key (the proof carries the public
