@@ -5,6 +5,7 @@
 // whole window away from the editor).
 import { marked } from "marked";
 import { computed, h, nextTick, ref, watch } from "vue";
+import CodeBlock from "./CodeBlock.vue";
 
 const props = defineProps({
   source: { type: String, default: "" },
@@ -67,7 +68,7 @@ function blocks(list = []) {
       case "text": // a line of a tight list item
         return [h("p", { key, class: "tight" }, t.tokens?.length ? inline(t.tokens) : t.text)];
       case "code":
-        return [h("pre", { key }, [h("code", t.text)])];
+        return [h(CodeBlock, { key, code: t.text, info: t.lang ?? "" })];
       case "blockquote":
         return [h("blockquote", { key }, blocks(t.tokens))];
       case "hr":
