@@ -419,16 +419,42 @@
   transition: transform 0.15s var(--ease);
 }
 
-/* "Snippets" opens a page, so it reads as a link: the accent colour, an arrow, and an underline on hover. */
-.drawer .link.to-snippets {
-  display: inline-flex;
+/* "Snippets" opens a page, so it is a full-width row with an arrow. */
+.drawer .snippets-row {
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+}
+
+.drawer .snippets-row:hover {
+  background: var(--raised);
+}
+
+.drawer .snippets-row .name {
   font-weight: 600;
 }
 
-.drawer .link.to-snippets:hover {
-  text-decoration: underline;
+.drawer .snippets-row .about {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mute);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer .snippets-row .go {
+  color: var(--mute);
 }
 
 /* Only a phone shows the version (responsive.css): the desktop app and a wide window have it in the header. */
