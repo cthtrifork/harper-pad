@@ -441,7 +441,7 @@ CREATE TABLE docs (
   created_at BIGINT  NOT NULL,                    -- the device's timestamps, Unix ms, as in the app
   updated_at BIGINT  NOT NULL,
   deleted    BOOLEAN NOT NULL DEFAULT FALSE,      -- a tombstone; data is cleared when this is set
-  data       TEXT    NOT NULL DEFAULT '' CHECK (octet_length(data) <= 8388608),
+  data       TEXT    NOT NULL DEFAULT '' CHECK (octet_length(data) <= 2097152),
   PRIMARY KEY (client_id, id)
 );
 
@@ -510,9 +510,9 @@ How it is used:
   for it and the admin UI has no action for it. Adding accounts later means an admin action to create one, an account selector next to
   the device name, and per-account operators (see Later).
 - **Times are `BIGINT` Unix milliseconds,** matching the app and the device-supplied times.
-- **The 8 MiB check** is the CHECK on `docs.data`, the server's only size limit (the API maps its refusal to 413 and only caps the request body at that size plus 4 KiB). It is a backstop. The app enforces the 5 MB draft limit, and a base64 envelope (the encryption option) would be larger than the plaintext.
+- **The 2 MiB check** is the CHECK on `docs.data`, the server's only size limit (the API maps its refusal to 413 and only caps the request body at that size plus 4 KiB). It is a backstop. The app enforces the 1 MiB draft limit; 2 MiB leaves room for the JSON wrapper and a base64 envelope (the encryption option), which is 4/3 of the plaintext.
 
-The server validates what the app validates: drafts at most 5 MB of valid UTF-8, a known format, a strict id. All SQL uses `$1`-style parameters.
+The server validates what the app validates: drafts at most 1 MiB of valid UTF-8, a known format, a strict id. All SQL uses `$1`-style parameters.
 
 ## Protocol
 
@@ -537,8 +537,8 @@ assigns each draft a version, and it never merges, never makes copies and has no
 - **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS
   allows `Authorization`, `DPoP`, `Content-Type` and `If-None-Match`.
 - **The limits** from [Server schema](#server-schema-postgresql) apply to a `PUT`; the server answers 413 or 422 and changes nothing.
-  `data` of a live draft must be the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`) and, in size, whatever the database's CHECK allows (8 MiB; the
-  server has no other size check, a refusal comes back as 413, and the app enforces its own 5 MB on the text); a tombstone must have empty `data`. A page of `GET /docs` is 500 drafts by default and at most 1000 (`limit`);
+  `data` of a live draft must be the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`) and, in size, whatever the database's CHECK allows (2 MiB; the
+  server has no other size check, a refusal comes back as 413, and the app enforces its own 1 MiB on the text); a tombstone must have empty `data`. A page of `GET /docs` is 500 drafts by default and at most 1000 (`limit`);
   a page shorter than the limit is the last. A 409 on a `PUT` carries `current`, the server's copy, unless the server has none.
 - **Errors** are `application/problem+json` (`title`, `status`, `detail`). A credential failure (no or bad proof, a replayed proof, an
   unknown or revoked token, the wrong key, a wrong, spent or expired invite) is always `{"title":"Unauthorized","status":401,"detail":"unauthorized"}`:
@@ -744,7 +744,7 @@ This is a device-token model with DPoP key binding, transport security and no co
 | Admin UI | No Service and no listener outside its pod; reached only through a Cloudflare Tunnel sidecar behind Cloudflare Access with OIDC login and MFA at the identity provider. **The app does no authentication of its own**, so the Access policy is the only access control and the Cloudflare account and policy are part of the trust chain. In the app: same-origin checks, CSRF tokens and a strict CSP. Its database role owns the tables; row security hides the notes from ordinary SQL but not from DDL that switches it off, and admin access can also enroll a device, and **a device reads the notes** (v1). See [the admin UI](#the-admin-ui). |
 | Guessing | 256-bit tokens and generic 401s on `/enroll` and on bad tokens; rate limiting, if any, is at the ingress (GitOps repository). |
 | Cross-origin use | CORS allows exactly the Pages origin and the desktop app's webview origin (`CORS_ALLOWED_ORIGINS`, exact match), not `*`, and only the headers and methods the API uses. An origin that is not listed gets no CORS headers (a preflight is a 403) and is logged once, which is how the desktop webview's real origin is read off the server. `Authorization` and `DPoP` headers, not cookies. |
-| Abuse and size | A body cap, the 8 MiB `CHECK` on a draft's text, and strict field formats. The server has no per-account quota and no limit on changes per request. |
+| Abuse and size | A body cap, the 2 MiB `CHECK` on a draft's text, and strict field formats. The server has no per-account quota and no limit on changes per request. |
 | Content-Security-Policy | `connect-src` is `'self'`, plus the sync origin when the build sets `SYNC_ORIGIN`, and nothing else changes: the build setting `SYNC_ORIGIN` (an https origin, no path; a bad value fails the build), read by `frontend/vite.config.js` for both builds and passed by the Pages workflow from a repository variable. Unset, the policy is unchanged. See [security](security.md). |
 | Token at rest on the client | On the web it is in IndexedDB, readable by any script on the origin, which the strict CSP (no inline scripts, no `eval`) is there to prevent. On desktop it is in the local database, outside the app's other settings, and never uploaded. Neither is encrypted, and the device key sits in the same profile as the token (no OS keyring, by design). On Chromium engines a copied profile carries a usable key as well as the token (tested); the other engines are not tested. The local drafts are plain text in any case. |
 | Draft text from the server | Treated as untrusted data like any pasted text: never run, never put in the page as HTML, validated before it is stored. |

@@ -20,7 +20,7 @@ CREATE TABLE docs (
   created_at BIGINT  NOT NULL,
   updated_at BIGINT  NOT NULL,
   deleted    BOOLEAN NOT NULL DEFAULT FALSE,
-  data       TEXT    NOT NULL DEFAULT '' CHECK (octet_length(data) <= 8388608),
+  data       TEXT    NOT NULL DEFAULT '' CHECK (octet_length(data) <= 2097152),
   PRIMARY KEY (client_id, id)
 );
 

@@ -20,7 +20,7 @@ var ErrConflict = errors.New("doc changed")
 var ErrTooLarge = errors.New("draft too large")
 
 // MaxDocData is the limit of the CHECK on docs.data (migration 0001), in bytes.
-const MaxDocData = 8 << 20
+const MaxDocData = 2 << 20
 
 // docWriteErr turns the database's refusal of too much text into ErrTooLarge and leaves every other error as it is.
 func docWriteErr(err error) error {
