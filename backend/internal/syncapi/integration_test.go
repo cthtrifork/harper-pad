@@ -69,6 +69,7 @@ func TestEnrollmentAcrossTheRoles(t *testing.T) {
 	}
 
 	v := auth.NewVerifier()
+	defer v.Close()
 	api := New(publicURL, nil, store.NewSync(syncPool), v)
 	mux := http.NewServeMux()
 	api.Register(mux)

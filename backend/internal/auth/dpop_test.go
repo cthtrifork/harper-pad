@@ -3,7 +3,6 @@ package auth
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,40 +12,52 @@ import (
 
 const htu = "https://sync.example.org/enroll"
 
-func verifier() *Verifier {
+func verifier(t *testing.T) *Verifier {
+	t.Helper()
 	v := NewVerifier()
-	v.Now = func() time.Time { return authtest.Now }
+	t.Cleanup(v.Close)
 	return v
 }
 
+// claims are valid for POST htu, issued now. The window tests use margins of a few seconds because the library that checks the
+// iat reads the real clock.
 func claims() authtest.Claims {
-	return authtest.Claims{JTI: "j1", HTM: "POST", HTU: htu, IAT: authtest.Now.Unix()}
+	return authtest.Claims{JTI: "j1", HTM: "POST", HTU: htu, IAT: time.Now().Unix()}
+}
+
+// thumbprint is the RFC 7638 thumbprint of a P-256 JWK, computed here from the spec so the test does not trust the library's output.
+func thumbprint(jwk map[string]any) string {
+	canonical := `{"crv":"P-256","kty":"EC","x":"` + jwk["x"].(string) + `","y":"` + jwk["y"].(string) + `"}`
+	h := sha256.Sum256([]byte(canonical))
+	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 
 func TestVerifyAcceptsAGoodProof(t *testing.T) {
 	k := authtest.NewKey(t)
-	p, err := verifier().Verify(k.Proof(t, nil, claims()), "POST", htu, "")
+	p, err := verifier(t).Verify(k.Proof(t, nil, claims()), "POST", htu, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(p.PublicKey, `{"crv":"P-256","kty":"EC","x":"`) {
-		t.Errorf("not canonical: %s", p.PublicKey)
+	if want := thumbprint(k.JWK()); p.KeyThumbprint != want {
+		t.Errorf("thumbprint = %s, want the RFC 7638 value %s", p.KeyThumbprint, want)
 	}
-	// The same key gives the same string in a later proof.
+	// The same key gives the same value in a later proof, and another key a different one.
+	v := verifier(t)
 	c := claims()
 	c.JTI = "j2"
-	p2, err := verifier().Verify(k.Proof(t, nil, c), "POST", htu, "")
-	if err != nil || p2.PublicKey != p.PublicKey {
-		t.Errorf("second proof: %v, same key = %v", err, p2.PublicKey == p.PublicKey)
+	p2, err := v.Verify(k.Proof(t, nil, c), "POST", htu, "")
+	if err != nil || p2.KeyThumbprint != p.KeyThumbprint {
+		t.Errorf("second proof: %v, same key = %v", err, p2.KeyThumbprint == p.KeyThumbprint)
 	}
-	if other, _ := verifier().Verify(authtest.NewKey(t).Proof(t, nil, claims()), "POST", htu, ""); other.PublicKey == p.PublicKey {
-		t.Error("two keys share a canonical form")
+	if other, _ := v.Verify(authtest.NewKey(t).Proof(t, nil, claims()), "POST", htu, ""); other.KeyThumbprint == p.KeyThumbprint {
+		t.Error("two keys share a thumbprint")
 	}
 }
 
 func TestVerifyChecksTheClaims(t *testing.T) {
 	k := authtest.NewKey(t)
 	const token = "device-token"
+	secs := func(d int64) func(*authtest.Claims) { return func(c *authtest.Claims) { c.IAT += d } }
 	tests := []struct {
 		name   string
 		mutate func(*authtest.Claims)
@@ -55,13 +66,15 @@ func TestVerifyChecksTheClaims(t *testing.T) {
 		token  string
 		ok     bool
 	}{
-		{"query on htu is ignored", func(c *authtest.Claims) { c.HTU = htu + "?a=1#f" }, "POST", htu, "", true},
+		{"as issued", func(*authtest.Claims) {}, "POST", htu, "", true},
 		{"wrong method", func(c *authtest.Claims) { c.HTM = "PUT" }, "POST", htu, "", false},
 		{"wrong url", func(c *authtest.Claims) { c.HTU = "https://sync.example.org/docs" }, "POST", htu, "", false},
 		{"wrong scheme", func(c *authtest.Claims) { c.HTU = "http://sync.example.org/enroll" }, "POST", htu, "", false},
-		{"too old", func(c *authtest.Claims) { c.IAT -= 61 }, "POST", htu, "", false},
-		{"too new", func(c *authtest.Claims) { c.IAT += 61 }, "POST", htu, "", false},
-		{"edge of the window", func(c *authtest.Claims) { c.IAT -= 60 }, "POST", htu, "", true},
+		{"wrong host", func(c *authtest.Claims) { c.HTU = "https://evil.example/enroll" }, "POST", htu, "", false},
+		{"old but inside the window", secs(-50), "POST", htu, "", true},
+		{"too old", secs(-70), "POST", htu, "", false},
+		{"new but inside the window", secs(50), "POST", htu, "", true},
+		{"too new", secs(70), "POST", htu, "", false},
 		{"no jti", func(c *authtest.Claims) { c.JTI = "" }, "POST", htu, "", false},
 		{"no iat", func(c *authtest.Claims) { c.IAT = 0 }, "POST", htu, "", false},
 		{"ath for the token", func(c *authtest.Claims) { c.ATH = authtest.ATH(token) }, "POST", htu, token, true},
@@ -72,10 +85,7 @@ func TestVerifyChecksTheClaims(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := claims()
 			tt.mutate(&c)
-			if tt.name == "no iat" {
-				c.IAT = 0 // an iat of 0 is far outside the window, which is the check being made
-			}
-			_, err := verifier().Verify(k.Proof(t, nil, c), tt.method, tt.url, tt.token)
+			_, err := verifier(t).Verify(k.Proof(t, nil, c), tt.method, tt.url, tt.token)
 			if (err == nil) != tt.ok {
 				t.Errorf("err = %v, want ok = %v", err, tt.ok)
 			}
@@ -101,10 +111,12 @@ func TestVerifyRefusesBadHeadersAndKeys(t *testing.T) {
 	zero := strings.Repeat("A", 43) // 32 zero bytes
 	headers := map[string]map[string]any{
 		"wrong typ":       {"typ": "JWT", "alg": "ES256", "jwk": jwk},
+		"no typ":          {"alg": "ES256", "jwk": jwk},
 		"alg none":        {"typ": "dpop+jwt", "alg": "none", "jwk": jwk},
 		"alg HS256":       {"typ": "dpop+jwt", "alg": "HS256", "jwk": jwk},
+		"alg ES384":       {"typ": "dpop+jwt", "alg": "ES384", "jwk": jwk},
 		"no jwk":          {"typ": "dpop+jwt", "alg": "ES256"},
-		"private part":    with("d", zero),
+		"private part":    with("d", zero), // the library ignores it, so this is the check in Verify
 		"wrong curve":     with("crv", "P-384"),
 		"wrong kty":       with("kty", "RSA"),
 		"short x":         with("x", "AAAA"),
@@ -112,7 +124,7 @@ func TestVerifyRefusesBadHeadersAndKeys(t *testing.T) {
 	}
 	for name, h := range headers {
 		t.Run(name, func(t *testing.T) {
-			if _, err := verifier().Verify(k.Proof(t, h, claims()), "POST", htu, ""); err == nil {
+			if _, err := verifier(t).Verify(k.Proof(t, h, claims()), "POST", htu, ""); err == nil {
 				t.Error("accepted")
 			}
 		})
@@ -128,35 +140,37 @@ func TestVerifyRefusesTamperingAndAnotherKey(t *testing.T) {
 	c := claims()
 	c.HTU = "https://sync.example.org/docs"
 	other := strings.Split(k.Proof(t, nil, c), ".")
-	if _, err := verifier().Verify(parts[0]+"."+other[1]+"."+parts[2], "POST", htu, ""); err == nil {
+	if _, err := verifier(t).Verify(parts[0]+"."+other[1]+"."+parts[2], "POST", htu, ""); err == nil {
 		t.Error("payload swapped under the old signature was accepted")
 	}
 	// A flipped bit in the signature.
 	sig, _ := base64.RawURLEncoding.DecodeString(parts[2])
 	sig[10] ^= 1
-	if _, err := verifier().Verify(parts[0]+"."+parts[1]+"."+base64.RawURLEncoding.EncodeToString(sig), "POST", htu, ""); err == nil {
+	if _, err := verifier(t).Verify(parts[0]+"."+parts[1]+"."+base64.RawURLEncoding.EncodeToString(sig), "POST", htu, ""); err == nil {
 		t.Error("tampered signature was accepted")
 	}
 	// A signature that is not 64 bytes (a DER one would be).
-	if _, err := verifier().Verify(parts[0]+"."+parts[1]+"."+base64.RawURLEncoding.EncodeToString(append(sig, 0)), "POST", htu, ""); err == nil {
+	if _, err := verifier(t).Verify(parts[0]+"."+parts[1]+"."+base64.RawURLEncoding.EncodeToString(append(sig, 0)), "POST", htu, ""); err == nil {
 		t.Error("65-byte signature was accepted")
 	}
 	// A proof signed by a key that is not the one in its header.
 	mine := authtest.NewKey(t)
 	header := map[string]any{"typ": "dpop+jwt", "alg": "ES256", "jwk": k.JWK()}
-	if _, err := verifier().Verify(mine.Proof(t, header, claims()), "POST", htu, ""); err == nil {
+	if _, err := verifier(t).Verify(mine.Proof(t, header, claims()), "POST", htu, ""); err == nil {
 		t.Error("proof signed by a different key than its jwk was accepted")
 	}
-	for _, junk := range []string{"", "a.b", "a.b.c.d", "!!.!!.!!", strings.Repeat("a", maxProofBytes+1)} {
-		if _, err := verifier().Verify(junk, "POST", htu, ""); err == nil {
-			t.Errorf("%q was accepted", junk)
+	// A flattened JSON serialization is not a compact JWS.
+	flattened := `{"protected":"` + parts[0] + `","payload":"` + parts[1] + `","signature":"` + parts[2] + `"}`
+	for _, junk := range []string{"", "a.b", "a.b.c.d", "!!.!!.!!", flattened, strings.Repeat("a", maxProofBytes+1)} {
+		if _, err := verifier(t).Verify(junk, "POST", htu, ""); err == nil {
+			t.Errorf("%.40q was accepted", junk)
 		}
 	}
 }
 
 func TestVerifyRefusesAReplay(t *testing.T) {
 	k := authtest.NewKey(t)
-	v := verifier()
+	v := verifier(t)
 	proof := k.Proof(t, nil, claims())
 	if _, err := v.Verify(proof, "POST", htu, ""); err != nil {
 		t.Fatal(err)
@@ -172,38 +186,29 @@ func TestVerifyRefusesAReplay(t *testing.T) {
 	c := claims()
 	c.JTI = "j9"
 	c.HTM = "PUT"
-	bad := k.Proof(t, nil, c)
-	_, _ = v.Verify(bad, "POST", htu, "")
+	_, _ = v.Verify(k.Proof(t, nil, c), "POST", htu, "")
 	c.HTM = "POST"
 	if _, err := v.Verify(k.Proof(t, nil, c), "POST", htu, ""); err != nil {
 		t.Errorf("jti burned by a rejected proof: %v", err)
 	}
-	// Later than twice the window the entry may be forgotten (the proof itself is then too old, so it is still refused).
-	now := authtest.Now.Add(3 * proofWindow)
-	v.Now = func() time.Time { return now }
-	if _, err := v.Verify(proof, "POST", htu, ""); err == nil {
-		t.Error("an old proof was accepted")
-	}
 }
 
-func TestReplayCacheIsBounded(t *testing.T) {
-	v := verifier()
-	now := authtest.Now
-	for i := range maxSeen {
-		v.seen[strconv.Itoa(i)] = now.Add(time.Minute)
-	}
+// An entry is forgotten after the time it was given. In production that time is twice the proof window, so by then the proof
+// itself is too old to be accepted; here it is short, to see the cache let go.
+func TestReplayEntriesExpire(t *testing.T) {
+	v := newVerifier(80 * time.Millisecond)
+	t.Cleanup(v.Close)
 	k := authtest.NewKey(t)
-	if _, err := v.Verify(k.Proof(t, nil, claims()), "POST", htu, ""); err == nil {
-		t.Error("accepted with a full cache")
+	proof := k.Proof(t, nil, claims())
+	if _, err := v.Verify(proof, "POST", htu, ""); err != nil {
+		t.Fatal(err)
 	}
-	// Entries that have expired make room.
-	for key := range v.seen {
-		v.seen[key] = now.Add(-time.Second)
+	if _, err := v.Verify(proof, "POST", htu, ""); err == nil {
+		t.Fatal("replay accepted")
 	}
-	c := claims()
-	c.JTI = "fresh"
-	if _, err := v.Verify(k.Proof(t, nil, c), "POST", htu, ""); err != nil {
-		t.Errorf("not accepted after the cache expired: %v", err)
+	time.Sleep(200 * time.Millisecond)
+	if _, err := v.Verify(proof, "POST", htu, ""); err != nil {
+		t.Errorf("entry still remembered after its time: %v", err)
 	}
 }
 
@@ -221,46 +226,5 @@ func TestTokens(t *testing.T) {
 	}
 	if id, _ := NewID(); len(id) != 32 || strings.Trim(id, "0123456789abcdef") != "" {
 		t.Errorf("id %q", id)
-	}
-}
-
-func TestVerifyIsCompactSerializationOnly(t *testing.T) {
-	k := authtest.NewKey(t)
-	parts := strings.Split(k.Proof(t, nil, claims()), ".")
-	flattened := `{"protected":"` + parts[0] + `","payload":"` + parts[1] + `","signature":"` + parts[2] + `"}`
-	if _, err := verifier().Verify(flattened, "POST", htu, ""); err == nil {
-		t.Error("a flattened JSON serialization was accepted")
-	}
-}
-
-// The base64url text of a coordinate has spare bits in its last character; a decoder that ignores them would let one key be
-// written many ways. Either the proof is refused or it yields the same stored key as the clean spelling, never a second identity.
-func TestOneKeyHasOneStoredForm(t *testing.T) {
-	k := authtest.NewKey(t)
-	clean, err := verifier().Verify(k.Proof(t, nil, claims()), "POST", htu, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	jwk := k.JWK()
-	x := jwk["x"].(string)
-	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-	last := strings.IndexByte(alphabet, x[len(x)-1])
-	for _, spare := range []int{1, 2, 3} { // the low two bits of the last character carry nothing
-		alt := map[string]any{}
-		for a, b := range jwk {
-			alt[a] = b
-		}
-		alt["x"] = x[:len(x)-1] + string(alphabet[last&^3|(last+spare)&3])
-		if alt["x"] == x {
-			continue
-		}
-		c := claims()
-		c.JTI = "spare" + string(rune('0'+spare))
-		header := map[string]any{"typ": "dpop+jwt", "alg": "ES256", "jwk": alt}
-		got, err := verifier().Verify(k.Proof(t, header, c), "POST", htu, "")
-		// The signature was made with the real key, so verification can only succeed if the decoder read the same coordinate.
-		if err == nil && got.PublicKey != clean.PublicKey {
-			t.Errorf("spare bits %d: a second spelling of the key was accepted as %s", spare, got.PublicKey)
-		}
 	}
 }

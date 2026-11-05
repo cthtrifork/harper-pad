@@ -27,7 +27,7 @@ const (
 
 // Store is what the handlers need from the database; *store.Sync implements it.
 type Store interface {
-	Enroll(ctx context.Context, inviteHash []byte, deviceID, deviceName, userAgent, publicKey string, tokenHash []byte) error
+	Enroll(ctx context.Context, inviteHash []byte, deviceID, deviceName, userAgent, keyThumbprint string, tokenHash []byte) error
 	DeviceByToken(ctx context.Context, tokenHash []byte) (store.Device, error)
 }
 
@@ -212,7 +212,7 @@ func (a *API) RequireDevice(ctx huma.Context, next func(huma.Context)) {
 		return
 	}
 	// The token alone is not enough: the proof must come from the key the device enrolled with.
-	if subtle.ConstantTimeCompare([]byte(proof.PublicKey), []byte(dev.PublicKey)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(proof.KeyThumbprint), []byte(dev.KeyThumbprint)) != 1 {
 		a.unauthorized(ctx)
 		return
 	}
@@ -258,7 +258,7 @@ func (a *API) enroll(ctx context.Context, in *enrollInput) (*enrollOutput, error
 	if err != nil {
 		return nil, serverError("id", err)
 	}
-	err = a.store.Enroll(ctx, auth.HashToken(in.Body.Invite), id, name, userAgent(in.UserAgent), proof.PublicKey, auth.HashToken(token))
+	err = a.store.Enroll(ctx, auth.HashToken(in.Body.Invite), id, name, userAgent(in.UserAgent), proof.KeyThumbprint, auth.HashToken(token))
 	switch {
 	case errors.Is(err, store.ErrInvalidInvite):
 		return nil, huma.Error401Unauthorized("unauthorized")

@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,7 +55,7 @@ func (f *fakeStore) Enroll(_ context.Context, inviteHash []byte, id, name, ua, k
 	if n != "" {
 		name = n
 	}
-	f.devices[string(tokenHash)] = store.Device{ID: id, ClientID: 1, PublicKey: key}
+	f.devices[string(tokenHash)] = store.Device{ID: id, ClientID: 1, KeyThumbprint: key}
 	f.names[id], f.agents[id] = name, ua
 	return nil
 }
@@ -90,7 +92,7 @@ type whoamiOut struct {
 func setup(t *testing.T, st Store, origins ...string) (http.Handler, *int) {
 	t.Helper()
 	v := auth.NewVerifier()
-	v.Now = func() time.Time { return authtest.Now }
+	t.Cleanup(v.Close)
 	api := New(publicURL+"/", origins, st, v)
 	mux := http.NewServeMux()
 	api.Register(mux)
@@ -127,12 +129,11 @@ func do(h http.Handler, method, path string, body any, hdr map[string]string) *h
 	return rec
 }
 
-var jti int
+var jti atomic.Int64
 
 func proof(t *testing.T, k authtest.Key, method, path, token string) string {
 	t.Helper()
-	jti++
-	c := authtest.Claims{JTI: strings.Repeat("j", 1) + string(rune('a'+jti%26)) + time.Now().String() + string(rune(jti)), HTM: method, HTU: publicURL + path, IAT: authtest.Now.Unix()}
+	c := authtest.Claims{JTI: "jti-" + strconv.FormatInt(jti.Add(1), 10), HTM: method, HTU: publicURL + path, IAT: time.Now().Unix()}
 	if token != "" {
 		c.ATH = authtest.ATH(token)
 	}
@@ -319,7 +320,9 @@ func TestEachRejectedOriginIsLoggedOnce(t *testing.T) {
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	defer slog.SetDefault(prev)
-	api := New(publicURL, nil, newFake("x", ""), auth.NewVerifier())
+	v := auth.NewVerifier()
+	defer v.Close()
+	api := New(publicURL, nil, newFake("x", ""), v)
 	for range 3 {
 		api.logRejected("https://a.example")
 	}
@@ -387,5 +390,51 @@ func TestCredentialFailuresAreIdentical(t *testing.T) {
 	}
 	if !strings.Contains(first, `"detail":"unauthorized"`) || strings.Contains(first, "invite") {
 		t.Errorf("unexpected 401 body: %s", first)
+	}
+}
+
+// base64url has spare bits in the last character of a 32-byte value, so one key can be written several ways. It must still be one
+// identity: a proof that spells the enrolled key differently is the same key (the thumbprint comes from the decoded coordinates), and
+// a different key is not.
+func TestARespelledKeyIsTheSameKey(t *testing.T) {
+	invite := newInvite(t)
+	h, _ := setup(t, newFake(invite, ""))
+	k := authtest.NewKey(t)
+	rec := do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")})
+	if rec.Code != 200 {
+		t.Fatalf("enroll = %d", rec.Code)
+	}
+	var got struct {
+		DeviceToken string `json:"deviceToken"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	get := func(header string) int {
+		return do(h, "GET", "/whoami", "", map[string]string{"Authorization": "DPoP " + got.DeviceToken, "DPoP": header}).Code
+	}
+	if c := get(proof(t, k, "GET", "/whoami", got.DeviceToken)); c != 200 {
+		t.Fatalf("the enrolled spelling = %d, want 200", c)
+	}
+
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	jwk := k.JWK()
+	x := jwk["x"].(string)
+	last := strings.IndexByte(alphabet, x[len(x)-1])
+	for spare := 1; spare <= 3; spare++ {
+		alt := map[string]any{}
+		for a, b := range jwk {
+			alt[a] = b
+		}
+		alt["x"] = x[:len(x)-1] + string(alphabet[last&^3|(last+spare)&3])
+		jti := "respelled-" + strconv.Itoa(spare)
+		p := k.Proof(t, map[string]any{"typ": "dpop+jwt", "alg": "ES256", "jwk": alt},
+			authtest.Claims{JTI: jti, HTM: "GET", HTU: publicURL + "/whoami", IAT: time.Now().Unix(), ATH: authtest.ATH(got.DeviceToken)})
+		if c := get(p); c != 200 {
+			t.Errorf("spare bits %d: respelled key = %d, want 200 (the same key)", spare, c)
+		}
+	}
+	if c := get(proof(t, authtest.NewKey(t), "GET", "/whoami", got.DeviceToken)); c != 401 {
+		t.Errorf("another key = %d, want 401", c)
 	}
 }

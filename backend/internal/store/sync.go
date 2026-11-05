@@ -31,15 +31,15 @@ func NewSync(db *pgxpool.Pool) *Sync { return &Sync{db: db, now: time.Now} }
 
 // Device is what a request needs to know about the device behind a token.
 type Device struct {
-	ID        string
-	ClientID  int64
-	PublicKey string // the canonical JWK the device enrolled with (auth.Proof.PublicKey)
+	ID            string
+	ClientID      int64
+	KeyThumbprint string // the RFC 7638 thumbprint of the key the device enrolled with (auth.Proof.KeyThumbprint)
 }
 
 // Enroll spends the invite and creates the device in one transaction: if the device cannot be written the invite is not spent. The
 // spend is a single UPDATE, so two devices presenting the same invite cannot both win. The device is bound to the invite's client
 // account, and named after the invite (typed in the admin UI) or, when that is empty, deviceName.
-func (s *Sync) Enroll(ctx context.Context, inviteHash []byte, deviceID, deviceName, userAgent, publicKey string, tokenHash []byte) error {
+func (s *Sync) Enroll(ctx context.Context, inviteHash []byte, deviceID, deviceName, userAgent, keyThumbprint string, tokenHash []byte) error {
 	now := s.now().UnixMilli()
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -66,9 +66,9 @@ func (s *Sync) Enroll(ctx context.Context, inviteHash []byte, deviceID, deviceNa
 		deviceName = "Device"
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO devices (id, client_id, name, user_agent, token_hash, public_key, created_at, last_seen)
+		INSERT INTO devices (id, client_id, name, user_agent, token_hash, key_thumbprint, created_at, last_seen)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
-		deviceID, clientID, deviceName, userAgent, tokenHash, publicKey, now); err != nil {
+		deviceID, clientID, deviceName, userAgent, tokenHash, keyThumbprint, now); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -80,10 +80,10 @@ func (s *Sync) DeviceByToken(ctx context.Context, tokenHash []byte) (Device, err
 	now := s.now().UnixMilli()
 	var d Device
 	err := s.db.QueryRow(ctx, `
-		WITH d AS (SELECT id, client_id, public_key, last_seen FROM devices WHERE token_hash = $1),
+		WITH d AS (SELECT id, client_id, key_thumbprint, last_seen FROM devices WHERE token_hash = $1),
 		     u AS (UPDATE devices SET last_seen = $2 WHERE token_hash = $1 AND last_seen < $3 RETURNING id)
-		SELECT id, client_id, public_key FROM d`,
-		tokenHash, now, now-lastSeenEvery.Milliseconds()).Scan(&d.ID, &d.ClientID, &d.PublicKey)
+		SELECT id, client_id, key_thumbprint FROM d`,
+		tokenHash, now, now-lastSeenEvery.Milliseconds()).Scan(&d.ID, &d.ClientID, &d.KeyThumbprint)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Device{}, ErrUnknownToken
 	}

@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 // Key is a device's signing key.
@@ -32,7 +31,8 @@ func (k Key) JWK() map[string]any {
 	return map[string]any{"kty": "EC", "crv": "P-256", "x": b(k.Priv.X.Bytes()), "y": b(k.Priv.Y.Bytes())}
 }
 
-// Claims are the payload of a proof; the zero value of a field is left out, except IAT, which Proof fills in when it is zero.
+// Claims are the payload of a proof; a zero JTI and a zero ATH are left out. The verifier uses the real clock, so IAT is normally
+// time.Now().Unix() (the library that checks proofs reads the clock itself).
 type Claims struct {
 	JTI, HTM, HTU, ATH string
 	IAT                int64
@@ -78,8 +78,5 @@ func ATH(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }
-
-// Now is a fixed time for tests; use it as the verifier's clock and as the iat.
-var Now = time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 
 func pad32(b []byte) []byte { return append(make([]byte, 32-len(b)), b...) }
