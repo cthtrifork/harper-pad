@@ -85,7 +85,7 @@ test("applyRemote checks what save checks", async () => {
     { id: "nope" },
     { createdAt: 0 },
     { updatedAt: undefined },
-    { content: "x".repeat((5 << 20) + 1) },
+    { content: "x".repeat((1 << 20) + 1) },
   ]) {
     await assert.rejects(drafts.applyRemote({ ...ok, ...bad }, 1), undefined, JSON.stringify(Object.keys(bad)));
   }

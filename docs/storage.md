@@ -68,7 +68,7 @@ sync_state (id TEXT PRIMARY KEY, hash TEXT, updated_at INTEGER,   -- only for th
 - Draft ids are 32 hex characters that sort by creation. Timestamps are Unix milliseconds.
 - **The list never reads the text.** The title, the excerpt and the first three task lines (`tasks` is JSON) with their counts are
   worked out once, when a draft is saved, and stored in their own columns. Listing selects only those columns, so it stays quick
-  however many drafts there are or how large they are (a test lists 20 drafts of 2 MB and checks that it allocates almost nothing).
+  however many drafts there are or how large they are (a test lists 20 drafts of 1 MB and checks that it allocates almost nothing).
   Opening a draft (`Get`) is what reads its text. Search is the one query that looks into the text: it runs inside SQLite
   (`json_extract(data, '$.content') LIKE ...`), so the text is scanned there and not copied into Go. If searching gets slow with a
   very large collection, an FTS5 index can be added alongside the table.
@@ -90,7 +90,7 @@ sync_state (id TEXT PRIMARY KEY, hash TEXT, updated_at INTEGER,   -- only for th
   reading, so old rows keep loading.
 - **Damage:** a file that is not a database or fails SQLite's quick integrity check is moved aside as `harper-pad.db.bad-<time>` and a
   fresh database is created, so the app still starts. (Drafts and settings in the damaged file are in the `.bad` copy.)
-- **Input:** drafts are at most 5 MB of valid UTF-8 with a known format and a strict id. Dictionary words are single words of at most 64
+- **Input:** drafts are at most 1 MiB of valid UTF-8 with a known format and a strict id. Dictionary words are single words of at most 64
   characters (10,000 at most); the ignore list must be valid JSON of at most 1 MB.
 - The database opens on first use and closes when the app quits (`ServiceShutdown`).
 

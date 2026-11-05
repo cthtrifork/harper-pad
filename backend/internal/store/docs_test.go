@@ -226,7 +226,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	}
 }
 
-// What the database refuses, whatever the service checks: ids that are not 32 hex characters and text over MaxDocData (8 MiB).
+// What the database refuses, whatever the service checks: ids that are not 32 hex characters and text over MaxDocData (2 MiB).
 func TestDocConstraints(t *testing.T) {
 	s, _ := docsFixture(t)
 	ctx := context.Background()

@@ -23,7 +23,7 @@ const (
 	FormatText     = "text"
 
 	// MaxContentBytes caps one draft, so a paste of something huge cannot fill the disk.
-	MaxContentBytes = 5 << 20
+	MaxContentBytes = 1 << 20
 
 	defaultLimit = 500
 	maxLimit     = 1000
