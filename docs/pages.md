@@ -18,8 +18,11 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 - The web build does not contain the Wails runtime, the generated bindings or the update button (checked in the bundle).
 - `frontend/web/` (manifest, service worker, icons) is copied to the site root by the `web-app` plugin in `vite.config.js`, which also adds the matching `<head>` tags; the desktop build gets none of it. `vite.config.js` sets the base path (`/harper-pad/`, or `BASE_PATH`), the output folder, and the Content-Security-Policy. The
   web policy is the desktop policy plus `manifest-src 'self'`, so the page may load its own manifest. Nothing else is loosened.
-- The drafts backend (`ListDrafts`, `SaveDraft`, ...) has no frontend yet. When the drawer is built, give it a web implementation
-  in `backend.js` too, or it will not work on Pages.
+- Every host call needs a web implementation in `backend.js` too, or it will not work on Pages. Sync is the exception for now: it is
+  web only (`backend.js` exports `syncDevice` and `syncDrafts`, and `syncDrafts` is `null` on desktop, where the chip does not show).
+- **Sync origin.** The build setting `SYNC_ORIGIN` (an https origin, no path) adds the sync server to the page's `connect-src` and turns the
+  chip on; `pages.yml` reads it from the repository variable of that name, and with it unset nothing changes. Previews do not set it. The
+  server must list the site's origin in its `CORS_ALLOWED_ORIGINS` ([sync](sync.md)).
 
 ## Deploying
 
