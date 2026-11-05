@@ -1,11 +1,9 @@
 # Sync (design)
 
-Status: **partly built.** This page describes an optional sync service so **notes** (the scratch pad drafts) follow the user
-between the desktop app and the iPhone Home Screen app. Built so far, in `backend/` and the cluster: the database and its roles, the
-schema migrations, the admin service, device enrollment, the DPoP check and the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`).
-Not built: the device list routes, the client sync module and the app's UI, so nothing in the app uses the server yet ([Build order](#build-order) and `TODO.md` track it). When it is all built,
-this page becomes the reference and [storage](storage.md), [security](security.md) and [architecture](architecture.md) get the
-matching changes (see [Documentation changes](#documentation-changes)).
+Status: **partly built.** An optional sync service so **notes** (scratch pad drafts) follow the user between the desktop app and
+the iPhone Home Screen app. Built, in `backend/` and the cluster: the database and roles, schema migrations, the admin service,
+enrollment, the DPoP check and the draft routes. Not built: the device list routes, the client sync module and the app's UI, so
+nothing in the app uses the server yet ([Open work](#open-work)). When done, this page becomes the reference.
 
 ## Goals and non-goals
 
@@ -132,14 +130,6 @@ flowchart LR
   cm -. "client certificates" .-> admin
 ```
 
-| Component | Runs as | Reachable from | Does |
-|---|---|---|---|
-| `harper-pad-sync` | Deployment and ClusterIP Service | The cluster's ingress only (NetworkPolicy) | The API: enroll (built), list, get and put drafts (not yet). No DDL rights; it waits until the schema is current |
-| `harper-pad-admin` | Deployment; the pod also runs a `cloudflared` sidecar | The admin hostname through Cloudflare, behind Access with OIDC login; listens on 127.0.0.1, so only the sidecar can connect | Creates enrollment URLs, lists, renames and revokes devices; owns the tables and applies the schema migrations at start |
-| PostgreSQL | CloudNativePG `Cluster` | Port 5432, only from the sync and admin pods (NetworkPolicy) | All server state; accepts only TLS connections with a valid client certificate |
-| cert-manager | Cluster add-on | Nothing | Issues the database client certificates and the sync domain's TLS certificate |
-| Cloudflare | External | The internet | Carries the admin tunnel and runs Access on the admin hostname. Not in the sync path |
-| GitHub Pages | Static hosting | The internet | Serves the web app's code; holds no user data |
 
 Each device keeps its own full copy (SQLite on desktop, IndexedDB in the browser) and works without the server. The sync module
 pushes a draft when it is saved, checks the server when a note is opened, and reconciles everything on **Sync all**. The server is
@@ -228,28 +218,6 @@ authentication:
   and the app has no second check. The loopback listener and the NetworkPolicy keep every other route closed. Treat the
   Cloudflare account and the Access policy as part of the security of the notes, and review them like the database.
 
-### Enrolling a device
-
-```mermaid
-sequenceDiagram
-  actor Op as Operator
-  participant CF as Cloudflare (Access + Tunnel)
-  participant Admin as Admin UI (pod, localhost)
-  participant DB as PostgreSQL
-  participant Dev as Device
-  participant API as Sync API
-  Op->>CF: Open admin.example.com (OIDC login with MFA)
-  CF->>Admin: Forward the request (Cloudflare has already authenticated the operator)
-  Op->>CF: Add device (device name)
-  CF->>Admin: Forward the request
-  Admin->>DB: INSERT invite (token hash, expires in 15 min)
-  Admin-->>Op: https://sync.example.com/join#35;token (shown once)
-  Op->>Dev: Paste in Settings, Sync, Add this device
-  Dev->>API: POST /enroll {invite, deviceName} with a DPoP proof
-  API->>DB: Spend invite, INSERT device (token hash)
-  API-->>Dev: device token
-  Dev->>API: Sync all with the device token and a DPoP proof (GET /docs, PUT /docs/{id})
-```
 
 ## Enrollment
 
@@ -335,27 +303,17 @@ The server checks, as RFC 9449 section 4.3 lists: exactly one proof; `typ`, `alg
 and that the `jwk`'s thumbprint (RFC 7638) equals the one stored on the token's device row. The proof carries the key and its signature is verified against it, so the server stores only the thumbprint. A token copied without the key is then
 useless.
 
-**What differs from RFC 9449.** The proof is the RFC's. What is around it is simpler, because DPoP is the proof part of an OAuth
-setup and this design has no OAuth server:
-
-| RFC 9449 | This design | Why |
-|---|---|---|
-| The access token comes from an OAuth authorization server's token endpoint | `POST /enroll` issues it, with an invite as the grant | One service issues and checks its own tokens |
-| The token is usually a **JWT** with `cnf.jkt`, the key's thumbprint | An **opaque random token**; the key binding is stored on the `devices` row | Revocation and the account need a database lookup anyway, so a JWT would add signing-key management and no benefit |
-| Short-lived access tokens, renewed with a refresh token bound to the key | One long-lived token, no refresh | A refresh flow brings races between tabs, the service worker and iOS suspensions for the same protection |
-| Optional server-supplied `DPoP-Nonce`, with a retry on `use_dpop_nonce` | A timestamp window of about 60 seconds plus the `jti` replay cache | No extra round trip and no nonce state |
-| Defined error responses (`WWW-Authenticate: DPoP error="invalid_dpop_proof"`) | A 401 with a small `application/problem+json` body whose `detail` is always `unauthorized`, the same bytes for every credential failure | Nothing outside this app reads them, and the cause must not be readable from the response |
-
-Nothing outside the app consumes the standard: there is no second service, third-party client or identity provider that expects an
-OAuth server. It would be worth going literal if that changes. The client already sends literal DPoP proofs, so the move (JWT
-access tokens with `cnf.jkt`, nonces, refresh tokens) would be a **server-side change only**.
+**Differences from RFC 9449.** The proof is the RFC's; there is no OAuth server, so the token is an opaque random value issued by
+`POST /enroll` (the invite is the grant) with the key binding stored on the `devices` row, not a JWT with `cnf.jkt`. There is one
+long-lived token with no refresh, a 60 second `iat` window plus the `jti` cache instead of `DPoP-Nonce`, and every credential failure
+is the same generic 401. Nothing outside the app consumes the standard; moving to the literal form would be a server-side change only.
 
 Where the private key lives:
 
 | Build | Key storage |
 |---|---|
 | Web (iPhone Home Screen app, browsers) | `crypto.subtle.generateKey` with `extractable: false`; **only the private `CryptoKey`** is stored in IndexedDB (storing a whole `CryptoKeyPair` is not needed; the iPhone test showed it is accepted there, but older WebKit rejected it); the public key goes to the server in the enrollment proof. `extractable: false` stops script from exporting the key bytes; it does not encrypt the key on disk |
-| Desktop (Linux, Windows) | **The same as the web build.** The window is a webview (WebKitGTK on Linux, WebView2 on Windows), so the same WebCrypto key is created there and stored in the webview's IndexedDB. There is no OS keyring, Credential Manager, TPM or key file, and no Go signing method: the sync module is the same code everywhere. Still to check: that both webviews keep a non-extractable key across a relaunch (`TODO.md`) |
+| Desktop (Linux, Windows) | **The same as the web build.** The window is a webview (WebKitGTK on Linux, WebView2 on Windows), so the same WebCrypto key is created there and stored in the webview's IndexedDB. There is no OS keyring, Credential Manager, TPM or key file, and no Go signing method: the sync module is the same code everywhere. |
 
 Where it is kept: the private key, the public JWK and the token are one record in the `kv` store (see [Changes to local storage](#changes-to-local-storage)).
 
@@ -386,20 +344,11 @@ Details that are easy to get wrong:
 - **Limits:** DPoP does not stop script running in the page, or someone using the unlocked device, because both can ask the key to
   sign. The RFC says the same. Only preventing XSS (the strict CSP in [security](security.md)) addresses the first, and revocation
   the second.
-- **Checked on an iPhone** (4 November 2026, a throwaway test page published as a pull request preview; the user agent was
-  `iPhone OS 18_7` with Safari `Version/27.0.1`), in a Safari tab and in an installed Home Screen app: a non-extractable ECDSA
-  P-256 key is generated, **only the private `CryptoKey`** is stored in IndexedDB and read back, `exportKey` on it is refused, a
-  signature is raw `r||s` (64 bytes) and verifies against the public key saved at the first run, and a tampered signature is
-  rejected. The key, and a second non-extractable key used to test the encryption option, both **survived closing and reopening the
-  Home Screen app** (39 seconds later, the same keys, not new ones). A Home Screen app starts with its own empty storage, so a device
-  enrolls inside the installed app, as designed. `navigator.storage.persist()` returned false in both, so iOS promises nothing.
-  Opened again 20.6 hours later (5 November 2026) in the Home Screen app, both keys were still there, still non-extractable, and
-  still signed and decrypted as before. Longer checks (a week, a phone restart) are not planned: if iOS does clear the key, the
-  device shows "Sign in again" and enrolls once more, as above.
-- **Checked in Edge on Windows** (5 November 2026, a browser tab, Edge 156, so the engine of the Windows window, not the window
-  itself): the same checks pass (non-extractable key, only the private key stored, `exportKey` refused, raw `r||s` signature that
-  verifies, a tampered one rejected, an HKDF data key and the derived AES-GCM key), and `navigator.storage.persist()` returned
-  true. WebKitGTK, the engine of the Linux window, was not checked.
+- **Checked** on an iPhone (4 and 5 November 2026, Safari tab and Home Screen app, throwaway page in PR #86): a non-extractable
+  P-256 key is generated, only the private `CryptoKey` is stored in IndexedDB, `exportKey` is refused, signatures are raw `r||s`, and
+  the key survived closing the app and 20.6 hours; `persist()` returned false. In Edge 156 on Windows the same checks pass and
+  `persist()` is true. WebKitGTK (the Linux window) was not checked. Longer iPhone checks were dropped: a cleared key means
+  "Sign in again".
 
 **Not planned:** rotating the token on a schedule with reuse detection, and a separate refresh token. DPoP covers the leaked-token
 case with no refresh race (two tabs, the service worker, a response lost when iOS suspends the app). Rotation with reuse detection
@@ -562,93 +511,10 @@ undone with the app's delete-undo. A run is **idempotent**: it recomputes every 
 (a phone suspended partway) is just a partial one and the next run carries on. iOS has no background sync, which is why nothing
 depends on one.
 
-**Saving a draft:**
-
-```mermaid
-sequenceDiagram
-  actor U as User
-  participant D as Device
-  participant S as Sync API
-  participant DB as PostgreSQL
-  U->>D: Type in a draft
-  D->>D: Save locally (the draft is now changed)
-  Note over D: about 2 seconds without typing
-  D->>S: PUT /docs/{id} with base state and text
-  S->>DB: Write if the stored state still matches base (version + 1)
-  alt base matches
-    DB-->>S: new version
-    S-->>D: 200 with the new version
-    D->>D: Record the synced state (the draft is unchanged again)
-  else somebody else changed it
-    S-->>D: 409 with the server's current copy
-    D->>D: Apply the conflict rules (same text adopts, different text makes a Conflicted copy)
-    D->>S: PUT the local text on top of the server's version
-    D->>S: PUT the Conflicted copy as a new draft
-  else offline or an error
-    D->>D: Keep the draft changed, the next save or Sync all retries
-  end
-```
-
-**Opening a note:**
-
-```mermaid
-sequenceDiagram
-  actor U as User
-  participant D as Device
-  participant S as Sync API
-  U->>D: Open a note
-  D-->>U: Show the local text at once
-  D->>S: GET /docs/{id} with If-None-Match (state of the last sync)
-  alt unchanged on the server
-    S-->>D: 304
-  else newer on the server
-    S-->>D: 200 with the newer text
-    alt the draft is unchanged here and the user has not typed
-      D->>D: Apply it without touching its timestamps
-      D-->>U: The text swaps in with an Updated from the server notice
-    else the user already typed, or the draft is changed
-      D-->>U: Keep the local text and mark Newer on the server
-      Note over D,S: Sync all or the next save settles it
-    end
-  else the server has a tombstone or no copy
-    S-->>D: 200 deleted, or 404
-    Note over D: Nothing changes while the note is open
-  end
-  opt offline or an error
-    D-->>U: The local text stays, nothing is shown
-  end
-```
-
-**Sync all:**
-
-```mermaid
-sequenceDiagram
-  actor U as User
-  participant D as Device
-  participant S as Sync API
-  U->>D: Press Sync all (or the app starts, or a device just enrolled)
-  D->>S: GET /docs (states without text, paged by id)
-  S-->>D: id, version, updatedAt and deleted for every draft
-  D->>D: Compare every draft with the state recorded at the last sync
-  loop every draft that needs work
-    alt changed here and unchanged there, or missing there
-      D->>S: PUT /docs/{id} (upload)
-    else newer there, or missing here
-      D->>S: GET /docs/{id}
-      S-->>D: the draft
-      D->>D: Save it without touching its timestamps
-    else changed on both sides with different text
-      D->>S: GET /docs/{id}
-      D->>D: Save the server version as a Conflicted copy
-      D->>S: PUT the local text on top, and PUT the copy as a new draft
-    else deleted there and unchanged here
-      D->>D: Remove it, with undo
-    else deleted here and unchanged there
-      D->>S: PUT a tombstone
-    end
-  end
-  D-->>U: Summary: 3 uploaded, 2 downloaded, 1 conflicted copy, 1 removed
-```
+Saving a draft pushes `PUT /docs/{id}` with the base state. On 200 the device records the synced state; on 409 it applies the
+[conflict rules](#conflicts) to the server's current copy, pushes its own text on top, and pushes any conflicted copy as a new draft;
+offline or on an error the draft stays *changed* for the next save or Sync all. **Sync all** reads `GET /docs` (states, no text,
+paged) and, per draft, uploads, downloads, makes a conflicted copy, removes with undo or pushes a tombstone, as the table below says.
 
 ### Conflicts
 
@@ -762,181 +628,57 @@ Commands: `harper-pad-sync serve` and `harper-pad-admin serve`. Enrollment, devi
 
 ## End-to-end test
 
-Runs the real pieces together, because only that proves the JavaScript sync client, CORS, the CSP, IndexedDB, TLS and the server
-work as one: a Playwright script driving real Chromium against a compose stack (`backend/test/e2e/`, `make` target locally; in CI
-it follows `scripts/screenshots.sh`).
+Not built. A Playwright script drives real Chromium against a compose stack (`backend/test/e2e/`; in CI it follows
+`scripts/screenshots.sh`): PostgreSQL, `harper-pad-sync` built from `backend/Containerfile.sync`, `harper-pad-admin` (it owns the
+database and applies the migrations) and Caddy for https (`app.localhost` serves the web build, `sync.localhost` proxies to the
+service, `tls internal`, high port, trusted through `--ignore-certificate-errors-spki-list` rather than `ignoreHTTPSErrors`). Page and
+API are different https origins, so CORS, the CSP `connect-src` and the "https only" rule are exercised. Two browser contexts are
+devices A and B; the test inserts invite rows into PostgreSQL as the table owner instead of using the admin UI. The same stack runs
+the Go store tests (`make test-db`) and the admin UI for development (`make admin-up`).
 
-- **Stack:** PostgreSQL, `harper-pad-sync` built from its real `backend/Containerfile.sync`, `harper-pad-admin` (plain HTTP on
-  loopback, logging in as `harper_admin` with its own client certificate; it owns the database and applies the migrations, and
-  `harper-pad-sync` waits for it), and Caddy for HTTPS. The compose file works with both
-  `podman compose` and `docker compose`. The same stack runs the Go store tests (`make test-db`) and the admin UI for development
-  (`make admin-up`), so the database login under test is the production one.
-- **HTTPS:** Caddy (`tls internal`, high port for rootless) serves `https://app.localhost:18443` (the web build) and
-  `https://sync.localhost:18443` (proxy to the sync service). Page and API are different https origins, as in production, so CORS,
-  the CSP `connect-src` and the client's "https only" rule are exercised, with `PUBLIC_URL` strict and no development exception.
-  Certificates are really checked: Chromium trusts only Caddy's intermediate through `--ignore-certificate-errors-spki-list`
-  (no `ignoreHTTPSErrors`, which would hide a broken chain and break service workers).
-- **Devices and invites:** two Chromium contexts, each with its own IndexedDB, act as devices A and B. The test inserts invite
-  rows into PostgreSQL itself, as the table owner, (same SHA-256 token hash, bound to the default `client_id`) instead of going through the admin UI,
-  which sits behind Access. The admin UI has its own Go handler tests (`backend/internal/admin`) and no end-to-end test yet.
-- **Checks, in order:**
-  1. **Enrollment:** A pastes an invite URL and gets a token; reusing the invite fails.
-  2. **Save pushes:** a draft made on A is in PostgreSQL shortly after the save.
-  3. **Sync all and opening a note:** B, enrolled with its own invite, has the draft. An edit on A reaches B when B opens the note
-     as a plain update, with no "Conflicted copy". A draft created on A after B enrolled appears on B after Sync all.
-  4. **Lose the server:** wipe the database, restart the service, re-enroll both devices; Sync all rebuilds the drafts with no
-     conflicted copies.
-  5. **Later:** offline edits on both devices make a local conflicted copy; a revoked token shows "Sign in again" with local drafts
-     kept; with a second client account, neither sees the other's drafts or devices.
-- **Database login:** the compose PostgreSQL requires TLS 1.3 and a client certificate whose common name is the role, from a
-  throwaway CA (`certs.sh`). The test checks that TLS without a certificate, a certificate with another common name and a plain
-  connection are refused. The bootstrap superuser is never used by a service: `harper_admin` owns the tables and `harper_sync` has
-  rows only, so the store tests run under the grants production has.
-- **Needs:** the page origin in the CORS allowlist and the sync origin in the web build's CSP `connect-src`.
-- **Does not prove:** certificate renewal and the Reloader restart, the real ingress and its certificate, Cloudflare and
-  Access, and Safari or WebKit behaviour.
+Checks, in order: enrollment (and a spent invite); a save pushes; Sync all and opening a note (a plain update, no "Conflicted copy");
+**lose the server** (wipe the database, re-enroll both devices, Sync all rebuilds identical drafts with no conflicted copies); later,
+offline edits on both devices, a revoked token showing "Sign in again", and isolation between two accounts. Needs the sync origin in
+the CORS allowlist and the web build's CSP. It does not prove certificate renewal, the real ingress, Cloudflare Access or WebKit.
 
-## Build order
+## Open work
 
-Each step is its own pull request, from a branch off `origin/main`, and each leaves the app working with sync off.
+- [ ] `GET` and `DELETE` for the device list the app shows (the admin's revoke already works on the same table).
+- [ ] The sync module (`lib/sync.js`) with unit tests: pure logic against fixtures with Node's runner.
+- [ ] The [end-to-end test](#end-to-end-test), including the "lose the server" check. A draft deleted elsewhere while a device was
+      offline can reappear (documented), but nothing else is lost.
+- [ ] The rest of the UI: the device list and the **Sync all** button in the drafts drawer (progress line, one-line summary, undoable
+      removals, a "Newer on the server" marker). The status chip, the enroll pop-up and push after a save exist (web build only; desktop needs bindings for the sync state first): follow `docs/design-cheatsheet.html`, short eased transitions, reduced motion honoured.
+- [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md` (`sync_state`, the `user_version` rule), `architecture.md`,
+      `pages.md` (sync origin, CORS), `AGENTS.md`, and a server operations page (run, proxy, back up, rotate, revoke).
+- [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests once the origins are known.
+- [ ] Before release, decide whether the device record needs its own store, and whether desktop keeps it in SQLite.
+- [ ] Check that WebKitGTK keeps a non-extractable key across a relaunch (Edge on Windows passed).
 
-1. **Local groundwork.** The sync state, hash-based change tracking, the apply-remote store methods, both migrations, with tests for the Go store and
-   the web store.
-2. **The server.** Enrollment (binding the token to the key in the enrollment DPoP proof), the draft endpoints (checking each request's DPoP proof), devices, the admin container, the database roles and certificate setup, tests (including conflicts, deletes and the limits).
-3. **The sync module** (`lib/sync.js`) and the DPoP key (generate it at enrollment, store the private key, send a proof with every request), with the pure logic (what to push, how to apply, how to resolve a conflict) unit-tested
-   with Node's runner against fixtures, and the [end-to-end test](#end-to-end-test) against the real server.
-4. **UI:** the enrollment and status screens, the device list and the status bar state.
-5. **Docs and policy:** the changes below, and the CSP change.
-6. **Option, not planned:** end-to-end encryption ([the option](#option-end-to-end-encryption)). The device list is in steps 2 and 4.
-
-**Where it stands:** step 1 is done. Step 2 has the database roles and certificates, the migrations, the admin container, enrollment and
-the DPoP check and the draft routes; the device list routes (`GET` and `DELETE`) are not built. Steps 3 to 6 have not started. `TODO.md` has the open items.
-
-## Documentation changes
-
-- [security](security.md): replace "no accounts, no server and no network use beyond the update check" with the opt-in
-  description, add this page's threat table, and the `connect-src` change.
-- [storage](storage.md): the `sync_state` table and the compatibility rule for `user_version`.
-- [architecture](architecture.md) and `AGENTS.md`: the sync module, the new binary and its layout.
-- [pages](pages.md): the web build's sync origin setting and CORS.
-- A server operations page (run, proxy, back up, rotate, revoke).
-- [openapi.yaml](openapi.yaml) is generated from the server (`make openapi` in `backend/`), not written by hand: it needs no review of its own.
+Done: the iPhone and Edge key checks, local groundwork, the database, roles and admin service (deployed at
+`harper-sync.portableinfo.cloud`), enrollment, and the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`).
 
 ## Option: end-to-end encryption
 
-Status: **an option, not planned.** It is kept so that choosing it later would not need a different server. Goal: **the server
-stores only ciphertext**, so a compromised server, a stolen copy of its database or a copied device token reveals no draft text.
-This does not need a new kind of server: it still stores and returns opaque `data` strings by id and version. A new device can
-only read the notes with a secret (the recovery key or the passphrase below) or from another enrolled device, so without v1's
-"enroll and sync" shortcut, losing every device and the secret loses the notes.
+**An option, not planned.** The server would store only ciphertext, still as opaque `data` strings by id and version, so it needs
+no new kind of server. Ids, versions, times, the deleted flag and blob sizes stay visible; search already runs on each device.
 
-### What the server sees afterwards
-
-| Visible to the server | Not visible |
-|---|---|
-| Doc ids, versions, created and updated times, the deleted flag, the size of each blob, request times and the client's IP | Draft text and format |
-
-The ids and times stay in the clear because listing and conflict handling need them. Sizes leak roughly how long a draft
-is. There is **no feature loss from hiding the text**: search already runs on each device's local copy, never on the server.
-
-### Keys
-
-- **Data key (DK):** 256 random bits made once, on the first device that turns encryption on. It is never sent to the server in the
-  clear.
-- **Per-doc key:** `HKDF-SHA-256(DK, info = "harper-pad doc " + id)`. This keeps the number of encryptions under any one AES key
-  small, so a random 96-bit nonce is safe, and a blob cannot be moved to another id and still decrypt.
-- **Cipher:** AES-256-GCM through WebCrypto, native in every browser including iOS Safari and in the desktop webview, so the sync
-  module needs no crypto library for the data itself. (XChaCha20-Poly1305 is not in WebCrypto.)
-- **Key bag on the server** (one per client account): the DK **wrapped** (AES-GCM) by a key-encryption key, plus the KDF parameters, so devices can fetch it.
-  It holds one wrapping per unlock method, and the sketch has two:
-  1. **Passphrase.** The key-encryption key is `Argon2id(passphrase, salt)` with parameters stored in the key bag. The default is
-     **32 MiB, 3 passes, 1 lane**, which is above OWASP's minimum of 19 MiB, 2 iterations and 1 lane; a device refuses a key bag
-     below that floor, so the parameters cannot be weakened. They can be raised later, by re-wrapping the key with a stronger
-     setting (no document is re-encrypted); 64 MiB is fine on a recent device, but every device must derive with the stored
-     parameters, so the weakest device sets the practical ceiling. Argon2id is not in WebCrypto; use a pinned, audited WebAssembly
-     implementation (the CSP already allows `'wasm-unsafe-eval'`) run in a worker, **for both builds** so the derivation is
-     identical everywhere.
-  2. **Recovery key.** A generated 160-bit secret shown once as groups of Base32 characters, to be saved in a password manager or
-     printed. It wraps the same DK, so a forgotten passphrase is recoverable, and because it is high entropy it cannot be guessed
-     offline.
-- **A local copy of the key bag** on every device that has unlocked it. It is only ciphertext (the data key wrapped by the
-  passphrase and recovery key), so keeping it is safe. It is what lets a device re-create the server's key bag on a new server without
-  ever exposing the data key, which the web build holds as a non-extractable handle and cannot re-wrap. A device re-uploads it
-  before any doc.
-- **Check value:** the key bag also holds a small known string encrypted under the DK, so a wrong passphrase is rejected on the
-  device, before anything is decrypted.
-- **Passphrase change:** unwrap the DK, wrap it again under the new key-encryption key, and upload the key bag with a
-  compare-and-set on its version. No document is re-encrypted.
-
-The server can serve the key bag to any device that holds a valid token, so a thief with a copied token can try passphrases
-**offline** against it. That is why the recovery key exists, why the parameters are strong, and why the setup screen enforces a long
-passphrase (a strength meter, and a length floor of about 12 characters, or four or more random words) or offers to generate one.
-
-### Envelope
-
-Each doc's `data` becomes this JSON string; the server checks only that it has this shape and is within the size limit:
-
-```json
-{"v": 2, "kid": "k1", "n": "<base64 12-byte nonce>", "c": "<base64 ciphertext + 16-byte tag>"}
-```
-
-The plaintext is the v1 blob plus a revision counter: `{"v":1,"format":"markdown","content":"...","rev":12}`. The additional
-authenticated data is `id || "|" || v || "|" || kid`, so a blob cannot be swapped between docs or relabelled. `kid` names the data
-key, which lets a later rotation tell old blobs from new ones.
-
-### What this does and does not stop
-
-- **A server cannot alter a blob** without the device noticing (GCM fails). It **can** refuse to return one, hide a delete, or
-  **serve an old valid version** of a doc (a rollback). Each device remembers the highest `rev` it has seen for each doc and rejects a
-  lower one. A device that has never seen the doc cannot detect a rollback; say so in the docs.
-- **A thief with a copied token** gets ciphertext only, and can offline-guess the passphrase (above).
-- **A thief with the unlocked device** has the DK in use there. After revoking the device, run **Rotate key** (below), or the thief
-  can still decrypt anything they already downloaded and anything uploaded under the old key.
-- **Losing both the passphrase and the recovery key loses the data.** The server cannot help, and the setup screen says so before
-  it finishes.
-
-### Where the data key lives on a device
-
-| Build | Storage |
-|---|---|
-| Web (iPhone Home Screen app, browsers) | After unlocking, the DK is imported as a **non-extractable** WebCrypto key (HKDF material) and only that handle is stored in IndexedDB, so the passphrase is entered once per device. The iPhone check in `TODO.md` showed this works, as for the device key. |
-| Desktop (Linux, Windows) | The same as the web build: the webview's IndexedDB, with no OS keyring. |
-
-### Rotating the key
-
-**Rotate key** makes a new DK (`kid` increments), re-encrypts every doc under it, uploads the new key bag, and the
-old `kid` is no longer accepted by the server for new writes. Other devices unlock again with the passphrase. Use it after revoking
-a device that held the DK, or after a passphrase or recovery key may have leaked. It re-uploads everything, so it is slow on a
-phone with many drafts, and it runs in chunks that can be resumed.
-
-### What it would take
-
-- **Server:** a `keybag` table (one row per client account: `client_id` primary key, `version` for compare-and-set, and an opaque
-  `data` JSON with the wrapped data key, the KDF parameters and the check value), key bag endpoints (`GET` and `PUT /keys`, with
-  compare-and-set) and a check that a draft's `data` has the envelope shape. Storage is otherwise unchanged; it holds ciphertext.
-- **Client:** a `lib/crypto.js` (HKDF, AES-GCM, the envelope, the key bag) with test vectors checked in as shared fixtures like the
-  existing Go and frontend tests, plus the Argon2id worker and the unlock, setup, change-passphrase and rotate screens.
-
-### Open questions for the option
-
-- **Argon2id memory on an iPhone: answered.** In the installed Home Screen app, Argon2id (hash-wasm 4.12.0, in a worker, 3 passes,
-  1 lane) ran at 32, 64 and 128 MiB in about 101, 107 and 218 ms, with no page kill and no warning. That is one phone on one iOS
-  version, so an older, low-memory device may differ, which is why the default stays at 32 MiB and not higher.
-- **Which Argon2id WebAssembly package** to pin, and whether to keep it lazy-loaded so people who never turn it on do not pay for it.
-- **Device pairing** as a third unlock method: an enrolled device wraps the DK to the new device's public key (ECDH P-256, in
-  WebCrypto) through the server, after the user confirms a fingerprint on both. It avoids typing the passphrase on a phone but
-  needs both devices online; leave it for later.
-- **Whether to encrypt the id and times.** Not planned; it would break listing and conflict handling.
+- **Keys:** one random 256-bit data key (DK) made on the first device; per-doc key `HKDF-SHA-256(DK, "harper-pad doc " + id)`;
+  AES-256-GCM through WebCrypto, with the additional authenticated data `id|v|kid` so a blob cannot move to another doc.
+- **Key bag** (one per client account, a `keybag` table with `GET` and `PUT /keys` using compare-and-set): the DK wrapped by a
+  passphrase key (Argon2id, at least 32 MiB, 3 passes, 1 lane, in a worker; devices refuse weaker parameters) and by a generated
+  160-bit recovery key. Every unlocked device keeps a local copy so it can re-create a lost server's key bag.
+- **Envelope:** `{"v":2,"kid":"k1","n":"<nonce>","c":"<ciphertext+tag>"}`; the plaintext is the v1 blob plus a `rev` counter, and a
+  device rejects a lower `rev` than it has seen (rollback detection, only for docs it has seen).
+- **Limits:** a copied token gets ciphertext but can guess the passphrase offline; a thief with an unlocked device needs
+  **Rotate key** after revocation; losing both the passphrase and the recovery key loses the notes.
+- **On a device:** the DK is a non-extractable WebCrypto handle in IndexedDB, as for the device key.
+- **Measured:** Argon2id (hash-wasm 4.12.0) took about 101, 107 and 218 ms at 32, 64 and 128 MiB on an iPhone Home Screen app.
+- **Open:** which Argon2id WebAssembly package to pin (lazy-loaded), and device pairing as a third unlock method.
 
 ## Later
 
-- **Server-side version history,** if wanted: keep the previous versions of each doc and a way to bring one back. v1 has none, because
-  bringing one back has to read and write notes, and putting that in the admin UI would add code that reads and writes notes to the
-  internet-reachable admin UI, which has none. It would be a command on the server host. Until then the server keeps no older copies.
-- **Syncing settings,** if wanted: the dictionary (a set union) and the ignore list (the newer replaces the older) are the candidates.
-  They need their own table, validation and merge rules, which is why v1 leaves them out.
-- **More client accounts.** The schema already carries `client_id`; what is missing is an admin action to create an account, an
-  account selector next to the device name, per-account operators (which would need the app to learn who is signed in, something v1 deliberately does not do), quotas, and the
-  isolation checks above.
-- **Sharing between client accounts,** with OIDC and short-lived tokens with refresh. This is a different feature from more accounts.
-- **Merging text** with a CRDT such as Yjs (it has a CodeMirror 6 binding) if two-device simultaneous edits become common.
+- **Server-side version history:** a command on the server host, not in the admin UI, which must not read or write notes.
+- **Syncing settings:** the dictionary (set union) and the ignore list; they need their own table and merge rules.
+- **More client accounts:** an admin action, an account selector, per-account operators, quotas and the isolation checks above.
+- **Sharing between accounts** (OIDC, short-lived tokens with refresh) and **merging text** with a CRDT such as Yjs.
