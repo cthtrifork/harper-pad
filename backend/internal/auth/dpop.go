@@ -2,18 +2,17 @@ package auth
 
 import (
 	"bytes"
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-jose/go-jose/v4"
 )
 
 // ErrInvalidProof is returned for every proof that fails a check. The cause is deliberately not in the error: the HTTP layer
@@ -32,12 +31,16 @@ const (
 
 // Verifier checks DPoP proofs (RFC 9449 section 4.3) and remembers the jti of every accepted proof for as long as it could still be
 // replayed. The cache is in memory, which is enough at one replica (the sync Deployment uses the Recreate strategy for this).
+//
+// The JWS and JWK work (parsing, the algorithm allow-list, the key checks and the signature) is go-jose's. What is checked here is
+// what no library does for this design, which has no OAuth server around the proof: the claims against the request, the token
+// hash, and replay.
 type Verifier struct {
 	// Now is the clock; tests replace it.
 	Now func() time.Time
 
 	mu   sync.Mutex
-	seen map[string]time.Time // thumbprint + "." + jti -> when it may be forgotten
+	seen map[string]time.Time // key + "." + jti -> when it may be forgotten
 }
 
 // NewVerifier returns a Verifier that uses the real clock.
@@ -46,8 +49,8 @@ func NewVerifier() *Verifier { return &Verifier{Now: time.Now, seen: map[string]
 // Proof is what a verified proof tells the caller.
 type Proof struct {
 	// PublicKey is the proof's key as a canonical JWK: {"crv":"P-256","kty":"EC","x":"...","y":"..."}, members in that order and
-	// nothing else. Two proofs from the same key give the same string, so the stored key is compared with ==, which is the same as
-	// comparing JWK thumbprints (RFC 7638).
+	// nothing else, the coordinates as 32 bytes in base64url. Two proofs from the same key give the same string, so the stored key
+	// is compared with ==, which is the same as comparing JWK thumbprints (RFC 7638).
 	PublicKey string
 }
 
@@ -59,38 +62,31 @@ func (v *Verifier) Verify(header, method, htu, accessToken string) (Proof, error
 	if len(header) == 0 || len(header) > maxProofBytes {
 		return Proof{}, ErrInvalidProof
 	}
-	parts := strings.Split(header, ".")
-	if len(parts) != 3 {
+	// Compact serialization only, and only ES256: a proof that names another algorithm (including "none" and the HMAC ones that
+	// are used in key-confusion attacks) is refused before any key is looked at.
+	jws, err := jose.ParseSignedCompact(header, []jose.SignatureAlgorithm{jose.ES256})
+	if err != nil || len(jws.Signatures) != 1 {
 		return Proof{}, ErrInvalidProof
 	}
-	hdrJSON, err1 := b64(parts[0])
-	payJSON, err2 := b64(parts[1])
-	sig, err3 := b64(parts[2])
-	if err1 != nil || err2 != nil || err3 != nil {
+	h := jws.Signatures[0].Header
+	if typ, _ := h.ExtraHeaders[jose.HeaderType].(string); typ != "dpop+jwt" {
 		return Proof{}, ErrInvalidProof
 	}
-
-	var h struct {
-		Typ string          `json:"typ"`
-		Alg string          `json:"alg"`
-		JWK json.RawMessage `json:"jwk"`
-	}
-	if err := strictJSON(hdrJSON, &h); err != nil || h.Typ != "dpop+jwt" || h.Alg != "ES256" {
+	// The key is the one in the proof's own header: a public P-256 key (go-jose has checked that it is a valid point and has no
+	// private part by Valid and IsPublic).
+	jwk := h.JSONWebKey
+	if jwk == nil || !jwk.Valid() || !jwk.IsPublic() {
 		return Proof{}, ErrInvalidProof
 	}
-	pub, canonical, err := parseJWK(h.JWK)
+	pub, ok := jwk.Key.(*ecdsa.PublicKey)
+	if !ok || pub.Curve != elliptic.P256() {
+		return Proof{}, ErrInvalidProof
+	}
+	payload, err := jws.Verify(jwk)
 	if err != nil {
 		return Proof{}, ErrInvalidProof
 	}
-
-	// ES256 in a JWS is the raw r||s, 64 bytes (what WebCrypto produces). A DER signature has another length and is refused.
-	if len(sig) != 64 {
-		return Proof{}, ErrInvalidProof
-	}
-	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
-	if !ecdsa.Verify(pub, digest[:], new(big.Int).SetBytes(sig[:32]), new(big.Int).SetBytes(sig[32:])) {
-		return Proof{}, ErrInvalidProof
-	}
+	canonical := canonicalJWK(pub)
 
 	var p struct {
 		JTI string `json:"jti"`
@@ -99,7 +95,7 @@ func (v *Verifier) Verify(header, method, htu, accessToken string) (Proof, error
 		IAT *int64 `json:"iat"`
 		ATH string `json:"ath"`
 	}
-	if err := strictJSON(payJSON, &p); err != nil || p.JTI == "" || len(p.JTI) > 128 || p.IAT == nil {
+	if err := strictJSON(payload, &p); err != nil || p.JTI == "" || len(p.JTI) > 128 || p.IAT == nil {
 		return Proof{}, ErrInvalidProof
 	}
 	if p.HTM != method || !sameURL(p.HTU, htu) {
@@ -145,7 +141,16 @@ func (v *Verifier) remember(key string, now time.Time) bool {
 	return true
 }
 
-func b64(s string) ([]byte, error) { return base64.RawURLEncoding.DecodeString(s) }
+// canonicalJWK writes a P-256 public key in the one form this server stores and compares: fixed member order, 32-byte padded
+// coordinates, nothing else. It is built from the key, not copied from the client's text, so one key has one string.
+func canonicalJWK(pub *ecdsa.PublicKey) string {
+	x := make([]byte, 32)
+	y := make([]byte, 32)
+	pub.X.FillBytes(x)
+	pub.Y.FillBytes(y)
+	return `{"crv":"P-256","kty":"EC","x":"` + base64.RawURLEncoding.EncodeToString(x) +
+		`","y":"` + base64.RawURLEncoding.EncodeToString(y) + `"}`
+}
 
 // strictJSON decodes one JSON object and refuses trailing data.
 func strictJSON(data []byte, v any) error {
@@ -157,35 +162,6 @@ func strictJSON(data []byte, v any) error {
 		return errors.New("trailing data")
 	}
 	return nil
-}
-
-// parseJWK accepts a public P-256 key in JWK form and nothing else: kty EC, crv P-256, 32-byte x and y that are a point on the
-// curve, and no private part ("d"). It returns the key and its canonical JWK string.
-func parseJWK(raw json.RawMessage) (*ecdsa.PublicKey, string, error) {
-	var k map[string]any
-	if err := strictJSON(raw, &k); err != nil {
-		return nil, "", err
-	}
-	if _, private := k["d"]; private || k["kty"] != "EC" || k["crv"] != "P-256" {
-		return nil, "", errors.New("not a public P-256 JWK")
-	}
-	xs, _ := k["x"].(string)
-	ys, _ := k["y"].(string)
-	x, err1 := b64(xs)
-	y, err2 := b64(ys)
-	if err1 != nil || err2 != nil || len(x) != 32 || len(y) != 32 {
-		return nil, "", errors.New("bad coordinates")
-	}
-	// crypto/ecdh checks that the point is on the curve (and not the identity).
-	point := append([]byte{4}, append(x, y...)...)
-	if _, err := ecdh.P256().NewPublicKey(point); err != nil {
-		return nil, "", err
-	}
-	pub := &ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(x), Y: new(big.Int).SetBytes(y)}
-	// Re-encoded from the bytes: the decoder accepts non-zero padding bits, so the client's text is not trusted to be canonical.
-	canonical := `{"crv":"P-256","kty":"EC","x":"` + base64.RawURLEncoding.EncodeToString(x) +
-		`","y":"` + base64.RawURLEncoding.EncodeToString(y) + `"}`
-	return pub, canonical, nil
 }
 
 // sameURL compares a proof's htu with the request URL, ignoring the query and the fragment of the proof's value.
