@@ -48,8 +48,11 @@ jobs:
           mkdir -p frontend/dist-web
           docker compose -f backend/test/e2e/compose.yaml up -d --build --wait
 
-      # harper-pad-admin applies the schema (it owns the tables); harper-pad-sync is not ready until it has.
+      # harper-pad-admin applies the schema (it owns the tables); harper-pad-sync is not ready until it has. The Makefile prefers
+      # podman, which is also on the runner, so COMPOSE is set explicitly (the stack above was started with docker compose).
       - name: Wait for the schema
+        env:
+          COMPOSE: docker compose
         run: make -C backend wait-schema
 
       # The scan runs in a container on the stack's network and talks to the service directly (plain http, as Caddy does).
