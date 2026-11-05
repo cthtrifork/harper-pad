@@ -15,7 +15,7 @@ on:
       - .github/renovate.json5
       - .github/workflows/renovate.yml
   schedule:
-    - cron: '12 */2 * * *' # weekdays 04:12 UTC
+    - cron: '12 */2 * * *' # every 2 hours (GitHub may delay or skip runs)
   workflow_dispatch:
     inputs:
       log_level:
