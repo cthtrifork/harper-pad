@@ -36,7 +36,7 @@ type Store interface {
 
 // API is the sync API: the routes, the CORS allowlist and the device authentication. The routes are registered with Huma, which
 // serves them on the standard library's ServeMux and describes them in an OpenAPI document (docs/openapi.yaml, generated from
-// these types by the test in openapi_test.go, so the description cannot drift from the code).
+// these types by `make openapi` in backend/).
 type API struct {
 	publicURL string
 	origins   map[string]bool
