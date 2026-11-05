@@ -140,13 +140,17 @@ const baseName = (path) => path.split(/[\\/]/).pop();
     </TransitionGroup>
     <p v-else class="empty">{{ query.trim() ? `No drafts match "${query.trim()}".` : "No drafts yet. Start typing and it is saved here." }}</p>
 
+    <!-- Snippets is a page of its own, so it is a row you can tap, not a word in the footer. -->
+    <button type="button" class="snippets-row" @click="help = true">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <span class="name">Snippets</span>
+      <span class="about">Type a short code to insert text</span>
+      <svg class="go" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5l3.5 3.5-3.5 3.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    </button>
+
     <footer>
       <span class="mute">{{ total }} {{ total === 1 ? "draft" : "drafts" }}</span>
       <button v-if="total > drafts.length" type="button" class="link" @click="emit('more')">Show more</button>
-      <button type="button" class="link to-snippets" @click="help = true">
-        Snippets
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5l3.5 3.5-3.5 3.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      </button>
       <span v-if="version" class="version" title="Version">{{ version }}</span>
     </footer>
     </template>
