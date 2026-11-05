@@ -67,10 +67,38 @@
 }
 
 .snippets li {
+  display: flex;
+}
+
+/* The whole card is the button: pressing it inserts the snippet. */
+.snippets .card {
+  flex: 1;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--raised);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+
+.snippets .card:hover {
+  border-color: var(--accent);
+}
+
+.snippets .card:active {
+  transform: scale(0.99);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snippets .card {
+    transition: none;
+  }
 }
 
 .snippets .row {
@@ -92,6 +120,8 @@
 }
 
 .snippets .mock {
+  display: block;
+  white-space: pre;
   margin: 0;
   padding: 8px 10px;
   overflow: auto;

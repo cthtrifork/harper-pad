@@ -10,7 +10,7 @@ const props = defineProps({
   query: { type: String, default: "" },
   toast: { type: Object, default: null },
 });
-const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo"]);
+const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet"]);
 
 const help = ref(false); // the snippets help page replaces the list
 const q = ref(props.query);
@@ -77,7 +77,7 @@ const baseName = (path) => path.split(/[\\/]/).pop();
 
 <template>
   <aside id="drafts-drawer" class="drawer" aria-label="Drafts">
-    <SnippetsHelp v-if="help" @back="help = false" />
+    <SnippetsHelp v-if="help" @back="help = false" @insert="(t) => emit('snippet', t)" />
     <template v-else>
     <header>
       <h2>Drafts</h2>

@@ -1,6 +1,7 @@
 <script setup>
 import { EditorView } from "@codemirror/view";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { insertSnippet } from "../lib/editor/snippets.js";
 import { applyFix, createEditor, fixAllSafe, jumpTo, loadDocument, relint, revertFixes, setMode } from "../lib/editor/index.js";
 
 const props = defineProps({
@@ -101,6 +102,12 @@ defineExpose({
     ),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
+  insertSnippet: (trigger) => {
+    const spec = view && insertSnippet(view.state, trigger);
+    if (!spec) return;
+    view.dispatch(spec);
+    view.focus();
+  },
   fixAll: () => (view ? fixAllSafe(view) : 0),
   revert: (ids) => (view ? revertFixes(view, ids) : 0),
 });

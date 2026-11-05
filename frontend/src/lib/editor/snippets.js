@@ -43,15 +43,30 @@ export function expandSnippet(state) {
   for (let node = syntaxTree(state).resolveInner(line.from, 1); node; node = node.parent) {
     if (IN_CODE.test(node.name)) return null;
   }
-  const [before, mid, after] = body.split("@@");
-  const text = before + (mid ?? "") + (after ?? "");
-  const anchor = line.from + before.length;
+  return snippetChange(body, line.from, line.to);
+}
+
+// Replace from..to with a snippet's text, selecting the part to fill in.
+function snippetChange(body, from, to, lead = "") {
+  const [before, mid = "", after = ""] = body.split("@@");
+  const anchor = from + lead.length + before.length;
   return {
-    changes: { from: line.from, to: line.to, insert: text },
-    selection: { anchor, head: anchor + (mid ?? "").length },
+    changes: { from, to, insert: lead + before + mid + after },
+    selection: { anchor, head: anchor + mid.length },
     userEvent: "input.snippet",
     scrollIntoView: true,
   };
+}
+
+// The help page's shortcut: put a snippet where the cursor is (in place of a selection). A block (a fence, a task, a table) needs
+// a line of its own, so it starts on a new line when the cursor is not at the start of one; a link or image goes in the text.
+export function insertSnippet(state, trigger) {
+  if (!Object.hasOwn(SNIPPETS, trigger)) return null;
+  const { text } = SNIPPETS[trigger];
+  const { from, to } = state.selection.main;
+  const block = /^(```|- |\|)/.test(text);
+  const lead = block && state.doc.lineAt(from).from !== from ? "\n" : "";
+  return snippetChange(text, from, to, lead);
 }
 
 export const snippets = Prec.high(
