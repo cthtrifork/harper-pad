@@ -42,7 +42,7 @@ env:
   GOTOOLCHAIN: local
   APP: harper-pad
   # renovate: datasource=github-releases depName=aquasecurity/trivy
-  TRIVY_VERSION: v0.76.1
+  TRIVY_VERSION: v0.76.2
 
 jobs:
   # The version and the "is this a real release" decision, on their own so the checks and the binary
