@@ -41,8 +41,9 @@ const parseData = (doc) => {
 const stateOf = (doc) => (doc ? { version: doc.version, updatedAt: doc.updatedAt, deleted: !!doc.deleted } : null);
 
 // A server that cannot be reached, or that refuses this device, stops everything with a SyncError; any other failure fails one draft.
-// `onCopy(copy)` is called with the new draft when a conflict keeps the server's version as a conflicted copy, so the person can be told.
-export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), onCopy = () => {} }) {
+// `onCopy(copy)` is called with the new draft when a conflict keeps the server's version as a conflicted copy, and `onGone(id)` when Sync all
+// leaves a draft alone that was deleted on another device (it is the open one), so the person can be told.
+export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), onCopy = () => {}, onGone = () => {} }) {
   // Uploads a draft on top of `state` (the server's state, or null when it has none) and records the answer. True when it was taken.
   async function upload(draft, state) {
     const out = await pushDraft({ device, draft, state, fetchFn });
@@ -67,7 +68,10 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
       server: srv ? { updatedAt: srv.updatedAt, deleted: srv.deleted } : null,
     });
     if (action === "none") return "";
-    if (skip && action !== "upload-tombstone") return "skipped";
+    if (skip && action !== "upload-tombstone") {
+      if (action === "remove-local") onGone(id);
+      return "skipped";
+    }
 
     if (action === "upload") {
       if (await upload(await drafts.get(id), srv)) return "uploaded";
@@ -108,7 +112,7 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
     return topped && copied ? "conflicted" : "failed";
   }
 
-  return {
+  const api = {
     // Sync all: every draft, both ways. `skip` is a set of ids to leave alone this time (the draft open in the editor, so a download
     // cannot change text being typed). Resolves to {uploaded, downloaded, removed, conflicted, failed, skipped}.
     async all({ skip = new Set() } = {}) {
@@ -134,8 +138,9 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
     // Opening a note: the local text is already on screen; ask the server whether it holds something different (one conditional request,
     // a 304 when nothing changed) and settle by the same rules. Resolves to "updated" (the draft is unchanged here, `canSwap()` still says
     // nothing was typed, so the server's newer text was stored and the caller should show it), "newer" (the server has a different state
-    // that was not applied: the draft was changed here, or was being typed in) or "none". A tombstone or a missing draft changes nothing
-    // while the note is open.
+    // that was not applied: the draft was changed here, or was being typed in), "deleted" (the server holds a tombstone and nothing was
+    // changed here; nothing is removed, `remove` and `keep` below carry out the person's choice) or "none" (a missing draft, or a tombstone
+    // for a draft that was changed here, which survives).
     async open(id, { canSwap = () => true } = {}) {
       const [st, mine] = await Promise.all([drafts.syncState(id), drafts.get(id).catch(() => null)]);
       if (!mine) return "none";
@@ -149,6 +154,7 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
         server: { updatedAt: srv.updatedAt, deleted: srv.deleted },
       });
       if (action === "resolve") return "newer";
+      if (action === "remove-local") return "deleted"; // deleted on another device, and nothing was changed here: the person decides
       if (action !== "download") return "none";
       if (!canSwap()) return "newer";
       await drafts.applyRemote({ id, ...parseData(got.doc), createdAt: got.doc.createdAt, updatedAt: got.doc.updatedAt }, got.doc.version);
@@ -168,5 +174,26 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
       if (key !== "stale") return key;
       return settleOne(id, local, stateOf(await getDoc({ device, id, fetchFn })));
     },
+
+    // The person chose to keep a draft that was deleted on another device: the tombstone is taken as the known state, so the draft counts as
+    // changed and is uploaded on top of it (an edit survives a delete), as any save would.
+    async keep(id) {
+      const got = await getDocIfChanged({ device, id, state: null, fetchFn });
+      if (got.kind === "doc") {
+        await drafts.markSynced(id, { hash: "", updatedAt: got.doc.updatedAt, version: got.doc.version, deleted: !!got.doc.deleted });
+      }
+      return api.one(id);
+    },
+
+    // The person chose to remove it here too. Only if the server still holds the tombstone. Resolves to the draft that was removed (so the
+    // caller can offer Undo), or null when nothing was removed.
+    async removeLocal(id) {
+      const mine = await drafts.get(id).catch(() => null);
+      const doc = mine && (await getDoc({ device, id, fetchFn }));
+      if (!mine || !doc?.deleted) return null;
+      await drafts.applyRemoteDelete(id, doc.version, doc.updatedAt);
+      return mine;
+    },
   };
+  return api;
 }

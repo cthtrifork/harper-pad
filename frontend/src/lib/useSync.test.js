@@ -312,3 +312,78 @@ test("'Open copy' opens the conflicted copy", async () => {
   sync.openCopy("c".repeat(32));
   assert.deepEqual(opened, ["c".repeat(32)]);
 });
+
+// Deleted on another device.
+const TOMB = { id: D.id, version: 2, createdAt: 1, updatedAt: 5, deleted: true, data: "" };
+const LIVE = { updatedAt: 1, version: 1, deleted: false, hash: "h" };
+
+test("opening a note that was deleted elsewhere asks, and removes nothing", async () => {
+  let applied = 0;
+  const { sync, kept, ready } = setup({
+    fetchFn: reply(200, TOMB),
+    draftOverrides: {
+      isChanged: async () => false,
+      applyRemoteDelete: async () => {
+        applied++;
+      },
+    },
+  });
+  kept.states.set(D.id, LIVE);
+  await ready();
+  await sync.noteOpened(D.id);
+  assert.deepEqual(sync.gone.value, { id: D.id });
+  assert.equal(applied, 0);
+  sync.dismissGone();
+  assert.equal(sync.gone.value, null);
+});
+
+test("Remove: the draft is removed and handed to onRemoved; Keep: it is uploaded again", async () => {
+  const removed = [];
+  const restored = [];
+  const a = setup({
+    fetchFn: reply(200, TOMB),
+    draftOverrides: { isChanged: async () => false, applyRemoteDelete: async () => {} },
+    onRemoved: (d) => removed.push(d.id),
+    onRestore: (d) => restored.push(d.id),
+  });
+  a.kept.states.set(D.id, LIVE);
+  await a.ready();
+  a.sync.gone.value = { id: D.id };
+  await a.sync.removeGone();
+  assert.deepEqual(removed, [D.id]);
+  assert.equal(a.sync.gone.value, null);
+  assert.equal(a.sync.notice.value.kind, "removed");
+  a.sync.undoRemoved();
+  assert.deepEqual(restored, [D.id]);
+  assert.equal(a.sync.notice.value, null);
+
+  const b = setup({ fetchFn: reply(200, { ...TOMB, version: 2 }), draftOverrides: { isChanged: async () => true } });
+  b.kept.states.set(D.id, LIVE);
+  await b.ready();
+  b.sync.gone.value = { id: D.id };
+  await b.sync.keepGone();
+  assert.equal(b.sync.gone.value, null);
+  assert.equal(b.sync.status.value, "synced");
+  assert.equal(b.kept.states.get(D.id).deleted, false); // uploaded on top of the tombstone
+});
+
+test("a delete is pushed at once when its Undo offer ends", async () => {
+  const methods = [];
+  const { sync, kept, ready } = setup({
+    delay: 100000,
+    fetchFn: async (_u, init) => {
+      methods.push(init.method);
+      return reply(200, { version: 2 })();
+    },
+    draftOverrides: {
+      get: async () => {
+        throw new Error("draft not found");
+      },
+    },
+  });
+  kept.states.set(D.id, LIVE);
+  await ready();
+  await sync.draftDeleted(D.id);
+  assert.deepEqual(methods, ["PUT"]);
+  assert.equal(kept.states.get(D.id).deleted, true);
+});

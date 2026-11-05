@@ -51,6 +51,8 @@ const sync = useSync({
   skip: () => new Set([drafts.current.value.id].filter(Boolean)),
   onChanged: () => drafts.refreshList(),
   openDraft: (id) => drafts.open(id),
+  onRemoved: (draft) => drafts.removedElsewhere(draft),
+  onRestore: (draft) => drafts.restore(draft),
 });
 // A draft that was opened is checked against the server in the background (a newer version is swapped in when nothing was typed).
 const openHooks = { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() };
@@ -59,6 +61,7 @@ const checkOpened = (id) => sync.noteOpened(id, openHooks);
 const drafts = useDrafts(editor, showDrawer, {
   onSaved: (id, how) => (how?.explicit ? sync.saveRequested(id, openHooks) : sync.draftSaved(id)),
   onOpened: checkOpened,
+  onDeleted: sync.draftDeleted,
 });
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast

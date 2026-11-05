@@ -13,7 +13,7 @@ const PUSH_DELAY_MS = 2000;
 // `origin` is the sync server this build was made for (SYNC_ORIGIN, "" when none: then nothing shows). `deviceStore` is syncDevice from
 // backend.js and `drafts` the web store (see createSyncer: all syncing, conflicts included, is done there, not here). For Sync all: `prepare` saves what is typed first,
 // `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and `autoSync`
-// runs it when the app starts and after enrolling. `openDraft(id)` shows a draft (the conflicted copy, from the notice's "Open copy").
+// runs it when the app starts and after enrolling. `openDraft(id)` shows a draft (the conflicted copy, from the notice's "Open copy"), and `onRemoved(draft)` is told when the person chose to remove a draft that was deleted on another device (it shows another note), and `onRestore(draft)` when they undo that.
 export function useSync({
   origin,
   deviceStore,
@@ -25,6 +25,8 @@ export function useSync({
   skip = () => new Set(),
   onChanged = () => {},
   openDraft = () => {},
+  onRemoved = () => {},
+  onRestore = () => {},
 }) {
   const configured = !!origin && !!deviceStore && !!drafts;
   const status = ref("off");
@@ -32,13 +34,14 @@ export function useSync({
   const info = ref(null); // {server, deviceName} while enrolled
   const summary = ref(""); // what the last Sync all did, "3 uploaded, 2 downloaded"
   const lastSync = ref(0); // when it finished, ms
+  const gone = ref(null); // {id}: the open draft was deleted on another device and the person has not chosen yet
   const notice = ref(null); // {id, kind: "updated" | "newer", text} about the open draft, or null
   const enrolled = computed(() => info.value !== null);
 
   let device = null;
 
   // One syncer for every path, so a conflict is announced the same way wherever it was found.
-  const syncer = () => createSyncer({ device, drafts, fetchFn, onCopy: showCopy });
+  const syncer = () => createSyncer({ device, drafts, fetchFn, onCopy: showCopy, onGone: (id) => (gone.value = { id }) });
 
   // A conflict kept the server's version as a new draft: say so, with a way to open it. It stays a while, or until another note is opened.
   function showCopy(copy) {
@@ -80,6 +83,7 @@ export function useSync({
     clearTimeout(timer);
     waiting.clear();
     notice.value = null;
+    gone.value = null;
     await deviceStore.clear();
     device = null;
     error.value = "";
@@ -152,6 +156,7 @@ export function useSync({
   function noteOpened(id, { canSwap = () => true, onSwapped = () => {} } = {}) {
     clearTimeout(noticeTimer);
     notice.value = null;
+    gone.value = null;
     openHooks = { canSwap, onSwapped };
     if (!device || status.value === "signin") return Promise.resolve();
     chain = chain.then(() => checkOpen(id));
@@ -176,6 +181,8 @@ export function useSync({
         noticeTimer = setTimeout(() => (notice.value = null), 5000);
       } else if (out === "newer") {
         notice.value = { id, kind: "newer", text: "Newer on the server" };
+      } else if (out === "deleted") {
+        gone.value = { id };
       }
     } catch (err) {
       if (err instanceof SyncError && err.code === "signin") stopped(err);
@@ -207,6 +214,58 @@ export function useSync({
 
   const openCopy = (id) => openDraft(id);
 
+  // The person's answer to "deleted elsewhere": keep the draft (it is uploaded again), or remove it here too (`onRemoved` shows another note
+  // and offers Undo). Escape, or any other note, leaves the question for the next time the note is opened.
+  function keepGone() {
+    const g = gone.value;
+    if (!g) return Promise.resolve();
+    gone.value = null;
+    status.value = "syncing";
+    chain = chain.then(async () => {
+      try {
+        await syncer().keep(g.id);
+        status.value = "synced";
+      } catch (err) {
+        if (!stopped(err)) status.value = "pending";
+      }
+    });
+    return chain;
+  }
+  function removeGone() {
+    const g = gone.value;
+    if (!g) return Promise.resolve();
+    gone.value = null;
+    chain = chain.then(async () => {
+      try {
+        const removed = await syncer().removeLocal(g.id);
+        if (removed) {
+          await onRemoved(removed);
+          // Undo sits beside the chip: the drafts drawer, where the usual Undo shows, is closed.
+          clearTimeout(noticeTimer);
+          notice.value = { id: removed.id, kind: "removed", text: "Removed", draft: removed };
+          noticeTimer = setTimeout(() => {
+            if (notice.value?.kind === "removed") notice.value = null;
+          }, 12000);
+        }
+      } catch (err) {
+        stopped(err);
+      }
+    });
+    return chain;
+  }
+  const dismissGone = () => (gone.value = null);
+
+  // Undo of "Removed": the draft comes back and is uploaded again.
+  function undoRemoved() {
+    const n = notice.value;
+    if (n?.kind !== "removed") return;
+    notice.value = null;
+    onRestore(n.draft);
+  }
+
+  // A draft was deleted and its Undo offer has ended: push the tombstone now (the same push as for a save; see createSyncer.one).
+  const draftDeleted = (id) => saveRequested(id);
+
   return {
     configured,
     status,
@@ -216,13 +275,19 @@ export function useSync({
     summary,
     lastSync,
     notice,
+    gone,
     init,
     enroll,
     turnOff,
     draftSaved,
+    draftDeleted,
     saveRequested,
     noteOpened,
     openCopy,
+    keepGone,
+    removeGone,
+    dismissGone,
+    undoRemoved,
     syncAll,
   };
 }
