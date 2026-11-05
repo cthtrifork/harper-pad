@@ -59,7 +59,9 @@ never run on a real desktop yet.
 - [ ] A "lose the server" test in the end-to-end suite: wipe the server's database, re-enroll both devices and check that Sync all
       rebuilds identical drafts with no conflicted copies. A draft deleted elsewhere while a device was offline can reappear
       (documented), but nothing else is lost.
-- [ ] The enrollment and status UI, and the **Sync all** button in the drafts drawer (progress line, one-line summary, undoable
+- [x] First slice of the UI (web build only): the status bar chip, the pop-up to paste an invite, and push after a save. Checked in
+      Chromium against the compose stack. Desktop needs bindings for the sync state first.
+- [ ] The rest of the UI: the device list, and the **Sync all** button in the drafts drawer (progress line, one-line summary, undoable
       removals, a "Newer on the server" marker on a note): follow `docs/design-cheatsheet.html`, short eased transitions, reduced
       motion honoured.
 - [ ] Docs: `security.md` (opt-in network use, `connect-src`), `storage.md`, `architecture.md`, `pages.md`, `AGENTS.md`, and a server

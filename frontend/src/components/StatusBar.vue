@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import SyncChip from "./SyncChip.vue";
 
 const props = defineProps({
   state: { type: String, required: true }, // loading | ready | failed
@@ -16,6 +17,7 @@ const props = defineProps({
   mode: { type: String, default: "edit" }, // edit | split | preview: the preview has no problems, caret or selection
   isMarkdown: { type: Boolean, default: false },
   startup: { type: Boolean, default: true }, // show "Harper ready" and the start-up and check timings (false after the first edit is saved)
+  sync: { type: Object, default: null }, // useSync's result; the chip shows only when sync is set up in this build
   autocorrect: { type: Boolean, default: false }, // autocorrect is on (its switch is in the Problems panel, so it shows here too)
 });
 const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect"]);
@@ -55,6 +57,7 @@ function fmt(ms) {
     <button v-if="state === 'ready' && mode !== 'preview'" id="autocorrect-state" type="button" class="auto-chip" :class="{ on: autocorrect }" role="switch" :aria-checked="autocorrect" aria-label="Autocorrect" @click="emit('toggle-autocorrect')">
       <span class="dot" aria-hidden="true"></span>Autocorrect {{ autocorrect ? "on" : "off" }}
     </button>
+    <SyncChip v-if="sync?.configured" :sync="sync" />
     <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span>
     <span v-if="state === 'ready' && startup" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
     <span v-if="saveError" class="state failed clip" :title="saveError">{{ saveError }}</span>

@@ -1,0 +1,197 @@
+/* The sync chip in the status bar and its pop-up (SyncChip.vue). Same dot language as the autocorrect chip: hollow is off, filled is on. */
+.sync {
+  position: relative;
+  display: inline-flex;
+}
+
+.sync-chip {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--mute);
+  font: inherit;
+}
+
+.sync-chip:hover,
+.sync-chip[aria-expanded="true"] {
+  border-color: var(--line);
+  background: var(--raised);
+}
+
+.sync-chip .dot {
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.sync-chip.synced {
+  color: var(--ok);
+}
+
+.sync-chip.synced .dot,
+.sync-chip.pending .dot {
+  background: currentColor;
+}
+
+.sync-chip.pending {
+  color: var(--accent);
+}
+
+.sync-chip.signin {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.sync-chip .spin {
+  animation: sync-spin 0.9s linear infinite;
+}
+
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The pop-up opens upward from the chip, as the status bar is at the bottom of the window. */
+.sync-panel {
+  position: absolute;
+  bottom: 32px;
+  left: 0;
+  z-index: 10;
+  width: 340px;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: var(--shadow-menu);
+  font-size: 13px;
+}
+
+.sync-panel form,
+.sync-panel > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-panel h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sync-panel p {
+  margin: 0;
+}
+
+.sync-panel .mute {
+  color: var(--mute);
+}
+
+.sync-panel label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mute);
+}
+
+.sync-panel .in {
+  height: 32px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.sync-panel .in[aria-invalid="true"] {
+  border-color: var(--bad);
+}
+
+.sync-panel .error {
+  font-size: 12px;
+  color: var(--bad);
+}
+
+.sync-panel .actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.sync-panel .actions button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mute);
+  font: inherit;
+}
+
+.sync-panel .actions .primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.sync-panel .actions .primary:disabled {
+  background: var(--selected);
+  color: var(--mute);
+  cursor: not-allowed;
+}
+
+.sync-panel .actions .link {
+  height: auto;
+  padding: 0;
+  color: var(--c-style);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sync-panel .note {
+  font-size: 12px;
+}
+
+.sync-scrim {
+  display: none;
+}
+
+/* A phone: a bottom sheet over a scrim, with fields and buttons big enough to tap. */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .sync-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 9;
+    background: rgb(0 0 0 / 0.5);
+  }
+
+  .sync-panel {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: auto;
+    padding: 16px 20px max(24px, env(safe-area-inset-bottom));
+    border-width: 1px 0 0;
+    border-radius: 16px 16px 0 0;
+    font-size: 14px;
+  }
+
+  .sync-panel .in,
+  .sync-panel .actions button {
+    height: 44px;
+  }
+}
