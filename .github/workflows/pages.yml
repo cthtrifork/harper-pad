@@ -75,6 +75,8 @@ jobs:
           # /preview/ is what tells the frontend it is not the release (src/lib/scope.js, web/sw.js): its own localStorage keys and
           # service-worker cache on the shared origin. The IndexedDB database is shared on purpose (real data).
           BASE_PATH: ${{ steps.pages.outputs.base_path }}${{ steps.target.outputs.release == 'true' && '/' || '/preview/' }}
+          # The sync server's https origin, a repository variable; empty (the default) leaves the policy as it was (docs/sync.md).
+          SYNC_ORIGIN: ${{ vars.SYNC_ORIGIN }}
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build:web
