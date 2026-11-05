@@ -65,13 +65,10 @@ export function SaveDraft(d) {
 }
 
 /**
- * SaveDraftToFile saves the draft's text to a file, and the draft itself in the database as SaveDraft does, so the draft stays
- * in the scratch pad and remembers the file. With saveAs, or when the draft was never saved to a file, the user picks the file in
- * a dialog; otherwise the file it was saved to before is overwritten. The path is never taken from the page: it comes from the
- * dialog, or from what the database holds for the draft.
+ * SaveDraftToFile saves the draft's text to a file as well as to the database. With saveAs, or when the draft has no file yet, the
+ * user picks one in a dialog. The path never comes from the page.
  * 
- * When the file was changed by something else since this app last wrote it, nothing is written and Conflict is true, unless
- * overwrite is set (the page sets it when the user saves again after being told). A file that is gone is simply written again.
+ * When something else changed the file since this app wrote it, nothing is written and Conflict is true, unless overwrite is set.
  * @param {store$0.Draft} d
  * @param {boolean} saveAs
  * @param {boolean} overwrite
