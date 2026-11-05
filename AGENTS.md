@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Start here. This file is for AI coding agents (and humans) picking up work on **Harper Pad**, a Go + Wails v3
-desktop app: a Harper-checked editor plus a scratch pad drawer. The editor, Problems panel, drafts drawer, markdown Edit / Split / Preview views, saving a draft to a file (Ctrl+Shift+S, then Ctrl+S) and optional sync work; opening files is not built. What is left before sync can be switched on is the checklist in `docs/sync.md`.
+desktop app: a Harper-checked editor plus a scratch pad drawer. The editor, Problems panel, drafts drawer, markdown Edit / Split / Preview views, saving a draft to a file (Ctrl+Shift+S, then Ctrl+S) and optional sync work; opening files is not built.
 
 ## Commands
 
@@ -54,4 +54,3 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
 - `application.New` must be called before `InitUpdater`, which runs before `Run` (self-update tutorial order); see `docs/self-update.md`, `docs/releasing.md`.
 - UI conventions (button types, tokens, motion, UX rules) are in `docs/design-cheatsheet.html`; open it in a browser and follow it for new UI.
 - How the pieces fit together (frontend hosts, Go service, data flow) is in `docs/architecture.md`.
-- What is left for sync is the "Before release" checklist in `docs/sync.md`.

@@ -31,7 +31,6 @@ release replaces the site, and the head of `main` is at `/preview/`. See [`docs/
 Notes can follow you between the desktop app and the phone through your own server. It is off unless the build sets
 `SYNC_ORIGIN`. The devices stay the source of truth; the server is plain storage and can be rebuilt from them. See the
 [backend](backend/README.md) (`harper-pad-sync` and `harper-pad-admin` on PostgreSQL) and the design in [`docs/sync.md`](docs/sync.md),
-which ends with what is left before it is switched on.
 
 ## Develop
 

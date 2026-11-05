@@ -2,7 +2,7 @@
 
 An optional sync service so **notes** (scratch pad drafts) follow the user between the desktop app and the iPhone Home Screen
 app. The server is described in the [backend README](../backend/README.md); this page is the design and the protocol the clients
-follow. The client and the server are built; [Before release](#before-release) lists what is left before it is switched on.
+follow. The client and the server are built.
 
 ## Goals and non-goals
 
@@ -114,7 +114,7 @@ Why paste instead of opening the link: on iPhone, a tapped link opens Safari, wh
 Screen app, so the enrollment would land in the wrong place. Pasting inside the installed app avoids it. The URL is only a
 convenient way to carry the address and token in one string; opening it in a browser shows a short "copy this into Harper Pad" page.
 
-The device list and revoking live in the admin page only; the app has no device list (see [Decided not to build](#before-release)).
+The device list and revoking live in the admin page only; the app has no device list (see [Decided not to build](#decided-not-to-build)).
 
 ## Authentication
 
@@ -491,22 +491,9 @@ This is a device-token model with DPoP key binding, transport security and no co
 Not defended: a compromised device (it has the data, and can edit or delete notes with no server-side undo), a compromised server (it has the data; the [encryption option](#option-end-to-end-encryption) would leave it only
 ciphertext), and traffic analysis (the server sees sizes and times).
 
-## Before release
+## Decided not to build
 
-Sync is built and was checked with two Chromium contexts against the compose stack. What is left is configuration and checks on real
-devices:
-
-- [ ] Set the repository variable `SYNC_ORIGIN`: the Pages build and both desktop release builds (Linux and Windows) read it, and with it
-      unset sync is off in that build.
-- [ ] Set `CORS_ALLOWED_ORIGINS` in the cluster manifests: the Pages origin, and the desktop window's origin once it is known (the sync
-      server logs a rejected origin once, so read it from the log).
-- [ ] **Check the desktop app in a real window** (GTK or WebView2; only the headless server build was checked): whether the webview keeps
-      the device key and token across a relaunch (Edge on Windows passed in a browser tab; WebKitGTK is open), and what origin it presents.
-- [ ] Walk through it on a real iPhone, in the installed Home Screen app: enrolling by pasting an invite, a push, Sync all, the Keep or
-      Remove dialog, the bottom sheet (fields stay at 16 px, no zoom), and surviving a restart. It needs the two settings above and a
-      release deployed (previews do not turn sync on).
-
-**Decided not to build** (5 November 2026; each can be reopened):
+Decided on 5 November 2026; each can be reopened:
 
 - **A device list in the app.** The admin page already lists devices and revokes them, behind a stronger login. A revoke from inside the app
   would be authenticated by a device token alone, so one stolen device could revoke all the others.
