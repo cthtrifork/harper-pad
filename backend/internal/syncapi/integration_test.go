@@ -11,6 +11,7 @@ import (
 	"github.com/cthtrifork/harper-pad/backend/internal/auth"
 	"github.com/cthtrifork/harper-pad/backend/internal/auth/authtest"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 // pgLogin points the libpq variables at the end-to-end stack's PostgreSQL as one role (TLS 1.3, its client certificate, no
@@ -72,10 +73,12 @@ func TestEnrollmentAcrossTheRoles(t *testing.T) {
 	mux := http.NewServeMux()
 	api.Register(mux)
 	var seenDevice store.Device
-	mux.HandleFunc("GET /docs", api.Authenticated(func(w http.ResponseWriter, _ *http.Request, d store.Device) {
-		seenDevice = d
-		w.WriteHeader(http.StatusNoContent)
-	}))
+	huma.Register(api.Huma(), huma.Operation{
+		OperationID: "probe", Method: http.MethodGet, Path: "/docs", DefaultStatus: http.StatusNoContent, Middlewares: huma.Middlewares{api.RequireDevice},
+	}, func(ctx context.Context, _ *whoamiIn) (*struct{}, error) {
+		seenDevice, _ = DeviceFrom(ctx)
+		return nil, nil
+	})
 	h := api.CORS(mux)
 
 	// Proofs are made with the real clock here: the verifier is the real one.
@@ -98,7 +101,9 @@ func TestEnrollmentAcrossTheRoles(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("enroll = %d %s", rec.Code, rec.Body)
 	}
-	var got enrollResponse
+	var got struct {
+		DeviceToken string `json:"deviceToken"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}

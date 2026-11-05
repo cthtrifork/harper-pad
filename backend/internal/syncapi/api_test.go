@@ -17,6 +17,7 @@ import (
 	"github.com/cthtrifork/harper-pad/backend/internal/auth"
 	"github.com/cthtrifork/harper-pad/backend/internal/auth/authtest"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 const publicURL = "https://sync.example.org"
@@ -75,6 +76,17 @@ func newInvite(t *testing.T) string {
 	return tok
 }
 
+type whoamiIn struct {
+	DPoP          string `header:"DPoP"`
+	Authorization string `header:"Authorization"`
+}
+
+type whoamiOut struct {
+	Body struct {
+		ID string `json:"id"`
+	}
+}
+
 func setup(t *testing.T, st Store, origins ...string) (http.Handler, *int) {
 	t.Helper()
 	v := auth.NewVerifier()
@@ -83,10 +95,15 @@ func setup(t *testing.T, st Store, origins ...string) (http.Handler, *int) {
 	mux := http.NewServeMux()
 	api.Register(mux)
 	hits := 0
-	mux.HandleFunc("GET /whoami", api.Authenticated(func(w http.ResponseWriter, r *http.Request, d store.Device) {
+	huma.Register(api.Huma(), huma.Operation{
+		OperationID: "whoami", Method: http.MethodGet, Path: "/whoami", Middlewares: huma.Middlewares{api.RequireDevice},
+	}, func(ctx context.Context, _ *whoamiIn) (*whoamiOut, error) {
 		hits++
-		_, _ = w.Write([]byte(d.ID))
-	}))
+		d, _ := DeviceFrom(ctx)
+		out := &whoamiOut{}
+		out.Body.ID = d.ID
+		return out, nil
+	})
 	return api.CORS(mux), &hits
 }
 
@@ -99,6 +116,9 @@ func do(h http.Handler, method, path string, body any, hdr map[string]string) *h
 		rd = bytes.NewReader(b)
 	}
 	req := httptest.NewRequest(method, path, rd)
+	if rd.Len() > 0 {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
@@ -130,7 +150,10 @@ func TestEnrollThenAuthenticate(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("enroll = %d %s", rec.Code, rec.Body)
 	}
-	var got enrollResponse
+	var got struct {
+		DeviceToken string `json:"deviceToken"`
+		TokenType   string `json:"token_type"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got.TokenType != "DPoP" || len(got.DeviceToken) != 43 {
 		t.Fatalf("response %q, %v", rec.Body, err)
 	}
@@ -196,12 +219,12 @@ func TestEnrollRefusals(t *testing.T) {
 			return rec
 		}, 401},
 		{"not json", func(h http.Handler) *httptest.ResponseRecorder { return do(h, "POST", "/enroll", "{", hdr()) }, 400},
-		{"control character in the name", func(h http.Handler) *httptest.ResponseRecorder {
+		{"control character in the name (422)", func(h http.Handler) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", map[string]string{"invite": invite, "deviceName": "a\x01b"}, hdr())
-		}, 400},
-		{"long name", func(h http.Handler) *httptest.ResponseRecorder {
+		}, 422},
+		{"long name (422)", func(h http.Handler) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", map[string]string{"invite": invite, "deviceName": strings.Repeat("é", 65)}, hdr())
-		}, 400},
+		}, 422},
 		{"body too large", func(h http.Handler) *httptest.ResponseRecorder {
 			return do(h, "POST", "/enroll", map[string]string{"invite": invite, "deviceName": strings.Repeat("a", maxEnrollBody)}, hdr())
 		}, 413},
@@ -309,5 +332,60 @@ func TestEachRejectedOriginIsLoggedOnce(t *testing.T) {
 	}
 	if len(api.logged) > maxLoggedOrigins {
 		t.Errorf("the set grew to %d", len(api.logged))
+	}
+}
+
+// The proof is checked before Huma reads or validates the body, so a caller without a valid proof learns nothing about the shape of
+// a request: a broken body, an oversized one and a valid one all get the same answer.
+func TestCredentialsAreCheckedBeforeTheBody(t *testing.T) {
+	invite := newInvite(t)
+	h, _ := setup(t, newFake(invite, ""))
+	for name, body := range map[string]string{
+		"broken json": "{",
+		"wrong types": `{"invite": 5}`,
+		"too large":   `{"invite":"` + strings.Repeat("a", maxEnrollBody*2) + `"}`,
+		"valid":       `{"invite":"` + invite + `"}`,
+	} {
+		if rec := do(h, "POST", "/enroll", body, nil); rec.Code != 401 {
+			t.Errorf("%s without a proof = %d, want 401", name, rec.Code)
+		}
+	}
+}
+
+// Every way of failing the credential checks is the same response, byte for byte, so the cause cannot be read from it.
+func TestCredentialFailuresAreIdentical(t *testing.T) {
+	invite := newInvite(t)
+	k := authtest.NewKey(t)
+	st := newFake(invite, "")
+	h, _ := setup(t, st)
+	good := func() map[string]string { return map[string]string{"DPoP": proof(t, k, "POST", "/enroll", "")} }
+
+	spent := newInvite(t)
+	st.invites[string(auth.HashToken(spent))] = ""
+	if rec := do(h, "POST", "/enroll", map[string]string{"invite": spent}, good()); rec.Code != 200 {
+		t.Fatalf("setup: %d", rec.Code)
+	}
+
+	cases := map[string]*httptest.ResponseRecorder{
+		"no proof":        do(h, "POST", "/enroll", map[string]string{"invite": invite}, nil),
+		"proof for /docs": do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": proof(t, k, "POST", "/docs", "")}),
+		"junk proof":      do(h, "POST", "/enroll", map[string]string{"invite": invite}, map[string]string{"DPoP": "a.b.c"}),
+		"unknown invite":  do(h, "POST", "/enroll", map[string]string{"invite": newInvite(t)}, good()),
+		"malformed":       do(h, "POST", "/enroll", map[string]string{"invite": "short"}, good()),
+		"spent invite":    do(h, "POST", "/enroll", map[string]string{"invite": spent}, good()),
+	}
+	var first string
+	for name, rec := range cases {
+		if rec.Code != 401 {
+			t.Errorf("%s = %d, want 401", name, rec.Code)
+		}
+		if first == "" {
+			first = rec.Header().Get("Content-Type") + "\n" + rec.Body.String()
+		} else if got := rec.Header().Get("Content-Type") + "\n" + rec.Body.String(); got != first {
+			t.Errorf("%s differs:\n%s\nvs\n%s", name, got, first)
+		}
+	}
+	if !strings.Contains(first, `"detail":"unauthorized"`) || strings.Contains(first, "invite") {
+		t.Errorf("unexpected 401 body: %s", first)
 	}
 }

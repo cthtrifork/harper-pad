@@ -322,7 +322,7 @@ setup and this design has no OAuth server:
 | The token is usually a **JWT** with `cnf.jkt`, the key's thumbprint | An **opaque random token**; the key binding is stored on the `devices` row | Revocation and the account need a database lookup anyway, so a JWT would add signing-key management and no benefit |
 | Short-lived access tokens, renewed with a refresh token bound to the key | One long-lived token, no refresh | A refresh flow brings races between tabs, the service worker and iOS suspensions for the same protection |
 | Optional server-supplied `DPoP-Nonce`, with a retry on `use_dpop_nonce` | A timestamp window of about 60 seconds plus the `jti` replay cache | No extra round trip and no nonce state |
-| Defined error responses (`WWW-Authenticate: DPoP error="invalid_dpop_proof"`) | A plain 401 | Nothing outside this app reads them |
+| Defined error responses (`WWW-Authenticate: DPoP error="invalid_dpop_proof"`) | A 401 with a small `application/problem+json` body whose `detail` is always `unauthorized`, the same bytes for every credential failure | Nothing outside this app reads them, and the cause must not be readable from the response |
 
 Nothing outside the app consumes the standard: there is no second service, third-party client or identity provider that expects an
 OAuth server. It would be worth going literal if that changes. The client already sends literal DPoP proofs, so the move (JWT
@@ -488,6 +488,8 @@ assigns each draft a version, and it never merges, never makes copies and has no
   same text. The device records the state it last synced for each draft, and "the
   server changed" means the server's state differs from that record. Only equality is tested, never order, so device clocks do not
   matter.
+- **The routes are also described in [openapi.yaml](openapi.yaml)**, generated from the server's Go types (`make openapi` in `backend/`; a test
+  fails when the file is out of date). Where it and this page disagree, one of them is wrong: fix it.
 - **`version` is only for compare-and-set.** It is not used to order anything or to tell whether the server changed. `base` carries
   `updatedAt` too, so a write is checked against the exact state the device saw.
 - **Every route needs a valid `DPoP` proof header** ([DPoP](#limiting-the-damage-of-a-stolen-device)), `/enroll` included, so CORS

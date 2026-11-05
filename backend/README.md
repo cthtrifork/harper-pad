@@ -12,7 +12,7 @@ manifests are not kept in this repository.
 |---|---|
 | `cmd/harper-pad-sync`, `cmd/harper-pad-admin` | The two commands (stubs that serve the health endpoints below) |
 | `internal/admin` | The admin UI (Go `html/template` + vendored htmx 2, embedded; one page: add a device, pending URLs, devices; no inline script or style, same-origin and CSRF checks). The CSS is one file per concern in `web/static` (`tokens`, `base`, `controls`, `list`, `card`, `motion`, `phone`, linked in that order from `layout.html`; `phone.css` last because it overrides). It reaches the database only through the `Store` interface, implemented on PostgreSQL by `store.Admin` |
-| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool, the migration runner, the admin queries in `admin.go`, the sync queries in `sync.go`, and `migrations/` with the schema from `docs/sync.md`), `auth` (device tokens and the DPoP proof check; `authtest` makes proofs the way the web client does), `syncapi` (the routes, the CORS allowlist and the device authentication), `admin`, and `protocol` (empty, for the draft types) |
+| `internal/` | `server` (health endpoints, graceful shutdown), `config` (environment), `store` (the pgx pool, the migration runner, the admin queries in `admin.go`, the sync queries in `sync.go`, and `migrations/` with the schema from `docs/sync.md`), `auth` (device tokens and the DPoP proof check; `authtest` makes proofs the way the web client does), `syncapi` (the routes on [Huma](https://huma.rocks), which serves them on the standard library's mux and describes them in OpenAPI; the CORS allowlist and the device authentication), `admin`, and `protocol` (empty, for the draft types) |
 | `Containerfile.sync`, `Containerfile.admin` | Container images; the build context is this directory |
 | `testdata/protocol/` | Fixtures for the protocol (empty) |
 | `test/e2e/` | The end-to-end stack (`compose.yaml`, `Caddyfile`, `certs.sh`) and the Playwright test |
@@ -32,7 +32,7 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 
 | Endpoint | Use it for | |
 |---|---|---|
-| `POST /enroll` | Enrolling a device | `{invite, deviceName}` with a `DPoP` proof signed by the new key. Spends the invite and returns `{deviceToken, token_type: "DPoP"}`. A wrong, spent or expired invite, a bad or replayed proof and a missing proof are all the same `401`; `400` for a malformed body or name, `413` above 4 KiB |
+| `POST /enroll` | Enrolling a device | `{invite, deviceName}` with a `DPoP` proof signed by the new key. Spends the invite and returns `{deviceToken, token_type: "DPoP"}`. A wrong, spent or expired invite, a bad or replayed proof and a missing proof are all the same `401` (an `application/problem+json` body that says only `unauthorized`); `400` for a malformed body, `422` for an invalid name, `413` above 4 KiB. The proof is checked before the body is read |
 | `GET /healthz` | `livenessProbe` | The process is serving. Never touches PostgreSQL, so a database outage does not restart healthy pods |
 | `GET /readyz` | `readinessProbe` | A PostgreSQL round trip succeeds (2 s limit, so set `timeoutSeconds: 3`; the result is cached for 2 s and logged only when it changes). 503 while the database is unreachable and while shutting down |
 
@@ -91,6 +91,15 @@ Ports are `E2E_ADMIN_PORT` (default 19001) and `E2E_PG_PORT` (PostgreSQL on loop
 against the same stack, copy the certificates out with `make e2e-certs` and set the libpq variables the cluster uses
 (`PGHOST=localhost PGPORT=15432 PGDATABASE=harper PGUSER=harper_admin PGSSLMODE=verify-full PGSSLROOTCERT=.e2e-certs/ca.crt
 PGSSLCERT=.e2e-certs/admin.crt PGSSLKEY=.e2e-certs/admin.key SYNC_PUBLIC_URL=https://sync.example.test`).
+
+## OpenAPI
+
+The routes are described in [`../docs/openapi.yaml`](../docs/openapi.yaml), **generated from the Go request and response types** (the field
+tags carry the constraints and descriptions), not written beside the code. `make openapi` rewrites it; `TestOpenAPIIsUpToDate` fails when
+the committed file differs from what the code describes, so a changed route or field cannot ship with a stale description. Huma serves
+nothing itself: no documentation page, no `/openapi.json`, no schema routes, and no `$schema` member in bodies (`/docs` is the draft list).
+The DPoP header and the device token are described but not marked `required` in the schema, because a missing credential must be the same
+401 as a wrong one, not the 422 Huma gives a missing required header: the middleware that checks them runs before Huma validates the input.
 
 ## Tests
 
