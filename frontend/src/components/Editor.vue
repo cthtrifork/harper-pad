@@ -90,7 +90,7 @@ defineExpose({
   remeasure: () => view?.requestMeasure(),
   relint: () => view && relint(view),
   getText: () => view?.state.doc.toString() ?? "",
-  load: (text, format = props.format) =>
+  load: (text, format = props.format, keepSelection = false) =>
     view &&
     loadDocument(
       view,
@@ -99,6 +99,7 @@ defineExpose({
       { format, source: props.source },
       (t) => emit("doc", t),
       (c) => emit("cursor", c),
+      keepSelection,
     ),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
