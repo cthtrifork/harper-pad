@@ -3,19 +3,74 @@
   <head>
     <meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;self&#39; &#39;wasm-unsafe-eval&#39;; style-src &#39;self&#39; &#39;unsafe-inline&#39;; img-src &#39;self&#39; data:; font-src &#39;self&#39;; connect-src &#39;self&#39; https://harper-sync.portableinfo.cloud; worker-src &#39;self&#39; blob:; object-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;; manifest-src &#39;self&#39;">
 
+    <style>:root {
+  --bg: #f6f7f9;
+  --panel: #eceff3;
+  --raised: #ffffff;
+  --selected: #dde4ec;
+  --sunken: #eef1f5;
+  --well: #e3e7ed; /* the Problems panel: a step darker than --panel, so it reads as a list of findings, not as the drafts cards */
+  --line: #d3d9e0;
+  --text: #1a2028;
+  --mute: #566170;
+  --accent: #b36b00;
+  --on-accent: #ffffff;
+  --accent-tint: #f6e7cf;
+  --ok: #166534;
+  --bad: #b91c1c;
+  --c-spelling: #d63a32;
+  --c-grammar: #7a4fd6;
+  --c-style: #1f6fd1;
+  --tok-string: #1a7f4b; /* fenced code (preview.css) */
+  --scrim: rgb(0 0 0 / 0.5);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.08);
+  --shadow-thumb: 0 1px 2px rgb(0 0 0 / 0.12);
+  --shadow-menu: 0 8px 24px rgb(0 0 0 / 0.18);
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.35);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --font-ui: system-ui, sans-serif;
+  --font-doc: "Literata Variable", Georgia, serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161b;
+    --panel: #181d23;
+    --raised: #1f252d;
+    --selected: #2c3745;
+    --sunken: #151a20;
+    --well: #11151a;
+    --line: #2b333d;
+    --text: #e8ebef;
+    --mute: #9aa5b1;
+    --accent: #f5a524;
+    --on-accent: #1a1203;
+    --accent-tint: #3a2a0e;
+    --ok: #4cc38a;
+    --bad: #ff7b72;
+    --c-spelling: #ff7b72;
+    --c-grammar: #c4a1ff;
+    --c-style: #79b8ff;
+    --tok-string: #7ee2a8;
+  }
+}
+</style>
+
     <meta charset="utf-8" />
     <title>Harper Pad</title>
     <meta name="description" content="Grammar-checked editor with a scratch pad drawer." />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- Painted before any script has arrived: the page colours (same as styles/tokens.css) and a title (on a phone only: the same query as App.vue's `narrow`), so a cold start is not a blank
+    <!-- Painted before any script has arrived: the page colours (styles/tokens.css, inlined by vite.config.js) and a title (on a phone only: the same query as App.vue's `narrow`), so a cold start is not a blank
          screen while the scripts download and the first draft is read. Vue replaces the contents of #app when it mounts. -->
-    <style>body{color:#1a2028;background:#f6f7f9;margin:0;font:14px/1.5 system-ui,sans-serif}#app>.splash{flex-direction:column;justify-content:center;align-items:center;gap:12px;min-height:100dvh;font-size:20px;font-weight:600;display:none}@media (width<=720px),(pointer:coarse) and (height<=500px){#app>.splash{display:flex}}#app>.splash span{opacity:.6}@media (prefers-color-scheme:dark){body{color:#e8ebef;background:#12161b}}</style>
-    <script type="module" crossorigin src="/assets/index-CQ-nq6-7.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/diagnostics-BBjJDD-1.js">
+    <style>body{background:var(--bg);color:var(--text);margin:0;font:14px/1.5 system-ui,sans-serif}#app>.splash{flex-direction:column;justify-content:center;align-items:center;gap:12px;min-height:100dvh;font-size:20px;font-weight:600;display:none}@media (width<=720px),(pointer:coarse) and (height<=500px){#app>.splash{display:flex}}#app>.splash span{opacity:.6}</style>
+    <script type="module" crossorigin src="/assets/index-BNvV_642.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/diagnostics-8JUVTIUY.js">
     <link rel="modulepreload" crossorigin href="/assets/dist-emYHyIrl.js">
     <link rel="modulepreload" crossorigin href="/assets/dist-qIrWpRkD.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-D0vU1Fi_.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-ZdR2FGS4.css">
     <meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#181d23" media="(prefers-color-scheme: dark)">
     <meta name="mobile-web-app-capable" content="yes">
