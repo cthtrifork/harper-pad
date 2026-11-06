@@ -38,7 +38,7 @@
 
 {{define "row"}}<div class="item" id="dev-{{.ID}}">
   <span class="dot{{if idle .LastSeen}} old{{end}}"></span>
-  <div class="main">{{.Name}}<span class="sub">{{if .LastSeen.IsZero}}never{{else}}<time data-seen="{{millis .LastSeen}}">{{lastSeen .LastSeen}}</time>{{end}}{{with .UserAgent}} · {{.}}{{end}}</span></div>
+  <div class="main">{{.Name}}<span class="sub">{{if .LastSeen.IsZero}}never{{else}}<time datetime="{{iso .LastSeen}}" data-seen="{{millis .LastSeen}}">{{iso .LastSeen}}</time>{{end}}{{with .UserAgent}} · {{.}}{{end}}</span></div>
   <button class="hp quiet" type="button" hx-get="/devices/{{.ID}}/edit" hx-target="closest .item" hx-swap="outerHTML">Rename</button>
   <button class="hp danger" type="button" hx-delete="/devices/{{.ID}}" hx-target="#devices-list" hx-swap="outerHTML"
     hx-confirm="Revoke {{.Name}}? It is signed out at its next sync. Its drafts stay on the device.">Revoke</button>
