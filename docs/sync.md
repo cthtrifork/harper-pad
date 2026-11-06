@@ -36,14 +36,14 @@ The server is described next to its code: [backend README](../backend/README.md)
 - One dialog covers the file and the server when both differ.
 - Closing the window while it is open is allowed. The dialog returns the next time the draft is opened.
 - Your draft keeps its id and its file link.
-- Under the first sentence, one row per version that exists (your draft, the file, the server) gives its number of lines and when it was edited or changed; a time that is unknown is left out, and a narrow screen shows the lines only.
-- **Overwrite** Updates the file, then the server, with your draft. The other versions are Deleted, with no undo. Its button is the danger style and its text says whose text is Deleted. When your draft has no edits of its own, it takes the file's text and only the server is Updated.
-- **Keep** first Creates a Conflicted copy of each other version that differs from your draft (one copy when the file and the server hold the same text), then does what Overwrite does.
+- The dialog is a title, one row per version that exists (your draft, the file, the server) with its timestamp, two buttons and one footer line, "Overwrite cannot be undone." A long file name is cut so the timestamp always shows.
+- **Overwrite** (**Overwrite others** with three versions) Updates the file, then the server, with your draft. The other versions are Deleted, with no undo. Its button is the danger style and its tooltip says what is Deleted. When your draft has no edits of its own, the file counts as yours (the footer says so) and only the server is Updated.
+- **Keep** (**Keep all** with three versions) first Creates a Conflicted copy of each other version that differs from your draft (one copy when the file and the server hold the same text), then does what Overwrite does.
 - A Conflicted copy is an ordinary draft without a file link, with a badge in memory ("Conflicted copy, from the file", "from the server" or "from the file and the server"). The badge goes when the copy is edited or deleted, from its x, or at restart. It is never kept on disk or synced, and the text is not edited.
 - The file and the server are read again when you choose. If either changed, the dialog is redrawn and nothing is changed.
 - A failed file update is skipped and the header chip says why; the server is still Updated.
 - With the server unreachable the file is Updated and the server stays pending. The dialog returns for the server only if it changed again.
-- The dialog looks the same on a phone: centered, Overwrite on the left and Keep, which has the focus, on the right.
+- Keep has the focus. The dialog looks the same on a phone: centered, with the two buttons stacked, Overwrite above Keep.
 
 ## Other paths on this device
 
@@ -61,7 +61,7 @@ The server is described next to its code: [backend README](../backend/README.md)
 | A dot beside the file name | Your draft has changes the file does not have yet; Ctrl+S or Save Updates the file and the dot goes. Never shown with a struck file name |
 | The x on the file name | Deletes the link only; the file and your draft are untouched. A toast "Unlinked <name>" has Undo, which Creates the same link again (path and baseline); then Save as file returns |
 | Save as file onto the path of another draft | The link moves to this draft and the other draft is unlinked, with a toast naming it |
-| Web build | It never links a draft to a file |
+| Web build | It never links a draft to a file; the header offers Save as file, or Share on iPhone and iPad |
 | Second launch of the app | It focuses the open window (desktop) |
 
 ## Sync moments

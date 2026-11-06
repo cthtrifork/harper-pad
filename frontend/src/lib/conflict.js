@@ -21,86 +21,59 @@ export const COPY_LABELS = {
 
 const stampOf = (side) => (side ? side.stamp : null);
 
-import { whenLabel } from "./when.js";
+import { whenStamp } from "./when.js";
 
-// Lines of a text: "" has none, and a final newline does not start another.
-export function lineCount(text) {
-  return text === "" ? 0 : text.replace(/\n$/, "").split("\n").length;
-}
-
-// "14:07" for today, else the date label ("Yesterday", "29 Oct"); "" when the time is not known.
-function when(ms, now) {
-  if (!Number.isFinite(ms) || ms <= 0) return "";
-  const l = whenLabel(ms, now);
-  return l.startsWith("Today, ") ? l.slice(7) : l;
-}
-
-// The versions involved, one short row each, at most three: your draft (when edited), the file, the server. `m.draftAt`, `m.file.at` and
-// `m.server.at` are times in ms and may be missing; a missing time leaves the time out. An unedited draft has no row of its own: the file's row
-// is labelled as yours. Rows: {label, lines: "4 lines", when: "edited 14:07" or ""}.
+// The versions involved, one row each, in the order draft, file, server (never more than three). Rows: {kind, label, when, tint}. `when` is the
+// version's timestamp from `whenStamp` ("22:36" today, "6 Nov, 22:36" otherwise), or "–" when it is not known (`m.draftAt`, `m.file.at` and
+// `m.server.at` are times in ms). The draft's row is tinted; an unedited draft has no row of its own, and the file's row is tinted instead
+// because the file's text counts as yours.
 export function summaryRows(m, now = new Date()) {
-  const row = (label, text, verb, ms) => {
-    const n = lineCount(text);
-    const at = when(ms, now);
-    return { label, lines: `${n} ${n === 1 ? "line" : "lines"}`, when: at ? `${verb} ${at}` : "" };
-  };
-  const name = m.name || "The file";
+  const when = (ms) => (Number.isFinite(ms) && ms > 0 ? whenStamp(ms, now) : "–");
   return [
-    !m.applyFile && row("Your draft", m.yours, "edited", m.draftAt),
-    m.file && row(m.applyFile ? `${name}, yours` : name, m.file.text, "changed", m.file.at),
-    m.server && row("The server", m.server.text, "changed", m.server.at),
+    !m.applyFile && { kind: "draft", label: "Your draft", when: when(m.draftAt), tint: true },
+    m.file && { kind: "file", label: m.name || "The file", when: when(m.file.at), tint: !!m.applyFile },
+    m.server && { kind: "server", label: "The server", when: when(m.server.at), tint: false },
   ].filter(Boolean);
-}
-
-// What the dialog says: which versions differ, and whose text each choice loses. Plain and specific.
-export function describeConflict(m) {
-  const both = !!m.file && !!m.server;
-  const file = m.name ? m.name : "the file";
-  const title = both
-    ? `${file} and the server both differ from your draft`
-    : m.file
-      ? `${file} changed on disk`
-      : "This draft changed on another device";
-  const fileOther = m.file && !m.applyFile; // an unedited draft takes the file's text: it is not an "other" version then
-  const same = fileOther && m.server && sameText(m); // one text, held by the file and the server: said once
-  const others = same
-    ? [`the text now in ${file}, which matches the server's text,`]
-    : [fileOther && `the text now in ${file}`, m.server && "the server's text"].filter(Boolean);
-  const othersText = others.join(" and ");
-  const yours = m.applyFile ? `${file}'s text` : "your draft's text";
-  const detail = m.applyFile
-    ? `Your draft has no edits of its own, so ${file}'s text counts as yours.`
-    : both
-      ? "Your draft, the file and the server each hold different text."
-      : m.file
-        ? `Your draft and ${file} hold different text.`
-        : "Your draft and the server hold different text.";
-  const sendsTo = [fileOther && file, (m.server || m.sync) && "the server"].filter(Boolean);
-  const where = sendsTo.length > 1 ? `${sendsTo[0]} and ${sendsTo[1]}` : (sendsTo[0] ?? "where it belongs");
-  const verb = others.length > 1 ? "are" : "is";
-  const cap = othersText ? `${othersText[0].toUpperCase()}${othersText.slice(1)}` : "";
-  // Nothing else differs (an unedited draft whose file is the only version): there is nothing to copy and nothing to lose.
-  if (!othersText) {
-    return {
-      title,
-      detail,
-      keep: `Keep: ${yours} goes to ${where}. Nothing else differs, so no Conflicted copy is made.`,
-      overwrite: `Overwrite: ${yours} goes to ${where}. Nothing else differs, so nothing is lost.`,
-    };
-  }
-  return {
-    title,
-    detail,
-    keep: `Keep: ${yours} goes to ${where}. ${cap} ${verb} saved first as ${copiesText(m)}.`,
-    overwrite: `Overwrite: ${yours} goes to ${where}. ${cap} ${verb} lost for good, with no undo.`,
-  };
 }
 
 const sameText = (m) => !!m.file && !!m.server && m.file.text === m.server.text;
 
-function copiesText(m) {
-  if (m.file && !m.applyFile && m.server) return sameText(m) ? "one Conflicted copy" : "two Conflicted copies";
-  return "a Conflicted copy";
+// The words of the dialog. The title, the two button labels and one footer line are what is seen; the two sentences for the buttons are
+// their tooltips and what assistive technology reads. `versions` is how many rows there are (2 or 3).
+export function describeConflict(m) {
+  const fileName = m.name || "the file";
+  const fileOther = !!m.file && !m.applyFile; // an unedited draft takes the file's text: the file is not an "other" version then
+  const versions = summaryRows(m).length;
+  const title = m.applyFile
+    ? "Two versions differ"
+    : fileOther && m.server
+      ? "Three versions differ"
+      : fileOther
+        ? `${m.name || "The file"} changed on disk`
+        : "This draft changed on another device";
+
+  const others = fileOther && m.server ? (sameText(m) ? 1 : 2) : fileOther || m.server ? 1 : 0;
+  const otherNames = [fileOther && `the text now in ${fileName}`, m.server && "the server's text"].filter(Boolean);
+  const targets = [fileOther && fileName, (m.server || m.sync) && "the server"].filter(Boolean).join(" and ") || "where it belongs";
+  const yours = m.applyFile ? `${fileName}'s text` : "your draft";
+  const copies = !others ? "" : fileOther && m.server && !sameText(m) ? "as two Conflicted copies" : "as a Conflicted copy";
+  const losing = others === 0 ? "" : others === 1 ? "the other version" : "the other versions";
+
+  return {
+    title,
+    versions,
+    keepLabel: versions === 3 ? "Keep all" : "Keep both",
+    overwriteLabel: versions === 3 ? "Overwrite others" : "Overwrite",
+    keepTitle: others
+      ? `Keeps ${otherNames.join(" and ")} ${copies}, then updates ${targets} with ${yours}.`
+      : `Nothing else differs, so no copy is made. Updates ${targets} with ${yours}.`,
+    overwriteTitle: others
+      ? `Deletes ${losing} (${otherNames.join(" and ")}). No undo. Updates ${targets} with ${yours}.`
+      : `Nothing else differs, so nothing is deleted. Updates ${targets} with ${yours}.`,
+    footer: m.applyFile
+      ? `${m.name || "The file"} counts as yours: your draft has no edits. Overwrite cannot be undone.`
+      : "Overwrite cannot be undone.",
+  };
 }
 
 // The versions Keep saves as copies: [{text, from}] with from "file", "server" or "file and server". A side whose text equals yours has no copy.
@@ -117,28 +90,51 @@ export function copiesFor(m) {
 //   saveCopy(text, from) saves a new unlinked draft and returns its id.
 //   writeFile()          writes the draft to its file (rejects with the reason when it cannot; null when the draft has no file).
 //   push()               sends the draft to the server (null when sync is off); resolves to false when it did not go.
-// Resolves to {status: "stale"} when either side moved since the dialog was drawn (nothing was written: the caller redraws), or
+// Resolves to {status: "stale", changed: ["file" and/or "server"]} when either side moved since the dialog was drawn (nothing was written: the caller redraws), or
 // {status: "done", copies: [{id, from}], fileError, pushed}.
 export async function resolveConflict(choice, m, ops) {
   const now = await ops.recheck();
-  if (stampOf(now.file) !== stampOf(m.file) || stampOf(now.server) !== stampOf(m.server)) return { status: "stale" };
+  const changed = [stampOf(now.file) !== stampOf(m.file) && "file", stampOf(now.server) !== stampOf(m.server) && "server"].filter(Boolean);
+  if (changed.length) return { status: "stale", changed };
 
-  if (m.applyFile) await ops.applyFile(m.file.text);
-
-  const copies = [];
-  if (choice === "keep") {
-    for (const c of copiesFor(m)) copies.push({ id: await ops.saveCopy(c.text, c.from), from: c.from });
-  }
-
-  let fileError = "";
-  if (ops.writeFile && !m.applyFile) {
-    try {
-      await ops.writeFile();
-    } catch (err) {
-      fileError = String(err?.message || err); // skipped: the chip says why, and the server push goes on
+  // From the first step that changes anything, a failure is no longer "nothing was changed" (err.untouched says which it is).
+  let acted = false;
+  try {
+    if (m.applyFile) {
+      acted = true;
+      await ops.applyFile(m.file.text);
     }
-  }
 
-  const pushed = ops.push ? await ops.push() : null;
-  return { status: "done", copies, fileError, pushed };
+    const copies = [];
+    if (choice === "keep") {
+      for (const c of copiesFor(m)) {
+        acted = true;
+        copies.push({ id: await ops.saveCopy(c.text, c.from), from: c.from });
+      }
+    }
+
+    let fileError = "";
+    if (ops.writeFile && !m.applyFile) {
+      acted = true;
+      try {
+        await ops.writeFile();
+      } catch (err) {
+        fileError = String(err?.message || err); // skipped: the chip says why, and the server push goes on
+      }
+    }
+
+    acted = true;
+    const pushed = ops.push ? await ops.push() : null;
+    return { status: "done", copies, fileError, pushed };
+  } catch (err) {
+    err.untouched = !acted;
+    throw err;
+  }
+}
+
+// What the dialog says when a side changed again since it was drawn: names the side, and asks to look again.
+export function staleNote(m, changed) {
+  const names = [changed.includes("file") && (m.name || "The file"), changed.includes("server") && "the server"].filter(Boolean);
+  const who = names.join(" and ").replace(/^the /, "The "); // a file name keeps its own case
+  return `${who} changed again. Check the rows and choose again.`;
 }

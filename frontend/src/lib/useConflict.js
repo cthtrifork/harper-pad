@@ -1,5 +1,5 @@
 import { ref, watch } from "vue";
-import { resolveConflict } from "./conflict.js";
+import { resolveConflict, staleNote } from "./conflict.js";
 
 // The Keep or Overwrite dialog for the open draft (ConflictDialog.vue): what disagrees with it (its file, the server, or both), the model for
 // lib/conflict.js, and the choice. `drafts` is useDrafts and `sync` is useSync. Only the open draft ever gets a dialog; any other draft in
@@ -92,7 +92,7 @@ export function useConflict({ drafts, sync }) {
     try {
       const r = await resolveConflict(choice, m, ops(m));
       if (r.status === "stale") {
-        note.value = "Something changed while this was open. Please look again.";
+        note.value = staleNote(m, r.changed);
         await drafts.recheckFile();
         await build();
         return;
@@ -102,7 +102,7 @@ export function useConflict({ drafts, sync }) {
       sync.clearConflict();
       model.value = null;
     } catch (err) {
-      note.value = `Could not finish: ${String(err?.message || err)}`;
+      note.value = `Could not finish: ${String(err?.message || err).replace(/\.$/, "")}.${err?.untouched ? " Nothing was changed." : ""}`;
     } finally {
       busy.value = false;
     }

@@ -17,7 +17,7 @@
 }
 
 .conflict-dialog h2 {
-  margin: 0 0 6px;
+  margin: 0 0 12px;
   font-size: 15px;
   font-weight: 600;
 }
@@ -27,32 +27,86 @@
   color: var(--mute);
 }
 
-/* The versions involved: quiet, one short row each (at most three), never wrapping or scrolling. */
+/* The versions: a dot, the name, the timestamp. Rows are quiet blocks; your draft's row (or the file's, when it counts as yours) is tinted. The
+   dot colours reuse the app's tokens: blue for your draft, the accent for the file, green for the server. The name is cut with an ellipsis, so
+   the timestamp is always visible, at 320 px too. */
 .conflict-dialog .summary {
   width: 100%;
-  margin: 0 0 8px;
-  border-collapse: collapse;
-  color: var(--mute);
-  font-size: 12.5px;
+  margin: 0 0 16px;
+  border-collapse: separate;
+  border-spacing: 0 2px;
+  table-layout: fixed;
 }
 
-.conflict-dialog .summary th,
-.conflict-dialog .summary td {
-  padding: 2px 12px 2px 0;
+.conflict-dialog .summary td,
+.conflict-dialog .summary th {
+  padding: 7px 0;
+  background: var(--sunken);
   font-weight: 400;
   text-align: left;
+}
+
+.conflict-dialog .summary tr.tint td,
+.conflict-dialog .summary tr.tint th {
+  background: color-mix(in srgb, var(--c-style) 12%, var(--raised));
+}
+
+.conflict-dialog .summary .dot-cell {
+  width: 30px;
+  padding-left: 10px;
+  border-radius: 6px 0 0 6px;
+}
+
+.conflict-dialog .summary .when {
+  width: 9.5em;
+  padding-right: 10px;
+  border-radius: 0 6px 6px 0;
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
-.conflict-dialog .summary th {
-  max-width: 190px;
+.conflict-dialog .summary th .name {
+  display: block;
   overflow: hidden;
-  color: var(--text);
+  font-weight: 600;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.conflict-dialog .summary td:last-child {
-  padding-right: 0;
+.conflict-dialog .dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.conflict-dialog .dot.draft {
+  background: var(--c-style);
+}
+
+.conflict-dialog .dot.file {
+  background: var(--accent);
+}
+
+.conflict-dialog .dot.server {
+  background: var(--ok);
+}
+
+.conflict-dialog .foot {
+  margin: 12px 0 0;
+  color: var(--mute);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.conflict-dialog .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .conflict-dialog .note {
@@ -67,13 +121,13 @@
 
 .conflict-dialog .actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-top: 0;
 }
 
 .conflict-dialog .actions button {
-  height: 30px;
+  flex: 1 1 0;
+  height: 36px;
   padding: 0 14px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -110,7 +164,7 @@
   background: var(--raised);
 }
 
-/* A phone: the same centered dialog, never a sheet, with Keep and Overwrite side by side and tall enough to tap. */
+/* A phone: the same centered dialog. The buttons stack at full width, 44 px tall, Overwrite above Keep; the rows keep their timestamp. */
 @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .conflict-dialog {
     max-height: calc(100dvh - 32px);
@@ -119,14 +173,18 @@
     font-size: 15px;
   }
 
-  .conflict-dialog .actions button {
-    flex: 1 1 0;
-    height: 44px;
+  .conflict-dialog .summary .when {
+    width: 8.5em;
   }
 
-  /* Narrow: the label and the lines only. */
-  .conflict-dialog .summary .when {
-    display: none;
+  .conflict-dialog .actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .conflict-dialog .actions button {
+    flex: none;
+    height: 44px;
   }
 }
 

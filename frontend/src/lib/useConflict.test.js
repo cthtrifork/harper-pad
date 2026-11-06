@@ -127,7 +127,7 @@ test("if either side moved since the dialog was drawn it is redrawn and nothing 
     log.some((l) => l === "write" || l === "push" || (Array.isArray(l) && l[0] === "copy")),
     false,
   );
-  assert.match(c.note.value, /Something changed/);
+  assert.equal(c.note.value, "plan.md changed again. Check the rows and choose again.");
   assert.ok(c.model.value, "the dialog stays");
   const second = setup({ file: {}, server: {}, serverNow: { text: "newer", stamp: "3:9" } });
   await settle();
