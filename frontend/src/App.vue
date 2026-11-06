@@ -9,12 +9,15 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { backUp, isWeb, keepData, restoreBackup, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
+import { watchInstall } from "./lib/installHint.js";
 import { statusLine } from "./lib/statusLine.js";
+import { applyUpdate, onUpdateReady } from "./lib/swUpdate.js";
+import { trackKeyboard } from "./lib/viewport.js";
 import { useDrafts } from "./lib/useDrafts.js";
 import { useSync } from "./lib/useSync.js";
 
@@ -102,6 +105,51 @@ function syncToastAction() {
     sync.openCopy(n.copyId);
     sync.clearNotice();
   } else if (n?.kind === "removed") sync.undoRemoved();
+}
+
+// Back up and Restore (the drawer's two rows, web build). The typed text is saved first, so a backup holds it and a restore never takes it
+// for older. A restore stores only what is new or newer, then reloads what the page holds of it: the list, the open draft when the backup
+// had a newer copy of it (nothing was typed since the flush), and Harper's dictionary and ignore list.
+const notice = ref(null); // {text, tick}: one line about a backup or a restore
+const say = (text) => (notice.value = { text, tick: (notice.value?.tick ?? 0) + 1 });
+async function onBackup() {
+  try {
+    await drafts.flush();
+    const how = await backUp();
+    if (how !== "cancelled") say(how === "shared" ? "Backup ready to save" : "Backup downloaded");
+  } catch (err) {
+    say(`Could not back up: ${err?.message || err}`);
+  }
+}
+async function onRestore(file) {
+  try {
+    await drafts.flush();
+    const result = await restoreBackup(await file.text());
+    await drafts.refreshList();
+    if (result.changed.includes(drafts.current.value.id)) await drafts.reloadCurrent();
+    if (result.settings && harper.value) {
+      personal.value = await loadPersonal(harper.value);
+      editor.value?.relint();
+    }
+    say(result.message);
+  } catch (err) {
+    say(err?.message || String(err));
+  }
+}
+
+// Web build: a new version is waiting (lib/swUpdate.js), and the one-time offer to install the app (lib/installHint.js). Reload saves what
+// is typed first. The install offer waits a few seconds after Harper is ready, so it does not compete with the first paint.
+const updateReady = ref(false);
+const hint = ref(null); // {text, action, kind, tick}
+const installer = isWeb ? watchInstall({ show: (h) => (hint.value = { ...h, tick: 1 }) }) : null;
+if (isWeb) onUpdateReady(() => (updateReady.value = true));
+async function reloadForUpdate() {
+  await drafts.flush();
+  applyUpdate();
+}
+function hintAction() {
+  if (hint.value?.kind === "install") installer.accept();
+  hint.value = null;
 }
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
@@ -327,6 +375,7 @@ const focusFromPress = (e) => {
   if (isPlainPress(e)) editor.value?.focusEnd();
 };
 
+let stopKeyboard = () => {};
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
   sync
@@ -338,12 +387,14 @@ onMounted(async () => {
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
   keepData();
+  stopKeyboard = trackKeyboard({ onChange: (open) => open && nextTick(() => requestAnimationFrame(() => editor.value?.revealCaret())) });
   await nextTick(); // the editor is in the page now; Harper starts loading after it has been painted
   try {
     harper.value = await loadHarper();
     setupMs.value = Math.round(performance.now() - t0);
     record("setupMs", setupMs.value);
     state.value = "ready";
+    setTimeout(() => installer?.ready(), 4000);
   } catch (err) {
     state.value = "failed";
     error.value = String(err?.stack || err);
@@ -367,6 +418,7 @@ watch(
 onBeforeUnmount(() => {
   narrow.removeEventListener("change", onNarrowChange);
   window.removeEventListener("keydown", onKeydown);
+  stopKeyboard();
   drafts.detach();
 });
 </script>
@@ -412,6 +464,8 @@ onBeforeUnmount(() => {
         @more="drafts.showMore"
         @undo="drafts.undo"
         @snippet="insertSnippet"
+        @backup="onBackup"
+        @restore="onRestore"
         @close="toggleDrawer"
       />
       </Transition>
@@ -447,6 +501,15 @@ onBeforeUnmount(() => {
           </Transition>
           <Transition name="toast-bar">
             <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
+          </Transition>
+          <Transition name="toast-bar">
+            <ToastBar v-if="updateReady" message="A new version is ready." action="Reload" :ms="60000" :tick="1" @action="reloadForUpdate" @close="updateReady = false" />
+          </Transition>
+          <Transition name="toast-bar">
+            <ToastBar v-if="hint" :message="hint.text" :action="hint.action" :ms="20000" :tick="hint.tick" @action="hintAction" @close="hint = null" />
+          </Transition>
+          <Transition name="toast-bar">
+            <ToastBar v-if="notice" :message="notice.text" :tick="notice.tick" :ms="8000" @close="notice = null" />
           </Transition>
         </div>
         <Transition name="grow">

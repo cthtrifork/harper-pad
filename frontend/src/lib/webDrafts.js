@@ -158,6 +158,46 @@ export function createWebDrafts(open) {
     return withDb((db) => db.getAllKeys("drafts"));
   }
 
+  // Every draft with its text, for a backup (backup.js).
+  async function exportAll() {
+    return withDb((db) => db.getAll("drafts"));
+  }
+
+  // The update time of every stored draft, {id: updatedAt}, read from the small summaries, for planning a restore.
+  async function updatedTimes() {
+    return withDb(async (db) => new Map((await db.getAll("summaries")).map((s) => [s.id, s.updatedAt])));
+  }
+
+  // Stores drafts from a backup as they are, with their own times (save would stamp them with now), in one transaction. The caller has
+  // already decided which to store (planRestore). The sync state is left alone, so a restored draft counts as changed and is pushed by
+  // the next sync; the file link is kept when the draft is here already.
+  async function restore(list) {
+    for (const d of list) {
+      if (!ID.test(d.id ?? "")) throw new Error(`"${d.id}" is not a draft id`);
+      if (d.format !== "markdown" && d.format !== "text") throw new Error(`unknown draft format "${d.format}"`);
+      if (new TextEncoder().encode(d.content).length > MAX_CONTENT_BYTES) throw new Error("a draft in the backup is over the size limit");
+    }
+    return withDb(async (db) => {
+      const tx = db.transaction(["drafts", "summaries"], "readwrite");
+      const drafts = tx.objectStore("drafts");
+      const summaries = tx.objectStore("summaries");
+      const puts = [];
+      for (const input of list) {
+        const existing = await drafts.get(input.id);
+        const d = {
+          id: input.id,
+          format: input.format,
+          content: input.content,
+          createdAt: input.createdAt,
+          updatedAt: input.updatedAt,
+          filePath: existing?.filePath ?? "",
+        };
+        puts.push(drafts.put(d), summaries.put(summaryOf(d)));
+      }
+      await Promise.all([...puts, tx.done]);
+    });
+  }
+
   // What the page needs to start: the most recent draft and how many there are (see PadService.Startup).
   async function startup() {
     const { drafts, total } = await list(1, 0);
@@ -276,6 +316,9 @@ export function createWebDrafts(open) {
     list,
     search,
     startup,
+    exportAll,
+    updatedTimes,
+    restore,
     allIds,
     isChanged,
     syncState,

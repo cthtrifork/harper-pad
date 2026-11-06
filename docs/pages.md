@@ -108,7 +108,23 @@ Browser data belongs to one site in one browser on one device.
   browser to keep its data (`navigator.storage.persist()`).
 - A different address (a renamed repo or owner, a custom domain) starts with empty storage.
 
-There is no export or import yet. The dictionary is small, but if it matters, add one before relying on the web version.
+**Back up and Restore** (in the drafts drawer, web build only) are the way to move or protect it. Back up writes one JSON file with every
+draft (id, format, text, times) and the dictionary and ignore list (`frontend/src/lib/backup.js`): the share sheet on an iPhone, a download
+elsewhere. Restore reads such a file and only ever adds: a draft that is not here is added, one that is older here is replaced, one that is as
+new or newer here is kept, and the dictionary and ignore lists are merged. Nothing is deleted, so restoring twice is harmless. Restored drafts
+count as changed for sync. File links and sync state are device-specific and are not in the file. To move to the Home Screen app: Back up in
+Safari, install, then Restore in the app.
+
+### Keyboard, install hint and updates
+
+- **Keyboard.** Safari does not shrink the page when the keyboard opens; `lib/viewport.js` follows `visualViewport` and, while the keyboard is up,
+  sets the app height to what is left (`html.keyboard`, `--vvh`, `styles/safe-area.css`) and scrolls the caret into view. Unit tested with a fake
+  viewport; the real keyboard needs a device.
+- **Install hint** (`lib/installHint.js`): once, from the second visit, a toast. Chromium gets an Install button (`beforeinstallprompt`); an iPhone
+  gets the Share → Add to Home Screen steps, with a reminder that the app starts empty. Not shown when already installed.
+- **Updates.** The service worker installs a new version and waits (`web/sw.js` no longer calls `skipWaiting` by itself). `lib/swUpdate.js` shows
+  "A new version is ready. Reload"; Reload saves the draft first, then tells the worker to take over and reloads. It checks for a new worker when the
+  app comes to the front, at most hourly. A first install is not an update and shows nothing.
 
 ### Changing the schema
 

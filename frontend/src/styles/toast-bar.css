@@ -23,8 +23,8 @@
   border-radius: 8px;
   background: var(--raised);
   box-shadow: var(--shadow-menu);
+  max-width: calc(100vw - 24px);
   font-size: 13px;
-  white-space: nowrap;
   transition: opacity 0.3s var(--ease);
 }
 
