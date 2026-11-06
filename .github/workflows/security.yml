@@ -50,17 +50,21 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read # dorny/paths-filter lists the files of a pull request through the API
     outputs:
-      go: ${{ github.event_name != 'pull_request' || steps.filter.outputs.go }}
-      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend }}
-      npm: ${{ github.event_name != 'pull_request' || steps.filter.outputs.npm }}
+      go: ${{ github.event_name != 'pull_request' || steps.filter.outputs.go_any_changed }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend_any_changed }}
+      npm: ${{ github.event_name != 'pull_request' || steps.filter.outputs.npm_any_changed }}
     steps:
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - id: filter
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        uses: step-security/changed-files@2e07db73e5ccdb319b9a6c7766bd46d39d304bad # v47.0.5
         with:
-          filters: |
+          files_yaml: |
             go:
               - main.go
               - internal/**
