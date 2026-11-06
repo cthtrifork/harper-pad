@@ -14,7 +14,7 @@ const base = {
 test("the report is a few metric lines: version, timings, slowest requests, agent", () => {
   const text = formatDiagnostics({
     ...base,
-    nowMs: 0,
+    now: new Date(0),
     opens: { count: 1, first: 0, previous: 0 },
     storage: "1/500 MB",
     openMs: 3200.4,
@@ -64,7 +64,7 @@ test("storage that cannot be read or written does not stop the app", () => {
 test("the report says whether this is the first open and how storage stands", () => {
   const first = formatDiagnostics({
     ...base,
-    nowMs: 10_000,
+    now: new Date(10_000),
     opens: { count: 1, first: 10_000, previous: 0 },
     storage: "1/500 MB",
   });
@@ -72,9 +72,9 @@ test("the report says whether this is the first open and how storage stands", ()
   assert.match(first, /storage 1\/500 MB/);
   const later = formatDiagnostics({
     ...base,
-    nowMs: 3 * 3600_000,
-    opens: { count: 4, first: 0, previous: 3600_000 },
+    now: new Date(2026, 10, 6, 12, 0),
+    opens: { count: 4, first: new Date(2026, 9, 20, 9, 0).getTime(), previous: new Date(2026, 10, 6, 9, 12).getTime() },
     storage: "1/500 MB persisted",
   });
-  assert.match(later, /open #4 \(first 3 h ago, last 2 h ago\)/);
+  assert.match(later, /open #4 \(first 20 Oct, last Today, 09:12\)/);
 });

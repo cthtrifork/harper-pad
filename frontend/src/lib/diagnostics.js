@@ -1,5 +1,6 @@
-// What to paste into a bug report or a performance question from a phone, where there is no inspector: pressing the version in the drafts
-// drawer copies it. Nothing here is sent anywhere, and it holds no draft text. The start-up timings are recorded by main.js and App.vue.
+// What to paste into a bug report or a performance question from a phone, where there is no inspector: pressing the version in the header
+// popup copies it. Nothing here is sent anywhere, and it holds no draft text. The start-up timings are recorded by main.js and App.vue.
+import { whenLabel } from "./when.js";
 
 const recorded = {};
 
@@ -27,16 +28,6 @@ export function noteOpen(now = Date.now(), store = globalThis.localStorage) {
   recorded.opens = { count: before.count + 1, first: before.first, previous: before.last };
 }
 
-const ago = (then, now) => {
-  const s = Math.max(0, Math.round((now - then) / 1000));
-  return s < 90
-    ? `${s} s`
-    : s < 5400
-      ? `${Math.round(s / 60)} min`
-      : s < 129600
-        ? `${Math.round(s / 3600)} h`
-        : `${Math.round(s / 86400)} days`;
-};
 const mb = (b) => (typeof b === "number" ? `${Math.round(b / 1048576)} MB` : "n/a");
 const ms = (v) => (typeof v === "number" ? `${Math.round(v)} ms` : "n/a");
 const kb = (b) => (b ? `${Math.round(b / 1024)} kB` : "cached");
@@ -47,7 +38,7 @@ export function formatDiagnostics(info) {
   const opens = info.opens
     ? info.opens.count === 1
       ? "open #1 (first)"
-      : `open #${info.opens.count} (first ${ago(info.opens.first, info.nowMs)} ago, last ${ago(info.opens.previous, info.nowMs)} ago)`
+      : `open #${info.opens.count} (first ${whenLabel(info.opens.first, info.now)}, last ${whenLabel(info.opens.previous, info.now)})`
     : "opens n/a";
   const lines = [
     `Harper Pad ${info.version || "(no version)"} | ${info.standalone ? "home-screen app" : "browser tab"} | ${opens} | ${info.when}`,
@@ -80,7 +71,7 @@ export async function collect(version) {
     storage?.estimate?.().catch(() => undefined),
   ]);
   return {
-    nowMs: Date.now(),
+    now: new Date(),
     opens: recorded.opens,
     storage: storage ? `${mb(estimate?.usage)}/${mb(estimate?.quota)}${persisted ? " persisted" : ""}` : "n/a",
     version: version || (import.meta.env?.APP_VERSION ?? ""),
