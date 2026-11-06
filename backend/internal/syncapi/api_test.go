@@ -38,7 +38,7 @@ func newDB(t *testing.T) (*store.Admin, *store.Sync) {
 	if _, err := store.Migrate(ctx, adminPool, store.Migrations); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := adminPool.Exec(ctx, `TRUNCATE devices, invites, docs`); err != nil {
+	if _, err := adminPool.Exec(ctx, `TRUNCATE devices, invites, docs, settings`); err != nil {
 		t.Fatal(err)
 	}
 	pgtest.Login(t, "harper_sync", "client")
@@ -479,4 +479,12 @@ func TestServesOpenAPI(t *testing.T) {
 	if rec := do(h, "GET", "/schemas/Foo.json", "", nil); rec.Code != 404 {
 		t.Errorf("GET /schemas/... = %d, want 404", rec.Code)
 	}
+}
+
+func (b brokenStore) GetSetting(context.Context, int64, string) (store.Setting, error) {
+	return store.Setting{}, b.err
+}
+
+func (b brokenStore) PutSetting(context.Context, int64, string, int64, string) (store.Setting, error) {
+	return store.Setting{}, b.err
 }

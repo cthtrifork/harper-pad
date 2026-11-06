@@ -6,8 +6,10 @@
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.js";
-import { getDoc, getDocIfChanged, listDocs, pushDraft, pushTombstone } from "./syncClient.js";
+import { changesFor, itemsData, mergeItems, parseItems, reconcile, sameItems } from "./settingsItems.js";
+import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.js";
 import { decide, settle } from "./syncPlan.js";
+import { SyncError } from "./syncEnroll.js";
 
 const pad = (n) => String(n).padStart(2, "0");
 
@@ -183,6 +185,26 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
         await drafts.markSynced(id, { hash: "", updatedAt: got.doc.updatedAt, version: got.doc.version, deleted: !!got.doc.deleted });
       }
       return api.one(id);
+    },
+
+    // The personal dictionary (key "words") or the ignore list (key "ignored"), docs/sync.md "Settings": `current` is the words or
+    // hashes held now, `store` the sync record (settingsSync.js). Notes this device's changes, merges them with the server's set
+    // (later change per item wins, an item is never dropped for being absent), writes the merge back if the server lacked something,
+    // and resolves to {add, remove}: what the local set must do to match. The caller applies it; nothing here touches Harper. A write
+    // that loses a race is merged again.
+    async settingSet({ key, current, store }) {
+      const rec = await store.load();
+      let items = reconcile(rec.items, current, now().getTime());
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const remote = await getSetting({ device, key, fetchFn });
+        const theirs = remote ? parseItems(remote.data, key) : {};
+        items = mergeItems(items, theirs);
+        await store.save({ items });
+        if (remote && sameItems(items, theirs)) return changesFor(items, current);
+        const out = await putSetting({ device, key, baseVersion: remote?.version ?? 0, data: itemsData(items), fetchFn });
+        if (out.result === "ok") return changesFor(items, current);
+      }
+      throw new SyncError("server", "The setting changed on the server. Try again.");
     },
 
     // The person chose to remove it here too. Only if the server still holds the tombstone. Resolves to the draft that was removed (so the

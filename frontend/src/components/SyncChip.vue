@@ -112,6 +112,9 @@ onBeforeUnmount(() => {
         <div v-else>
           <h2>{{ status === "offline" ? "Offline" : `Synced with ${host}` }}</h2>
           <p v-if="status === 'pending'" class="mute">Some drafts are not sent yet.</p>
+          <p v-if="sync.setsFailed.value.length" id="sync-sets-failed" class="error" role="alert">
+            Could not sync the {{ sync.setsFailed.value.join(" and the ") }}. Choose Sync all to try again.
+          </p>
           <p v-if="status === 'offline'" class="mute">Server not reachable. Drafts are kept here.</p>
           <p v-if="sync.summary.value" id="sync-summary" class="summary" role="status">
             {{ sync.summary.value }}<span v-if="lastSyncText" class="mute"> · {{ lastSyncText }}</span>

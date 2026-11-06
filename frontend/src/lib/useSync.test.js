@@ -437,3 +437,80 @@ test("Sync with the server unreachable says Offline, unlike opening a note, whic
   await b.sync.noteOpened(D.id, {});
   assert.equal(b.sync.status.value, "synced");
 });
+
+test("Sync all also syncs the dictionary, and applies what the merge decided", async () => {
+  const applied = [];
+  let held = { version: 1, data: JSON.stringify({ v: 1, items: { Remote: { at: 5, del: false } } }) };
+  const fetchFn = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path === "/docs") return reply(200, [])();
+    if (init.method === "GET") return reply(200, held)();
+    held = { version: 2, data: JSON.parse(init.body).data };
+    return reply(200, { version: 2 })();
+  };
+  const record = { items: {} };
+  const dictionary = {
+    items: async () => ["Local"],
+    store: { load: async () => structuredClone(record), save: async (r) => Object.assign(record, r) },
+    apply: async (c) => applied.push(c),
+  };
+  const { sync, ready } = setup({ fetchFn, dictionary });
+  await ready();
+  await sync.syncAll();
+  assert.deepEqual(applied, [{ add: ["Remote"], remove: [] }]);
+  assert.deepEqual(Object.keys(JSON.parse(held.data).items).sort(), ["Local", "Remote"]);
+  assert.equal(sync.status.value, "synced");
+});
+
+test("a dictionary that fails to sync is named in the chip, and the drafts and the ignore list are not held back", async () => {
+  const applied = [];
+  let ignoredHeld = { version: 1, data: JSON.stringify({ v: 1, items: { 12345: { at: 5, del: false } } }) };
+  const fetchFn = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path === "/docs") return reply(200, [])();
+    if (path === "/settings/words") return reply(500, {})();
+    if (init.method === "GET") return reply(200, ignoredHeld)();
+    ignoredHeld = { version: 2, data: JSON.parse(init.body).data };
+    return reply(200, { version: 2 })();
+  };
+  const memory = () => {
+    const rec = { items: {} };
+    return { load: async () => structuredClone(rec), save: async (r) => Object.assign(rec, r) };
+  };
+  const dictionary = { items: async () => ["Local"], store: memory(), apply: async () => applied.push("dictionary") };
+  const ignoreList = { items: async () => [], store: memory(), apply: async (c) => applied.push(c) };
+  const { sync, ready } = setup({ fetchFn, dictionary, ignoreList });
+  await ready();
+  await sync.syncAll();
+  assert.deepEqual(sync.setsFailed.value, ["dictionary"]);
+  assert.deepEqual(applied, [{ add: ["12345"], remove: [] }]);
+  assert.equal(sync.status.value, "synced");
+  assert.match(sync.summary.value, /up to date/);
+});
+
+test("changing the dictionary syncs it after the delay, and a later success clears the message", async () => {
+  let fail = true;
+  let puts = 0;
+  const fetchFn = async (_url, init) => {
+    if (fail) return reply(500, {})();
+    if (init.method === "GET") return reply(404, {})();
+    puts++;
+    return reply(200, { version: 1 })();
+  };
+  const rec = { items: {} };
+  const dictionary = {
+    items: async () => ["Local"],
+    store: { load: async () => structuredClone(rec), save: async (r) => Object.assign(rec, r) },
+    apply: async () => {},
+  };
+  const { sync, ready } = setup({ fetchFn, dictionary });
+  await ready();
+  sync.wordsChanged();
+  await settle();
+  assert.deepEqual(sync.setsFailed.value, ["dictionary"]);
+  fail = false;
+  sync.wordsChanged();
+  await settle();
+  assert.deepEqual(sync.setsFailed.value, []);
+  assert.equal(puts, 1);
+});

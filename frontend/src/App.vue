@@ -9,11 +9,11 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { keepData, sharing, ignoredSync, syncDevice, syncDrafts, wordsSync } from "./lib/backend.js";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
-import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
+import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.js";
 import { statusLine } from "./lib/statusLine.js";
 import { useDrafts } from "./lib/useDrafts.js";
 import { useSync } from "./lib/useSync.js";
@@ -42,6 +42,16 @@ const showProblems = ref(!narrow.matches);
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
+// Syncing the dictionary and ignore list needs Harper, which loads after the first paint: they wait for it (or for its failure).
+let harperLoaded;
+const harperReady = new Promise((resolve) => {
+  harperLoaded = resolve;
+});
+const linter = async () => {
+  await harperReady;
+  if (!harper.value) throw new Error("Harper did not load");
+  return harper.value;
+};
 const personal = ref({ words: [], ignored: [] });
 const cursor = ref({ line: 1, col: 1, selected: 0 });
 const saveError = ref("");
@@ -59,6 +69,8 @@ const sync = useSync({
   openDraft: (id) => drafts.open(id),
   onRemoved: (draft) => drafts.removedElsewhere(draft),
   onRestore: (draft) => drafts.restore(draft),
+  dictionary: { items: async () => (await linter()).exportWords(), store: wordsSync, apply: (changes) => applyWords(changes) },
+  ignoreList: { items: async () => ignoredHashes(await linter()), store: ignoredSync, apply: (changes) => applyIgnoredHashes(changes) },
 });
 // A draft that was opened is checked against the server in the background (a newer version is swapped in when nothing was typed).
 const openHooks = { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() };
@@ -283,6 +295,7 @@ async function persist(note) {
     if (note?.ignoredHash !== undefined) noteIgnored(note.ignoredHash, note.label);
     personal.value = await savePersonal(harper.value);
     saveError.value = "";
+    sync.wordsChanged();
   } catch (err) {
     saveError.value = `Could not save settings: ${err?.message || err}`;
   }
@@ -298,6 +311,20 @@ async function changePersonal(work) {
     saveError.value = `Could not change settings: ${err?.message || err}`;
   }
 }
+
+// What syncing the dictionary decided (docs/sync.md, "Settings"): words to add, and words another device removed (a new linter without them).
+const applyWords = ({ add, remove }) =>
+  changePersonal(async () => {
+    if (remove.length) {
+      const old = harper.value;
+      harper.value = await withoutWords(old, remove, createLinter);
+      old.dispose().catch(() => {});
+    }
+    if (add.length) await harper.value.importWords(add);
+  });
+
+// The same for the ignore list: hashes another device ignored are imported, ones it stopped ignoring are cleared.
+const applyIgnoredHashes = (changes) => changePersonal(() => applyIgnored(harper.value, changes));
 
 const stopIgnoring = (hash) => changePersonal(() => removeIgnored(harper.value, hash));
 // Harper cannot drop a word, so this swaps in a new linter without it; the editor checks again with it when it arrives.
@@ -347,6 +374,8 @@ onMounted(async () => {
   } catch (err) {
     state.value = "failed";
     error.value = String(err?.stack || err);
+  } finally {
+    harperLoaded();
   }
 });
 // The page title follows the design: "notes.md — Harper Pad" for a file, "(draft)" for a draft.
