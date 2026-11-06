@@ -355,13 +355,8 @@
   color: var(--accent);
 }
 
-/* The save button's icon is for phones, where the label is hidden (responsive.css). With sync on the button is a sync button and shows
-   its icon at every width, like the buttons beside it. */
+/* The main button's icon (Save or Sync) shows at every width, like the buttons beside it; a phone hides the label (responsive.css). */
 .bar .save-icon {
-  display: none;
-}
-
-.bar .save-icon.wide {
   display: block;
   flex: none;
 }
