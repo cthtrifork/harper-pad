@@ -78,7 +78,7 @@ func (a *API) config() huma.Config {
 		{Name: "enrollment", Description: "Spend an invite from the admin UI and get a device token."},
 		{Name: "drafts", Description: "List, read and write the end-to-end encrypted drafts of an enrolled device."},
 	}
-	cfg.OpenAPI.ExternalDocs = &huma.ExternalDocs{Description: "How the sync works (docs/sync.md)", URL: "https://github.com/cthtrifork/harper-pad/blob/main/docs/sync.md"}
+	cfg.ExternalDocs = &huma.ExternalDocs{Description: "How the sync works (docs/sync.md)", URL: "https://github.com/cthtrifork/harper-pad/blob/main/docs/sync.md"}
 	// Scalar's options (https://github.com/scalar/scalar/blob/main/documentation/configuration.md). Every route needs a DPoP proof
 	// signed with a device key, which the page's "Test Request" cannot make, so it is hidden along with the client picker and
 	// the dev tools; the schema list is noise for a phone.
