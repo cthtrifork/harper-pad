@@ -80,14 +80,14 @@
   min-height: 52px; /* two lines, so the pop-up keeps its height while the status changes */
 }
 
-.wrap .status .body {
+.wrap .status .msg {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   width: 100%;
 }
 
-.wrap .status .body > div {
+.wrap .status .msg > div {
   flex: 1;
   min-width: 0; /* lets the text wrap inside the pop-up instead of widening it */
 }
@@ -182,4 +182,8 @@
 .wrap .row.primary:focus-visible {
   background: var(--accent);
   filter: brightness(1.08);
+}
+
+.wrap .row .spin {
+  margin: 1px; /* 16px in all, like the icons, so the label does not shift when the spinner leaves */
 }
