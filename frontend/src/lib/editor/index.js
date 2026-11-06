@@ -1,7 +1,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { forEachDiagnostic } from "@codemirror/lint";
 import { Compartment, EditorState } from "@codemirror/state";
-import { drawSelection, dropCursor, EditorView, keymap, placeholder } from "@codemirror/view";
+import { dropCursor, EditorView, keymap, placeholder } from "@codemirror/view";
 import { autoField, fixAllSafe, reportAutocorrect, undoFixes } from "./autocorrect.js";
 import { harperSource, relint } from "./lint.js";
 import { modeExtensions } from "./mode.js";
@@ -79,7 +79,6 @@ export function createEditor(
   const extensions = [
     mode.of(modeExtensions(initialMode)),
     history(),
-    drawSelection(),
     dropCursor(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.lineWrapping,
