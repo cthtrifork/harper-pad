@@ -20,6 +20,9 @@ import (
 	"github.com/cthtrifork/harper-pad/backend/internal/syncapi"
 )
 
+// version is the release, set at build time with -ldflags "-X main.version=..." (Containerfile.sync, from APP_VERSION).
+var version = "dev"
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		slog.Error("harper-pad-sync", "err", err)
@@ -59,6 +62,7 @@ func run(args []string) error {
 	verifier := auth.NewVerifier()
 	defer verifier.Close()
 	api := syncapi.New(cfg.PublicURL, cfg.AllowedOrigins, sync, verifier)
+	api.Version = version
 	api.Register(mux)
 	if len(cfg.AllowedOrigins) == 0 {
 		slog.Warn("CORS_ALLOWED_ORIGINS is empty: browsers on other origins cannot call the API")
