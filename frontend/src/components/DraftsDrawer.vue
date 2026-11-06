@@ -11,7 +11,7 @@ const props = defineProps({
   query: { type: String, default: "" },
   toast: { type: Object, default: null },
 });
-const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet"]);
+const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet", "backup", "restore"]);
 
 const help = ref(false); // the snippets help page replaces the list
 const q = ref(props.query);
@@ -84,6 +84,14 @@ async function copyReport() {
   copiedTimer = setTimeout(() => (copied.value = ""), 2000);
 }
 onBeforeUnmount(() => clearTimeout(copiedTimer));
+// Backup and Restore (web build only: the desktop app keeps its drafts in a file). Restore opens the file picker; the app does the rest.
+const isWeb = import.meta.env?.MODE === "web";
+const backupFile = ref(null);
+function picked(e) {
+  const file = e.target.files?.[0];
+  e.target.value = ""; // so choosing the same file again still fires
+  if (file) emit("restore", file);
+}
 const iso = (ms) => new Date(ms).toISOString();
 const baseName = (path) => path.split(/[\\/]/).pop();
 </script>
@@ -160,6 +168,24 @@ const baseName = (path) => path.split(/[\\/]/).pop();
       </span>
       <svg class="go" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5l3.5 3.5-3.5 3.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
     </button>
+
+    <template v-if="isWeb">
+      <button type="button" class="snippets-row" @click="emit('backup')">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <span class="text">
+          <span class="name">Back up</span>
+          <span class="about">Save every draft and your dictionary to a file</span>
+        </span>
+      </button>
+      <button type="button" class="snippets-row" @click="backupFile.click()">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10V2M5 5l3-3 3 3M3 13h10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <span class="text">
+          <span class="name">Restore</span>
+          <span class="about">Add the drafts from a backup file</span>
+        </span>
+      </button>
+      <input ref="backupFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1" aria-hidden="true" @change="picked" />
+    </template>
 
     <footer>
       <span class="mute">{{ total }} {{ total === 1 ? "draft" : "drafts" }}</span>

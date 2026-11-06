@@ -439,6 +439,10 @@
   background: var(--raised);
 }
 
+.drawer .file-input {
+  display: none;
+}
+
 /* The name and the line beside it share a baseline (centring boxes of two font sizes leaves the smaller text sitting high). */
 .drawer .snippets-row .text {
   display: flex;

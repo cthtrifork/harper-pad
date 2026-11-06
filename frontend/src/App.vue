@@ -9,7 +9,7 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { backUp, keepData, restoreBackup, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
@@ -102,6 +102,36 @@ function syncToastAction() {
     sync.openCopy(n.copyId);
     sync.clearNotice();
   } else if (n?.kind === "removed") sync.undoRemoved();
+}
+
+// Back up and Restore (the drawer's two rows, web build). The typed text is saved first, so a backup holds it and a restore never takes it
+// for older. A restore stores only what is new or newer, then reloads what the page holds of it: the list, the open draft when the backup
+// had a newer copy of it (nothing was typed since the flush), and Harper's dictionary and ignore list.
+const notice = ref(null); // {text, tick}: one line about a backup or a restore
+const say = (text) => (notice.value = { text, tick: (notice.value?.tick ?? 0) + 1 });
+async function onBackup() {
+  try {
+    await drafts.flush();
+    const how = await backUp();
+    if (how !== "cancelled") say(how === "shared" ? "Backup ready to save" : "Backup downloaded");
+  } catch (err) {
+    say(`Could not back up: ${err?.message || err}`);
+  }
+}
+async function onRestore(file) {
+  try {
+    await drafts.flush();
+    const result = await restoreBackup(await file.text());
+    await drafts.refreshList();
+    if (result.changed.includes(drafts.current.value.id)) await drafts.reloadCurrent();
+    if (result.settings && harper.value) {
+      personal.value = await loadPersonal(harper.value);
+      editor.value?.relint();
+    }
+    say(result.message);
+  } catch (err) {
+    say(err?.message || String(err));
+  }
 }
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
@@ -412,6 +442,8 @@ onBeforeUnmount(() => {
         @more="drafts.showMore"
         @undo="drafts.undo"
         @snippet="insertSnippet"
+        @backup="onBackup"
+        @restore="onRestore"
         @close="toggleDrawer"
       />
       </Transition>
@@ -447,6 +479,9 @@ onBeforeUnmount(() => {
           </Transition>
           <Transition name="toast-bar">
             <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
+          </Transition>
+          <Transition name="toast-bar">
+            <ToastBar v-if="notice" :message="notice.text" :tick="notice.tick" :ms="8000" @close="notice = null" />
           </Transition>
         </div>
         <Transition name="grow">

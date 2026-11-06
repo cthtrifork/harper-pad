@@ -23,9 +23,11 @@ export const fileName = (title, format) => {
 export const sharesFiles = () =>
   !window.showSaveFilePicker && !!navigator.canShare?.({ files: [new File([""], "a.md", { type: "text/markdown" })] });
 
+const typeOf = (name) => (name.endsWith(".md") ? "text/markdown" : name.endsWith(".json") ? "application/json" : "text/plain");
+
 // Offers the text to the system share sheet as a file. Returns "shared", "cancelled", or "unsupported" when the browser cannot share files.
 async function share(name, content) {
-  const file = new File([content], name, { type: name.endsWith(".md") ? "text/markdown" : "text/plain" });
+  const file = new File([content], name, { type: typeOf(name) });
   if (!navigator.canShare?.({ files: [file] })) return "unsupported";
   try {
     await navigator.share({ files: [file], title: name });
@@ -38,12 +40,22 @@ async function share(name, content) {
 }
 
 function download(name, content) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
+  const url = URL.createObjectURL(new Blob([content], { type: `${typeOf(name)};charset=utf-8` }));
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// Hands a file to the person: the share sheet where the browser has no file picker but can share files (an iPhone), a download elsewhere
+// (a desktop browser's share dialog would be a detour). Returns "shared",
+// "downloaded" or "cancelled".
+export async function handOver(name, content) {
+  const how = sharesFiles() ? await share(name, content) : "unsupported";
+  if (how !== "unsupported") return how;
+  download(name, content);
+  return "downloaded";
 }
 
 // `web` is createWebDrafts' result, `getHandle` and `putHandle` read and write what is kept per draft id: {handle, modified}, the

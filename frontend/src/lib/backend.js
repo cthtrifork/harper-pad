@@ -7,7 +7,8 @@
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { createDesktopSyncDrafts } from "./desktopSync.js";
 import { createDeviceStore } from "./syncDevice.js";
-import { saveWebFile, sharesFiles } from "./webFiles.js";
+import { backupFileName, buildBackup, mergeSettings, parseBackup, planRestore, restoreMessage } from "./backup.js";
+import { handOver, saveWebFile, sharesFiles } from "./webFiles.js";
 
 export const isWeb = import.meta.env.MODE === "web";
 
@@ -130,6 +131,34 @@ export async function saveDraftToFile(draft, saveAs, overwrite = false) {
 
 export async function deleteDraft(id) {
   return isWeb ? web.remove(id) : (await bindings()).DraftService.DeleteDraft(id);
+}
+
+// --- Backup (web build) ------------------------------------------------------------------------------------------------------
+// Everything kept on this device in one JSON file, and the way back (lib/backup.js). The desktop build keeps its data in a file the
+// person can copy, so it has neither.
+
+// Hands the backup to the person (share sheet or download). Returns "shared", "downloaded" or "cancelled".
+export async function backUp() {
+  if (!isWeb) throw new Error("backups are for the web build");
+  const backup = buildBackup({ drafts: await web.exportAll(), settings: await loadSettings() });
+  return handOver(backupFileName(backup.exportedAt), JSON.stringify(backup));
+}
+
+// Restores the text of a backup file: drafts that are new or newer than the ones here are stored, the dictionary and ignore list are
+// merged with this device's, and nothing is deleted. Returns {message, changed: ids of drafts that were stored, settings: true when the
+// dictionary or ignore list may have changed}.
+export async function restoreBackup(text) {
+  if (!isWeb) throw new Error("backups are for the web build");
+  const { drafts, settings, skipped } = parseBackup(text);
+  const plan = planRestore(await web.updatedTimes(), drafts);
+  const stored = [...plan.add, ...plan.replace];
+  await web.restore(stored);
+  await saveSettings(mergeSettings(await loadSettings(), settings));
+  return {
+    message: restoreMessage({ added: plan.add.length, replaced: plan.replace.length, kept: plan.kept, skipped }),
+    changed: stored.map((d) => d.id),
+    settings: true,
+  };
 }
 
 // Ask the browser not to evict this site's data when storage runs low. Safari grants it to an installed (Add to Home Screen) app.
