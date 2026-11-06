@@ -4,7 +4,7 @@ Unicode true
 ## NSIS installer for Harper Pad, from the Wails v3 template (`wails3 generate build-assets`), see docs/windows.md.
 ## scripts/package-windows-installer.sh runs makensis in this directory and passes every define below on the command line:
 ##   -DARG_WAILS_AMD64_BINARY=<the exe>   -DINFO_PRODUCTVERSION=<x.y.z>   -DOUTFILE=<installer to write>
-## The install is per user ($LOCALAPPDATA\Programs\Harper Pad, no UAC prompt). That is deliberate: the in-app updater replaces
+## The install is per user ($LOCALAPPDATA\Programs\harper-pad, no UAC prompt). That is deliberate: the in-app updater replaces
 ## the installed exe, which it can only do in a folder the user can write to (Program Files would not be).
 ####
 !define INFO_PROJECTNAME    "harper-pad"
@@ -57,7 +57,7 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "${OUTFILE}"
-InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
+InstallDir "$LOCALAPPDATA\Programs\${INFO_PROJECTNAME}"
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit

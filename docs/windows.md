@@ -9,7 +9,7 @@ Harper Pad runs on Windows 10 and 11 (64-bit Intel/AMD). The release has two Win
 
 ## Installing
 
-Download the installer from the release and run it. It puts Harper Pad in `%LOCALAPPDATA%\Programs\Harper Pad`, adds the
+Download the installer from the release and run it. It puts Harper Pad in `%LOCALAPPDATA%\Programs\harper-pad`, adds the
 shortcuts, and downloads the WebView2 runtime if the PC lacks it. Silent install for scripts: `installer.exe /S`, with
 `/D=C:\some\folder` last to choose the folder. Uninstall from *Settings → Apps* or `uninstall.exe` in the install folder; your
 drafts and settings (`%LOCALAPPDATA%\harper-pad`) stay.
