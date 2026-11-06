@@ -6,8 +6,38 @@ Sync is off until you enroll a device; without it the app uses the network only 
 
 When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**.
 
+Blue is the app, orange the file, green the server, amber a question for you.
+
+```mermaid
+flowchart LR
+    S["Check a draft<br>open, focus, sync"]:::app --> D{"What changed?"}
+    D -->|"same text, or only the modified time"| N["Does nothing"]
+    D -->|"one side is ahead, draft has no edits"| U["Updates the draft<br>from the file: Undo toast, then updates the server<br>from the server: a toast"]:::app
+    D -->|"file gone or not usable"| C["Strikes out the file name<br>Ctrl+S retries, Unlink offered"]:::file
+    D -->|"both sides changed"| M["Asks Keep or Overwrite<br>cannot be dismissed"]:::ask
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
+
 The server is described next to its code: [backend README](../backend/README.md), [sync API](../backend/cmd/harper-pad-sync/README.md),
 [admin UI](../backend/cmd/harper-pad-admin/README.md), routes in [openapi.yaml](openapi.yaml).
+
+### Where the decisions are made
+
+Every decision, conflicts included, is made on the device. The file path and the file's modified time never leave it.
+
+```mermaid
+flowchart LR
+    D["Desktop app<br>full copy in SQLite<br>linked files stay here"]:::app <-->|"updates both ways"| S["Sync server<br>compare and set<br>never merges"]:::server
+    P["Web or phone app<br>full copy in IndexedDB<br>no linked files"]:::app <-->|"updates both ways"| S
+    S <--> G[("PostgreSQL<br>drafts and settings")]:::server
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
 
 ## Rules
 
@@ -31,31 +61,105 @@ The server is described next to its code: [backend README](../backend/README.md)
 
 ## The Keep or Overwrite dialog
 
+```mermaid
+flowchart TD
+    S["Keep or Overwrite clicked"] --> Q{"File or server<br>changed again?"}
+    Q -->|yes| D["Redraws the dialog<br>nothing is updated"]:::ask
+    Q -->|no| B{"Which button?"}
+    B -->|Keep| K["Creates a Conflicted copy<br>per differing version"]:::app
+    B -->|Overwrite| O["Creates no copies<br>the other versions are deleted"]
+    K --> U{"Update the file?"}
+    O --> U
+    U -->|"no link, or the file already holds your draft"| X["Skips the file"]:::file
+    U -->|yes| W["Updates the file<br>if that fails, skips it<br>the file name says why"]:::file
+    W --> P["Updates the server<br>with your draft, when sync is on"]:::server
+    X --> P
+    P --> Z{"Server reachable?"}
+    Z -->|yes| F["Finishes<br>your draft keeps its id and link"]
+    Z -->|no| Y["Keeps the update pending<br>Sync all retries"]:::server
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
+
 - It has no close button; Escape and a click outside do nothing. The editor is blocked; autosave keeps updating the draft behind it.
 - It appears only for the open draft. A draft in conflict that is not open is left untouched (not Created, Updated or counted) until it is opened.
 - One dialog covers the file and the server when both differ.
 - Closing the window while it is open is allowed. The dialog returns the next time the draft is opened.
 - Your draft keeps its id and its file link.
 - The dialog is a title, one row per version that exists (your draft, the file, the server) with its timestamp, two buttons and one footer line, "Overwrite cannot be undone." A long file name is cut so the timestamp always shows.
-- **Overwrite** (**Overwrite others** with three versions) Updates the file, then the server, with your draft. The other versions are Deleted, with no undo. Its button is the danger style and its tooltip says what is Deleted. When your draft has no edits of its own, the file counts as yours (the footer says so) and only the server is Updated.
+- **Overwrite** (**Overwrite others** with three versions) Updates the file, then the server, with your draft. The other versions are Deleted, with no undo. Keep and Overwrite skip the check that the file changed on disk (the dialog just made it) but never Update a file that is not text. Its button is the danger style and its tooltip says what is Deleted. When your draft has no edits of its own, the file counts as yours (the footer says so) and only the server is Updated.
 - **Keep** (**Keep all** with three versions) first Creates a Conflicted copy of each other version that differs from your draft (one copy when the file and the server hold the same text), then does what Overwrite does.
 - A Conflicted copy is an ordinary draft without a file link, with a badge in memory ("Conflicted copy, from the file", "from the server" or "from the file and the server"). The badge goes when the copy is edited or deleted, from its x, or at restart. It is never kept on disk or synced, and the text is not edited.
-- The file and the server are read again when you choose. If either changed, the dialog is redrawn and nothing is changed.
-- A failed file update is skipped and the header chip says why; the server is still Updated.
-- With the server unreachable the file is Updated and the server stays pending. The dialog returns for the server only if it changed again.
 - Keep has the focus. The dialog looks the same on a phone: centered, with the two buttons stacked, Overwrite above Keep.
 
 ## Other paths on this device
 
+### Open or focus
+
+```mermaid
+flowchart TD
+    S["Open or focus"] --> Q{"Safe to check?"}
+    Q -->|"updating, or looked less than 2 s ago"| K["Skips, retries later"]
+    Q -->|yes| L["Looks at the file<br>reads only if it changed"]:::file
+    L --> F{"File state?"}
+    F -->|"gone or not usable"| G["Strikes out the file name<br>Ctrl+S retries, Unlink offered"]:::file
+    F -->|same| E["Does nothing<br>updates the stored file state"]
+    F -->|differs| X{"Draft edited?"}
+    X -->|yes| M["Asks Keep or Overwrite"]:::ask
+    X -->|no| R["Refreshes from the file, unless busy typing<br>see below"]:::app
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
+
+### Refresh from a changed file
+
+```mermaid
+flowchart LR
+    S["File changed<br>draft has no edits"]:::file --> Q{"Server?"}
+    Q -->|unchanged| A["Updates the draft and the server<br>Undo toast"]:::app
+    Q -->|"ahead, the file's text"| B["Does nothing"]
+    Q -->|"ahead, different text"| C["Asks Keep or Overwrite<br>the file counts as your edit"]:::ask
+    Q -->|unreachable| D["Updates the draft only<br>updates the server at the next sync moment"]:::app
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
+
+### Ctrl+S
+
+```mermaid
+flowchart TD
+    S["Ctrl+S"] --> A["Updates the draft<br>always first"]:::app
+    A --> Q{"Linked file?"}
+    Q -->|no| V["Updates the server only"]:::server
+    Q -->|yes| J{"Draft changed since the file<br>was updated, or file gone?"}
+    J -->|no| V
+    J -->|yes| R["Re-reads the file<br>compares its text"]:::file
+    R --> T{"File state?"}
+    T -->|gone| C["Creates the file<br>status line says Recreated<br>then updates the server"]:::file
+    T -->|"not text"| N["Refuses to update the file<br>the file name is struck out<br>autosave updates the server"]:::file
+    T -->|readable| H{"File text changed since<br>you last saw it?"}
+    H -->|yes| M["Asks Keep or Overwrite<br>the file is not updated yet<br>updates the server"]:::ask
+    H -->|no| W["Updates the file<br>then updates the server at once"]:::file
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
+
+### Everything else
+
 | Path | What happens |
 |---|---|
 | Edit your draft | Autosave Updates the draft, never the file. Ctrl+S Updates the file when the draft changed since the file was Updated |
-| The file changed, your draft has no edits and you are not typing | The server is asked first. If it is unchanged, the draft and the server are Updated from the file at once, with an Undo toast. If it holds the same text as the file, nothing more. If it holds other text, the dialog. If it is unreachable or sync is off, the draft is Updated from the file, and the server once it is reachable |
 | Undo of that update, then Ctrl+S | Your draft wins while the file is still the version the update read; otherwise the dialog |
 | The draft is Updated from the file | The cursor and scroll position stay as far as the text allows, and autocorrect leaves the text alone |
 | The server holds a changed draft | It Updates your draft. The file counts as older than the draft; the next Ctrl+S Updates it, after the dialog if the file also changed |
-| Every file update | The file is read again first; if something else changed it since your last update, the dialog opens instead (Overwrite skips this, but never Updates a file that is not text) |
-| A file update fails, or the file is unreadable | The draft is kept and Ctrl+S tries again; a gone file is Created again ("Recreated <name>") |
 | Delete a linked draft | The file is untouched. Undo Creates the draft again without the link |
 | Sync or Save button (Ctrl+S) | Says **Sync** once sync is set up and this device is enrolled, and always has something to do: it Updates the draft, Updates its file when the draft changed, and asks the server. Says **Save** without sync: it does the first two, and is disabled while there is nothing to Update |
 | Save to disk | Offered only for a draft without a link (a struck file name still counts as linked). Ctrl+Shift+S on a linked draft only shows "Unlink first to save as another file" |
@@ -80,6 +184,34 @@ Sync is never periodic. Every moment uses the same rules.
 
 A draft that changed on both sides with different text is the dialog's; Sync all leaves it untouched. Typing and then undoing is no change.
 
+### The decision for one draft
+
+```mermaid
+flowchart TD
+    S["A sync moment"] --> Q{"This device?"}
+    Q -->|"unchanged here"| A{"Server?"}
+    Q -->|"changed here"| B{"Server?"}
+    Q -->|"deleted here"| C{"Server?"}
+    Q -->|"never had it"| N["Creates the draft<br>if the server holds one"]:::app
+    A -->|unchanged| A1["Does nothing"]
+    A -->|changed| A2["Updates the draft<br>open draft: toast, Updated from the server"]:::app
+    A -->|"no copy"| A4["Creates the server draft"]:::server
+    A -->|"deleted it"| A3["Deletes the draft, or asks<br>open: asks; else Deletes it, no undo"]:::app
+    B -->|unchanged| B1["Updates the server draft"]:::server
+    B -->|"no copy"| B2["Creates the server draft"]:::server
+    B -->|"deleted it"| B3["Creates the server draft<br>the edit survives"]:::server
+    B -->|"same text on both"| B4["Updates the sync state<br>no copy needed"]:::app
+    B -->|"different text"| B5["Asks Keep or Overwrite<br>open draft only"]:::ask
+    C -->|unchanged| C1["Deletes the server draft"]:::server
+    C -->|"edited on another device"| C2["Creates the draft<br>the delete is dropped"]:::app
+    C -->|"deleted there too"| C3["Does nothing"]
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
+
+
 ## The file link meets sync
 
 - Only `{v, format, content}` travels, with the draft's own times. The file path and the file's modified time stay on the device, and a draft Created from the server has no link.
@@ -95,6 +227,21 @@ deletion. A device that syncs them for the first time Deletes nothing: it Create
 - If it fails, the chip's pop-up says "Could not sync the dictionary and ignore list" (see Failure states).
 
 ## Failure states
+
+```mermaid
+flowchart LR
+    S["Server answer"]:::server --> Q{"Answer?"}
+    Q -->|"unreachable or 5xx"| A["Keeps edits local<br>the chip shows it, retried next moment"]
+    Q -->|401| B["Stops syncing<br>local drafts stay, chip says Sign in again"]
+    Q -->|"rejects the draft"| C["Keeps the draft local<br>status line names the open draft and why"]
+    Q -->|"draft deleted elsewhere"| D{"Draft open?"}
+    D -->|yes| E["Asks Keep or Remove<br>cannot be dismissed"]:::ask
+    D -->|no| F["Deletes the draft here<br>no undo"]:::app
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef file fill:#fde4d9,stroke:#e8683a,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
 
 | Failure | What happens |
 |---|---|
