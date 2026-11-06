@@ -74,12 +74,12 @@ After enrollment every request carries `Authorization: DPoP <device token>` and 
 
 **DPoP** is [RFC 9449](https://rfc-editor.org/rfc/rfc9449) with one change: the token is opaque, so the key binding (the key's
 RFC 7638 thumbprint) is stored on the `devices` row instead of in a `cnf.jkt` claim. The device key is ECDSA P-256 and proofs are
-ES256 JWTs bound to the request and the token. The server checks the proof **before reading the body**, with
-[go-dpop](https://github.com/AxisCommunications/go-dpop) and a `ttlcache` for replays (`backend/internal/auth`). There is no
-`DPoP-Nonce`; a 60 second `iat` window and the `jti` cache replace it.
+ES256 JWTs bound to the request and the token. The server checks the proof **before reading the body**, using
+[go-dpop](https://github.com/AxisCommunications/go-dpop). There is no `DPoP-Nonce`; a 60 second `iat` window and a replay cache
+of proof ids replace it.
 
 **Key storage** is the same on the web and on desktop: a non-extractable WebCrypto key (only the private `CryptoKey` is stored) in
-the webview's IndexedDB, in the `sync-device` record with the token ([Changes to local storage](#changes-to-local-storage)). If
+the webview's IndexedDB, with the token ([Changes to local storage](#changes-to-local-storage)). If
 storage is cleared the key is lost and the device re-enrolls.
 
 Things to know:
@@ -95,9 +95,8 @@ and the fallback if iOS turns out to clear the key.
 
 ## Protocol
 
-The schema is `backend/internal/store/migrations/0001_init.sql`, the routes are in [openapi.yaml](openapi.yaml) and the
-[backend README](../backend/README.md) covers the database roles; the code is the documentation. The server is plain storage, so
-all sync logic is on the device ([Conflicts](#conflicts)).
+The routes are described in [openapi.yaml](openapi.yaml) and the database roles in the [backend README](../backend/README.md). The
+server is plain storage, so all sync logic is on the device ([Conflicts](#conflicts)).
 
 ### When sync happens
 
@@ -116,9 +115,7 @@ background sync, so nothing depends on one.
 ### Conflicts
 
 For each draft the device compares its own text now, the state recorded at the last sync, and the server's current state. The same
-table applies to a save that comes back 409, to opening a note and to Sync all. **In the code it is one place**: `createSyncer` in
-`frontend/src/lib/syncRun.js` (the table is the pure `decide` in `syncPlan.js`; `all()` is Sync all, `one(id)` a save, `open(id)`
-opening a note), and `syncOneEngine.test.js` fails if another module decides or uploads drafts.
+table applies to a save that comes back 409, to opening a note and to Sync all. **One piece of logic decides all of them**, so no other path may decide or upload drafts.
 
 | This device | The server | What happens |
 |---|---|---|
@@ -153,15 +150,16 @@ drafts on the device first.
 
 ## Changes to local storage
 
-Sync state lives in its own table or store (`sync_state` in SQLite, `sync` in IndexedDB), never on the draft rows, and is never sent.
+Sync state lives in its own table or store, never on the draft rows, and is never sent.
 It changes nothing for a user who leaves sync off. The reasons behind the shape:
 
 - **No dirty flag.** A draft is *changed* when its hash differs from the one recorded at the last sync, computed on demand so it
   cannot go stale. A delete is a state record with no draft (a *pending delete*), so undo is then no change at all.
-- **Older builds keep working.** Both changes are additive: SQLite's `user_version` stays 2 and IndexedDB's `DB_VERSION` goes to 3
-  ([pages](pages.md#changing-the-schema)). An older build ignores the state and cannot lose it, and sees what it saves or deletes as
-  a change. A build from before `#83` fails on the newer IndexedDB version; there is no way around that.
-- **Device settings** (server URL, token, key) are one `sync-device` record in the app's IndexedDB on web and desktop alike. They
+- **Older builds keep working.** Both changes are additive: a new table in SQLite (its compatibility level is unchanged) and a new
+  IndexedDB store with a version bump ([pages](pages.md#changing-the-schema)). An older build ignores the state and cannot lose it,
+  and sees what it saves or deletes as a change. A build from before `#83` fails on the newer IndexedDB version; there is no way
+  around that.
+- **Device settings** (server URL, token, key) are one record in the app's IndexedDB on web and desktop alike. They
   are never uploaded; a cleared profile means "Sign in again".
 
 ## Security
@@ -174,7 +172,7 @@ A device-token model with DPoP key binding, TLS and no content encryption.
 | Who can read the data | The server and its operator. Cloudflare is not in the sync path. Use encrypted volumes, tight namespace access, and keep bodies out of logs. The settings screen says this. |
 | Stolen token | Revoke the device. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
-| Account isolation | The account comes from the device row and every query filters on it. v1 has one account, so this is a guard for the future; before adding a second, narrow the `sync_rows` policy to the account and test isolation. |
+| Account isolation | The account comes from the device row and every query filters on it. v1 has one account, so this is a guard for the future; before adding a second, narrow the row-security policy to the account and test isolation. |
 | Database and cluster | Client certificates only, PostgreSQL reachable only from the sync and admin pods, separate roles ([backend README](../backend/README.md)). Default-deny NetworkPolicies, hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod, reached only through a Cloudflare Tunnel behind Cloudflare Access (OIDC, MFA). The app does no authentication of its own, so the Access policy is the only access control. It adds same-origin checks, CSRF tokens and a strict CSP. See the [admin README](../backend/cmd/harper-pad-admin/README.md#access). |
 | Draft text from the server | Untrusted like pasted text: never run, never inserted as HTML, validated before it is stored. |
