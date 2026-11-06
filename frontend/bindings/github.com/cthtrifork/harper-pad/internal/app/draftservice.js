@@ -152,7 +152,21 @@ export function StartFresh() {
 }
 
 /**
- * UnlinkDraftFile removes the draft's link to its file. The draft and the file both stay as they are.
+ * UndoUnlinkDraftFile restores the link UnlinkDraftFile removed last for this draft: the same path and the same baseline (modified time,
+ * size and text hash), and nothing else. Another draft linked to that path in the meantime loses it, as after Save as file. An error when
+ * there is nothing to restore or the draft got a link since.
+ * @param {string} id
+ * @returns {$CancellablePromise<store$0.Draft>}
+ */
+export function UndoUnlinkDraftFile(id) {
+    return $Call.ByID(1422134571, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
+/**
+ * UnlinkDraftFile removes the draft's link to its file. The draft and the file both stay as they are. The link (path and baseline) is kept
+ * in memory, so UndoUnlinkDraftFile can restore it; the page never names a path.
  * @param {string} id
  * @returns {$CancellablePromise<store$0.Draft>}
  */

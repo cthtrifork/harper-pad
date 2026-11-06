@@ -381,6 +381,49 @@ func TestUnlinkDraftFile(t *testing.T) {
 	}
 }
 
+func TestUndoUnlinkRestoresTheSameLinkAndBaseline(t *testing.T) {
+	s, id, target := linked(t, "keep\n")
+	before, _ := s.db.open()
+	b, _ := before.Get(id)
+	if _, err := s.UnlinkDraftFile(id); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.UndoUnlinkDraftFile(id)
+	if err != nil || d.FilePath != target || d.Content != "keep\n" {
+		t.Fatalf("undo = %+v, %v", d, err)
+	}
+	st, _ := s.db.open()
+	a, _ := st.Get(id)
+	if a.FileMTime != b.FileMTime || a.FileHash != b.FileHash || a.FileSize != b.FileSize || a.FileMTime == 0 {
+		t.Errorf("baseline changed: before %+v, after %+v", b, a)
+	}
+	// With the baseline back, an untouched file is still "same" and a save writes without a conflict.
+	if c := state(t, s, id); c.State != FileSame {
+		t.Errorf("status after undo = %+v", c)
+	}
+	// Nothing to undo twice, or for a draft that was never unlinked, or after it was linked again.
+	if _, err := s.UndoUnlinkDraftFile(id); err == nil {
+		t.Error("undid twice")
+	}
+	plain, _ := s.SaveDraft(store.Draft{Content: "plain"})
+	if _, err := s.UndoUnlinkDraftFile(plain.ID); err == nil {
+		t.Error("undid an unlink that never happened")
+	}
+	if _, err := s.UnlinkDraftFile(id); err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.SaveDraftToFile(store.Draft{Content: "other"}, false, false) // another draft takes the path through Save as file
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UndoUnlinkDraftFile(id); err != nil {
+		t.Fatalf("undo after another draft took the path: %v", err)
+	}
+	if g, _ := s.GetDraft(other.Draft.ID); g.FilePath != "" {
+		t.Errorf("two holders of one file: %+v", g)
+	}
+}
+
 func TestReloadDraftFromFile(t *testing.T) {
 	s, id, target := linked(t, "mine")
 	outside(t, target, "theirs")

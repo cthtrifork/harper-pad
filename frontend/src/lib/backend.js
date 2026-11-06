@@ -166,6 +166,12 @@ export async function unlinkDraftFile(id) {
   return (await bindings()).DraftService.UnlinkDraftFile(id);
 }
 
+// Desktop only: puts back the link the last unlink removed for this draft (the same file and baseline, kept in Go; the page names no path).
+export async function undoUnlinkDraftFile(id) {
+  if (isWeb) throw new Error("the web build cannot unlink a file");
+  return (await bindings()).DraftService.UndoUnlinkDraftFile(id);
+}
+
 export async function deleteDraft(id) {
   return isWeb ? web.remove(id) : (await bindings()).DraftService.DeleteDraft(id);
 }

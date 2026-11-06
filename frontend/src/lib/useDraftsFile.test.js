@@ -179,3 +179,59 @@ test("opening a draft: the file is looked at before sync is told, so a pull cann
     [["opened", other.id]],
   );
 });
+
+test("unlinking removes the link only, offers Undo with the file's name, and Undo puts the same link back", async () => {
+  const unlinked = { ...open, filePath: "" };
+  const { drafts, calls } = setup({
+    status: { state: "same" },
+    extraApi: {
+      unlinkDraftFile: async (id) => {
+        calls.push(["unlink", id]);
+        return unlinked;
+      },
+      undoUnlinkDraftFile: async (id) => {
+        calls.push(["undoUnlink", id]);
+        return open;
+      },
+    },
+  });
+  drafts.init({ open, total: 1 });
+  await settle();
+  assert.equal(drafts.current.value.filePath, "/home/me/plan.md");
+  await drafts.unlinkFile();
+  assert.equal(drafts.current.value.filePath, "", "the chip is gone and Save as file is back");
+  assert.equal(drafts.fileState.value, "none");
+  assert.equal(drafts.unlinkedToast.value.name, "plan.md");
+  assert.equal(drafts.current.value.id, ID, "the draft stays");
+  await drafts.undoUnlink();
+  assert.equal(drafts.current.value.filePath, "/home/me/plan.md");
+  assert.equal(drafts.unlinkedToast.value, null);
+  assert.deepEqual(
+    calls.filter((c) => c[0].includes("nlink")),
+    [
+      ["unlink", ID],
+      ["undoUnlink", ID],
+    ],
+  );
+});
+
+test("unlinking a struck chip clears the problem, and a failed Undo says so without touching the draft", async () => {
+  const unlinked = { ...open, filePath: "" };
+  const { drafts } = setup({
+    status: { state: "missing" },
+    extraApi: {
+      unlinkDraftFile: async () => unlinked,
+      undoUnlinkDraftFile: async () => {
+        throw new Error("there is no link to restore");
+      },
+    },
+  });
+  drafts.init({ open, total: 1 });
+  await settle();
+  assert.equal(drafts.fileProblem.value, "file not found");
+  await drafts.unlinkFile();
+  assert.equal(drafts.fileProblem.value, "");
+  await drafts.undoUnlink();
+  assert.match(drafts.status.value || "", /./);
+  assert.equal(drafts.current.value.filePath, "");
+});

@@ -1,4 +1,5 @@
 <script setup>
+import { fileControls } from "../lib/fileLink.js";
 import { computed, ref } from "vue";
 
 const VIEWS = [
@@ -24,6 +25,8 @@ const props = defineProps({
   fileDir: { type: String, default: "" },
   // Why the file cannot be used right now ("file not found", "permission denied", ...), or "" when it can. The chip is struck through while it is set.
   fileProblem: { type: String, default: "" },
+  // The desktop build can unlink a file (the x on the chip). The web build never does: Save as file is always offered there.
+  canUnlink: { type: Boolean, default: false },
   // The open draft is a Conflicted copy (in memory only): "Conflicted copy, from the file" and so on, or "".
   copyBadge: { type: String, default: "" },
   canSave: { type: Boolean, default: false },
@@ -46,6 +49,7 @@ const mainLabel = computed(() => {
 const mainName = computed(() => (props.syncBusy ? "Syncing..." : mainLabel.value));
 const mainDisabled = computed(() => !props.canSave || props.syncBusy || (!props.syncOn && !props.needsSave));
 // What the button also does when the draft has a file, since the label does not change for it.
+const controls = computed(() => fileControls({ filePath: props.filePath, fileProblem: props.fileProblem, canUnlink: props.canUnlink }));
 const problemText = computed(() => (props.fileProblem ? `Not linked: ${props.fileProblem}. Ctrl+S tries again` : ""));
 const mainTitle = computed(() => (props.filePath ? `Also writes ${props.fileName} if the draft changed` : ""));
 
@@ -73,7 +77,7 @@ function onMain() {
         <svg class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy, wide: syncOn }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <span class="label">{{ mainLabel }}</span> <span class="kbd">Ctrl+S</span>
       </button>
-      <button type="button" class="tool export" :aria-label="exportLabel" :title="exportLabel" :disabled="!canSave" @click="emit('save', true)">
+      <button v-if="controls.showSaveAs" type="button" class="tool export" :aria-label="exportLabel" :title="exportLabel" :disabled="!canSave" @click="emit('save', true)">
         <!-- iPhone and iPad open the share sheet: the share icon. Elsewhere it saves to a file: a disk. -->
         <svg v-if="sharing" class="export-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10V2.5M5 5l3-3 3 3M3.5 8.5v4h9v-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <svg v-else class="export-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h8.2L13.5 4.8V12a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 12V3A.5.5 0 0 1 3 2.5zM5 2.5v3h5v-3M5 13.5V9h6v4.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -86,8 +90,10 @@ function onMain() {
       <svg v-if="fileProblem" class="broken-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5l5 9H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path d="M6 5v2.5M6 9v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>
       <span id="file-name" class="file-name">{{ fileName }}</span>
       <span v-if="fileDir" class="folder">in {{ fileDir }}</span>
+      <button v-if="controls.showChipX" type="button" class="chip-x" :aria-label="`Unlink ${fileName}`" :title="`Unlink ${fileName}`" @click="emit('unlink')">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6m0-6L2 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+      </button>
     </span>
-    <button v-if="filePath && fileProblem" type="button" class="tool unlink" :aria-label="`Unlink ${fileName}`" :title="`Stop linking this draft to ${fileName}. The draft and the file stay as they are.`" @click="emit('unlink')">Unlink</button>
     <span v-if="!filePath" id="file-badge" class="badge">Draft, not on disk</span>
     <span v-if="copyBadge" class="badge copy" :title="copyBadge">{{ copyBadge }}</span>
     <span class="sr-only" role="status">{{ problemText }}</span>

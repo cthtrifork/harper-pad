@@ -31,14 +31,24 @@
     display: none;
   }
 
-  /* A file that cannot be used still shows, as its warning triangle alone (the struck-through name does not fit); its title and the
-     announcement carry the reason. */
-  .bar .badge.broken {
+  /* The file chip stays on a phone, because its x is the only way to unlink: the name is cut short, and the folder stays hidden. A struck chip
+     keeps its warning triangle. */
+  .bar .badge.on-disk {
     display: inline-flex;
     align-items: center;
-    min-width: 44px;
+    max-width: 150px;
     min-height: 44px;
-    justify-content: center;
+    padding-right: 4px;
+  }
+
+  .bar .badge.on-disk .file-name {
+    display: block;
+  }
+
+  .bar .badge.on-disk .chip-x {
+    width: 36px;
+    height: 36px;
+    margin: 0 0 0 4px;
   }
 
   .bar .save-icon {

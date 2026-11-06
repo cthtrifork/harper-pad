@@ -31,7 +31,10 @@ export function describeConflict(m) {
       ? `${file} changed on disk`
       : "This draft changed on another device";
   const fileOther = m.file && !m.applyFile; // an unedited draft takes the file's text: it is not an "other" version then
-  const others = [fileOther && `the text now in ${file}`, m.server && "the server's text"].filter(Boolean);
+  const same = fileOther && m.server && sameText(m); // one text, held by the file and the server: said once
+  const others = same
+    ? [`the text now in ${file}, which matches the server's text,`]
+    : [fileOther && `the text now in ${file}`, m.server && "the server's text"].filter(Boolean);
   const othersText = others.join(" and ");
   const yours = m.applyFile ? `${file}'s text` : "your draft's text";
   const detail = m.applyFile
@@ -42,9 +45,18 @@ export function describeConflict(m) {
         ? `Your draft and ${file} hold different text.`
         : "Your draft and the server hold different text.";
   const sendsTo = [fileOther && file, (m.server || m.sync) && "the server"].filter(Boolean);
-  const where = sendsTo.length > 1 ? `${sendsTo[0]} and ${sendsTo[1]}` : sendsTo[0];
-  const verb = others.length > 1 && !sameText(m) ? "are" : "is";
-  const cap = `${othersText[0].toUpperCase()}${othersText.slice(1)}`;
+  const where = sendsTo.length > 1 ? `${sendsTo[0]} and ${sendsTo[1]}` : (sendsTo[0] ?? "where it belongs");
+  const verb = others.length > 1 ? "are" : "is";
+  const cap = othersText ? `${othersText[0].toUpperCase()}${othersText.slice(1)}` : "";
+  // Nothing else differs (an unedited draft whose file is the only version): there is nothing to copy and nothing to lose.
+  if (!othersText) {
+    return {
+      title,
+      detail,
+      keep: `Keep: ${yours} goes to ${where}. Nothing else differs, so no Conflicted copy is made.`,
+      overwrite: `Overwrite: ${yours} goes to ${where}. Nothing else differs, so nothing is lost.`,
+    };
+  }
   return {
     title,
     detail,

@@ -120,6 +120,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
 
   function setCurrent(d) {
     refreshed.value = null;
+    unlinkedToast.value = null;
     current.value = asCurrent(d);
     fileState.value = current.value.filePath ? "unknown" : "none";
     dirty = false;
@@ -319,9 +320,11 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     editor.value?.undo();
   }
 
-  // "Unlink": the draft stays, the file stays, the link goes.
+  // "Unlink" (the x on the file chip): the draft stays, the file stays, the link goes. A toast offers Undo, which puts the link back as it was.
+  const unlinkedToast = ref(null); // {id, name, tick}
   function unlinkFile() {
     const id = current.value.id;
+    const name = fileName.value;
     fileChange.clear();
     if (!available.value || !id || isWeb) return Promise.resolve();
     chain = chain.then(async () => {
@@ -330,9 +333,32 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
         if (current.value.id !== id) return;
         current.value = asCurrent(d);
         fileState.value = "none";
+        unlinkedToast.value = { id, name, tick: Date.now() };
         refreshListSoon();
       } catch (err) {
         error.value = `Could not unlink: ${message(err)}`;
+        state.value = "error";
+      }
+    });
+    return chain;
+  }
+
+  // Undo of "Unlinked": the same file and baseline again. Does nothing if another draft was opened meanwhile.
+  function undoUnlink() {
+    const t = unlinkedToast.value;
+    unlinkedToast.value = null;
+    if (!t || !available.value) return Promise.resolve();
+    chain = chain.then(async () => {
+      try {
+        const d = await be.undoUnlinkDraftFile(t.id);
+        if (current.value.id === t.id) {
+          current.value = asCurrent(d);
+          fileState.value = d.filePath ? "unknown" : "none";
+          fileChange.check(current.value);
+        }
+        refreshListSoon();
+      } catch (err) {
+        error.value = `Could not restore the link: ${message(err)}`;
         state.value = "error";
       }
     });
@@ -697,6 +723,8 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     reloadFromFile,
     overwriteFile,
     unlinkFile,
+    unlinkedToast,
+    undoUnlink,
     checkFile,
     refreshList,
     setQuery,

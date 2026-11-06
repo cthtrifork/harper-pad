@@ -120,11 +120,26 @@
   align-self: center;
 }
 
-/* Unlink: only offered while the chip is struck through (the file is gone or unusable). */
-.bar .tool.unlink {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
+/* The x on the file chip: Unlink. The draft and the file stay as they are. */
+.bar .chip-x {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: -2px -6px -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mute);
+}
+
+.bar .chip-x:hover {
+  background: var(--selected);
+  color: var(--text);
 }
 
 /* "Conflicted copy, from ...": only in memory, beside the file chip. */

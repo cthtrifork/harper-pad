@@ -10,7 +10,7 @@ import StatusBar from "./components/StatusBar.vue";
 import ConflictDialog from "./components/ConflictDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
@@ -18,6 +18,7 @@ import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, 
 import { statusLine } from "./lib/statusLine.js";
 import { useDrafts } from "./lib/useDrafts.js";
 import { COPY_LABELS } from "./lib/conflict.js";
+import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.js";
 import { useConflict } from "./lib/useConflict.js";
 import { useSync } from "./lib/useSync.js";
 
@@ -111,7 +112,20 @@ const statusLineNow = computed(() =>
 const syncBusy = computed(() => sync.status.value === "syncing");
 // A draft that has just opened says nothing about saving until something is typed; pressing Sync or Save asks for an answer, so it shows.
 const syncAsked = ref(false);
+// A linked draft cannot be saved as another file until it is unlinked (the x on the file chip); Ctrl+Shift+S only says so in the status line.
+const saveAsHint = ref("");
+let saveAsHintTimer = 0;
+watch(
+  () => drafts.current.value.filePath,
+  () => (saveAsHint.value = ""), // the link changed (unlinked, or another draft): the hint is stale
+);
 function onSave(saveAs = false) {
+  if (saveAs && saveAsAction({ filePath: drafts.current.value.filePath, fileProblem: drafts.fileProblem.value, canUnlink: !isWeb }) === "hint") {
+    saveAsHint.value = UNLINK_FIRST;
+    clearTimeout(saveAsHintTimer);
+    saveAsHintTimer = setTimeout(() => (saveAsHint.value = ""), 5000);
+    return Promise.resolve();
+  }
   syncAsked.value = true;
   return drafts.saveFile(saveAs);
 }
@@ -428,6 +442,7 @@ onBeforeUnmount(() => {
       :file-name="drafts.fileName.value"
       :file-dir="drafts.fileDir.value"
       :file-problem="drafts.fileProblem.value"
+      :can-unlink="!isWeb"
       :copy-badge="copyBadge"
       @unlink="drafts.unlinkFile"
       :can-save="drafts.available.value"
@@ -500,6 +515,9 @@ onBeforeUnmount(() => {
             <ToastBar v-if="drafts.refreshed.value" :message="`Updated from ${drafts.refreshed.value.name}`" action="Undo" :tick="drafts.refreshed.value.tick" @action="drafts.undoRefresh" @close="drafts.refreshed.value = null" />
           </Transition>
           <Transition name="toast-bar">
+            <ToastBar v-if="drafts.unlinkedToast.value" :message="`Unlinked ${drafts.unlinkedToast.value.name}`" action="Undo" :tick="drafts.unlinkedToast.value.tick" @action="drafts.undoUnlink" @close="drafts.unlinkedToast.value = null" />
+          </Transition>
+          <Transition name="toast-bar">
             <ToastBar v-if="drafts.linkMoved.value" :message="drafts.linkMoved.value.text" :tick="drafts.linkMoved.value.tick" :ms="9000" @close="drafts.linkMoved.value = null" />
           </Transition>
           <Transition name="toast-bar">
@@ -526,8 +544,8 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' || sync.rejected.value?.id === drafts.current.value.id ? statusLineNow.text : ''"
-      :draft-tone="statusLineNow.tone"
+      :draft-status="saveAsHint || (typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' || sync.rejected.value?.id === drafts.current.value.id ? statusLineNow.text : '')"
+      :draft-tone="saveAsHint ? 'mute' : statusLineNow.tone"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"
       :mode="mode"

@@ -420,13 +420,54 @@ type FileText struct {
 	Stamp string `json:"stamp"`
 }
 
-// UnlinkDraftFile removes the draft's link to its file. The draft and the file both stay as they are.
+// UnlinkDraftFile removes the draft's link to its file. The draft and the file both stay as they are. The link (path and baseline) is kept
+// in memory, so UndoUnlinkDraftFile can restore it; the page never names a path.
 func (s *DraftService) UnlinkDraftFile(id string) (store.Draft, error) {
 	st, err := s.db.open()
 	if err != nil {
 		return store.Draft{}, err
 	}
+	before, err := st.Get(id)
+	if err != nil {
+		return store.Draft{}, err
+	}
 	if err := st.SetFile(id, "", 0); err != nil {
+		return store.Draft{}, err
+	}
+	if before.FilePath != "" {
+		s.mu.Lock()
+		if s.unlinked == nil {
+			s.unlinked = map[string]store.Draft{}
+		}
+		s.unlinked[id] = before
+		s.mu.Unlock()
+	}
+	return st.Get(id)
+}
+
+// UndoUnlinkDraftFile restores the link UnlinkDraftFile removed last for this draft: the same path and the same baseline (modified time,
+// size and text hash), and nothing else. Another draft linked to that path in the meantime loses it, as after Save as file. An error when
+// there is nothing to restore or the draft got a link since.
+func (s *DraftService) UndoUnlinkDraftFile(id string) (store.Draft, error) {
+	st, err := s.db.open()
+	if err != nil {
+		return store.Draft{}, err
+	}
+	s.mu.Lock()
+	before, ok := s.unlinked[id]
+	delete(s.unlinked, id)
+	s.mu.Unlock()
+	if !ok {
+		return store.Draft{}, errors.New("there is no link to restore")
+	}
+	cur, err := st.Get(id)
+	if err != nil {
+		return store.Draft{}, err
+	}
+	if cur.FilePath != "" {
+		return store.Draft{}, errors.New("the draft is linked to a file already")
+	}
+	if err := st.RestoreFile(id, before.FilePath, before.FileMTime, before.FileHash, before.FileSize); err != nil {
 		return store.Draft{}, err
 	}
 	return st.Get(id)

@@ -47,6 +47,11 @@ export function useConflict({ drafts, sync }) {
     if (sv) server = { text: sv.text, stamp: sv.stamp };
     if (mine !== building) return;
     const yours = f?.clean ? file.text : drafts.dialog.current().text;
+    // An unedited draft takes the file's text. If the server then holds nothing or the same text, nothing differs after all: no dialog.
+    if (f?.clean && (!server || server.text === yours)) {
+      model.value = null;
+      return;
+    }
     model.value = { id, name: f?.name ?? "", yours, file, server, applyFile: !!f?.clean, sync: syncOn() };
   }
 

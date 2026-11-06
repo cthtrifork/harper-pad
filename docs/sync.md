@@ -7,14 +7,14 @@ Sync is off until you enroll a device; without it the app uses the network only 
 When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**.
 
 The server is described next to its code: [backend README](../backend/README.md), [sync API](../backend/cmd/harper-pad-sync/README.md),
-[admin UI](../backend/cmd/harper-pad-admin/README.md), routes in [openapi.yaml](openapi.yaml). Files and the file link: [storage](storage.md).
+[admin UI](../backend/cmd/harper-pad-admin/README.md), routes in [openapi.yaml](openapi.yaml).
 
 ## Rules
 
-- The device is the source of truth. The server is a replica: if it is lost, the devices Create its drafts again.
+- The device is the source of truth. The server is a replica.
 - A draft the server lacks is Created there. Only an explicit delete Deletes a draft.
 - Sync never changes the open draft while you type, and never decides a conflict.
-- Revoking a device, an invalid token, a server reset and "Sign out" leave the drafts on the device.
+- Revoking a device, an invalid token, a server reset and turning off sync on this device leave the drafts on the device.
 - The device key is made on the device and never leaves it.
 
 ## What needs you
@@ -25,7 +25,7 @@ The server is described next to its code: [backend README](../backend/README.md)
 | Your draft is edited and the server holds different text | The same dialog | Keep, Overwrite |
 | Your draft is unedited, and the file and the server disagree | The same dialog; the changed file counts as your edit | Keep, Overwrite |
 | The open draft was deleted on another device | A dialog | Keep Creates the server draft again; Remove Deletes the draft here (the toast offers Undo) |
-| The linked file is gone, unreadable or not text | The file name in the header is struck through, with the reason | Ctrl+S retries; Unlink. A file that is not text is never updated |
+| The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the reason | Ctrl+S retries; the x on the file name Deletes the link; Save as file beside it picks another path. A file that is not text is never updated |
 | The token was revoked | The chip says "Sign in again" | Paste a fresh invite |
 | Enrolling | The Sync chip | Paste the invite URL |
 
@@ -36,84 +36,75 @@ The server is described next to its code: [backend README](../backend/README.md)
 - One dialog covers the file and the server when both differ.
 - Closing the window while it is open is allowed. The dialog returns the next time the draft is opened.
 - Your draft keeps its id and its file link.
-- **Overwrite** Updates the file, then the server, with your draft. The other versions are Deleted, with no undo. Its button is the danger style and its text says whose text is Deleted.
+- **Overwrite** Updates the file, then the server, with your draft. The other versions are Deleted, with no undo. Its button is the danger style and its text says whose text is Deleted. When your draft has no edits of its own, it takes the file's text and only the server is Updated.
 - **Keep** first Creates a Conflicted copy of each other version that differs from your draft (one copy when the file and the server hold the same text), then does what Overwrite does.
-- A Conflicted copy is an ordinary draft without a file link, with a badge in memory ("Conflicted copy, from the file" or "from the server"). The badge goes when the copy is edited or deleted, from its x, or at restart. It is never kept on disk or synced, and the text is not edited.
+- A Conflicted copy is an ordinary draft without a file link, with a badge in memory ("Conflicted copy, from the file", "from the server" or "from the file and the server"). The badge goes when the copy is edited or deleted, from its x, or at restart. It is never kept on disk or synced, and the text is not edited.
 - The file and the server are read again when you choose. If either changed, the dialog is redrawn and nothing is changed.
 - A failed file update is skipped and the header chip says why; the server is still Updated.
 - With the server unreachable the file is Updated and the server stays pending. The dialog returns for the server only if it changed again.
-- The dialog looks the same on a phone: centered, Keep and Overwrite side by side.
+- The dialog looks the same on a phone: centered, Overwrite on the left and Keep, which has the focus, on the right.
 
 ## Other paths on this device
 
 | Path | What happens |
 |---|---|
 | Edit your draft | Autosave Updates the draft, never the file. Ctrl+S Updates the file when the draft changed since the file was Updated |
-| The file changed and your draft has no edits | The server is asked first. If it is unchanged, the draft and the server are Updated from the file at once, with an Undo toast. If it holds the same text as the file, nothing more. If it holds other text, the dialog. If it is unreachable or sync is off, the draft is Updated from the file, and the server once it is reachable |
+| The file changed, your draft has no edits and you are not typing | The server is asked first. If it is unchanged, the draft and the server are Updated from the file at once, with an Undo toast. If it holds the same text as the file, nothing more. If it holds other text, the dialog. If it is unreachable or sync is off, the draft is Updated from the file, and the server once it is reachable |
 | Undo of that update, then Ctrl+S | Your draft wins while the file is still the version the update read; otherwise the dialog |
 | The draft is Updated from the file | The cursor and scroll position stay as far as the text allows, and autocorrect leaves the text alone |
 | The server holds a changed draft | It Updates your draft. The file counts as older than the draft; the next Ctrl+S Updates it, after the dialog if the file also changed |
-| Every file update | The file is read again first and its modified time, size and text hash compared; a difference opens the dialog |
-| A file update fails, or the file is unreadable | The draft is kept; the chip shows the reason; Ctrl+S tries again; a gone file is Created again ("Recreated <name>") |
+| Every file update | The file is read again first; if something else changed it since your last update, the dialog opens instead (Overwrite skips this, but never Updates a file that is not text) |
+| A file update fails, or the file is unreadable | The draft is kept and Ctrl+S tries again; a gone file is Created again ("Recreated <name>") |
 | Delete a linked draft | The file is untouched. Undo Creates the draft again without the link |
+| Save as file | Offered only for a draft without a link, and beside a struck file name. Ctrl+Shift+S on a linked, healthy draft only shows "Unlink first to save as another file" |
+| The x on the file name | Deletes the link only; the file and your draft are untouched. A toast "Unlinked <name>" has Undo, which Creates the same link again (path and baseline); then Save as file returns |
 | Save as file onto the path of another draft | The link moves to this draft and the other draft is unlinked, with a toast naming it |
 | Web build | It never links a draft to a file |
 | Second launch of the app | It focuses the open window (desktop) |
 
 ## Sync moments
 
-There is no timer. Every moment uses the same rules.
+Sync is never periodic. Every moment uses the same rules.
 
 | Moment | What it does |
 |---|---|
 | Edit | Updates the server draft about 2 s after typing stops; Ctrl+S at once |
 | Open a draft | Asks the server once; a changed server draft Updates yours unless you typed ("Updated from the server") |
 | Delete | Deletes the server draft when the undo offer ends |
-| Sync all | Runs at start-up and after enrolling, from the chip's pop-up too; ends with a summary like "3 created, 2 updated, 1 deleted" |
+| Sync all | Runs at start-up and after enrolling, from the chip's pop-up too; ends with a summary like "3 uploaded, 2 downloaded, 1 removed", which also counts failed and left-open drafts |
 | Dictionary and ignore list | Updates the server about 2 s after a change, and on Sync all |
 
-A draft that changed on both sides with different text is the dialog's; Sync all leaves it untouched. A run reads its decisions from
-kept state, so an interrupted run is a partial one. "Changed" means the text hash differs from the hash at the last sync, so typing
-and undoing changes nothing.
+A draft that changed on both sides with different text is the dialog's; Sync all leaves it untouched. Typing and then undoing is no change.
 
 ## The file link meets sync
 
-- Only `{v, format, content}` travels. The path and the modified time stay on the device, and a draft Created from the server has no link.
-- Remove in the deleted-elsewhere dialog never touches the file. Keep Creates the server draft again with its link.
+- Only `{v, format, content}` travels, with the draft's own times. The file path and the file's modified time stay on the device, and a draft Created from the server has no link.
+- Remove in the deleted-elsewhere dialog never touches the file. Keep Creates the server draft again, and the draft keeps its file link.
 
 ## Dictionary and ignore list
 
 These are small and are meant to be the same on every device, so there is no per-word merge: the last device to sync wins, and absence is
 deletion. A device that syncs them for the first time Deletes nothing: it Creates the union of both sides.
 
-- The server holds one row per account: a version and two JSON lists, `words` and `ignored` (Harper's 64-bit hashes as text). `GET` and
-  `PUT /settings` ([openapi.yaml](openapi.yaml)) Update both whole, with compare-and-set. The server checks that both are lists of strings and
-  never merges or looks inside.
-- Both lists together are at most 256 KiB of JSON; a larger one gets a 413.
-- A device sends its lists trimmed, without repeats or empty entries, and leaves out any entry another device would refuse (a phrase, a
-  control character, a word over 64 characters, a hash that is not digits). The entry stays in the local dictionary.
-- A device keeps one record: the server version it last matched and the lists it held then. It Updates the server when its lists differ from that
-  record, and a 409 is read and tried again, three times. When only the server's version moved, the server's lists Update the device's.
-- It runs on Sync all and about 2 s after a change, and waits for Harper at start-up.
-- Lists from the server with any entry that is not a word or a hash are refused whole.
+- It runs on Sync all and about 2 s after a change. At start-up it waits for Harper.
 - The labels of ignored findings are not synced; a hash from another device shows as "A finding in its context".
+- If it fails, the chip's pop-up says "Could not sync the dictionary and ignore list" (see Failure states).
 
 ## Failure states
 
 | Failure | What happens |
 |---|---|
-| Server unreachable, or a 5xx | Edits stay on the device, the chip says pending, the next moment tries again |
-| 401 | Syncing stops, drafts stay, the chip says "Sign in again". This also covers iOS clearing a Home Screen app's storage |
-| The server rejects a draft (too large, bad request) | The draft stays and keeps updating locally; the chip says "Could not sync <title>: <reason>"; no dialog; the next moment tries again |
+| Server unreachable | Edits stay on the device, the chip says "Offline", the next moment tries again |
+| A 5xx | Edits stay on the device, the chip's pop-up says "Some drafts are not sent yet.", the next moment tries again |
+| 401 | Syncing stops and the chip says "Sign in again". A lost key, such as iOS clearing a Home Screen app's storage, ends here too |
+| The server rejects a draft (too large, bad request) | The draft stays and keeps updating locally; the status line says "Could not sync <title>: <reason>" for the open draft; no dialog; the next moment tries again |
 | Server lost | The devices Create the server drafts again; devices and tokens need enrolling again; a draft deleted on one device while another was offline can reappear |
 | Dictionary or ignore list fails | The chip's pop-up says "Could not sync the dictionary and ignore list"; the next Sync all or change tries again; the local lists are untouched |
-| Sync off | The network is used only to check for an app update |
 
 ## Limits
 
-- Two devices that change the dictionary or ignore list between syncs: the one that syncs last wins, and the other's change is lost.
 - A word removed on the other devices before a device enrolls comes back when that device still holds it: the first sync cannot tell "removed elsewhere" from "never had".
-- Overwrite is the only choice that Deletes text, and the server keeps no history.
+- Overwrite is the only choice that Deletes text, and the server keeps no history to restore it from.
 
 ## Enrollment
 
@@ -164,7 +155,6 @@ the draft rows, and is never sent; an older build ignores it. The SQLite table i
 | Transport | HTTPS only (cert-manager, HSTS at the ingress). The client refuses an `http:` server |
 | Who can read the data | The server and its operator; Cloudflare is not in the sync path. Use encrypted volumes and keep bodies out of logs |
 | Stolen token | Revoke the device |
-| Invite theft | One use, 15 minutes, hashed, in the fragment |
 | Account isolation | The account comes from the device row and every query filters on it. With one account this is a guard; narrow the row-security policy to the account before adding a second |
 | Database and cluster | Client certificates only, PostgreSQL reachable only from the sync and admin pods, separate roles ([backend README](../backend/README.md)), default-deny NetworkPolicies, images pinned by digest |
 | Admin UI | No Service and no listener outside its pod; reached through a Cloudflare Tunnel behind Cloudflare Access (OIDC, MFA); same-origin checks, CSRF tokens, strict CSP ([admin README](../backend/cmd/harper-pad-admin/README.md#access)) |

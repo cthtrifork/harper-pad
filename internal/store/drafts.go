@@ -209,6 +209,27 @@ func (s *Store) LinkFile(id, path string, mtime int64, text string, size int64) 
 	return titles, tx.Commit()
 }
 
+// RestoreFile sets a draft's link exactly as it was (path, mtime, hash, size), for undoing an unlink. Any other draft linked to the path is
+// unlinked in the same transaction, so a file keeps one holder. ErrNotFound when there is no such draft.
+func (s *Store) RestoreFile(id, path string, mtime int64, hash string, size int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`UPDATE drafts SET file_path = '', file_mtime = 0, file_hash = '', file_size = -1 WHERE file_path = ? AND id <> ?`, path, id); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE drafts SET file_path = ?, file_mtime = ?, file_hash = ?, file_size = ? WHERE id = ?`, path, mtime, hash, size, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit()
+}
+
 // SetFile records the file a draft was saved to and its modification time after the write, or clears both with "" and 0. It also forgets
 // the file hash: call SetFileHash after it when the text is known to match.
 // ErrNotFound when there is no such draft.

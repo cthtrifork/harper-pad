@@ -135,3 +135,27 @@ test("the words name the file, the versions that differ, and whose text each cho
   assert.match(clean.detail, /no edits of its own, so plan\.md's text counts as yours/);
   assert.match(clean.keep, /plan\.md's text goes to the server\. The server's text is saved first/);
 });
+
+test("an unedited draft whose file is the only version that differs is described without crashing, and says nothing is lost", () => {
+  const d = describeConflict({ name: "plan.md", yours: "b", applyFile: true, sync: true, file: side("b"), server: null });
+  assert.match(d.detail, /no edits of its own, so plan\.md's text counts as yours/);
+  assert.equal(d.keep, "Keep: plan.md's text goes to the server. Nothing else differs, so no Conflicted copy is made.");
+  assert.equal(d.overwrite, "Overwrite: plan.md's text goes to the server. Nothing else differs, so nothing is lost.");
+  // Sync off as well: no destination to name, still no crash.
+  const off = describeConflict({ name: "plan.md", yours: "b", applyFile: true, sync: false, file: side("b"), server: null });
+  assert.match(off.keep, /^Keep: plan\.md's text goes to where it belongs\./);
+});
+
+test("when the file and the server hold the same text it is said once, in the singular", () => {
+  const d = describeConflict({ name: "plan.md", yours: "a", file: side("same"), server: side("same") });
+  assert.equal(
+    d.keep,
+    "Keep: your draft's text goes to plan.md and the server. The text now in plan.md, which matches the server's text, is saved first as one Conflicted copy.",
+  );
+  assert.equal(
+    d.overwrite,
+    "Overwrite: your draft's text goes to plan.md and the server. The text now in plan.md, which matches the server's text, is lost for good, with no undo.",
+  );
+  const two = describeConflict({ name: "plan.md", yours: "a", file: side("one"), server: side("two") });
+  assert.match(two.keep, /The text now in plan\.md and the server's text are saved first as two Conflicted copies\./);
+});

@@ -135,3 +135,15 @@ test("no conflict, no dialog; and a draft that is not the open one gets none", a
   await settle();
   assert.equal(other.c.model.value, null);
 });
+
+test("an unedited draft whose server holds nothing or the file's own text shows no dialog after all", async () => {
+  const none = setup({ file: { clean: true }, serverNow: null });
+  await settle();
+  assert.equal(none.c.model.value, null);
+  const same = setup({ file: { clean: true }, server: { text: "file text" } });
+  await settle();
+  assert.equal(same.c.model.value, null);
+  const differs = setup({ file: { clean: true }, server: { text: "other" } });
+  await settle();
+  assert.ok(differs.c.model.value, "a different server text still asks");
+});
