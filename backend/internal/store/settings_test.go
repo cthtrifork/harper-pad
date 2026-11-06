@@ -1,0 +1,87 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+)
+
+const words1 = `{"v":1,"items":{"Wails":{"at":1,"del":false}}}`
+
+func TestPutSettingCompareAndSet(t *testing.T) {
+	s, owner := syncFixture(t)
+	ctx := context.Background()
+	reset := func() { _, _ = owner.Exec(ctx, `TRUNCATE settings`) }
+	reset()
+	t.Cleanup(reset)
+
+	if _, err := s.GetSetting(ctx, 1, "words"); !errors.Is(err, ErrSettingNotFound) {
+		t.Fatalf("before any write: %v", err)
+	}
+	v, err := s.PutSetting(ctx, 1, "words", 0, words1)
+	if err != nil || v.Version != 1 {
+		t.Fatalf("create = %+v, %v", v, err)
+	}
+	if v, err = s.PutSetting(ctx, 1, "words", 1, "{}"); err != nil || v.Version != 2 {
+		t.Fatalf("update = %+v, %v", v, err)
+	}
+	// a stale base changes nothing and returns the stored row
+	cur, err := s.PutSetting(ctx, 1, "words", 1, "stale")
+	if !errors.Is(err, ErrSettingConflict) || cur.Version != 2 || cur.Data != "{}" {
+		t.Errorf("stale = %+v, %v", cur, err)
+	}
+	// base 0 over an existing row is a conflict, and a base for a missing key is a conflict with no copy
+	if cur, err := s.PutSetting(ctx, 1, "words", 0, "x"); !errors.Is(err, ErrSettingConflict) || cur.Version != 2 {
+		t.Errorf("create over existing: %+v, %v", cur, err)
+	}
+	if cur, err := s.PutSetting(ctx, 1, "ignored", 3, "x"); !errors.Is(err, ErrSettingConflict) || cur.Key != "" {
+		t.Errorf("base for a missing key: %+v, %v", cur, err)
+	}
+	// keys are separate; the database allows only the two
+	if _, err := s.PutSetting(ctx, 1, "ignored", 0, "{}"); err != nil {
+		t.Errorf("second key: %v", err)
+	}
+	if _, err := s.PutSetting(ctx, 1, "other", 0, "{}"); err == nil || errors.Is(err, ErrSettingConflict) {
+		t.Errorf("unknown key accepted: %v", err)
+	}
+	// size limit, as insert and as update
+	big := strings.Repeat("x", MaxSettingData+1)
+	if _, err := s.PutSetting(ctx, 2, "words", 0, big); !errors.Is(err, ErrSettingTooLarge) {
+		t.Errorf("insert over the limit: %v", err)
+	}
+	if _, err := s.PutSetting(ctx, 1, "words", 2, big); !errors.Is(err, ErrSettingTooLarge) {
+		t.Errorf("update over the limit: %v", err)
+	}
+}
+
+// The account comes from the device: another account has its own row under the same key.
+func TestSettingsAreScopedToTheAccount(t *testing.T) {
+	s, owner := syncFixture(t)
+	ctx := context.Background()
+	if _, err := owner.Exec(ctx, `INSERT INTO clients (name, created_at) VALUES ('second', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	var two int64
+	if err := owner.QueryRow(ctx, `SELECT id FROM clients WHERE name = 'second'`).Scan(&two); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = owner.Exec(ctx, `TRUNCATE settings`)
+		_, _ = owner.Exec(ctx, `DELETE FROM clients WHERE name = 'second'`)
+	})
+	if _, err := s.PutSetting(ctx, 1, "words", 0, words1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetSetting(ctx, two, "words"); !errors.Is(err, ErrSettingNotFound) {
+		t.Errorf("other account reads: %v", err)
+	}
+	if v, err := s.PutSetting(ctx, two, "words", 0, "{}"); err != nil || v.Version != 1 {
+		t.Errorf("other account creates the same key: %+v, %v", v, err)
+	}
+	// the admin role sees none of it (row security)
+	var n int
+	if err := owner.QueryRow(ctx, `SELECT count(*) FROM settings`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("harper_admin sees %d rows, %v", n, err)
+	}
+}

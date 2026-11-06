@@ -188,6 +188,45 @@ components:
       required:
         - version
       type: object
+    PutSettingInputBody:
+      additionalProperties: false
+      properties:
+        baseVersion:
+          description: The stored version the device saw; 0 when it believes the server has none
+          format: int64
+          minimum: 0
+          type: integer
+        data:
+          description: See GET
+          type: string
+      required:
+        - baseVersion
+        - data
+      type: object
+    PutSettingOutputBody:
+      additionalProperties: false
+      properties:
+        version:
+          description: The setting's new version
+          format: int64
+          type: integer
+      required:
+        - version
+      type: object
+    Setting:
+      additionalProperties: false
+      properties:
+        data:
+          description: "A JSON string, {\"v\":1,\"items\":{\"<item>\":{\"at\":<unix ms>,\"del\":<bool>}}}: per item the time of its last change and whether it was removed (a tombstone). The server stores it as it came; the devices merge it."
+          type: string
+        version:
+          description: "Compare-and-set counter: 1 on creation, +1 on each accepted write"
+          format: int64
+          type: integer
+      required:
+        - version
+        - data
+      type: object
   securitySchemes:
     DPoP:
       description: "`Authorization: DPoP <device token>` together with a `DPoP` proof header made with the key the device enrolled with."
@@ -521,6 +560,169 @@ paths:
       summary: Enroll a device
       tags:
         - enrollment
+  /settings/{key}:
+    get:
+      description: "`words` is the personal dictionary, `ignored` the hashes of Harper's ignore list. 404 until a device has stored one."
+      operationId: getSetting
+      parameters:
+        - description: DPoP proof
+          in: header
+          name: DPoP
+          schema:
+            description: DPoP proof
+            type: string
+        - description: DPoP <device token>
+          in: header
+          name: Authorization
+          schema:
+            description: DPoP <device token>
+            type: string
+        - in: path
+          name: key
+          required: true
+          schema:
+            enum:
+              - words
+              - ignored
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+          description: OK
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - DPoP: []
+      summary: Get one synced setting
+      tags:
+        - settings
+    put:
+      description: Accepted only if the stored version is `baseVersion` (0 for a key the server does not have). Otherwise nothing changes and the 409 carries the current setting, so the device merges and writes again.
+      operationId: putSetting
+      parameters:
+        - description: DPoP proof
+          in: header
+          name: DPoP
+          schema:
+            description: DPoP proof
+            type: string
+        - description: DPoP <device token>
+          in: header
+          name: Authorization
+          schema:
+            description: DPoP <device token>
+            type: string
+        - in: path
+          name: key
+          required: true
+          schema:
+            enum:
+              - words
+              - ignored
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutSettingInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutSettingOutputBody"
+          description: OK
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Bad Request
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                additionalProperties: false
+                properties:
+                  current:
+                    $ref: "#/components/schemas/Setting"
+                    description: The server's current setting; absent when the server has none
+                  detail:
+                    type: string
+                  status:
+                    format: int64
+                    type: integer
+                  title:
+                    type: string
+                required:
+                  - title
+                  - status
+                  - detail
+                type: object
+          description: The stored setting is not the base the write was made against
+        "413":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Request Entity Too Large
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - DPoP: []
+      summary: Write one synced setting (compare-and-set)
+      tags:
+        - settings
 servers:
   - url: https://sync.example.com
 tags:
@@ -528,3 +730,5 @@ tags:
     name: enrollment
   - description: List, read and write the end-to-end encrypted drafts of an enrolled device.
     name: drafts
+  - description: The personal dictionary and the ignore list, merged by the devices.
+    name: settings

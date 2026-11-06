@@ -6,6 +6,7 @@
 
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { createDesktopSyncDrafts } from "./desktopSync.js";
+import { createSettingsSyncStore } from "./settingsSync.js";
 import { createDeviceStore } from "./syncDevice.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
@@ -60,6 +61,10 @@ export async function saveSettings(settings) {
 // The server, token and key this device syncs with: {load, save, clear}. The same on both builds, in the webview's or browser's IndexedDB
 // (see syncDevice.js); it is not part of the Go side.
 export const syncDevice = createDeviceStore(openDb);
+
+// When each dictionary word last changed, for syncing it: {load, save} (settingsSync.js). Same place, same builds.
+export const wordsSync = createSettingsSyncStore(openDb, "words");
+export const ignoredSync = createSettingsSyncStore(openDb, "ignored");
 
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
 // The same operations on both builds: DraftService's methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).

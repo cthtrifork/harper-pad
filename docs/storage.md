@@ -120,6 +120,10 @@ Harper (`harper.js`) is the source of truth during a run. At start `lib/personal
 dictionary** or **Ignore this one** in the suggestion popover) it exports both lists and saves them (`SaveSettings`). The ignore list is
 Harper's own export: hashes of the finding in its context, not the text.
 
+When sync is on, the dictionary and the ignore list are also synced ([sync](sync.md#settings-the-dictionary-and-the-ignore-list)). When each word last changed
+(and tombstones of removed words), and the same for ignored findings, is kept apart from the settings, in the `sync-words` and `sync-ignored` records of the IndexedDB `kv` store, on both
+builds; the `settings` table and `SettingsService` are unchanged.
+
 ## Why not the Wails `kvstore` or `sqlite` services
 
 - `kvstore` writes with a plain `os.WriteFile` (not atomic) and fails the service start-up when the file is damaged, which would stop the

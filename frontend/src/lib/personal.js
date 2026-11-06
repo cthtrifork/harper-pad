@@ -1,17 +1,12 @@
-import { loadSettings, saveSettings } from "./backend.js";
+import { ignoredSync, loadSettings, saveSettings, syncDevice, wordsSync } from "./backend.js";
+import { hashesOf } from "./personalSets.js";
+import { reconcile } from "./settingsItems.js";
+
+export { applyIgnored, ignoredHashes, removeIgnored, withoutWord, withoutWords } from "./personalSets.js";
 
 // What each ignored finding was, by hash. Harper's export holds only hashes of the finding in its context, so without this the list
 // could not say what was ignored. Hashes are kept as text: they are 64-bit and do not fit a JS number.
 let labels = {};
-
-// The hashes in Harper's exported ignore list, {"context_hashes": [...]}, as text. Read with a pattern, not JSON.parse, which would round them.
-function hashesOf(json) {
-  const list = /"context_hashes"\s*:\s*\[([^\]]*)\]/.exec(json ?? "");
-  return list?.[1].match(/\d+/g) ?? [];
-}
-
-// The same list as text, built by hand for the same reason.
-const exportList = (hashes) => `{"context_hashes":[${hashes.join(",")}]}`;
 
 // What the Problems panel shows: the dictionary, and the ignored findings.
 async function snapshot(harper) {
@@ -42,28 +37,23 @@ export async function savePersonal(harper) {
   const keep = new Set(hashesOf(ignored));
   labels = Object.fromEntries(Object.entries(labels).filter(([hash]) => keep.has(hash)));
   await saveSettings({ version: 1, words, ignored, ignoredLabels: labels });
+  await noteSets(words, hashesOf(ignored));
   return snapshot(harper);
 }
 
-// Stop ignoring one finding: Harper can only take the whole list back, so put the others back after clearing it.
-export async function removeIgnored(harper, hash) {
-  const rest = hashesOf(await harper.exportIgnoredLints()).filter((h) => h !== hash);
-  await harper.clearIgnoredLints();
-  if (rest.length) await harper.importIgnoredLints(exportList(rest));
-}
-
-// Harper can add words to its dictionary but not take one out. To remove a word, build a new linter with the words that stay (and the
-// same ignore list) and return it; the caller swaps it in and disposes the old one.
-export async function withoutWord(harper, word, create) {
-  const words = (await harper.exportWords()).filter((w) => w !== word);
-  const ignored = await harper.exportIgnoredLints();
-  const next = await create();
+// Remember when the dictionary and the ignore list changed, so syncing them can tell an item removed here from one never added
+// (docs/sync.md, "Settings"). Only for a device that syncs; a failure here must not fail the save.
+async function noteSets(words, hashes) {
   try {
-    if (words.length) await next.importWords(words);
-    if (hashesOf(ignored).length) await next.importIgnoredLints(ignored);
-  } catch (err) {
-    next.dispose().catch(() => {});
-    throw err;
+    if (!(await syncDevice.load())) return;
+    for (const [store, current] of [
+      [wordsSync, words],
+      [ignoredSync, hashes],
+    ]) {
+      const rec = await store.load();
+      await store.save({ items: reconcile(rec.items, current, Date.now()) });
+    }
+  } catch {
+    // the next sync stamps what it finds
   }
-  return next;
 }

@@ -1,6 +1,6 @@
 # Sync
 
-Optional sync keeps **notes** (scratch pad drafts) the same on the desktop app and the web app (the iPhone Home Screen app is
+Optional sync keeps **notes** (scratch pad drafts), the **personal dictionary** and the **ignore list** the same on the desktop app and the web app (the iPhone Home Screen app is
 the web build). It is built, on both the client and the server. The server is described next to its code: the
 [backend README](../backend/README.md), the [sync API](../backend/cmd/harper-pad-sync/README.md) and the
 [admin UI](../backend/cmd/harper-pad-admin/README.md). This page is the design and the rules the clients follow.
@@ -15,7 +15,7 @@ the web build). It is built, on both the client and the server. The server is de
 - Sync is off by default. Without it the app uses the network only for the update check.
 - Operators run a Go sync service, a small Go + HTMX admin container and PostgreSQL on their own domain.
 
-Not in v1: syncing settings (dictionary, ignore list, text size), end-to-end encryption, more than one client account, merging
+Not in v1: syncing the text size and other preferences, end-to-end encryption, more than one client account, merging
 text, syncing files, and any OS keyring or TPM (the desktop webview stores its key like the web build does).
 
 ## The device is the source of truth
@@ -107,6 +107,7 @@ All four moments use the same decision table ([Conflicts](#conflicts)).
 | **Save** | About 2 s after typing stops, `PUT` that one draft. The **Sync** button (Ctrl+S; "Save" when sync is off) pushes at once, then asks the server about the open draft, so a newer version or delete from another device is found: a newer version is swapped in if nothing was typed, otherwise the status line says "Newer on the server". Offline or on error the draft stays *changed* and goes with the next save or Sync all. |
 | **Delete** | The tombstone is pushed when the undo offer ends, so an undone delete never reaches the server. An unsent tombstone is found by the next Sync all. |
 | **Opening a note** | Local text shows at once. In the background the device fetches the draft with `If-None-Match`. A newer state is swapped in ("Updated from the server") only if the draft is unchanged here and the user has not typed; otherwise the note gets a "Newer on the server" marker. A 404 changes nothing. A tombstone for a draft changed here changes nothing (the edit survives). A tombstone for an unchanged draft is never applied silently: a modal asks **Keep** (upload it again) or **Remove** (remove it here; the toast offers Undo). Sync all asks the same question for the open draft. |
+| **Dictionary and ignore list** | At **Sync all** (so also at start-up and after enrolling) and about 2 s after a word was added or a finding was ignored or restored here: [Settings](#settings-the-dictionary-and-the-ignore-list). |
 | **Sync all** | Lists the state of every draft on the server and reconciles both ways, ending with a summary like "3 uploaded, 2 downloaded, 1 conflicted copy, 1 removed" (removals can be undone). |
 
 A run recomputes every decision from stored state, so an interrupted run (a suspended phone) is just a partial one. iOS has no
@@ -162,6 +163,46 @@ It changes nothing for a user who leaves sync off. The reasons behind the shape:
 - **Device settings** (server URL, token, key) are one record in the app's IndexedDB on web and desktop alike. They
   are never uploaded; a cleared profile means "Sign in again".
 
+## Settings: the dictionary and the ignore list
+
+The same rules apply: the device holds the truth, and **absence is not deletion**. A word the server lacks is uploaded, never
+removed here; only an explicit removal (a tombstone) removes a word, and the server never merges.
+
+**Data model.** One row per account and key in `settings` (`key` is `words` or `ignored`, a compare-and-set `version`, and `data`,
+at most 1 MiB), written with `GET` and `PUT /settings/<key>` ([openapi.yaml](openapi.yaml)). The server stores `data` as it came:
+
+```json
+{"v":1,"items":{"Wails":{"at":1762400000000,"del":false},"Harpr":{"at":1762400100000,"del":true}}}
+```
+
+Per item (a word, or for `ignored` the decimal hash of a finding) `at` is when it was last added or removed on a device and `del`
+marks a removal. Tombstones are kept forever, as for drafts. The server only checks the shape and the sizes (20,000 items; a word is
+one short word, a hash is digits).
+
+**Merge, on the device** (`settingsItems.js`, run by `createSyncer.words`): per item the later `at` wins; at the same `at` the item
+stays. The result is the union of both sets, minus what has a newer tombstone. So removing a word on one device is not undone by a
+device that still has it, a word added again after a removal comes back, and a word missing on one side is simply added. The device
+stamps its own changes as they happen: when the dictionary is saved, a new word gets `at = now` and a word that is gone becomes a
+tombstone. It keeps those stamps in the `sync-words` and `sync-ignored` records of its IndexedDB `kv` store (never uploaded, not a source of words; on
+desktop too, so SQLite and the bindings are unchanged), and only while the device is enrolled. A word the device holds with no stamp is
+stamped when it first syncs, so enrolling never removes a word.
+
+**When.** **Sync all** (so at start-up and after enrolling) and about 2 s after the dictionary or ignore list changed here. Each run is: stamp local
+changes, `GET`, merge, and `PUT` the merge on the version just read when it differs from the server's; a `409` is read and merged
+again (three tries). What the merge says the dictionary must gain or lose is applied afterwards: Harper can only add words, so removals
+build a new linter without them ([personal.js](../frontend/src/lib/personal.js)). A failure leaves the dictionary as it is.
+
+**The ignore list** is the same kind of set: `items` keyed by the finding's decimal hash (kept as text, because Harper's hashes are 64-bit),
+stamped and merged by the same code, under the key `ignored`. Applying it imports the hashes another device ignored and, for ones it
+stopped ignoring, clears Harper's list and imports the rest again. What each ignored finding was (the label in the Problems panel) is
+not synced; a hash from another device shows as "A finding in its context". Hashes depend on Harper's version, so a hash from a newer
+Harper may match nothing on an older one; that is harmless.
+
+**Failures.** The dictionary and the ignore list sync independently of the drafts and of each other. If one fails (not "unreachable"
+or "Sign in again", which stop everything as for a draft), the chip's pop-up says "Could not sync the dictionary" (or "the ignore
+list") and the next Sync all or change tries again; the local sets are untouched. At start-up they wait for Harper to load, which
+holds the sync queue for a moment.
+
 ## Security
 
 A device-token model with DPoP key binding, TLS and no content encryption.
@@ -212,4 +253,4 @@ server. Ids, versions, times, the deleted flag and sizes stay visible.
 
 ## Later
 
-- **Syncing settings:** the dictionary (set union) and the ignore list need their own table and merge rules.
+- **Text size and other preferences:** not synced.

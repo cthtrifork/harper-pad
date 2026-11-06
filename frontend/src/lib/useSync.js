@@ -13,7 +13,9 @@ const PUSH_DELAY_MS = 2000;
 // `origin` is the sync server this build was made for (SYNC_ORIGIN, "" when none: then nothing shows). `deviceStore` is syncDevice from
 // backend.js and `drafts` the web store (see createSyncer: all syncing, conflicts included, is done there, not here). For Sync all: `prepare` saves what is typed first,
 // `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and `autoSync`
-// runs it when the app starts and after enrolling. `openDraft(id)` shows a draft (the conflicted copy, from the notice's "Open copy"), and `onRemoved(draft)` is told when the person chose to remove a draft that was deleted on another device (it shows another note), and `onRestore(draft)` when they undo that.
+// runs it when the app starts and after enrolling. `dictionary` ({items(), store, apply({add, remove})}) syncs the personal dictionary and `ignoreList` the ignored findings
+// (hashes), both with Sync all and after `wordsChanged()`; `items()` gives the words or hashes now, `store` is settingsSync.js's record and
+// `apply` carries out what the merge decided. `openDraft(id)` shows a draft (the conflicted copy, from the notice's "Open copy"), and `onRemoved(draft)` is told when the person chose to remove a draft that was deleted on another device (it shows another note), and `onRestore(draft)` when they undo that.
 export function useSync({
   origin,
   deviceStore,
@@ -27,6 +29,8 @@ export function useSync({
   openDraft = () => {},
   onRemoved = () => {},
   onRestore = () => {},
+  dictionary = null,
+  ignoreList = null,
 }) {
   const configured = !!origin && !!deviceStore && !!drafts;
   const status = ref("off");
@@ -35,6 +39,7 @@ export function useSync({
   const summary = ref(""); // what the last Sync all did, "3 uploaded, 2 downloaded"
   const lastSync = ref(0); // when it finished, ms
   const gone = ref(null); // {id}: the open draft was deleted on another device and the person has not chosen yet
+  const setsFailed = ref([]); // "dictionary" and/or "ignore list" when their last sync failed (not a draft's failure), else []
   const notice = ref(null); // {id, kind: "updated" | "newer", text} about the open draft, or null
   const enrolled = computed(() => info.value !== null);
 
@@ -81,7 +86,9 @@ export function useSync({
   // Forget this device. Drafts and their sync state stay; the server keeps its copies.
   async function turnOff() {
     clearTimeout(timer);
+    clearTimeout(wordsTimer);
     waiting.clear();
+    setsFailed.value = [];
     notice.value = null;
     gone.value = null;
     await deviceStore.clear();
@@ -135,6 +142,7 @@ export function useSync({
       try {
         await prepare();
         const sum = await syncer().all({ skip: skip() });
+        await syncSets();
         summary.value = summaryText(sum);
         lastSync.value = Date.now();
         status.value = sum.failed ? "pending" : "synced";
@@ -148,6 +156,44 @@ export function useSync({
       }
     });
     return chain;
+  }
+
+  // The personal dictionary and the ignore list, by the same engine. Each fails on its own: `setsFailed` names what did not sync, and
+  // the chip says so. "unreachable" and "signin" are not theirs: they throw to the caller, as for a draft.
+  const SETS = [
+    ["words", "dictionary", () => dictionary],
+    ["ignored", "ignore list", () => ignoreList],
+  ];
+  async function syncSets() {
+    const failed = [];
+    for (const [key, name, get] of SETS) {
+      const set = get();
+      if (!set) continue;
+      try {
+        const out = await syncer().settingSet({ key, current: await set.items(), store: set.store });
+        if (out.add.length || out.remove.length) await set.apply(out);
+      } catch (err) {
+        if (err instanceof SyncError && (err.code === "unreachable" || err.code === "signin")) throw err;
+        failed.push(name);
+      }
+    }
+    setsFailed.value = failed;
+  }
+
+  // The dictionary or ignore list changed on this device: sync them once changes have stopped for `delay`.
+  let wordsTimer = null;
+  function wordsChanged() {
+    if (!device || !(dictionary || ignoreList) || status.value === "signin") return;
+    clearTimeout(wordsTimer);
+    wordsTimer = setTimeout(() => {
+      chain = chain.then(async () => {
+        try {
+          await syncSets();
+        } catch (err) {
+          stopped(err);
+        }
+      });
+    }, delay);
   }
 
   // Call when a draft was opened (its text is already on screen). In the background the server is asked whether it holds something
@@ -288,6 +334,8 @@ export function useSync({
     turnOff,
     draftSaved,
     draftDeleted,
+    wordsChanged,
+    setsFailed,
     saveRequested,
     syncRequested,
     noteOpened,

@@ -33,6 +33,8 @@ type Store interface {
 	ListDocs(ctx context.Context, clientID int64, after string, limit int) ([]store.DocState, error)
 	GetDoc(ctx context.Context, clientID int64, id string) (store.Doc, error)
 	PutDoc(ctx context.Context, clientID int64, id string, base store.DocBase, w store.DocWrite) (store.Doc, error)
+	GetSetting(ctx context.Context, clientID int64, key string) (store.Setting, error)
+	PutSetting(ctx context.Context, clientID int64, key string, base int64, data string) (store.Setting, error)
 }
 
 // API is the sync API: the routes, the CORS allowlist and the device authentication. The routes are registered with Huma, which
@@ -80,6 +82,7 @@ func (a *API) config() huma.Config {
 	cfg.Tags = []*huma.Tag{
 		{Name: "enrollment", Description: "Spend an invite from the admin UI and get a device token."},
 		{Name: "drafts", Description: "List, read and write the end-to-end encrypted drafts of an enrolled device."},
+		{Name: "settings", Description: "The personal dictionary and the ignore list, merged by the devices."},
 	}
 	cfg.ExternalDocs = &huma.ExternalDocs{Description: "How the sync works (docs/sync.md)", URL: "https://github.com/cthtrifork/harper-pad/blob/main/docs/sync.md"}
 	// Scalar's options (https://github.com/scalar/scalar/blob/main/documentation/configuration.md). Every route needs a DPoP proof
@@ -123,6 +126,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	}, a.enroll)
 
 	a.registerDocs()
+	a.registerSettings()
 
 	// The root shows the documentation page (Huma serves it at /api).
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
