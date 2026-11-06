@@ -8,6 +8,36 @@ export const record = (key, value) => {
   recorded[key] = value;
 };
 
+// Counts the opens in this browser storage, so a report says whether it comes from the first open (the cold one). localStorage is
+// cleared together with the rest when iOS drops a home-screen app's storage, so the count starts again then, which is the point.
+const OPENS = "harper-pad-opens";
+export function noteOpen(now = Date.now(), store = globalThis.localStorage) {
+  let seen = { count: 0, first: now, last: 0 };
+  try {
+    seen = { ...seen, ...JSON.parse(store.getItem(OPENS) ?? "{}") };
+  } catch {
+    // unreadable: start counting again
+  }
+  const before = seen;
+  try {
+    store.setItem(OPENS, JSON.stringify({ count: before.count + 1, first: before.first, last: now }));
+  } catch {
+    // storage full or blocked: the report says so (opens n/a)
+  }
+  recorded.opens = { count: before.count + 1, first: before.first, previous: before.last };
+}
+
+const ago = (then, now) => {
+  const s = Math.max(0, Math.round((now - then) / 1000));
+  return s < 90
+    ? `${s} s`
+    : s < 5400
+      ? `${Math.round(s / 60)} min`
+      : s < 129600
+        ? `${Math.round(s / 3600)} h`
+        : `${Math.round(s / 86400)} days`;
+};
+const mb = (b) => (typeof b === "number" ? `${(b / 1048576).toFixed(1)} MB` : "n/a");
 const ms = (v) => (typeof v === "number" ? `${Math.round(v)} ms` : "n/a");
 const kb = (b) => (b ? `${Math.round(b / 1024)} kB` : "cached/0");
 
@@ -20,6 +50,8 @@ export function formatDiagnostics(info) {
     `Standalone (home-screen app): ${info.standalone}`,
     `Service worker: ${info.worker}`,
     `Connection: ${info.connection}`,
+    `Opens in this storage: ${info.opens ? (info.opens.count === 1 ? "1 (the first)" : `${info.opens.count}, first ${ago(info.opens.first, info.nowMs)} ago, previous ${ago(info.opens.previous, info.nowMs)} ago`) : "n/a"}`,
+    `Storage: ${info.storage}`,
     `Opened in: ${ms(info.openMs)} (reading the draft ${ms(info.dataMs)})`,
     `Harper started in: ${ms(info.setupMs)}`,
     `Page: response ${ms(info.responseEnd)}, DOM ready ${ms(info.domReady)}, load ${ms(info.load)}, first paint ${ms(info.firstPaint)}`,
@@ -46,7 +78,15 @@ export async function collect(version) {
     .slice(0, 6);
   const registration = await navigator.serviceWorker?.getRegistration?.().catch(() => undefined);
   const net = navigator.connection;
+  const storage = navigator.storage;
+  const [persisted, estimate] = await Promise.all([
+    storage?.persisted?.().catch(() => undefined),
+    storage?.estimate?.().catch(() => undefined),
+  ]);
   return {
+    nowMs: Date.now(),
+    opens: recorded.opens,
+    storage: storage ? `${persisted ? "persisted" : "not persisted"}, ${mb(estimate?.usage)} of ${mb(estimate?.quota)}` : "unknown",
     version: version || (import.meta.env?.APP_VERSION ?? ""),
     when: new Date().toISOString(),
     agent: navigator.userAgent,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatDiagnostics } from "./diagnostics.js";
+import { formatDiagnostics, noteOpen } from "./diagnostics.js";
 
 const base = {
   version: "v1.2.3",
@@ -31,4 +31,44 @@ test("what the browser cannot tell is n/a, and a build with no version says so",
   assert.match(text, /^Harper Pad \(no version\)/);
   assert.match(text, /Opened in: n\/a/);
   assert.doesNotMatch(text, /Slowest requests/);
+});
+
+const memory = () => {
+  const data = new Map();
+  return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+};
+
+test("the first open is counted as the first, and later ones count on", () => {
+  const store = memory();
+  noteOpen(1000, store);
+  assert.deepEqual(JSON.parse(store.getItem("harper-pad-opens")), { count: 1, first: 1000, last: 1000 });
+  noteOpen(5000, store);
+  assert.deepEqual(JSON.parse(store.getItem("harper-pad-opens")), { count: 2, first: 1000, last: 5000 });
+});
+
+test("storage that cannot be read or written does not stop the app", () => {
+  noteOpen(1, {
+    getItem: () => "{broken",
+    setItem: () => {
+      throw new Error("full");
+    },
+  });
+});
+
+test("the report says whether this is the first open and how storage stands", () => {
+  const first = formatDiagnostics({
+    ...base,
+    nowMs: 10_000,
+    opens: { count: 1, first: 10_000, previous: 0 },
+    storage: "not persisted, 1.0 MB of 500.0 MB",
+  });
+  assert.match(first, /Opens in this storage: 1 \(the first\)/);
+  assert.match(first, /Storage: not persisted, 1\.0 MB of 500\.0 MB/);
+  const later = formatDiagnostics({
+    ...base,
+    nowMs: 3 * 3600_000,
+    opens: { count: 4, first: 0, previous: 3600_000 },
+    storage: "persisted",
+  });
+  assert.match(later, /Opens in this storage: 4, first 3 h ago, previous 2 h ago/);
 });

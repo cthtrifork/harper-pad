@@ -2,7 +2,7 @@ import "@fontsource-variable/literata";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { isWeb, startup } from "./lib/backend.js";
-import { record } from "./lib/diagnostics.js";
+import { noteOpen, record } from "./lib/diagnostics.js";
 import "./styles/index.css";
 
 // Ask the backend what the editor needs (the demo banner and the most recent draft) before mounting, so the first paint already has
@@ -15,6 +15,7 @@ const start = await startup().catch((err) => ({ demo: "", open: null, total: 0, 
 // iOS only applies :active (the press feedback on buttons) once a touch listener exists.
 document.addEventListener("touchstart", () => {}, { passive: true });
 const dataMs = Math.round(performance.now() - dataStart);
+noteOpen();
 record("dataMs", dataMs);
 record("openMs", Math.round(performance.now()));
 createApp(App, { start }).mount("#app");
