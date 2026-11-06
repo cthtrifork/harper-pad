@@ -62,9 +62,8 @@ export async function saveSettings(settings) {
 // (see syncDevice.js); it is not part of the Go side.
 export const syncDevice = createDeviceStore(openDb);
 
-// When each dictionary word last changed, for syncing it: {load, save} (settingsSync.js). Same place, same builds.
-export const wordsSync = createSettingsSyncStore(openDb, "words");
-export const ignoredSync = createSettingsSyncStore(openDb, "ignored");
+// What the last sync of the dictionary and ignore list matched, for the next one: {load, save, clear} (settingsSync.js). Same place, same builds.
+export const settingsSync = createSettingsSyncStore(openDb);
 
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
 // The same operations on both builds: DraftService's methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).

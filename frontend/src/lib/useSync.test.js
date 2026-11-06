@@ -438,52 +438,40 @@ test("Sync with the server unreachable says Offline, unlike opening a note, whic
   assert.equal(b.sync.status.value, "synced");
 });
 
-test("Sync all also syncs the dictionary, and applies what the merge decided", async () => {
+function memoryStore() {
+  let rec = null;
+  return {
+    load: async () => (rec ? structuredClone(rec) : null),
+    save: async (r) => (rec = structuredClone(r)),
+    clear: async () => (rec = null),
+  };
+}
+
+test("Sync all also syncs the dictionary and ignore list: a new device takes the server's", async () => {
   const applied = [];
-  let held = { version: 1, data: JSON.stringify({ v: 1, items: { Remote: { at: 5, del: false } } }) };
-  const fetchFn = async (url, init) => {
-    const path = new URL(url).pathname;
-    if (path === "/docs") return reply(200, [])();
-    if (init.method === "GET") return reply(200, held)();
-    held = { version: 2, data: JSON.parse(init.body).data };
-    return reply(200, { version: 2 })();
+  const held = { version: 1, data: JSON.stringify({ v: 1, words: ["Remote"], ignored: ["12345"] }) };
+  const fetchFn = async (url) => {
+    if (new URL(url).pathname === "/docs") return reply(200, [])();
+    return reply(200, held)();
   };
-  const record = { items: {} };
-  const dictionary = {
-    items: async () => ["Local"],
-    store: { load: async () => structuredClone(record), save: async (r) => Object.assign(record, r) },
-    apply: async (c) => applied.push(c),
-  };
-  const { sync, ready } = setup({ fetchFn, dictionary });
+  const settings = { current: async () => ({ words: ["Local"], ignored: [] }), store: memoryStore(), apply: async (c) => applied.push(c) };
+  const { sync, ready } = setup({ fetchFn, settings });
   await ready();
   await sync.syncAll();
-  assert.deepEqual(applied, [{ add: ["Remote"], remove: [] }]);
-  assert.deepEqual(Object.keys(JSON.parse(held.data).items).sort(), ["Local", "Remote"]);
+  assert.deepEqual(applied, [{ words: { add: ["Remote"], remove: ["Local"] }, ignored: { add: ["12345"], remove: [] }, any: true }]);
   assert.equal(sync.status.value, "synced");
 });
 
-test("a dictionary that fails to sync is named in the chip, and the drafts and the ignore list are not held back", async () => {
-  const applied = [];
-  let ignoredHeld = { version: 1, data: JSON.stringify({ v: 1, items: { 12345: { at: 5, del: false } } }) };
-  const fetchFn = async (url, init) => {
-    const path = new URL(url).pathname;
-    if (path === "/docs") return reply(200, [])();
-    if (path === "/settings/words") return reply(500, {})();
-    if (init.method === "GET") return reply(200, ignoredHeld)();
-    ignoredHeld = { version: 2, data: JSON.parse(init.body).data };
-    return reply(200, { version: 2 })();
+test("a dictionary that fails to sync is named in the chip, and the drafts are not held back", async () => {
+  const fetchFn = async (url) => {
+    if (new URL(url).pathname === "/docs") return reply(200, [])();
+    return reply(500, {})();
   };
-  const memory = () => {
-    const rec = { items: {} };
-    return { load: async () => structuredClone(rec), save: async (r) => Object.assign(rec, r) };
-  };
-  const dictionary = { items: async () => ["Local"], store: memory(), apply: async () => applied.push("dictionary") };
-  const ignoreList = { items: async () => [], store: memory(), apply: async (c) => applied.push(c) };
-  const { sync, ready } = setup({ fetchFn, dictionary, ignoreList });
+  const settings = { current: async () => ({ words: ["Local"], ignored: [] }), store: memoryStore(), apply: async () => {} };
+  const { sync, ready } = setup({ fetchFn, settings });
   await ready();
   await sync.syncAll();
-  assert.deepEqual(sync.setsFailed.value, ["dictionary"]);
-  assert.deepEqual(applied, [{ add: ["12345"], remove: [] }]);
+  assert.equal(sync.setsFailed.value, true);
   assert.equal(sync.status.value, "synced");
   assert.match(sync.summary.value, /up to date/);
 });
@@ -497,20 +485,25 @@ test("changing the dictionary syncs it after the delay, and a later success clea
     puts++;
     return reply(200, { version: 1 })();
   };
-  const rec = { items: {} };
-  const dictionary = {
-    items: async () => ["Local"],
-    store: { load: async () => structuredClone(rec), save: async (r) => Object.assign(rec, r) },
-    apply: async () => {},
-  };
-  const { sync, ready } = setup({ fetchFn, dictionary });
+  const settings = { current: async () => ({ words: ["Local"], ignored: [] }), store: memoryStore(), apply: async () => {} };
+  const { sync, ready } = setup({ fetchFn, settings });
   await ready();
   sync.wordsChanged();
   await settle();
-  assert.deepEqual(sync.setsFailed.value, ["dictionary"]);
+  assert.equal(sync.setsFailed.value, true);
   fail = false;
   sync.wordsChanged();
   await settle();
-  assert.deepEqual(sync.setsFailed.value, []);
+  assert.equal(sync.setsFailed.value, false);
   assert.equal(puts, 1);
+});
+
+test("turning sync off forgets what was synced, so enrolling again takes the server's lists", async () => {
+  const store = memoryStore();
+  await store.save({ version: 3, words: ["Old"], ignored: [] });
+  const settings = { current: async () => ({ words: [], ignored: [] }), store, apply: async () => {} };
+  const { sync, ready } = setup({ fetchFn: async () => reply(200, [])(), settings });
+  await ready();
+  await sync.turnOff();
+  assert.equal(await store.load(), null);
 });

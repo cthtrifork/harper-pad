@@ -1,9 +1,10 @@
-// What this device remembers to sync its dictionary (docs/sync.md, "Settings"): one record in the "kv" store of the app's IndexedDB,
-// under "sync-words" (the dictionary) and "sync-ignored" (the ignore list), the same on the web and on desktop, so there is no Go side. {items} is the map of words (or finding hashes) with the time of their
-// last change and whether they were removed (settingsItems.js). It is never a source of words: the dictionary itself stays in
-// SettingsService / IndexedDB "settings"; this only says when each word changed. A missing record means nothing is known yet.
-export function createSettingsSyncStore(open, key) {
-  const KEY = `sync-${key}`;
+// What this device remembers to sync its dictionary and ignore list (docs/sync.md, "Settings"): one record in the "kv" store of the
+// app's IndexedDB under "sync-settings", the same on the web and on desktop, so there is no Go side. {version, words, ignored} is the
+// server's version this device last matched and the lists it held then, which is how the next sync tells "changed here" from "changed
+// elsewhere". It is never a source of words: the dictionary itself stays in SettingsService / IndexedDB "settings". null means this
+// device has never synced them (just enrolled): the server's copy wins then.
+export function createSettingsSyncStore(open) {
+  const KEY = "sync-settings";
   async function withDb(work) {
     const db = await open();
     try {
@@ -13,7 +14,8 @@ export function createSettingsSyncStore(open, key) {
     }
   }
   return {
-    load: async () => withDb(async (db) => (await db.get("kv", KEY)) ?? { items: {} }),
+    load: async () => withDb(async (db) => (await db.get("kv", KEY)) ?? null),
     save: async (record) => withDb((db) => db.put("kv", record, KEY)),
+    clear: async () => withDb((db) => db.delete("kv", KEY)),
   };
 }
