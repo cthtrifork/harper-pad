@@ -805,3 +805,53 @@ func TestAFileChangedBackToTheBaselineTextIsNotAConflict(t *testing.T) {
 		t.Errorf("status = %+v", c)
 	}
 }
+
+// One size rule, in one function: the text of the file with its newlines turned into LF is at most 1 MiB, in the status check and the write
+// check alike.
+func TestOneSizeRuleForStatusAndWrite(t *testing.T) {
+	line := strings.Repeat("x", 62) + "\n"
+	full := strings.Repeat(line, store.MaxContentBytes/len(line))    // a draft just under 1 MiB
+	big := strings.Repeat(line, 3*store.MaxContentBytes/2/len(line)) // 1.5 MiB of LF text
+
+	s, id, target := linked(t, "start")
+	d, _ := s.GetDraft(id)
+	d.Content = "edited\n"
+
+	// 1.5 MiB of LF text: refused by both.
+	outside(t, target, big)
+	if c := state(t, s, id); c.State != FileBroken || !strings.Contains(c.Reason, "larger") {
+		t.Errorf("status of 1.5 MiB = %+v", c)
+	}
+	if _, err := s.SaveDraftToFile(d, false, false); err == nil || !strings.Contains(err.Error(), "not overwritten") {
+		t.Errorf("save over 1.5 MiB = %v", err)
+	}
+	if got, _ := os.ReadFile(target); len(got) != len(big) {
+		t.Error("the file was replaced")
+	}
+
+	// A full draft saved with CRLF (longer than 1 MiB on disk): accepted by both.
+	outside(t, target, strings.ReplaceAll(full, "\n", "\r\n"))
+	if fi, _ := os.Stat(target); fi.Size() <= store.MaxContentBytes {
+		t.Fatalf("the CRLF file is only %d bytes", fi.Size())
+	}
+	if c := state(t, s, id); c.State != FileChanged {
+		t.Errorf("status of the CRLF file = %+v", c)
+	}
+	if r, err := s.SaveDraftToFile(d, false, true); err != nil || r.Conflict {
+		t.Fatalf("overwrite = %+v, %v", r, err)
+	}
+	// Written with CRLF again (the file used it) and read whole afterwards.
+	d.Content = full
+	if _, err := s.SaveDraftToFile(d, false, true); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(target); len(got) <= store.MaxContentBytes || !strings.Contains(string(got), "\r\n") {
+		t.Errorf("the full draft was not written with CRLF: %d bytes", len(got))
+	}
+	if c := state(t, s, id); c.State != FileSame {
+		t.Errorf("status after writing it = %+v", c)
+	}
+	if ft, err := s.LinkedFileText(id); err != nil || ft.Text != full {
+		t.Errorf("reading it back: %v", err)
+	}
+}

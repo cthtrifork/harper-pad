@@ -150,8 +150,7 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 	return FileSave{Draft: saved, UnlinkedFrom: unlinked}, nil
 }
 
-// checkBeforeWrite runs before every write to the draft's existing file, with the file read again just now (up to twice the draft limit, so a
-// CRLF file written from a 1 MiB draft is read whole):
+// checkBeforeWrite runs before every write to the draft's existing file, with the file read again just now (see readTextFile):
 //   - a file that exists but is binary, not UTF-8 or too large is never replaced, with or without overwrite (an error);
 //   - otherwise the write is a conflict, unless overwrite is set, when the file's text differs from all of: the text this app last left there
 //     (`storedHash`, the hash of its normalised text; "" for a link that has none), the draft as stored before this save, and the text being
@@ -162,7 +161,7 @@ func checkBeforeWrite(path, storedHash string, overwrite bool, ownTexts ...strin
 	if _, err := os.Stat(path); err != nil {
 		return false, nil
 	}
-	raw, rerr := readTextFileLimit(path, 2*store.MaxContentBytes)
+	got, rerr := readTextFile(path)
 	if rerr != nil {
 		var nt *notText
 		if errors.As(rerr, &nt) {
@@ -173,7 +172,6 @@ func checkBeforeWrite(path, storedHash string, overwrite bool, ownTexts ...strin
 	if overwrite {
 		return false, nil
 	}
-	got := normalizeNewlines(raw)
 	if storedHash != "" && store.FileContentHash(got) == storedHash {
 		return false, nil
 	}
@@ -190,18 +188,18 @@ func normalizeNewlines(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
 }
 
-// usesCRLF reports whether the existing file at path ends its first line with CRLF. A missing, large or unreadable file does not.
+// usesCRLF reports whether the existing file at path ends its first line with CRLF (only the start of the file is read). A missing or
+// unreadable file does not.
 func usesCRLF(path string) bool {
-	fi, err := os.Stat(path)
-	if err != nil || !fi.Mode().IsRegular() || fi.Size() > store.MaxContentBytes {
-		return false
-	}
-	raw, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
-	i := strings.IndexByte(string(raw), '\n')
-	return i > 0 && raw[i-1] == '\r'
+	defer func() { _ = f.Close() }()
+	buf := make([]byte, 64<<10)
+	n, _ := f.Read(buf)
+	i := bytes.IndexByte(buf[:n], '\n')
+	return i > 0 && buf[i-1] == '\r'
 }
 
 // File states, the answer of LinkedFileStatus.
@@ -230,11 +228,11 @@ type notText struct{ msg string }
 
 func (e *notText) Error() string { return e.msg }
 
-// readTextFile reads a regular file of at most MaxContentBytes of valid UTF-8. The errors are plain sentences without the path (the page
-// names the file): they end up in the page's message.
-func readTextFile(path string) (string, error) { return readTextFileLimit(path, store.MaxContentBytes) }
-
-func readTextFileLimit(path string, limit int64) (string, error) {
+// readTextFile is the one rule for what text a file may hold, for the status check, the write check and the reads alike: a regular file of
+// valid UTF-8 without NUL bytes whose text, with CRLF and CR turned into LF, is at most MaxContentBytes. So a CRLF file written from a full
+// draft is fine everywhere, and anything bigger is "larger than 1 MiB" everywhere. It returns that LF text. The errors are plain sentences
+// without the path (the page names the file).
+func readTextFile(path string) (string, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return "", readError(err)
@@ -245,8 +243,9 @@ func readTextFileLimit(path string, limit int64) (string, error) {
 	if !fi.Mode().IsRegular() {
 		return "", errors.New("it is not a regular file")
 	}
-	if fi.Size() > limit {
-		return "", &notText{fmt.Sprintf("it is larger than %d MiB", store.MaxContentBytes>>20)}
+	tooLarge := &notText{fmt.Sprintf("it is larger than %d MiB", store.MaxContentBytes>>20)}
+	if fi.Size() > 2*store.MaxContentBytes { // CRLF at most doubles a text: no need to read more
+		return "", tooLarge
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -255,7 +254,11 @@ func readTextFileLimit(path string, limit int64) (string, error) {
 	if !utf8.Valid(raw) || bytes.IndexByte(raw, 0) >= 0 { // a NUL byte is valid UTF-8 but never text
 		return "", &notText{"it is not text (binary or not UTF-8)"}
 	}
-	return string(raw), nil
+	text := normalizeNewlines(string(raw))
+	if len(text) > store.MaxContentBytes {
+		return "", tooLarge
+	}
+	return text, nil
 }
 
 func readError(err error) error {
@@ -296,11 +299,10 @@ func (s *DraftService) LinkedFileStatus(id string) (FileCheck, error) {
 	if d.FileMTime == 0 || d.FileMTime == mtime {
 		return FileCheck{State: FileSame, Stamp: stamp}, nil
 	}
-	raw, err := readTextFile(path)
+	got, err := readTextFile(path)
 	if err != nil {
 		return FileCheck{State: FileBroken, Reason: err.Error()}, nil
 	}
-	got := normalizeNewlines(raw)
 	if got == normalizeNewlines(d.Content) || store.FileContentHash(got) == d.FileHash {
 		// Only the mtime moved: the text is the draft's, or the one this app last left. That is the baseline again.
 		if err := st.SetFile(id, path, mtime); err != nil {
@@ -337,7 +339,7 @@ func (s *DraftService) LinkedFileText(id string) (FileText, error) {
 	if err != nil {
 		return FileText{}, fmt.Errorf("could not read %s: %w", d.FilePath, err)
 	}
-	return FileText{Text: normalizeNewlines(raw), Stamp: strconv.FormatInt(fi.ModTime().UnixNano(), 10)}, nil
+	return FileText{Text: raw, Stamp: strconv.FormatInt(fi.ModTime().UnixNano(), 10)}, nil
 }
 
 // FileText is the answer to LinkedFileText.
@@ -428,7 +430,7 @@ func (s *DraftService) RecordLinkedFile(id, stamp string) error {
 	if err := st.SetFile(id, d.FilePath, fi.ModTime().UnixNano()); err != nil {
 		return err
 	}
-	return st.SetFileHash(id, normalizeNewlines(raw))
+	return st.SetFileHash(id, raw)
 }
 
 // writeFileAtomic writes to a temporary file beside path and renames it over path, so a crash or a failed write never leaves a half-written

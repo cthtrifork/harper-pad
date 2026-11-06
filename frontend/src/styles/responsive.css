@@ -31,24 +31,33 @@
     display: none;
   }
 
-  /* The file chip stays on a phone, because its x is the only way to unlink: the name is cut short, and the folder stays hidden. A struck chip
-     keeps its warning triangle. */
+  /* The file chip stays on a phone, because its x is the only way to unlink. It has a row of its own under the buttons, so nothing is squeezed
+     or overlapped at 390 or 320 px: the name is cut short with an ellipsis, and the dirty dot and the x always show (36 px tap targets). A
+     struck chip keeps its warning triangle. The folder stays hidden. */
   .bar .badge.on-disk {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    max-width: 150px;
-    min-height: 44px;
+    order: 6;
+    flex: 1 0 100%;
+    max-width: none;
+    min-height: 40px;
     padding-right: 4px;
   }
 
   .bar .badge.on-disk .file-name {
     display: block;
+    flex: 0 1 auto;
+  }
+
+  .bar .badge.on-disk .broken-icon,
+  .bar .badge.on-disk .dirty-dot {
+    flex: none;
   }
 
   .bar .badge.on-disk .chip-x {
     width: 36px;
     height: 36px;
-    margin: 0 0 0 4px;
+    margin: 0 0 0 auto;
   }
 
   .bar .save-icon {
@@ -258,5 +267,18 @@
 
   .status > .spacer {
     display: block;
+  }
+}
+
+/* The narrowest phones (320 px): tighter gaps and a smaller switcher, so Edit and Preview never run under a button. */
+@media (max-width: 360px) {
+  .bar {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .bar .view {
+    padding: 0 6px;
+    font-size: 12.5px;
   }
 }

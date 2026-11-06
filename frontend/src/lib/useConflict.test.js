@@ -7,7 +7,15 @@ const ID = "a".repeat(32);
 const settle = () => new Promise((r) => setTimeout(r, 15));
 
 // useDrafts and useSync reduced to what the dialog uses, recording what it does.
-function setup({ file = null, server = null, draftText = "mine", syncOn = true, serverNow = undefined, fileStampNow = undefined }) {
+function setup({
+  textStamp = "10",
+  file = null,
+  server = null,
+  draftText = "mine",
+  syncOn = true,
+  serverNow = undefined,
+  fileStampNow = undefined,
+}) {
   const log = [];
   const fileConflict = ref(file ? { id: ID, name: "plan.md", stamp: "10", clean: false, ...file } : null);
   const serverConflict = ref(server ? { id: ID, text: "server text", stamp: "2:5", ...server } : null);
@@ -21,7 +29,7 @@ function setup({ file = null, server = null, draftText = "mine", syncOn = true, 
     },
     recheckFile: async () => log.push("recheckFile"),
     dialog: {
-      fileText: async () => ({ text: "file text", stamp: "10" }),
+      fileText: async () => ({ text: "file text", stamp: textStamp }),
       fileStamp: async () => (fileStampNow === undefined ? "10" : fileStampNow),
       saveCopy: async (t, from) => {
         log.push(["copy", t, from]);
@@ -146,4 +154,11 @@ test("an unedited draft whose server holds nothing or the file's own text shows 
   const differs = setup({ file: { clean: true }, server: { text: "other" } });
   await settle();
   assert.ok(differs.c.model.value, "a different server text still asks");
+});
+
+test("the file's version stamp (its modified time in nanoseconds) becomes a time in milliseconds, with no zone shift", async () => {
+  const { c } = setup({ textStamp: "1793995200123456789", fileStampNow: "1793995200123456789", file: { stamp: "1793995200123456789" } });
+  await settle();
+  assert.equal(c.model.value.file.at, 1793995200123);
+  assert.equal(new Date(c.model.value.file.at).toISOString(), "2026-11-06T20:00:00.123Z");
 });
