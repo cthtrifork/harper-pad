@@ -305,7 +305,17 @@ const removeWord = (word) =>
   });
 
 // A tap on the empty page beside or below the editor: focus it from the click itself, the only place a phone opens its keyboard.
-const focusFromClick = (e) => e.target === pane.value && editor.value?.focusEnd();
+// A drag that starts in the text and is let go over the blank page also fires a click on the pane (their common ancestor). That is a
+// selection, not a tap: only a press that began on the blank page too counts, or the selection collapses and the caret jumps to the end.
+let pressedOnBlank = false;
+const notePress = (e) => {
+  pressedOnBlank = e.target === pane.value;
+};
+const focusFromClick = (e) => {
+  const tap = pressedOnBlank && e.target === pane.value;
+  pressedOnBlank = false;
+  if (tap) editor.value?.focusEnd();
+};
 
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
@@ -314,6 +324,7 @@ onMounted(async () => {
     .then(() => drafts.current.value.id && checkOpened(drafts.current.value.id))
     .catch(() => {});
   window.addEventListener("keydown", onKeydown);
+  pane.value?.addEventListener("pointerdown", notePress);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
   keepData();
