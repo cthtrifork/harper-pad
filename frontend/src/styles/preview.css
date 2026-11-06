@@ -231,15 +231,8 @@
 /* Colours in fenced code (lib/highlight.js): the class names are @lezer/highlight's classHighlighter. */
 .preview .md pre {
   --tok-keyword: var(--c-grammar);
-  --tok-string: #1a7f4b;
   --tok-number: var(--accent);
   --tok-name: var(--c-style);
-}
-
-@media (prefers-color-scheme: dark) {
-  .preview .md pre {
-    --tok-string: #7ee2a8;
-  }
 }
 
 .preview .md pre .tok-keyword,

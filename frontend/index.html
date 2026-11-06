@@ -9,6 +9,7 @@
     <!-- Painted before any script has arrived: the page colours (same as styles/tokens.css) and a title (on a phone only: the same query as App.vue's `narrow`), so a cold start is not a blank
          screen while the scripts download and the first draft is read. Vue replaces the contents of #app when it mounts. -->
     <style>
+      /* Literal colours on purpose: this paints before styles/tokens.css loads. Keep in sync with it. */
       body { margin: 0; background: #f6f7f9; color: #1a2028; font: 14px / 1.5 system-ui, sans-serif; }
       #app > .splash { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 100dvh; font-size: 20px; font-weight: 600; }
       @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) { #app > .splash { display: flex; } }
