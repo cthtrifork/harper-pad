@@ -85,7 +85,15 @@ function scrollToTop(pos) {
   view.dispatch({ effects: EditorView.scrollIntoView(Math.min(pos, view.state.doc.length), { y: "start", yMargin: 0 }) });
 }
 
+// After the on-screen keyboard opened the editor is shorter: bring the caret back into sight.
+function revealCaret() {
+  if (!view) return;
+  view.requestMeasure();
+  view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main, { y: "nearest", yMargin: 24 }) });
+}
+
 defineExpose({
+  revealCaret,
   topPosition,
   scrollToTop,
   focusEnd,

@@ -82,3 +82,13 @@ html {
     padding-top: calc(8px + var(--edge-fade) + env(safe-area-inset-top));
   }
 }
+
+/* The on-screen keyboard (lib/viewport.js): while it is up, the app is as tall as what is left above it (--vvh, the visual viewport),
+   so the status bar sits on the keyboard instead of behind it. The home indicator is under the keyboard then, so its inset goes. */
+html.keyboard .app {
+  height: var(--vvh);
+}
+
+html.keyboard .status {
+  padding-bottom: 6px;
+}

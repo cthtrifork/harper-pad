@@ -15,6 +15,7 @@ import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
 import { statusLine } from "./lib/statusLine.js";
+import { trackKeyboard } from "./lib/viewport.js";
 import { useDrafts } from "./lib/useDrafts.js";
 import { useSync } from "./lib/useSync.js";
 
@@ -327,6 +328,7 @@ const focusFromPress = (e) => {
   if (isPlainPress(e)) editor.value?.focusEnd();
 };
 
+let stopKeyboard = () => {};
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
   sync
@@ -338,6 +340,7 @@ onMounted(async () => {
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
   keepData();
+  stopKeyboard = trackKeyboard({ onChange: (open) => open && nextTick(() => requestAnimationFrame(() => editor.value?.revealCaret())) });
   await nextTick(); // the editor is in the page now; Harper starts loading after it has been painted
   try {
     harper.value = await loadHarper();
@@ -367,6 +370,7 @@ watch(
 onBeforeUnmount(() => {
   narrow.removeEventListener("change", onNarrowChange);
   window.removeEventListener("keydown", onKeydown);
+  stopKeyboard();
   drafts.detach();
 });
 </script>

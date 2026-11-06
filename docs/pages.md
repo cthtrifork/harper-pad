@@ -98,6 +98,12 @@ not zoom on focus. iOS reads the `<head>` tags when the icon is **added**, so af
 On an iPhone with a Dynamic Island the installed app starts the page below the status bar, but iOS fades the first stretch of the page, about 24 pt, so header buttons that start right at the top look blurry; the header is padded
 by that much in the installed app (`--edge-fade` in `styles/safe-area.css`).
 
+### Keyboard
+
+Safari does not shrink the page when the on-screen keyboard opens. `lib/viewport.js` follows `visualViewport` and, while the keyboard is up, sets the
+app height to what is left (`html.keyboard`, `--vvh`, `styles/safe-area.css`) so the status bar sits on the keyboard, scrolls the caret into view and
+undoes Safari's own page scroll. It is unit tested with a fake viewport; the real keyboard needs a device.
+
 ## Keeping the data
 
 Browser data belongs to one site in one browser on one device.
