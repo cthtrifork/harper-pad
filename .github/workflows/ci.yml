@@ -592,6 +592,10 @@ jobs:
           (cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
           scripts/package-windows.sh "ci-${GITHUB_SHA::7}" dist
 
+      # The runner image no longer ships NSIS, so install it (the script finds makensis.exe in Program Files).
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
       - name: Build the installer and try it
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"

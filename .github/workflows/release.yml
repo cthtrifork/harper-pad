@@ -376,6 +376,10 @@ jobs:
 
       # The installer (NSIS, per user, build/windows/nsis) is built from the exe above, so after signing it carries the
       # signed file. The installer itself is not signed yet (docs/windows.md). The check installs it silently and removes it again.
+      # The runner image no longer ships NSIS, so install it (the script finds makensis.exe in Program Files).
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
       - name: Build the installer
         env:
           VERSION: ${{ needs.meta.outputs.version }}
