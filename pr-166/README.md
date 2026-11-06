@@ -20,7 +20,9 @@
 - Narrow window: [linked](header-narrow-desktop-linked.png), [unlinked](header-narrow-desktop-unlinked.png), [struck](header-narrow-desktop-struck.png), [dot](header-narrow-desktop-dot.png), 320 px: [linked](header-narrow-desktop-320.png), [unlinked](header-narrow-desktop-320-unlinked.png), [struck](header-narrow-desktop-320-struck.png), [dot](header-narrow-desktop-320-dot.png)
 - Web on a phone: Save as file [320](header-phone-web-320-disk.png), [wider](header-phone-web-disk.png); Share (iPhone) [320](header-phone-web-320-share.png), [wider](header-phone-web-share.png)
 
-## Drafts drawer
+## Drafts drawer and version
 - [Drawer](modal-drawer.png)
+- Phone: [header, no version](version-header-phone.png), [drawer, version at the bottom](version-drawer-phone.png)
+- Desktop: [header, version at the end](version-header-desktop.png); the drawer shows none
 
 `mockups/` holds early sketches, superseded by the built dialog.
