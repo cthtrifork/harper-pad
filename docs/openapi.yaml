@@ -194,10 +194,19 @@ components:
       in: header
       name: Authorization
       type: apiKey
+externalDocs:
+  description: How the sync works (docs/sync.md)
+  url: https://github.com/cthtrifork/harper-pad/blob/main/docs/sync.md
 info:
+  contact:
+    name: Harper Pad
+    url: https://github.com/cthtrifork/harper-pad
   description: "The optional sync service of Harper Pad (docs/sync.md). Every route needs a DPoP proof header; routes other than /enroll also need `Authorization: DPoP <device token>`. The proof is a JWT signed with the device's key (RFC 9449 section 4.2): `typ` `dpop+jwt`, `alg` `ES256`, the public key in the `jwk` header, and the claims `jti`, `htm`, `htu`, `iat` and, with a token, `ath`. Credential failures are all the same 401 and say nothing about the cause."
+  license:
+    identifier: Apache-2.0
+    name: Apache-2.0
   title: Harper Pad sync API
-  version: 1.0.0
+  version: dev
 openapi: 3.1.0
 paths:
   /docs:
@@ -514,3 +523,8 @@ paths:
         - enrollment
 servers:
   - url: https://sync.example.com
+tags:
+  - description: Spend an invite from the admin UI and get a device token.
+    name: enrollment
+  - description: List, read and write the end-to-end encrypted drafts of an enrolled device.
+    name: drafts

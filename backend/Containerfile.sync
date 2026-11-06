@@ -2,11 +2,13 @@
 # platform and cross-compiles for TARGETARCH.
 FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26-trixie AS build
 ARG TARGETOS TARGETARCH
+# The release shown on the API documentation page; "dev" when empty.
+ARG APP_VERSION=""
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/harper-pad-sync ./cmd/harper-pad-sync
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${APP_VERSION:-dev}" -o /out/harper-pad-sync ./cmd/harper-pad-sync
 
 FROM gcr.io/distroless/static-debian12:nonroot
 # Set by the release (and backend-image.yml); empty in a plain local build.

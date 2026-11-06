@@ -38,6 +38,8 @@ type Store interface {
 // serves them on the standard library's ServeMux and describes them in an OpenAPI document (docs/openapi.yaml, generated from
 // these types by `make openapi` in backend/).
 type API struct {
+	// Version is the release shown as the document's version (info.version). Set it before Register; New defaults it to "dev".
+	Version   string
 	publicURL string
 	origins   map[string]bool
 	store     Store
@@ -55,14 +57,14 @@ func New(publicURL string, origins []string, st Store, v *auth.Verifier) *API {
 	for _, o := range origins {
 		set[o] = true
 	}
-	return &API{publicURL: strings.TrimRight(publicURL, "/"), origins: set, store: st, verifier: v, logged: map[string]bool{}}
+	return &API{Version: "dev", publicURL: strings.TrimRight(publicURL, "/"), origins: set, store: st, verifier: v, logged: map[string]bool{}}
 }
 
 // config is Huma's configuration. Huma serves the documentation page at /api and the OpenAPI document at /openapi.json and
 // /openapi.yaml; both are public, like /healthz, and describe only the routes. The default /docs is the draft list, so the page
 // is moved. No schema routes and no `$schema` member in bodies: the document is self-contained.
 func (a *API) config() huma.Config {
-	cfg := huma.DefaultConfig("Harper Pad sync API", "1.0.0")
+	cfg := huma.DefaultConfig("Harper Pad sync API", a.Version)
 	cfg.DocsPath, cfg.OpenAPIPath, cfg.SchemasPath = "/api", "/openapi", ""
 	cfg.DocsRenderer = huma.DocsRendererScalar // Huma's default, Stoplight Elements, has a fixed sidebar that fills a phone screen
 	cfg.CreateHooks = nil
@@ -70,6 +72,26 @@ func (a *API) config() huma.Config {
 		"than /enroll also need `Authorization: DPoP <device token>`. The proof is a JWT signed with the device's key (RFC 9449 " +
 		"section 4.2): `typ` `dpop+jwt`, `alg` `ES256`, the public key in the `jwk` header, and the claims `jti`, `htm`, `htu`, " +
 		"`iat` and, with a token, `ath`. Credential failures are all the same 401 and say nothing about the cause."
+	cfg.Info.Contact = &huma.Contact{Name: "Harper Pad", URL: "https://github.com/cthtrifork/harper-pad"}
+	cfg.Info.License = &huma.License{Name: "Apache-2.0", Identifier: "Apache-2.0"}
+	cfg.Tags = []*huma.Tag{
+		{Name: "enrollment", Description: "Spend an invite from the admin UI and get a device token."},
+		{Name: "drafts", Description: "List, read and write the end-to-end encrypted drafts of an enrolled device."},
+	}
+	cfg.OpenAPI.ExternalDocs = &huma.ExternalDocs{Description: "How the sync works (docs/sync.md)", URL: "https://github.com/cthtrifork/harper-pad/blob/main/docs/sync.md"}
+	// Scalar's options (https://github.com/scalar/scalar/blob/main/documentation/configuration.md). Every route needs a DPoP proof
+	// signed with a device key, which the page's "Test Request" cannot make, so it is hidden along with the client picker and
+	// the dev tools; the schema list is noise for a phone.
+	cfg.DocsRendererConfig = map[string]any{
+		"theme":                 "default",
+		"layout":                "modern",
+		"darkMode":              true,
+		"hideTestRequestButton": true,
+		"hideClientButton":      true,
+		"hideModels":            true,
+		"showDeveloperTools":    "never",
+		"defaultOpenAllTags":    true,
+	}
 	cfg.Servers = []*huma.Server{{URL: a.publicURL}}
 	cfg.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
 		"DPoP": {
