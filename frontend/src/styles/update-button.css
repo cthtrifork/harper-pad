@@ -21,6 +21,27 @@
   color: var(--text);
 }
 
+/* The busy / update marker sits in a slot that opens and closes, so the chip (and the header beside it) glides instead of jumping. */
+.wrap .ind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  margin-right: -8px; /* swallows the flex gap while the slot is closed */
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    width 0.15s var(--ease),
+    margin-right 0.15s var(--ease),
+    opacity 0.15s var(--ease);
+}
+
+.wrap .ind.on {
+  width: 14px;
+  margin-right: 0;
+  opacity: 1;
+}
+
 .wrap .dot {
   width: 8px;
   height: 8px;
@@ -55,9 +76,31 @@
   padding: 8px 10px 10px;
 }
 
-.wrap .status > div {
+.wrap .status {
+  min-height: 52px; /* two lines, so the pop-up keeps its height while the status changes */
+}
+
+.wrap .status .body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.wrap .status .body > div {
   flex: 1;
   min-width: 0; /* lets the text wrap inside the pop-up instead of widening it */
+}
+
+/* Status changes fade instead of snapping. */
+.swap-enter-active,
+.swap-leave-active {
+  transition: opacity 0.1s var(--ease);
+}
+
+.swap-enter-from,
+.swap-leave-to {
+  opacity: 0;
 }
 
 .wrap .status .mark {
@@ -112,6 +155,15 @@
 
 .wrap .row svg {
   flex: none;
+}
+
+.wrap .row:disabled {
+  color: var(--mute);
+  cursor: default;
+}
+
+.wrap .row:disabled:hover {
+  background: transparent;
 }
 
 .wrap .row:hover,

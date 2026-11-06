@@ -29,9 +29,13 @@ async function run(next, work) {
   }
 }
 
+// A check that answers at once would flash "Checking" and vanish, so it is shown for at least this long.
+const MIN_CHECK_MS = 600;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const check = () =>
   run("checking", async () => {
-    const status = await UpdateService.CheckForUpdates();
+    const [status] = await Promise.all([UpdateService.CheckForUpdates(), pause(MIN_CHECK_MS)]);
     found.value = status.version;
     state.value = status.available ? "available" : "current";
   });
@@ -109,14 +113,18 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 <template>
   <div ref="root" class="wrap">
     <button type="button" class="btn" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="onClick">
-      <span v-if="busy()" class="spin" aria-hidden="true"></span>
-      <span v-else-if="state === 'available' || state === 'ready'" class="dot" aria-hidden="true"></span>
+      <span class="ind" :class="{ on: busy() || state === 'available' || state === 'ready' }" aria-hidden="true">
+        <span v-if="busy()" class="spin"></span>
+        <span v-else class="dot"></span>
+      </span>
       {{ info.version || "..." }}
     </button>
 
     <Transition name="pop">
       <div v-if="open" class="pop" role="dialog" aria-label="Updates">
         <div class="status" role="status">
+          <Transition name="swap" mode="out-in">
+            <div :key="info.enabled ? state : 'off'" class="body">
           <template v-if="!info.enabled">
             <svg class="mark warn" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.1" /><circle cx="12" cy="12" r="9" /></svg>
             <div>
@@ -125,7 +133,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
             </div>
           </template>
           <template v-else-if="state === 'checking'">
-            <svg class="mark spin" width="16" height="16" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" /></svg>
+            <span class="mark spin" aria-hidden="true"></span>
             <div>
               <h3>Checking for updates</h3>
               <p>Looking at GitHub releases.</p>
@@ -146,7 +154,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
             </div>
           </template>
           <template v-else-if="state === 'downloading'">
-            <svg class="mark spin" width="16" height="16" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" /></svg>
+            <span class="mark spin" aria-hidden="true"></span>
             <div>
               <h3>Downloading {{ found }}</h3>
               <p>Keep working. The app stays as it is until you restart.</p>
@@ -172,15 +180,18 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
               <p>Updates are looked for on request.</p>
             </div>
           </template>
+            </div>
+          </Transition>
         </div>
         <div class="sep"></div>
         <button v-if="action" type="button" class="row primary" @click="action.run">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" /></svg>
           {{ action.label }}
         </button>
-        <button v-if="info.enabled && !busy() && (state === 'current' || state === 'idle')" type="button" class="row" @click="check">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
-          Check for updates
+        <button v-if="info.enabled && (state === 'current' || state === 'idle' || state === 'checking')" type="button" class="row" :disabled="state === 'checking'" @click="check">
+          <span v-if="state === 'checking'" class="spin" aria-hidden="true"></span>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
+          {{ state === "checking" ? "Checking…" : "Check for updates" }}
         </button>
         <button type="button" class="row" @click="whatsNew">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /></svg>
