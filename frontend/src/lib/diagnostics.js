@@ -1,16 +1,16 @@
-// What to paste into a bug report or a performance question from a phone, where there is no inspector: pressing the version in the header
-// popup copies it. Nothing here is sent anywhere, and it holds no draft text. The start-up timings are recorded by main.js and App.vue.
-import { whenLabel } from "./when.js";
+// A diagnostics report to paste into a bug report or a performance question: pressing the version copies it. One line of JSON with raw
+// numbers (milliseconds, bytes, epoch milliseconds), to be read by whoever gets it. Nothing here is sent anywhere, and it holds no draft text.
+// The start-up timings are recorded by main.js and App.vue.
 
 const recorded = {};
 
-// Remember a number or text for the report (for example `record("openMs", 794)`).
+// Remember a number for the report (for example `record("openMs", 794)`).
 export const record = (key, value) => {
   recorded[key] = value;
 };
 
-// Counts the opens in this browser storage, so a report says whether it comes from the first open (the cold one). localStorage is
-// cleared together with the rest when iOS drops a home-screen app's storage, so the count starts again then, which is the point.
+// Counts the opens in this browser storage, so a report says whether it comes from the first open (the cold one). localStorage is cleared
+// together with the rest when iOS drops a home-screen app's storage, so the count starts again then, which is the point.
 const OPENS = "harper-pad-opens";
 export function noteOpen(now = Date.now(), store = globalThis.localStorage) {
   let seen = { count: 0, first: now, last: 0 };
@@ -19,48 +19,42 @@ export function noteOpen(now = Date.now(), store = globalThis.localStorage) {
   } catch {
     // unreadable: start counting again
   }
-  const before = seen;
   try {
-    store.setItem(OPENS, JSON.stringify({ count: before.count + 1, first: before.first, last: now }));
+    store.setItem(OPENS, JSON.stringify({ count: seen.count + 1, first: seen.first, last: now }));
   } catch {
-    // storage full or blocked: the report says so (opens n/a)
+    // storage full or blocked: the report carries the count anyway
   }
-  recorded.opens = { count: before.count + 1, first: before.first, previous: before.last };
+  recorded.opens = { count: seen.count + 1, first: seen.first, previous: seen.last };
 }
 
-const mb = (b) => (typeof b === "number" ? `${Math.round(b / 1048576)} MB` : "n/a");
-const ms = (v) => (typeof v === "number" ? `${Math.round(v)} ms` : "n/a");
-const kb = (b) => (b ? `${Math.round(b / 1024)} kB` : "cached");
+const round = (v) => (typeof v === "number" ? Math.round(v) : undefined);
 
-// The text of the report from plain facts: `info` is what collect() returns. Mostly numbers on a few lines, so it is quick to read and
-// to compare between runs. Pure, so a test can check it.
-export function formatDiagnostics(info) {
-  const opens = info.opens
-    ? info.opens.count === 1
-      ? "open #1 (first)"
-      : `open #${info.opens.count} (first ${whenLabel(info.opens.first, info.now)}, last ${whenLabel(info.opens.previous, info.now)})`
-    : "opens n/a";
-  const lines = [
-    `Harper Pad ${info.version || "(no version)"} | ${info.standalone ? "home-screen app" : "browser tab"} | ${opens} | ${info.when}`,
-    `opened ${ms(info.openMs)} (draft ${ms(info.dataMs)}) | first paint ${ms(info.firstPaint)} | page response ${ms(info.responseEnd)}, load ${ms(info.load)} | Harper ${ms(info.setupMs)}`,
-    `worker ${info.worker} | net ${info.connection} | storage ${info.storage}`,
-  ];
-  if (info.resources?.length) lines.push(`slowest: ${info.resources.map((r) => `${r.name} ${ms(r.duration)}/${kb(r.size)}`).join(", ")}`);
-  lines.push(info.agent);
-  return lines.join("\n");
-}
+// The report as one line of JSON, from what collect() returns. Undefined values (what the browser cannot tell) drop out.
+export const formatDiagnostics = (info) =>
+  JSON.stringify({
+    version: info.version || undefined,
+    at: info.at,
+    standalone: info.standalone,
+    opens: info.opens,
+    openMs: round(info.openMs),
+    draftMs: round(info.dataMs),
+    harperMs: round(info.setupMs),
+    paintMs: round(info.firstPaint),
+    responseMs: round(info.responseEnd),
+    loadMs: round(info.load),
+    worker: info.worker,
+    net: info.net,
+    storage: info.storage,
+    slowest: info.resources?.map((r) => ({ name: r.name, ms: round(r.duration), bytes: r.size })),
+    agent: info.agent,
+  });
 
 // The facts of this page load, read from the browser. Each read is guarded: a browser without one of these APIs leaves it out.
 export async function collect(version) {
   const nav = performance.getEntriesByType?.("navigation")?.[0];
   const paint = performance.getEntriesByName?.("first-paint")?.[0];
   const resources = (performance.getEntriesByType?.("resource") ?? [])
-    .map((r) => ({
-      name: new URL(r.name, location.href).pathname.split("/").pop() || "/",
-      start: r.startTime,
-      duration: r.duration,
-      size: r.transferSize,
-    }))
+    .map((r) => ({ name: new URL(r.name, location.href).pathname.split("/").pop() || "/", duration: r.duration, size: r.transferSize }))
     .sort((a, b) => b.duration - a.duration)
     .slice(0, 3);
   const registration = await navigator.serviceWorker?.getRegistration?.().catch(() => undefined);
@@ -71,15 +65,14 @@ export async function collect(version) {
     storage?.estimate?.().catch(() => undefined),
   ]);
   return {
-    now: new Date(),
-    opens: recorded.opens,
-    storage: storage ? `${mb(estimate?.usage)}/${mb(estimate?.quota)}${persisted ? " persisted" : ""}` : "n/a",
     version: version || (import.meta.env?.APP_VERSION ?? ""),
-    when: new Date().toISOString(),
+    at: Date.now(),
     agent: navigator.userAgent,
     standalone: !!navigator.standalone || !!matchMedia("(display-mode: standalone)").matches,
-    worker: registration ? (navigator.serviceWorker.controller ? "controlling" : "not controlling") : "none",
-    connection: net ? `${net.effectiveType ?? "?"} ${net.downlink ?? "?"} Mbit/s ${net.rtt ?? "?"} ms` : "n/a",
+    worker: registration ? !!navigator.serviceWorker.controller : undefined, // true: the service worker controls this page
+    net: net ? { type: net.effectiveType, mbit: net.downlink, rtt: net.rtt } : undefined,
+    storage: estimate ? { usage: estimate.usage, quota: estimate.quota, persisted } : undefined,
+    opens: recorded.opens,
     openMs: recorded.openMs,
     dataMs: recorded.dataMs,
     setupMs: recorded.setupMs,

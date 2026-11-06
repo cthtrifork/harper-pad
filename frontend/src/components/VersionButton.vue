@@ -3,7 +3,7 @@ import "../styles/update-button.css"; // the same look as the desktop update but
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { copyDiagnostics } from "../lib/diagnostics.js";
 
-// The web build's end of the header: the release it was made from (a preview or local build has none and says "dev"), and a popup with
+// The web build's end of the header on a wide window (a phone has the version in the drafts drawer): the release it was made from (a preview or local build has none and says "dev"), and a popup with
 // "Copy diagnostics" for a bug report or a slow start. There is nothing to update here: a reload loads the latest deploy.
 const version = import.meta.env.APP_VERSION || "dev";
 const open = ref(false);
@@ -34,11 +34,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="wrap">
-    <button type="button" class="btn" :aria-label="`Version ${version}`" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="open = !open">
-      <span class="ver">{{ version }}</span>
-      <svg class="info" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M8 7.2v3.6M8 5v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
-    </button>
+  <div ref="root" class="wrap web-version">
+    <button type="button" class="btn" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="open = !open">{{ version }}</button>
     <div v-if="open" class="pop" role="dialog" aria-label="Version">
       <h3>Harper Pad {{ version }}</h3>
       <p>The web app updates itself when it opens online.</p>
