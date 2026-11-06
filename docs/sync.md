@@ -165,7 +165,7 @@ It changes nothing for a user who leaves sync off. The reasons behind the shape:
 
 ## Settings: the dictionary and the ignore list
 
-These are the exception to the rule above. The dictionary and the ignore list are small and are meant to be the same on every device, so there is **no merge: the last device to sync wins, and absence is deletion**. A word removed on one device is removed on the others.
+These are the exception to the rule above. The dictionary and the ignore list are small and are meant to be the same on every device, so there is no per-word merge: **the last device to sync wins, and absence is deletion**, with one exception: a device that syncs them for the first time deletes nothing. A word removed on one device is removed on the others.
 
 **Data model.** One row per account in `settings`: a compare-and-set `version` and two `JSONB` columns, `words` (the dictionary) and `ignored`
 (the decimal hash of each ignored finding), each an array of strings. They are written whole with `GET` and `PUT /settings`
@@ -193,16 +193,17 @@ words. A run is `GET`, then:
 | Situation | What happens |
 |---|---|
 | The server has nothing | This device's lists are sent. |
-| This device has no record (just enrolled, or turned sync off and on) | **The server's lists replace the local ones**, even if the device held words of its own. |
+| This device has no record (just enrolled, or turned sync off and on) | **The union of both is sent and applied**: every word and finding on either side ends up on both. Nothing is deleted, here or on the server. |
 | Changed here since the last sync | The lists are sent over whatever the server holds. A `409` is read and sent again (three tries), so nothing is merged. |
 | Not changed here, the server's `version` moved | The server's lists are applied here. |
 
 "Changed here" is a comparison of the current lists with the record, not a flag, so a change is not lost if the app closes before
-the sync. The record is saved only after the lists were sent or applied: a failure is retried and never mistaken for a local edit.
+the sync. The record is saved only after the lists were sent and applied: a failure is retried and never mistaken for a local edit.
 
 **What this costs.** If two devices change the lists between syncs, the one that syncs later overwrites the other: a word added on
-the first is gone. A device that was offline for a long time and then changes something overwrites newer words from the others. An
-enrolling device loses the words it already had when the server holds a dictionary. Device clocks play no part (the server's
+the first is gone. A device that was offline for a long time and then changes something overwrites newer words from the others. A
+word that was removed on the other devices before this one enrolled comes back when this device still holds it: the first sync cannot
+tell "removed elsewhere" from "never had". Device clocks play no part (the server's
 `version` orders the writes), and there are no tombstones to grow.
 
 **When.** **Sync all** (so at start-up and after enrolling) and about 2 s after the dictionary or ignore list changed here. Applying

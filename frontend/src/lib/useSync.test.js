@@ -447,7 +447,7 @@ function memoryStore() {
   };
 }
 
-test("Sync all also syncs the dictionary and ignore list: a new device takes the server's", async () => {
+test("Sync all also syncs the dictionary and ignore list: a new device joins its lists with the server's", async () => {
   const applied = [];
   const held = { version: 1, words: ["Remote"], ignored: ["12345"] };
   const fetchFn = async (url) => {
@@ -458,7 +458,7 @@ test("Sync all also syncs the dictionary and ignore list: a new device takes the
   const { sync, ready } = setup({ fetchFn, settings });
   await ready();
   await sync.syncAll();
-  assert.deepEqual(applied, [{ words: { add: ["Remote"], remove: ["Local"] }, ignored: { add: ["12345"], remove: [] }, any: true }]);
+  assert.deepEqual(applied, [{ words: { add: ["Remote"], remove: [] }, ignored: { add: ["12345"], remove: [] }, any: true }]);
   assert.equal(sync.status.value, "synced");
 });
 
