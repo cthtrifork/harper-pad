@@ -176,19 +176,16 @@ drafts on the device first.
 
 ## Changes to local storage
 
-The riskiest groundwork, because it touches both storage engines. It changes nothing for a user who leaves sync off.
+Sync state lives in its own table or store (`sync_state` in SQLite, `sync` in IndexedDB), never on the draft rows, and is never sent.
+It changes nothing for a user who leaves sync off. The reasons behind the shape:
 
-- **Sync state has its own table**: `sync_state` (SQLite) and the `sync` object store (IndexedDB), one record per draft the server
-  knows: `hash` (SHA-256 of format and text at the last sync, checked against `internal/store/testdata/contenthash.json`),
-  `updated_at`, `deleted` and `version`. Nothing is added to draft rows and none of it is sent.
-- **No dirty flag, no tombstone record.** A draft is *changed* when its current hash differs from `hash` (or it has no state); the
-  hash is computed on demand so it cannot go stale. A delete is a state record with no draft and `deleted` false, a *pending
-  delete*; it becomes `deleted` true when the server accepts it. Undo is then no change at all.
-- **Older builds keep working.** SQLite gets a table and `PRAGMA user_version` stays 2; IndexedDB `DB_VERSION` goes to 3 with a new
-  store ([pages](pages.md#changing-the-schema)). An older build ignores the state and cannot lose it, and what it saves or deletes
-  is seen as a change by the newer build. A build from before `#83` fails on the newer IndexedDB version; there is no way around that.
-- **Device-local sync settings** (server URL, token, device name, key) are one record, `sync-device`, in the `kv` store of the app's
-  IndexedDB (`lib/syncDevice.js`) on web and desktop alike. They are never uploaded; a cleared profile means "Sign in again".
+- **No dirty flag.** A draft is *changed* when its hash differs from the one recorded at the last sync, computed on demand so it
+  cannot go stale. A delete is a state record with no draft (a *pending delete*), so undo is then no change at all.
+- **Older builds keep working.** Both changes are additive: SQLite's `user_version` stays 2 and IndexedDB's `DB_VERSION` goes to 3
+  ([pages](pages.md#changing-the-schema)). An older build ignores the state and cannot lose it, and sees what it saves or deletes as
+  a change. A build from before `#83` fails on the newer IndexedDB version; there is no way around that.
+- **Device settings** (server URL, token, key) are one `sync-device` record in the app's IndexedDB on web and desktop alike. They
+  are never uploaded; a cleared profile means "Sign in again".
 
 ## Security
 
