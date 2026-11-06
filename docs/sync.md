@@ -73,19 +73,10 @@ After enrollment every request carries `Authorization: DPoP <device token>` and 
 | **Uses the unlocked device** or runs script in the page | Revoke, and the strict CSP ([security](security.md)). Its edits sync to other devices; there is no server-side undo |
 
 **DPoP** is [RFC 9449](https://rfc-editor.org/rfc/rfc9449) with one change: the token is opaque, so the key binding (the key's
-RFC 7638 thumbprint) is stored on the `devices` row instead of in a `cnf.jkt` claim. The device key is an ECDSA P-256 key. Each
-proof is an ES256 JWT:
-
-```
-header   {"typ": "dpop+jwt", "alg": "ES256", "jwk": {the device's public key}}
-payload  {"jti": "<random id>", "htm": "PUT", "htu": "https://sync.example.com/docs/<id>",
-          "iat": <unix seconds>, "ath": "<base64url SHA-256 of the device token>"}
-```
-
-The server checks one proof, the header, the signature, `htm`/`htu` against the request, `iat` within about 60 seconds, a `jti`
-not seen in that window, `ath` against the presented token, and the thumbprint against the device row. It does this **before
-reading the body**, using [go-dpop](https://github.com/AxisCommunications/go-dpop) and a `ttlcache` for replays. There is no
-`DPoP-Nonce`; the `iat` window and `jti` cache replace it.
+RFC 7638 thumbprint) is stored on the `devices` row instead of in a `cnf.jkt` claim. The device key is ECDSA P-256 and proofs are
+ES256 JWTs bound to the request and the token. The server checks the proof **before reading the body**, with
+[go-dpop](https://github.com/AxisCommunications/go-dpop) and a `ttlcache` for replays (`backend/internal/auth`). There is no
+`DPoP-Nonce`; a 60 second `iat` window and the `jti` cache replace it.
 
 **Key storage** is the same on the web and on desktop: a non-extractable WebCrypto key (only the private `CryptoKey` is stored) in
 the webview's IndexedDB, in the `sync-device` record with the token ([Changes to local storage](#changes-to-local-storage)). If
@@ -96,8 +87,6 @@ Things to know:
 - `extractable: false` stops script exporting the key; it does not encrypt it on disk. Tested on Chromium: the private key was in
   plain form in the profile's IndexedDB files and a signature made from that copy verified. WebKit was not tested for this.
 - DPoP does not stop script in the page or someone using the unlocked device, as both can ask the key to sign.
-- WebCrypto's ECDSA signature is already the raw `r‖s` JWS form, so no DER conversion is needed; Go's `ecdsa.VerifyASN1` would
-  reject it.
 - Checked on an iPhone (4 and 5 November 2026, Safari tab and Home Screen app, PR #86): key generation, private-key-only storage,
   refused `exportKey` and raw signatures work, and the key survived 20.6 hours. Edge 156 on Windows passes too. WebKitGTK was not checked.
 
@@ -106,104 +95,32 @@ and the fallback if iOS turns out to clear the key.
 
 ## Server schema (PostgreSQL)
 
-The server stores drafts as opaque strings by id and version. v1 has one client account (the `default` row of `clients`), but every
-row carries a `client_id` and every device is bound to one, so more can be added without reshaping the schema.
+The schema is `backend/internal/store/migrations/0001_init.sql`; the code is the documentation. What the code does not say:
 
-```sql
-CREATE TABLE meta    (key TEXT PRIMARY KEY, value TEXT NOT NULL);          -- 'schema_version'
-CREATE TABLE clients (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name TEXT NOT NULL, created_at BIGINT NOT NULL);
-
-CREATE TABLE docs (
-  client_id  BIGINT  NOT NULL REFERENCES clients (id),
-  id         TEXT    NOT NULL CHECK (id ~ '^[0-9a-f]{32}$'),
-  version    BIGINT  NOT NULL,                -- 1 on creation, +1 per accepted write; only for compare-and-set
-  created_at BIGINT  NOT NULL,                -- the device's timestamps, Unix ms
-  updated_at BIGINT  NOT NULL,
-  deleted    BOOLEAN NOT NULL DEFAULT FALSE,  -- a tombstone; data is cleared when set
-  data       TEXT    NOT NULL DEFAULT '' CHECK (octet_length(data) <= 2097152),
-  PRIMARY KEY (client_id, id)
-);
-
-CREATE TABLE devices (
-  id TEXT PRIMARY KEY,
-  client_id BIGINT NOT NULL REFERENCES clients (id),
-  name TEXT NOT NULL,
-  user_agent TEXT NOT NULL DEFAULT '',
-  token_hash BYTEA NOT NULL UNIQUE,           -- SHA-256 of the device token
-  key_thumbprint TEXT NOT NULL,               -- RFC 7638 thumbprint of the DPoP key from the enrollment proof
-  created_at BIGINT NOT NULL,
-  last_seen BIGINT NOT NULL
-);
-CREATE INDEX devices_client_idx ON devices (client_id);
-
-CREATE TABLE invites (
-  token_hash  BYTEA PRIMARY KEY,
-  client_id   BIGINT NOT NULL REFERENCES clients (id),
-  device_name TEXT NOT NULL DEFAULT '',
-  created_at  BIGINT NOT NULL,
-  expires_at  BIGINT NOT NULL,
-  used_at     BIGINT                          -- NULL until spent
-);
-```
+- The server stores drafts as opaque strings by id and version. v1 has one client account, but every row carries a `client_id` and
+  every device is bound to one, so more can be added without reshaping the schema. The account comes from the token's device row,
+  never from the request, and every query on account data filters on it.
+- A write is compare-and-set on `version` and `updated_at`; a mismatch changes nothing and returns the current row as the 409.
+  `version` exists only for that.
+- Tombstones clear the text and are kept forever. Revoking a device deletes its row.
+- The 2 MiB `CHECK` on a draft is a backstop; the app enforces 1 MiB.
 
 ### Database access
 
-Two roles, both authenticating with client certificates from cert-manager (no passwords). `harper_admin` owns the tables and
-applies the migrations (`0001_init.sql`); `harper_sync`, the internet-facing API's role, gets rows only:
-
-```sql
-GRANT SELECT ON schema_migrations TO harper_sync;
-GRANT SELECT, INSERT ON devices TO harper_sync;
-GRANT UPDATE (last_seen) ON devices TO harper_sync;
-GRANT SELECT ON invites TO harper_sync;
-GRANT UPDATE (used_at) ON invites TO harper_sync;
-GRANT SELECT, INSERT, UPDATE ON docs TO harper_sync;   -- a deletion is an update
--- nothing on clients or meta, no DELETE, no DDL
-
-ALTER TABLE docs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE docs FORCE ROW LEVEL SECURITY;             -- applies to the owner too
-CREATE POLICY sync_rows ON docs FOR ALL TO harper_sync USING (true) WITH CHECK (true);
-```
-
-Row security hides notes from the admin role's ordinary SQL, though its owner can switch it off, so a compromised admin process
-could read notes (it could already enroll a device that does). A later migration that changes `docs` rows must lift the force for
-its own statements.
-
-How queries work:
-
-- **The account comes from the token.** The server takes `client_id` from the device row, the protocol has no such field, and every
-  query on account data filters on it.
-- **Listing** is one primary-key query (`WHERE client_id = $1 AND id > $2 ORDER BY id LIMIT $3`) with no text.
-- **A write** is one transaction: lock the row, check that `version` and `updated_at` equal the request's `base` (an unknown id
-  is base 0 and is inserted), then write `version + 1`. A mismatch changes nothing and returns the current row as the 409.
-- **Tombstones** clear the text and are kept forever.
-- **Spending an invite** is one `UPDATE ... WHERE used_at IS NULL AND expires_at > now RETURNING ...`, so two devices cannot use it.
-  Creating an invite also deletes ones that expired over a day ago; the sync service runs no background job.
-- **Revoking a device** deletes its row.
-- **Times** are `BIGINT` Unix milliseconds. The 2 MiB `CHECK` is a backstop (the API maps its refusal to 413); the app enforces 1 MiB.
-
-The server validates what the app does: valid UTF-8, a known format, a strict id. All SQL is parameterised.
+Two roles, both authenticating with client certificates from cert-manager (no passwords). `harper_admin` owns the tables and applies
+the migrations; `harper_sync`, the internet-facing API's role, gets only the row access it needs (no DDL, no `DELETE`).
+Forced row security hides notes from the admin role's ordinary SQL. Its owner can still switch that off, so a compromised admin
+process could read notes (it could already enroll a device that does). A later migration that changes `docs` rows must lift the
+force for its own statements.
 
 ## Protocol
 
-JSON over HTTPS. Every route needs the device token and a DPoP proof (CORS allows `Authorization`, `DPoP`, `Content-Type` and
-`If-None-Match`), except that `/enroll` takes an invite instead of a token. [openapi.yaml](openapi.yaml) is generated from the
-server's Go types (`make openapi` in `backend/`); if it and this page disagree, fix one.
-
-| Route | Purpose |
-|---|---|
-| `POST /enroll` | `{invite, deviceName}`. Spends the invite, binds the token to the proof's key, returns `{deviceToken, token_type: "DPoP"}`. |
-| `GET /docs?after=<id>&limit=<n>` | State of every draft, without text: `[{id, version, updatedAt, deleted}]`, tombstones included, in id order. 500 per page by default, at most 1000; a short page is the last. |
-| `GET /docs/<id>` | One draft: `{id, version, createdAt, updatedAt, deleted, data}`, or 404. `If-None-Match` returns 304 when `updatedAt` and `deleted` match. |
-| `PUT /docs/<id>` | `{base: {version, updatedAt}, createdAt, updatedAt, deleted, data}`. 200 returns `{version}`; a stale `base` is a 409 with the server's current copy. A deletion is `deleted: true` with empty `data`. |
+JSON over HTTPS; the routes, fields, limits and errors are in [openapi.yaml](openapi.yaml), generated from the server's Go types
+(`make openapi` in `backend/`). The server is plain storage; a stale `base` on a `PUT` is a 409 carrying the server's copy.
 
 - **A draft's state is the pair `(updatedAt, deleted)`**, set by the device that saved it. The device records the state it last
   synced, and "the server changed" means the state differs from that record. Only equality is tested, never order, so device
   clocks do not matter. `version` is only for compare-and-set.
-- **`data`** of a live draft is the app's blob (`{"v":1,"format":"markdown"|"text","content":"..."}`); a tombstone's is empty.
-- **Errors** are `application/problem+json`. Credential failures are always the same 401 body; invalid JSON is 400, a failed
-  field 422, an oversize body 413. The proof is checked before the body is read.
-
 ### When sync happens
 
 All four moments use the same decision table ([Conflicts](#conflicts)).
@@ -215,8 +132,8 @@ All four moments use the same decision table ([Conflicts](#conflicts)).
 | **Opening a note** | Local text shows at once. In the background the device fetches the draft with `If-None-Match`. A newer state is swapped in ("Updated from the server") only if the draft is unchanged here and the user has not typed; otherwise the note gets a "Newer on the server" marker. A 404 changes nothing. A tombstone for a draft changed here changes nothing (the edit survives). A tombstone for an unchanged draft is never applied silently: a modal asks **Keep** (upload it again) or **Remove** (remove it here; the toast offers Undo). Sync all asks the same question for the open draft. |
 | **Sync all** | Lists the state of every draft on the server and reconciles both ways, ending with a summary like "3 uploaded, 2 downloaded, 1 conflicted copy, 1 removed" (removals can be undone). |
 
-The status bar shows "Synced", "Syncing", "N pending", "Offline" or "Sign in again". A run recomputes every decision from stored
-state, so an interrupted run (a suspended phone) is just a partial one. iOS has no background sync, so nothing depends on one.
+A run recomputes every decision from stored state, so an interrupted run (a suspended phone) is just a partial one. iOS has no
+background sync, so nothing depends on one.
 
 ### Conflicts
 
@@ -266,14 +183,11 @@ The riskiest groundwork, because it touches both storage engines. It changes not
 - **No dirty flag, no tombstone record.** A draft is *changed* when its current hash differs from `hash` (or it has no state); the
   hash is computed on demand so it cannot go stale. A delete is a state record with no draft and `deleted` false, a *pending
   delete*; it becomes `deleted` true when the server accepts it. Undo is then no change at all.
-- **`ApplyRemote` and `ApplyRemoteDelete`** store pulled changes with the server's timestamps and the file link, run the same
-  checks as `Save` and record the synced state in one transaction (`Save` would set `updated_at` to now).
 - **Older builds keep working.** SQLite gets a table and `PRAGMA user_version` stays 2; IndexedDB `DB_VERSION` goes to 3 with a new
   store ([pages](pages.md#changing-the-schema)). An older build ignores the state and cannot lose it, and what it saves or deletes
   is seen as a change by the newer build. A build from before `#83` fails on the newer IndexedDB version; there is no way around that.
 - **Device-local sync settings** (server URL, token, device name, key) are one record, `sync-device`, in the `kv` store of the app's
   IndexedDB (`lib/syncDevice.js`) on web and desktop alike. They are never uploaded; a cleared profile means "Sign in again".
-- New host calls go through `backend.js` with both implementations ([pages](pages.md)). New Go service methods need `make bindings`.
 
 ## Security
 
@@ -288,10 +202,6 @@ A device-token model with DPoP key binding, TLS and no content encryption.
 | Account isolation | The account comes from the device row and every query filters on it. v1 has one account, so this is a guard for the future; before adding a second, narrow the `sync_rows` policy to the account and test isolation. |
 | Database and cluster | Client certificates only, PostgreSQL reachable only from the sync and admin pods, separate roles ([Database access](#database-access)). Default-deny NetworkPolicies, hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod, reached only through a Cloudflare Tunnel behind Cloudflare Access (OIDC, MFA). The app does no authentication of its own, so the Access policy is the only access control. It adds same-origin checks, CSRF tokens and a strict CSP. See the [admin README](../backend/cmd/harper-pad-admin/README.md#access). |
-| Guessing and abuse | 256-bit tokens, generic 401s, a body cap and the 2 MiB check. Rate limiting, if any, is at the ingress. There is no per-account quota. |
-| Cross-origin use | CORS allows exactly the Pages origin and the desktop webview origin (`CORS_ALLOWED_ORIGINS`), not `*`. Other origins get no CORS headers and are logged once. |
-| CSP | `connect-src` is `'self'` plus the sync origin when the build sets `SYNC_ORIGIN` (an https origin, no path; read by `frontend/vite.config.js`). Unset, the policy is unchanged. See [security](security.md). |
-| Token at rest | In IndexedDB, readable by any script on the origin, which the strict CSP is there to prevent. Not encrypted, and the key sits beside the token. |
 | Draft text from the server | Untrusted like pasted text: never run, never inserted as HTML, validated before it is stored. |
 
 Not defended: a compromised device, a compromised server (the [encryption option](#option-end-to-end-encryption) would leave it
