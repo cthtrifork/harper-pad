@@ -9,12 +9,12 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { isWeb, keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
-import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
 import { watchInstall } from "./lib/installHint.js";
+import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
 import { statusLine } from "./lib/statusLine.js";
 import { useDrafts } from "./lib/useDrafts.js";
 import { useSync } from "./lib/useSync.js";
@@ -103,15 +103,6 @@ function syncToastAction() {
     sync.openCopy(n.copyId);
     sync.clearNotice();
   } else if (n?.kind === "removed") sync.undoRemoved();
-}
-
-// Web build: the one-time offer to install the app (lib/installHint.js). It waits a few seconds after Harper is ready, so it does not compete
-// with the first paint.
-const hint = ref(null); // {text, action, kind, tick}
-const installer = isWeb ? watchInstall({ show: (h) => (hint.value = { ...h, tick: 1 }) }) : null;
-function hintAction() {
-  if (hint.value?.kind === "install") installer.accept();
-  hint.value = null;
 }
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
@@ -318,6 +309,15 @@ const removeWord = (word) =>
     old.dispose().catch(() => {});
   });
 
+// Web build: the one-time offer to install the app (lib/installHint.js). It waits a few seconds after Harper is ready, so it does not compete
+// with the first paint.
+const hint = ref(null); // {text, action, kind, tick}
+const installer = watchInstall({ show: (h) => (hint.value = { ...h, tick: 1 }) }); // does nothing in the desktop build
+function hintAction() {
+  if (hint.value?.kind === "install") installer.accept();
+  hint.value = null;
+}
+
 // A tap on the empty page beside or below the editor: focus it from the click itself, the only place a phone opens its keyboard.
 // A drag that starts in the text and is let go over the blank page also fires a click on the pane (their common ancestor). That is a
 // selection, not a tap: only a press that began on the blank page too counts, or the selection collapses and the caret jumps to the end.
@@ -457,10 +457,10 @@ onBeforeUnmount(() => {
             <ToastBar v-if="toast" :message="`Fixed ${toast.ids.length} ${toast.ids.length === 1 ? 'thing' : 'things'}`" :action="toast.ids.length === 1 ? 'Undo' : 'Undo all'" :tick="toast.tick" @action="undoToast" @close="toast = null" />
           </Transition>
           <Transition name="toast-bar">
-            <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
+            <ToastBar v-if="hint" :message="hint.text" :action="hint.action" :ms="20000" :tick="hint.tick" @action="hintAction" @close="hint = null" />
           </Transition>
           <Transition name="toast-bar">
-            <ToastBar v-if="hint" :message="hint.text" :action="hint.action" :ms="20000" :tick="hint.tick" @action="hintAction" @close="hint = null" />
+            <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
           </Transition>
         </div>
         <Transition name="grow">

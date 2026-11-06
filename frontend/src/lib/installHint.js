@@ -37,6 +37,7 @@ export const MESSAGES = {
 // Counts this visit and listens for the install prompt. `show({kind, text, action})` is called when a hint is due (once the page asks:
 // `ready()`); the returned `accept()` runs the prompt for "install" and `done()` marks the hint as shown. `env` is injectable for tests.
 export function watchInstall({ show, env = {} }) {
+  if (!env.win && import.meta.env?.MODE !== "web") return { ready() {}, async accept() {} }; // the desktop build has no install prompt
   const win = env.win ?? window;
   const storage = env.storage ?? win.localStorage;
   const nav = env.navigator ?? win.navigator;
