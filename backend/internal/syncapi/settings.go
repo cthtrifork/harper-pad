@@ -15,8 +15,11 @@ import (
 )
 
 const (
-	maxSettingItems = 20000 // per list; the app's dictionary holds 10,000 words
-	maxWordRunes    = 64
+	// The limits are the client's too (frontend/src/lib/settingsItems.js, LIMITS; a frontend test compares them). A personal dictionary
+	// is tens to a few hundred words, so these leave a wide margin and keep a write, and a linter rebuild, small.
+	maxWords     = 5000
+	maxIgnored   = 2000
+	maxWordRunes = 64
 )
 
 // Setting is the synced settings of the account: the dictionary and the ignore list in one document.
@@ -51,7 +54,7 @@ func validateSetting(data string) error {
 		Ignored []string `json:"ignored"`
 	}
 	if !utf8.ValidString(data) || json.Unmarshal([]byte(data), &b) != nil || b.V != 1 || b.Words == nil || b.Ignored == nil ||
-		len(b.Words) > maxSettingItems || len(b.Ignored) > maxSettingItems {
+		len(b.Words) > maxWords || len(b.Ignored) > maxIgnored {
 		return errInvalid
 	}
 	for _, w := range b.Words {

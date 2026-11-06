@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateDeviceKey } from "./dpop.js";
-import { parseSettings, settingsData } from "./settingsItems.js";
+import { LIMITS, parseSettings, settingsData } from "./settingsItems.js";
 import { createSyncer } from "./syncRun.js";
 
 function fakeServer() {
@@ -156,4 +156,31 @@ test("a failed apply is not remembered, so the next sync tries again and does no
   );
   assert.equal(b.record, null);
   assert.equal(server.puts, 1);
+});
+
+test("input is trimmed and tidied before it is sent, and an entry the server would refuse stays local", async () => {
+  const server = fakeServer();
+  const a = phone(server, ["  Wails ", "Wails", "", "two words", "x".repeat(65), "Harper\n"], [" 42 ", "abc", "42"]);
+  await a.sync();
+  assert.deepEqual(server.lists(), { words: ["Harper", "Wails"], ignored: ["42"] });
+  assert.deepEqual(a.words, ["  Wails ", "Wails", "", "two words", "x".repeat(65), "Harper\n"], "nothing was removed locally");
+  await a.sync();
+  assert.equal(server.puts, 1, "tidying is not a change");
+});
+
+test("a list over the limit is refused before anything is sent", async () => {
+  const server = fakeServer();
+  const a = phone(
+    server,
+    Array.from({ length: LIMITS.words + 1 }, (_, i) => `w${i}`),
+  );
+  await assert.rejects(a.sync(), /too large to sync/);
+  assert.equal(server.puts, 0);
+  const b = phone(
+    server,
+    [],
+    Array.from({ length: LIMITS.ignored + 1 }, (_, i) => String(i)),
+  );
+  await assert.rejects(b.sync(), /ignore list is too large/);
+  assert.equal(server.puts, 0);
 });

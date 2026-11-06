@@ -38,7 +38,7 @@ export function useSync({
   const summary = ref(""); // what the last Sync all did, "3 uploaded, 2 downloaded"
   const lastSync = ref(0); // when it finished, ms
   const gone = ref(null); // {id}: the open draft was deleted on another device and the person has not chosen yet
-  const setsFailed = ref(false); // the dictionary and ignore list did not sync last time (not a draft's failure)
+  const setsFailed = ref(""); // why the dictionary and ignore list did not sync last time (not a draft's failure), "" when they did
   const notice = ref(null); // {id, kind: "updated" | "newer", text} about the open draft, or null
   const enrolled = computed(() => info.value !== null);
 
@@ -87,7 +87,7 @@ export function useSync({
     clearTimeout(timer);
     clearTimeout(wordsTimer);
     waiting.clear();
-    setsFailed.value = false;
+    setsFailed.value = "";
     notice.value = null;
     gone.value = null;
     await deviceStore.clear();
@@ -164,10 +164,13 @@ export function useSync({
     if (!settings) return;
     try {
       await syncer().syncSettings(settings);
-      setsFailed.value = false;
+      setsFailed.value = "";
     } catch (err) {
       if (err instanceof SyncError && (err.code === "unreachable" || err.code === "signin")) throw err;
-      setsFailed.value = true;
+      setsFailed.value =
+        err instanceof SyncError && err.code === "limit"
+          ? err.message
+          : "Could not sync the dictionary and ignore list. Choose Sync all to try again.";
     }
   }
 

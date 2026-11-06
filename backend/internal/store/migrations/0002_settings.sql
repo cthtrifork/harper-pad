@@ -4,7 +4,7 @@
 CREATE TABLE settings (
   client_id BIGINT PRIMARY KEY REFERENCES clients (id),
   version   BIGINT NOT NULL,
-  data      TEXT   NOT NULL CHECK (octet_length(data) <= 1048576)
+  data      TEXT   NOT NULL CHECK (octet_length(data) <= 262144)
 );
 
 GRANT SELECT, INSERT, UPDATE ON settings TO harper_sync;
