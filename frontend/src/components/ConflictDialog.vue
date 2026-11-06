@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { describeConflict } from "../lib/conflict.js";
+import { describeConflict, summaryRows } from "../lib/conflict.js";
 
 // Keep or Overwrite: the one question when the open draft disagrees with its file, the server, or both (docs/sync.md). A modal dialog with no
 // way out except a choice: no close button, Escape is stopped (the cancel event), and a click on the backdrop does nothing. The page behind is
@@ -14,6 +14,7 @@ const props = defineProps({
 const emit = defineEmits(["choose"]);
 const dialog = ref(null);
 const text = computed(() => describeConflict(props.model));
+const rows = computed(() => summaryRows(props.model));
 // The two explanations start with their choice in bold, so they can be told apart at a glance.
 const split = (s, label) => ({ label, rest: s.slice(label.length).trimStart() });
 const keep = computed(() => split(text.value.keep, "Keep:"));
@@ -32,10 +33,19 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <dialog ref="dialog" class="conflict-dialog" role="alertdialog" aria-labelledby="conflict-title" aria-describedby="conflict-text" :aria-busy="busy" @cancel.prevent>
+  <dialog ref="dialog" class="conflict-dialog" role="alertdialog" aria-labelledby="conflict-title" aria-describedby="conflict-text conflict-summary" :aria-busy="busy" @cancel.prevent>
     <h2 id="conflict-title">{{ text.title }}</h2>
     <div id="conflict-text">
       <p>{{ text.detail }}</p>
+      <table id="conflict-summary" class="summary" aria-label="The versions">
+        <tbody>
+          <tr v-for="r in rows" :key="r.label">
+            <th scope="row">{{ r.label }}</th>
+            <td>{{ r.lines }}</td>
+            <td class="when">{{ r.when }}</td>
+          </tr>
+        </tbody>
+      </table>
       <p><strong>{{ keep.label }}</strong> {{ keep.rest }}</p>
       <p><strong>{{ overwrite.label }}</strong> {{ overwrite.rest }}</p>
     </div>

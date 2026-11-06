@@ -443,6 +443,7 @@ onBeforeUnmount(() => {
       :file-dir="drafts.fileDir.value"
       :file-problem="drafts.fileProblem.value"
       :can-unlink="!isWeb"
+      :file-state="drafts.fileState.value"
       :copy-badge="copyBadge"
       @unlink="drafts.unlinkFile"
       :can-save="drafts.available.value"

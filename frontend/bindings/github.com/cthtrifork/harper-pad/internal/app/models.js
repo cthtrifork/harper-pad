@@ -42,40 +42,10 @@ export class FileCheck {
              */
             this["stamp"] = "";
         }
-        if (!("fileLines" in $$source)) {
-            /**
-             * For FileChanged: the line counts of the file and the draft, and how many lines are only in the file or only in the draft.
-             * @member
-             * @type {number}
-             */
-            this["fileLines"] = 0;
-        }
-        if (!("draftLines" in $$source)) {
-            /**
-             * @member
-             * @type {number}
-             */
-            this["draftLines"] = 0;
-        }
-        if (!("onlyInFile" in $$source)) {
-            /**
-             * @member
-             * @type {number}
-             */
-            this["onlyInFile"] = 0;
-        }
-        if (!("onlyInDraft" in $$source)) {
-            /**
-             * @member
-             * @type {number}
-             */
-            this["onlyInDraft"] = 0;
-        }
         if (!("clean" in $$source)) {
             /**
              * Clean is true for FileChanged when the draft has no edits of its own since it last matched the file (its text still has the hash kept
-             * then), so the file's text can replace it without losing anything. False when that is unknown (an older database) or after
-             * MarkFileDiffers.
+             * then), so the file's text can replace it without losing anything. False when that is unknown (a link without a hash).
              * @member
              * @type {boolean}
              */

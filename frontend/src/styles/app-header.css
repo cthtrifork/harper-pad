@@ -120,6 +120,30 @@
   align-self: center;
 }
 
+/* The dot: your draft has changes the file does not have yet. Shape and a title say it, not colour alone; it fades and grows in with the shared
+   easing (switched off by prefers-reduced-motion, see base.css). */
+.bar .dirty-dot {
+  flex: none;
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.bar .dot-enter-active,
+.bar .dot-leave-active {
+  transition:
+    opacity 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+
+.bar .dot-enter-from,
+.bar .dot-leave-to {
+  opacity: 0;
+  transform: scale(0.4);
+}
+
 /* The x on the file chip: Unlink. The draft and the file stay as they are. */
 .bar .chip-x {
   flex: none;

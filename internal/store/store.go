@@ -125,10 +125,7 @@ func (s *Store) ensureFileHash() error {
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('drafts') WHERE name = 'file_hash'`).Scan(&n); err != nil || n > 0 {
 		return err
 	}
-	if _, err := s.db.Exec(`ALTER TABLE drafts ADD COLUMN file_hash TEXT NOT NULL DEFAULT ''`); err != nil {
-		return err
-	}
-	_, err := s.db.Exec(`ALTER TABLE drafts ADD COLUMN file_size INTEGER NOT NULL DEFAULT -1`)
+	_, err := s.db.Exec(`ALTER TABLE drafts ADD COLUMN file_hash TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 
@@ -175,8 +172,7 @@ const draftColumns = `
 	tasks_done  INTEGER NOT NULL DEFAULT 0,
 		file_path   TEXT    NOT NULL DEFAULT '',
 		file_mtime  INTEGER NOT NULL DEFAULT 0,
-		file_hash   TEXT    NOT NULL DEFAULT '',
-		file_size   INTEGER NOT NULL DEFAULT -1`
+		file_hash   TEXT    NOT NULL DEFAULT ''`
 
 // create makes the schema in a new database.
 func (s *Store) create() error {

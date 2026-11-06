@@ -36,6 +36,7 @@ The server is described next to its code: [backend README](../backend/README.md)
 - One dialog covers the file and the server when both differ.
 - Closing the window while it is open is allowed. The dialog returns the next time the draft is opened.
 - Your draft keeps its id and its file link.
+- Under the first sentence, one row per version that exists (your draft, the file, the server) gives its number of lines and when it was edited or changed; a time that is unknown is left out, and a narrow screen shows the lines only.
 - **Overwrite** Updates the file, then the server, with your draft. The other versions are Deleted, with no undo. Its button is the danger style and its text says whose text is Deleted. When your draft has no edits of its own, it takes the file's text and only the server is Updated.
 - **Keep** first Creates a Conflicted copy of each other version that differs from your draft (one copy when the file and the server hold the same text), then does what Overwrite does.
 - A Conflicted copy is an ordinary draft without a file link, with a badge in memory ("Conflicted copy, from the file", "from the server" or "from the file and the server"). The badge goes when the copy is edited or deleted, from its x, or at restart. It is never kept on disk or synced, and the text is not edited.
@@ -57,6 +58,7 @@ The server is described next to its code: [backend README](../backend/README.md)
 | A file update fails, or the file is unreadable | The draft is kept and Ctrl+S tries again; a gone file is Created again ("Recreated <name>") |
 | Delete a linked draft | The file is untouched. Undo Creates the draft again without the link |
 | Save as file | Offered only for a draft without a link, and beside a struck file name. Ctrl+Shift+S on a linked, healthy draft only shows "Unlink first to save as another file" |
+| A dot beside the file name | Your draft has changes the file does not have yet; Ctrl+S or Save Updates the file and the dot goes. Never shown with a struck file name |
 | The x on the file name | Deletes the link only; the file and your draft are untouched. A toast "Unlinked <name>" has Undo, which Creates the same link again (path and baseline); then Save as file returns |
 | Save as file onto the path of another draft | The link moves to this draft and the other draft is unlinked, with a toast naming it |
 | Web build | It never links a draft to a file |

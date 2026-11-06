@@ -27,6 +27,34 @@
   color: var(--mute);
 }
 
+/* The versions involved: quiet, one short row each (at most three), never wrapping or scrolling. */
+.conflict-dialog .summary {
+  width: 100%;
+  margin: 0 0 8px;
+  border-collapse: collapse;
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+.conflict-dialog .summary th,
+.conflict-dialog .summary td {
+  padding: 2px 12px 2px 0;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.conflict-dialog .summary th {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+
+.conflict-dialog .summary td:last-child {
+  padding-right: 0;
+}
+
 .conflict-dialog .note {
   color: var(--text);
   font-weight: 600;
@@ -94,6 +122,11 @@
   .conflict-dialog .actions button {
     flex: 1 1 0;
     height: 44px;
+  }
+
+  /* Narrow: the label and the lines only. */
+  .conflict-dialog .summary .when {
+    display: none;
   }
 }
 

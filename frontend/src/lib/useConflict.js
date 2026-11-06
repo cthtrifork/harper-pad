@@ -33,7 +33,7 @@ export function useConflict({ drafts, sync }) {
     try {
       if (f) {
         const t = await drafts.dialog.fileText();
-        file = { text: t.text, stamp: t.stamp };
+        file = { text: t.text, stamp: t.stamp, at: Math.floor(Number(t.stamp) / 1e6) }; // the stamp is the modified time in ns
       }
       if (f?.clean && !sv) {
         const got = await sync.inspectServer(id); // the draft has no edits of its own and the server holds other text
@@ -44,7 +44,7 @@ export function useConflict({ drafts, sync }) {
       if (mine === building) model.value = null;
       return;
     }
-    if (sv) server = { text: sv.text, stamp: sv.stamp };
+    if (sv) server = { text: sv.text, stamp: sv.stamp, at: sv.updatedAt };
     if (mine !== building) return;
     const yours = f?.clean ? file.text : drafts.dialog.current().text;
     // An unedited draft takes the file's text. If the server then holds nothing or the same text, nothing differs after all: no dialog.
@@ -52,7 +52,16 @@ export function useConflict({ drafts, sync }) {
       model.value = null;
       return;
     }
-    model.value = { id, name: f?.name ?? "", yours, file, server, applyFile: !!f?.clean, sync: syncOn() };
+    model.value = {
+      id,
+      name: f?.name ?? "",
+      yours,
+      file,
+      server,
+      applyFile: !!f?.clean,
+      sync: syncOn(),
+      draftAt: drafts.dialog.current().updatedAt,
+    };
   }
 
   watch([() => drafts.fileConflict.value, () => sync.serverConflict.value, () => drafts.current.value.id], build, { immediate: true });

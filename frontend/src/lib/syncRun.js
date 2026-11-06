@@ -181,7 +181,13 @@ export function createSyncer({ device, drafts, fetchFn, onGone = () => {}, onRej
       const doc = await getDoc({ device, id, fetchFn });
       if (!doc) return null;
       const remote = doc.deleted ? { format: "markdown", content: "" } : parseData(doc);
-      return { text: remote.content, format: remote.format, stamp: `${doc.version}:${doc.updatedAt}`, deleted: !!doc.deleted };
+      return {
+        text: remote.content,
+        format: remote.format,
+        stamp: `${doc.version}:${doc.updatedAt}`,
+        updatedAt: doc.updatedAt,
+        deleted: !!doc.deleted,
+      };
     },
 
     // Before an automatic refresh from a file: has the server something this device has not seen? One conditional request. Resolves to

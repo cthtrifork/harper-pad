@@ -3,7 +3,7 @@ import { ref } from "vue";
 // What the page does when the file a draft is linked to no longer matches the draft: it looks (`checkStatus(id)` is the Go side's
 // LinkedFileStatus, which reads the stored path; the web build has no path and always answers "none").
 //
-//   conflict  null or {id, name, stamp, counts, clean, serverText}: the file's text differs from the draft and the draft has edits of its own
+//   conflict  null or {id, name, stamp, clean, serverText}: the file's text differs from the draft and the draft has edits of its own
 //             (a real conflict), or the draft has none and the server also holds something else (`clean`, `serverText`). It becomes the one
 //             Keep or Overwrite dialog (lib/conflict.js, useConflict.js); it stays until the person chooses, and is never hidden.
 //   problem   {id, reason} when the file is gone or cannot be used (deleted, moved, folder or drive gone, permission denied, now a folder,
@@ -26,7 +26,6 @@ export function createFileChange(checkStatus, auto = null) {
       id: draft.id,
       name: baseName(draft.filePath),
       stamp: s.stamp ?? "",
-      counts: s.fileLines != null ? s : null,
       clean: false,
       tick: ++tick,
       ...extra,

@@ -27,14 +27,17 @@ function setup({ status, probe = null, extraApi = {} }) {
   const api = {
     linkedFileStatus: async () => status,
     linkedFileText: async () => ({ text: FROM_FILE.content, stamp: "7" }),
-    reloadDraftFromFile: async (id) => {
-      calls.push(["reload", id]);
-      return FROM_FILE;
-    },
-    markFileDiffers: async (id) => calls.push(["mark", id]),
+    recordLinkedFile: async (id, stamp) => calls.push(["record", id, stamp]),
     saveDraft: async (d) => {
       calls.push(["saveDraft", d.content]);
-      return { id: "c".repeat(32), format: d.format, content: d.content, createdAt: 1, updatedAt: 1, filePath: "" };
+      return {
+        id: d.id || "c".repeat(32),
+        format: d.format,
+        content: d.content,
+        createdAt: 1,
+        updatedAt: 9,
+        filePath: d.id ? open.filePath : "",
+      };
     },
     ...extraApi,
   };
@@ -54,7 +57,10 @@ test("an automatic refresh from the file pushes at once, like Ctrl+S (explicit),
   const { drafts, editor, saved, calls } = setup({ status: CLEAN });
   drafts.init({ open, total: 1 });
   await settle();
-  assert.deepEqual(calls, [["reload", ID]]);
+  assert.deepEqual(calls, [
+    ["saveDraft", FROM_FILE.content],
+    ["record", ID, "7"],
+  ]);
   assert.equal(editor.value.text, "from the file\n");
   assert.deepEqual(saved, [[ID, { explicit: true }]]);
   assert.equal(drafts.refreshed.value.name, "plan.md");
@@ -63,7 +69,7 @@ test("an automatic refresh from the file pushes at once, like Ctrl+S (explicit),
 
 test("an edited draft whose file changed raises the conflict, takes nothing and pushes nothing", async () => {
   const { drafts, saved, calls } = setup({
-    status: { state: "changed", clean: false, stamp: "1", fileLines: 1, draftLines: 1, onlyInFile: 1, onlyInDraft: 1 },
+    status: { state: "changed", clean: false, stamp: "1" },
   });
   drafts.init({ open, total: 1 });
   await settle();
@@ -111,7 +117,10 @@ test("nothing is refreshed or pushed during an IME composition, and the next loo
   composing = false;
   await drafts.checkFile(); // the window came back
   await settle();
-  assert.deepEqual(calls, [["reload", ID]]);
+  assert.deepEqual(calls, [
+    ["saveDraft", FROM_FILE.content],
+    ["record", ID, "7"],
+  ]);
   assert.deepEqual(saved, [[ID, { explicit: true }]]);
 });
 
@@ -122,10 +131,7 @@ test("undoing the refresh is the person's decision: no mark on the file, the nex
   editor.value.text = open.content; // Ctrl+Z (the real editor reports the edit)
   drafts.edited();
   await settle();
-  assert.equal(
-    calls.some((c) => c[0] === "mark"),
-    false,
-  );
+  assert.equal(calls.filter((c) => c[0] === "record").length, 1, "nothing else is recorded for the file");
   assert.equal(drafts.fileState.value, "stale");
   assert.equal(drafts.refreshed.value, null);
 });
@@ -234,4 +240,22 @@ test("unlinking a struck chip clears the problem, and a failed Undo says so with
   await drafts.undoUnlink();
   assert.match(drafts.status.value || "", /./);
   assert.equal(drafts.current.value.filePath, "");
+});
+
+test("typing that starts while the file is being read: nothing is applied, nothing is recorded, and the next look tries again", async () => {
+  let release;
+  const { drafts, editor, calls } = setup({
+    status: CLEAN,
+    extraApi: { linkedFileText: () => new Promise((r) => (release = () => r({ text: FROM_FILE.content, stamp: "7" }))) },
+  });
+  drafts.init({ open, total: 1 });
+  await settle();
+  drafts.edited(); // typing began
+  release();
+  await settle();
+  assert.equal(editor.value.text, "old text\n", "the typed text stays");
+  assert.deepEqual(
+    calls.filter((c) => c[0] === "record" || c[0] === "saveDraft"),
+    [],
+  );
 });

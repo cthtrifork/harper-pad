@@ -135,8 +135,7 @@ export async function saveDraftToFile(draft, saveAs, overwrite = false) {
   );
 }
 
-// Desktop only: how the file the draft is linked to compares with the draft: {state, reason, stamp, fileLines, draftLines, onlyInFile,
-// onlyInDraft} with state "none" | "same" | "changed" | "missing" | "broken". Go reads the stored path. The web build has no path to
+// Desktop only: how the file the draft is linked to compares with the draft: {state, reason, stamp, clean} with state "none" | "same" | "changed" | "missing" | "broken". Go reads the stored path. The web build has no path to
 // look at, so it always answers "none".
 export async function linkedFileStatus(id) {
   if (isWeb) return { state: "none" };
@@ -149,15 +148,10 @@ export async function linkedFileText(id) {
   return (await bindings()).DraftService.LinkedFileText(id);
 }
 
-// Desktop only: replaces the draft's text with its file's text (Go reads the stored path) and returns the draft as stored.
-export async function reloadDraftFromFile(id) {
-  if (isWeb) throw new Error("there is no file to reload from in the web build");
-  return (await bindings()).DraftService.ReloadDraftFromFile(id);
-}
-
-// Desktop only: after a reload was undone, so that the next save of the linked file reports it as changed. Nothing is written.
-export async function markFileDiffers(id) {
-  if (!isWeb) await (await bindings()).DraftService.MarkFileDiffers(id);
+// Desktop only: makes the file's text (as `linkedFileText` returned it, with its stamp) the baseline of the draft's link, once the draft has it.
+export async function recordLinkedFile(id, stamp) {
+  if (isWeb) throw new Error("there is no file to read in the web build");
+  return (await bindings()).DraftService.RecordLinkedFile(id, stamp);
 }
 
 // Desktop only: stops linking the draft to its file; both stay as they are. Returns the draft as stored.

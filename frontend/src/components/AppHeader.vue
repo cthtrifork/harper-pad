@@ -1,5 +1,5 @@
 <script setup>
-import { fileControls } from "../lib/fileLink.js";
+import { dirtyText, fileControls } from "../lib/fileLink.js";
 import { computed, ref } from "vue";
 
 const VIEWS = [
@@ -27,6 +27,8 @@ const props = defineProps({
   fileProblem: { type: String, default: "" },
   // The desktop build can unlink a file (the x on the chip). The web build never does: Save as file is always offered there.
   canUnlink: { type: Boolean, default: false },
+  // useDrafts' fileState: "stale" means your draft has changes the file does not have yet (the dot).
+  fileState: { type: String, default: "none" },
   // The open draft is a Conflicted copy (in memory only): "Conflicted copy, from the file" and so on, or "".
   copyBadge: { type: String, default: "" },
   canSave: { type: Boolean, default: false },
@@ -49,7 +51,8 @@ const mainLabel = computed(() => {
 const mainName = computed(() => (props.syncBusy ? "Syncing..." : mainLabel.value));
 const mainDisabled = computed(() => !props.canSave || props.syncBusy || (!props.syncOn && !props.needsSave));
 // What the button also does when the draft has a file, since the label does not change for it.
-const controls = computed(() => fileControls({ filePath: props.filePath, fileProblem: props.fileProblem, canUnlink: props.canUnlink }));
+const controls = computed(() => fileControls({ filePath: props.filePath, fileProblem: props.fileProblem, canUnlink: props.canUnlink, fileState: props.fileState }));
+const dirtyText_ = computed(() => (controls.value.showDirty ? dirtyText(props.fileName) : ""));
 const problemText = computed(() => (props.fileProblem ? `Not linked: ${props.fileProblem}. Ctrl+S tries again` : ""));
 const mainTitle = computed(() => (props.filePath ? `Also writes ${props.fileName} if the draft changed` : ""));
 
@@ -86,9 +89,11 @@ function onMain() {
     </span>
     <span class="sep" aria-hidden="true"></span>
     <!-- The same chip as the draft badge: the file's name, and its folder in muted type when there is room. -->
-    <span v-if="filePath" class="badge on-disk" :class="{ broken: fileProblem }" :title="problemText || (fileDir ? `${fileDir}/${fileName}` : fileName)">
+    <span v-if="filePath" class="badge on-disk" :class="{ broken: fileProblem }" :title="problemText || dirtyText_ || (fileDir ? `${fileDir}/${fileName}` : fileName)">
       <svg v-if="fileProblem" class="broken-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5l5 9H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path d="M6 5v2.5M6 9v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>
       <span id="file-name" class="file-name">{{ fileName }}</span>
+      <Transition name="dot"><span v-if="controls.showDirty" class="dirty-dot" aria-hidden="true"></span></Transition>
+      <span v-if="controls.showDirty" class="sr-only">{{ dirtyText_ }}</span>
       <span v-if="fileDir" class="folder">in {{ fileDir }}</span>
       <button v-if="controls.showChipX" type="button" class="chip-x" :aria-label="`Unlink ${fileName}`" :title="`Unlink ${fileName}`" @click="emit('unlink')">
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6m0-6L2 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
@@ -96,7 +101,7 @@ function onMain() {
     </span>
     <span v-if="!filePath" id="file-badge" class="badge">Draft, not on disk</span>
     <span v-if="copyBadge" class="badge copy" :title="copyBadge">{{ copyBadge }}</span>
-    <span class="sr-only" role="status">{{ problemText }}</span>
+    <span class="sr-only" role="status">{{ problemText || dirtyText_ }}</span>
     <span class="spacer"></span>
     <span v-if="isMarkdown && !showDrawer" class="sep" aria-hidden="true"></span>
     <div v-if="isMarkdown && !showDrawer" class="views" :data-mode="mode" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">

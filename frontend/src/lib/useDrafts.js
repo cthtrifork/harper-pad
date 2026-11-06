@@ -67,6 +67,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
   let checkDone = Promise.resolve(); // the look at the file of the draft just opened: sync waits for it, so the two never race
   const refreshed = ref(null); // {name, tick} while the "Updated from <file>" toast shows
   let dirty = false;
+  let quietSave = false; // set while the draft takes the file's text: the caller says to sync (or not), so the save does not
   let stored = null; // {text, format} the saved draft holds, so a save that would change nothing is skipped and the timestamp stays
   let edits = 0;
   let timer = null;
@@ -116,7 +117,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     { immediate: true, flush: "sync" },
   );
 
-  const asCurrent = (d) => ({ id: d.id, createdAt: d.createdAt, format: d.format, filePath: d.filePath ?? "" });
+  const asCurrent = (d) => ({ id: d.id, createdAt: d.createdAt, updatedAt: d.updatedAt, format: d.format, filePath: d.filePath ?? "" });
 
   function setCurrent(d) {
     refreshed.value = null;
@@ -189,7 +190,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
         state.value = "dirty"; // typed during the save: its own timer is already running
       }
       refreshListSoon();
-      onSaved?.(d.id);
+      if (!quietSave) onSaved?.(d.id);
     } catch (err) {
       error.value = `Not saved: ${message(err)}`;
       state.value = "error"; // the text stays dirty, so the next edit or flush tries again
@@ -268,7 +269,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     },
     // The draft takes the file's text (it has no edits of its own), without pushing: the dialog pushes.
     applyFile: () => reloadFromFile({ push: false }),
-    current: () => ({ id: current.value.id, text: editor.value?.getText() ?? "" }),
+    current: () => ({ id: current.value.id, text: editor.value?.getText() ?? "", updatedAt: current.value.updatedAt }),
   };
 
   // "Reload from file" in the toast: the draft's text becomes the file's text, as one edit that Ctrl+Z takes back. Go reads the stored path and
@@ -283,26 +284,27 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     chain = chain.then(async () => {
       try {
         if (auto && (edits !== startEdits || !canAutoRefresh())) return; // the next look tries again
-        const d = await be.reloadDraftFromFile(id);
+        const f = await be.linkedFileText(id);
         if (current.value.id !== id) return; // another draft was opened meanwhile
-        if (auto && (edits !== startEdits || !canAutoRefresh())) {
-          // Typing began while the file was read: the editor keeps the typed text, and the file is marked as differing so Ctrl+S asks.
-          await be.markFileDiffers(id);
-          return;
-        }
+        // Typing began while the file was read: nothing is applied (the editor keeps the typed text) and the next look tries again.
+        if (auto && (edits !== startEdits || !canAutoRefresh())) return;
+        editor.value?.replaceText(f.text); // one edit that Ctrl+Z takes back; it reports an edit, which the draft's own update settles below
         clearTimeout(timer);
         timer = null;
-        editor.value?.replaceText(d.content); // reports an edit, which the lines below settle
-        stored = { text: d.content, format: d.format };
-        current.value = asCurrent(d);
-        dirty = false;
+        quietSave = true;
+        try {
+          await saveNow(); // the normal update of the draft (not through the chain: this already runs in it)
+        } finally {
+          quietSave = false;
+        }
+        await be.recordLinkedFile(id, f.stamp).catch(() => {}); // the file is the baseline now; if it changed again, the next look finds that
         fileState.value = "synced";
         state.value = "saved";
         if (auto) refreshed.value = { name: auto, tick: Date.now() };
         refreshListSoon();
         if (push) onSaved?.(id, { explicit: true }); // the draft changed to match the file: push it at once, like Ctrl+S, so no other device pulls stale text
       } catch (err) {
-        error.value = `Could not reload ${fileName.value}: ${message(err)}`;
+        error.value = `Could not read ${fileName.value}: ${message(err)}`;
         state.value = "error";
       }
     });

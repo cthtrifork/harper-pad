@@ -21,6 +21,37 @@ export const COPY_LABELS = {
 
 const stampOf = (side) => (side ? side.stamp : null);
 
+import { whenLabel } from "./when.js";
+
+// Lines of a text: "" has none, and a final newline does not start another.
+export function lineCount(text) {
+  return text === "" ? 0 : text.replace(/\n$/, "").split("\n").length;
+}
+
+// "14:07" for today, else the date label ("Yesterday", "29 Oct"); "" when the time is not known.
+function when(ms, now) {
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  const l = whenLabel(ms, now);
+  return l.startsWith("Today, ") ? l.slice(7) : l;
+}
+
+// The versions involved, one short row each, at most three: your draft (when edited), the file, the server. `m.draftAt`, `m.file.at` and
+// `m.server.at` are times in ms and may be missing; a missing time leaves the time out. An unedited draft has no row of its own: the file's row
+// is labelled as yours. Rows: {label, lines: "4 lines", when: "edited 14:07" or ""}.
+export function summaryRows(m, now = new Date()) {
+  const row = (label, text, verb, ms) => {
+    const n = lineCount(text);
+    const at = when(ms, now);
+    return { label, lines: `${n} ${n === 1 ? "line" : "lines"}`, when: at ? `${verb} ${at}` : "" };
+  };
+  const name = m.name || "The file";
+  return [
+    !m.applyFile && row("Your draft", m.yours, "edited", m.draftAt),
+    m.file && row(m.applyFile ? `${name}, yours` : name, m.file.text, "changed", m.file.at),
+    m.server && row("The server", m.server.text, "changed", m.server.at),
+  ].filter(Boolean);
+}
+
 // What the dialog says: which versions differ, and whose text each choice loses. Plain and specific.
 export function describeConflict(m) {
   const both = !!m.file && !!m.server;

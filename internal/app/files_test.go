@@ -219,6 +219,29 @@ func linked(t *testing.T, content string) (*DraftService, string, string) {
 	return s, r.Draft.ID, target
 }
 
+// reloadAsPage does what the page does to take the file's text into the draft: read it, update the draft through the normal path, then record
+// the file as the baseline.
+func reloadAsPage(s *DraftService, id string) (store.Draft, error) {
+	ft, err := s.LinkedFileText(id)
+	if err != nil {
+		return store.Draft{}, err
+	}
+	d, err := s.GetDraft(id)
+	if err != nil {
+		return store.Draft{}, err
+	}
+	d.Content = ft.Text
+	saved, err := s.SaveDraft(d)
+	if err != nil {
+		return store.Draft{}, err
+	}
+	if err := s.RecordLinkedFile(id, ft.Stamp); err != nil {
+		return store.Draft{}, err
+	}
+	saved.FilePath = d.FilePath
+	return saved, nil
+}
+
 // outside replaces the file's text as another program would, with a modification time an hour on.
 func outside(t *testing.T, path, text string) {
 	t.Helper()
@@ -265,10 +288,10 @@ func TestLinkedFileStatusScenarios(t *testing.T) {
 		}
 	}
 
-	// Changed text: counts of lines.
+	// Changed text.
 	outside(t, target, "one\nTWO\nthree\nfour\n")
 	c := state(t, s, id)
-	if c.State != FileChanged || c.FileLines != 4 || c.DraftLines != 3 || c.OnlyInFile != 2 || c.OnlyInDraft != 1 || c.Stamp == "" {
+	if c.State != FileChanged || c.Stamp == "" {
 		t.Errorf("changed file = %+v", c)
 	}
 	// It stays changed until the person decides: asking again does not re-baseline.
@@ -333,8 +356,8 @@ func TestSaveWithTouchedFileIsNoConflict(t *testing.T) {
 }
 
 func TestSaveRefusesToOverwriteWhatIsNotText(t *testing.T) {
-	big := strings.Repeat("x", store.MaxContentBytes+1)
-	for name, content := range map[string]string{"binary": "\x00\x01\x02 PNG", "not utf-8": "\xff\xfe\xfd", "over 1 MiB": big} {
+	big := strings.Repeat("x", 2*store.MaxContentBytes+1) // a write reads up to twice the draft limit, so a CRLF file made from a full draft is read whole
+	for name, content := range map[string]string{"binary": "\x00\x01\x02 PNG", "not utf-8": "\xff\xfe\xfd", "too large": big} {
 		t.Run(name, func(t *testing.T) {
 			s, id, target := linked(t, "one")
 			outside(t, target, content)
@@ -394,7 +417,7 @@ func TestUndoUnlinkRestoresTheSameLinkAndBaseline(t *testing.T) {
 	}
 	st, _ := s.db.open()
 	a, _ := st.Get(id)
-	if a.FileMTime != b.FileMTime || a.FileHash != b.FileHash || a.FileSize != b.FileSize || a.FileMTime == 0 {
+	if a.FileMTime != b.FileMTime || a.FileHash != b.FileHash || a.FileMTime == 0 {
 		t.Errorf("baseline changed: before %+v, after %+v", b, a)
 	}
 	// With the baseline back, an untouched file is still "same" and a save writes without a conflict.
@@ -424,10 +447,10 @@ func TestUndoUnlinkRestoresTheSameLinkAndBaseline(t *testing.T) {
 	}
 }
 
-func TestReloadDraftFromFile(t *testing.T) {
+func TestTakingTheFilesTextIntoTheDraft(t *testing.T) {
 	s, id, target := linked(t, "mine")
 	outside(t, target, "theirs")
-	d, err := s.ReloadDraftFromFile(id)
+	d, err := reloadAsPage(s, id)
 	if err != nil || d.Content != "theirs" || d.FilePath != target {
 		t.Fatalf("reload = %+v, %v", d, err)
 	}
@@ -437,7 +460,7 @@ func TestReloadDraftFromFile(t *testing.T) {
 	if err := os.WriteFile(target, []byte{0xff, 0xfe, 'x'}, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReloadDraftFromFile(id); err == nil {
+	if _, err := reloadAsPage(s, id); err == nil {
 		t.Error("reloaded a file that is not UTF-8")
 	}
 	if got, _ := s.GetDraft(id); got.Content != "theirs" {
@@ -446,16 +469,16 @@ func TestReloadDraftFromFile(t *testing.T) {
 	if err := os.Remove(target); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReloadDraftFromFile(id); err == nil {
+	if _, err := reloadAsPage(s, id); err == nil {
 		t.Error("reloaded a file that is gone")
 	}
 	plain, _ := s.SaveDraft(store.Draft{Content: "plain"})
-	if _, err := s.ReloadDraftFromFile(plain.ID); err == nil {
+	if _, err := reloadAsPage(s, plain.ID); err == nil {
 		t.Error("reloaded a draft that has no file")
 	}
 }
 
-func TestWriteNeverTruncatesOnFailedTemp(t *testing.T) {
+func TestAtomicWriteFailureLeavesTheFileWhole(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Getuid() == 0 {
 		t.Skip("needs a read-only folder that root and Windows ignore")
 	}
@@ -464,20 +487,20 @@ func TestWriteNeverTruncatesOnFailedTemp(t *testing.T) {
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(dir, 0o555); err != nil { // no temp file can be made; the file itself is writable
+	if err := os.Chmod(dir, 0o555); err != nil { // no temporary file can be made beside it
 		t.Fatal(err)
 	}
 	defer func() { _ = os.Chmod(dir, 0o755) }()
-	if err := writeFileAtomic(path, []byte("new")); err != nil {
-		t.Fatalf("in-place fallback failed: %v", err)
+	err := writeFileAtomic(path, []byte("new"))
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("write = %v, want permission denied", err)
 	}
-	if got, _ := os.ReadFile(path); string(got) != "new" {
-		t.Errorf("file = %q", got)
+	if got, _ := os.ReadFile(path); string(got) != "old" {
+		t.Errorf("file = %q: a failed write must leave it whole", got)
 	}
-	// A temp error that is not about creating or renaming is not retried in place.
-	var noTemp *tempUnusable
-	if errors.As(errors.New("no space left on device"), &noTemp) {
-		t.Error("a plain error counts as an unusable temp file")
+	left, _ := os.ReadDir(dir)
+	if len(left) != 1 {
+		t.Errorf("a temporary file was left behind: %v", left)
 	}
 }
 
@@ -493,7 +516,7 @@ func TestReloadNormalizesAndOverwriteKeepsCRLF(t *testing.T) {
 	if err := os.WriteFile(target, []byte("one\r\ntwo\rthree\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	d, err := s.ReloadDraftFromFile(id)
+	d, err := reloadAsPage(s, id)
 	if err != nil || d.Content != "one\ntwo\nthree\n" {
 		t.Fatalf("reload = %q, %v", d.Content, err)
 	}
@@ -514,44 +537,6 @@ func TestReloadNormalizesAndOverwriteKeepsCRLF(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(target); string(got) != "one\nedited\n" {
 		t.Errorf("file = %q", got)
-	}
-}
-
-func TestMarkFileDiffersMakesTheNextSaveWarn(t *testing.T) {
-	s := newTestServices(t).Drafts
-	target := filepath.Join(t.TempDir(), "a.md")
-	s.pickPath = func(string, string) (string, error) { return target, nil }
-	r, err := s.SaveDraftToFile(store.Draft{Content: "old"}, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := r.Draft
-	if err := os.WriteFile(target, []byte("theirs"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ReloadDraftFromFile(d.ID); err != nil {
-		t.Fatal(err)
-	}
-	// Typing began while the file was being read, so the page marks the file as differing: the next save must not replace it silently.
-	if err := s.MarkFileDiffers(d.ID); err != nil {
-		t.Fatal(err)
-	}
-	d.Content = "old"
-	if _, err := s.SaveDraft(d); err != nil { // the autosave of the undone text
-		t.Fatal(err)
-	}
-	if c, _ := s.LinkedFileStatus(d.ID); c.State != FileChanged {
-		t.Error("the file is not reported as differing")
-	}
-	d.Content = "old, again"
-	if r, err = s.SaveDraftToFile(d, false, false); err != nil || !r.Conflict {
-		t.Fatalf("save = %+v, %v", r, err)
-	}
-	if got, _ := os.ReadFile(target); string(got) != "theirs" {
-		t.Errorf("file = %q", got)
-	}
-	if err := s.MarkFileDiffers("0123456789abcdef0123456789abcdef"); !errors.Is(err, store.ErrNotFound) {
-		t.Errorf("unknown id = %v", err)
 	}
 }
 
@@ -584,20 +569,12 @@ func TestChangedFileIsCleanOnlyWithoutEditsOfItsOwn(t *testing.T) {
 	}
 
 	// After a reload the baseline is the file; a later outside change is clean again.
-	if _, err := s.ReloadDraftFromFile(id); err != nil {
+	if _, err := reloadAsPage(s, id); err != nil {
 		t.Fatal(err)
 	}
 	outside(t, target, "three\r\n")
 	if c := state(t, s, id); c.State != FileChanged || !c.Clean {
 		t.Fatalf("after reload = %+v", c)
-	}
-
-	// MarkFileDiffers (an undone reload) forgets it, so the bar is shown instead of refreshing again.
-	if err := s.MarkFileDiffers(id); err != nil {
-		t.Fatal(err)
-	}
-	if c := state(t, s, id); c.State != FileChanged || c.Clean {
-		t.Fatalf("marked file = %+v", c)
 	}
 
 	// A draft linked before the hash existed (no hash) is never clean.
@@ -636,7 +613,7 @@ func TestUnreachableFileIsBrokenNotAConflict(t *testing.T) {
 func TestUndoneReloadIsMyVersionWinsWhileTheFileIsTheReloadedOne(t *testing.T) {
 	s, id, target := linked(t, "old\n")
 	outside(t, target, "theirs\n")
-	if _, err := s.ReloadDraftFromFile(id); err != nil {
+	if _, err := reloadAsPage(s, id); err != nil {
 		t.Fatal(err)
 	}
 	// Ctrl+Z brings the old text back (the autosave stores it). The file is still the version that was reloaded, so the save just writes.
@@ -657,7 +634,7 @@ func TestUndoneReloadIsMyVersionWinsWhileTheFileIsTheReloadedOne(t *testing.T) {
 func TestUndoneReloadThenFileChangedAgainIsAConflict(t *testing.T) {
 	s, id, target := linked(t, "old\n")
 	outside(t, target, "theirs\n")
-	if _, err := s.ReloadDraftFromFile(id); err != nil {
+	if _, err := reloadAsPage(s, id); err != nil {
 		t.Fatal(err)
 	}
 	d, _ := s.GetDraft(id)
@@ -767,5 +744,64 @@ func TestLinkedFileText(t *testing.T) {
 	plain, _ := s.SaveDraft(store.Draft{Content: "plain"})
 	if _, err := s.LinkedFileText(plain.ID); err == nil {
 		t.Error("read the file of a draft that has none")
+	}
+}
+
+func TestAFullDraftWrittenWithCRLFIsReadWholeAndWrittenAgain(t *testing.T) {
+	line := strings.Repeat("x", 62) + "\n" // 63 bytes; as CRLF 64
+	full := strings.Repeat(line, store.MaxContentBytes/len(line))
+	s, id, target := linked(t, "start")
+	if err := os.WriteFile(target, []byte(strings.ReplaceAll(full, "\n", "\r\n")), 0o644); err != nil { // longer than 1 MiB on disk
+		t.Fatal(err)
+	}
+	st, _ := s.db.open()
+	if err := st.SetFile(id, target, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetFileHash(id, full); err != nil { // the baseline is that text
+		t.Fatal(err)
+	}
+	d, _ := s.GetDraft(id)
+	d.Content = full[:len(full)-len(line)] + "edited\n"
+	if len(d.Content) > store.MaxContentBytes {
+		t.Fatal("the draft is over the limit")
+	}
+	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+		t.Fatalf("save = %+v, %v", r, err)
+	}
+}
+
+func TestALinkWithoutAHashComparesByText(t *testing.T) {
+	s, id, target := linked(t, "one\n")
+	st, _ := s.db.open()
+	if err := st.SetFile(id, target, 1); err != nil { // clears the hash
+		t.Fatal(err)
+	}
+	d, _ := s.GetDraft(id)
+	d.Content = "one edited\n"
+	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict { // the file holds the draft as stored: unchanged
+		t.Fatalf("save = %+v, %v", r, err)
+	}
+	if err := st.SetFile(id, target, 1); err != nil {
+		t.Fatal(err)
+	}
+	outside(t, target, "something else\n")
+	d.Content = "two\n"
+	if r, err := s.SaveDraftToFile(d, false, false); err != nil || !r.Conflict { // any other text asks
+		t.Fatalf("save = %+v, %v", r, err)
+	}
+}
+
+func TestAFileChangedBackToTheBaselineTextIsNotAConflict(t *testing.T) {
+	s, id, target := linked(t, "base\n")
+	d, _ := s.GetDraft(id)
+	d.Content = "base, edited\n"
+	if _, err := s.SaveDraft(d); err != nil {
+		t.Fatal(err)
+	}
+	outside(t, target, "other\n")
+	outside(t, target, "base\r\n") // back to the text this app left, with a later time
+	if c := state(t, s, id); c.State != FileSame {
+		t.Errorf("status = %+v", c)
 	}
 }

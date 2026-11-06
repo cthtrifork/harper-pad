@@ -3,7 +3,7 @@ import test from "node:test";
 import { createFileChange, shortReason } from "./fileChange.js";
 
 const draft = { id: "a".repeat(32), filePath: "/home/me/notes/plan.md" };
-const changed = { state: "changed", stamp: "1", fileLines: 4, draftLines: 3, onlyInFile: 2, onlyInDraft: 1 };
+const changed = { state: "changed", stamp: "1" };
 const clean = { ...changed, clean: true };
 const answers = (s) => async () => s;
 
@@ -93,7 +93,6 @@ test("the conflict stays until it is answered: a look at the same version keeps 
 test("raise falls back to a plain conflict when the details are not available (the web build)", async () => {
   const web = createFileChange(answers({ state: "none" }));
   await web.raise(draft);
-  assert.equal(web.conflict.value.counts, null);
   const broken = createFileChange(async () => {
     throw new Error("x");
   });

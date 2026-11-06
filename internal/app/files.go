@@ -81,11 +81,10 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 		return FileSave{}, err
 	}
 	d.FilePath = ""
-	var base baseline
-	var oldContent string
+	var storedHash, oldContent string
 	if d.ID != "" {
 		if old, err := st.Get(d.ID); err == nil {
-			d.FilePath, base, oldContent = old.FilePath, baseline{old.FileMTime, old.FileHash, old.FileSize}, old.Content
+			d.FilePath, storedHash, oldContent = old.FilePath, old.FileHash, old.Content
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return FileSave{}, err
 		}
@@ -123,8 +122,8 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 	}
 	saved.FilePath = d.FilePath
 	if !picked {
-		// The file is checked against what this app last left there (mtime, size, content hash), and read again, before every write.
-		conflict, err := checkBeforeWrite(path, base, overwrite, oldContent, d.Content)
+		// The file is read again before every write and compared with what this app last left there.
+		conflict, err := checkBeforeWrite(path, storedHash, overwrite, oldContent, d.Content)
 		if err != nil {
 			return FileSave{}, err
 		}
@@ -139,11 +138,11 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 	if err := writeFileAtomic(path, []byte(out)); err != nil {
 		return FileSave{}, fmt.Errorf("could not write %s: %w", path, err)
 	}
-	var mtime, size int64 = 0, -1
+	var mtime int64
 	if fi, err := os.Stat(path); err == nil {
-		mtime, size = fi.ModTime().UnixNano(), fi.Size()
+		mtime = fi.ModTime().UnixNano()
 	}
-	unlinked, err := st.LinkFile(saved.ID, path, mtime, d.Content, size)
+	unlinked, err := st.LinkFile(saved.ID, path, mtime, d.Content)
 	if err != nil {
 		return FileSave{}, err
 	}
@@ -151,38 +150,19 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 	return FileSave{Draft: saved, UnlinkedFrom: unlinked}, nil
 }
 
-// baseline is the file version this app last left (or took) at the draft's path: its mtime in Unix nanoseconds (0 none, -1 "differs",
-// see MarkFileDiffers), the hash of its text and its size in bytes (-1 unknown).
-type baseline struct {
-	mtime int64
-	hash  string
-	size  int64
-}
-
-// checkBeforeWrite is what runs before every write to the draft's existing file, with the file read again just now:
-//   - a file that exists but is binary, not UTF-8 or over 1 MiB is never replaced, with or without overwrite (an error);
-//   - otherwise the write is a conflict, unless overwrite is set, when the file is not the version in `base`: its mtime, size or text hash
-//     differs. The last case is a file changed with its mtime kept (rsync -t). A file whose text is the draft as stored before this save,
-//     or the text being saved, is not a conflict (touched, or rewritten by a sync client). After MarkFileDiffers (mtime -1) only the text being
-//     saved counts. A file that was reloaded and then undone is still the baseline (its mtime and hash were recorded by the reload), so a save
-//     writes it: the undo was the person's decision;
+// checkBeforeWrite runs before every write to the draft's existing file, with the file read again just now (up to twice the draft limit, so a
+// CRLF file written from a 1 MiB draft is read whole):
+//   - a file that exists but is binary, not UTF-8 or too large is never replaced, with or without overwrite (an error);
+//   - otherwise the write is a conflict, unless overwrite is set, when the file's text differs from all of: the text this app last left there
+//     (`storedHash`, the hash of its normalised text; "" for a link that has none), the draft as stored before this save, and the text being
+//     saved. So a file that was only touched, rewritten with the same text, or reloaded and then undone is written; one whose text changed is
+//     not, whatever its modified time says (rsync -t);
 //   - a missing file is written again, and a path that cannot be read at all is attempted and fails loudly.
-//
-// A draft linked before the hash existed (no hash) is trusted while its mtime is unchanged.
-func checkBeforeWrite(path string, b baseline, overwrite bool, ownTexts ...string) (conflict bool, err error) {
-	fi, err := os.Stat(path)
-	if err != nil {
+func checkBeforeWrite(path, storedHash string, overwrite bool, ownTexts ...string) (conflict bool, err error) {
+	if _, err := os.Stat(path); err != nil {
 		return false, nil
 	}
-	sameMTime := b.mtime > 0 && fi.ModTime().UnixNano() == b.mtime
-	if sameMTime && b.hash == "" && !overwrite {
-		return false, nil
-	}
-	limit := int64(store.MaxContentBytes)
-	if sameMTime && b.size >= 0 && fi.Size() == b.size {
-		limit *= 2 // our own file: CRLF can make a 1 MiB draft up to twice as long on disk
-	}
-	raw, rerr := readTextFileLimit(path, limit)
+	raw, rerr := readTextFileLimit(path, 2*store.MaxContentBytes)
 	if rerr != nil {
 		var nt *notText
 		if errors.As(rerr, &nt) {
@@ -190,15 +170,12 @@ func checkBeforeWrite(path string, b baseline, overwrite bool, ownTexts ...strin
 		}
 		return false, nil
 	}
-	if overwrite || b.mtime == 0 {
+	if overwrite {
 		return false, nil
 	}
 	got := normalizeNewlines(raw)
-	if sameMTime && b.hash != "" && (b.size < 0 || fi.Size() == b.size) && store.FileContentHash(got) == b.hash {
-		return false, nil // the version we left
-	}
-	if b.mtime < 0 { // MarkFileDiffers: only the text being saved counts as ours
-		ownTexts = ownTexts[len(ownTexts)-1:]
+	if storedHash != "" && store.FileContentHash(got) == storedHash {
+		return false, nil
 	}
 	for _, t := range ownTexts {
 		if got == normalizeNewlines(t) {
@@ -227,24 +204,6 @@ func usesCRLF(path string) bool {
 	return i > 0 && raw[i-1] == '\r'
 }
 
-// MarkFileDiffers records that the draft's file no longer matches what the draft holds (the page took the file's text while the person was typing,
-// so the file has a version they never saw), so the next save of
-// the file reports it as changed instead of replacing it silently. Nothing is written to the file.
-func (s *DraftService) MarkFileDiffers(id string) error {
-	st, err := s.db.open()
-	if err != nil {
-		return err
-	}
-	d, err := st.Get(id)
-	if err != nil {
-		return err
-	}
-	if d.FilePath == "" {
-		return nil
-	}
-	return st.SetFile(id, d.FilePath, -1) // no real file has this mtime
-}
-
 // File states, the answer of LinkedFileStatus.
 const (
 	FileNone    = "none"    // the draft has no file
@@ -261,42 +220,9 @@ type FileCheck struct {
 	Reason string `json:"reason"`
 	// Stamp is the file's mtime as text (it does not fit a JavaScript number); the page uses it to remember "keep mine" for this version.
 	Stamp string `json:"stamp"`
-	// For FileChanged: the line counts of the file and the draft, and how many lines are only in the file or only in the draft.
-	FileLines   int `json:"fileLines"`
-	DraftLines  int `json:"draftLines"`
-	OnlyInFile  int `json:"onlyInFile"`
-	OnlyInDraft int `json:"onlyInDraft"`
 	// Clean is true for FileChanged when the draft has no edits of its own since it last matched the file (its text still has the hash kept
-	// then), so the file's text can replace it without losing anything. False when that is unknown (an older database) or after
-	// MarkFileDiffers.
+	// then), so the file's text can replace it without losing anything. False when that is unknown (a link without a hash).
 	Clean bool `json:"clean"`
-}
-
-// lineCount is the number of lines in text ("" has none; a final newline does not start another).
-func lineCount(s string) int {
-	if s == "" {
-		return 0
-	}
-	return len(strings.Split(strings.TrimSuffix(s, "\n"), "\n"))
-}
-
-// lineDiff counts the lines only in a and only in b, ignoring order: a summary, not a diff.
-func lineDiff(a, b string) (onlyA, onlyB int) {
-	counts := map[string]int{}
-	for _, l := range strings.Split(strings.TrimSuffix(a, "\n"), "\n") {
-		counts[l]++
-	}
-	for _, l := range strings.Split(strings.TrimSuffix(b, "\n"), "\n") {
-		counts[l]--
-	}
-	for _, n := range counts {
-		if n > 0 {
-			onlyA += n
-		} else {
-			onlyB -= n
-		}
-	}
-	return onlyA, onlyB
 }
 
 // notText is the error for a file that exists but is binary, not UTF-8 or too large, as opposed to one that cannot be reached.
@@ -374,23 +300,23 @@ func (s *DraftService) LinkedFileStatus(id string) (FileCheck, error) {
 	if err != nil {
 		return FileCheck{State: FileBroken, Reason: err.Error()}, nil
 	}
-	got, mine := normalizeNewlines(raw), normalizeNewlines(d.Content)
-	if got == mine {
-		if err := st.SetFile(id, path, mtime); err != nil { // touched only: the new baseline
+	got := normalizeNewlines(raw)
+	if got == normalizeNewlines(d.Content) || store.FileContentHash(got) == d.FileHash {
+		// Only the mtime moved: the text is the draft's, or the one this app last left. That is the baseline again.
+		if err := st.SetFile(id, path, mtime); err != nil {
 			return FileCheck{}, err
 		}
-		if err := st.SetFileHash(id, d.Content, fi.Size()); err != nil {
+		if err := st.SetFileHash(id, got); err != nil {
 			return FileCheck{}, err
 		}
 		return FileCheck{State: FileSame, Stamp: stamp}, nil
 	}
-	onlyFile, onlyDraft := lineDiff(got, mine)
-	return FileCheck{State: FileChanged, Stamp: stamp, FileLines: lineCount(got), DraftLines: lineCount(mine), OnlyInFile: onlyFile, OnlyInDraft: onlyDraft, Clean: d.FileHash != "" && d.FileHash == store.FileContentHash(d.Content)}, nil
+	return FileCheck{State: FileChanged, Stamp: stamp, Clean: d.FileHash != "" && d.FileHash == store.FileContentHash(d.Content)}, nil
 }
 
 // LinkedFileText returns the text of the draft's file (CRLF as LF), read from the stored path, with the file's version stamp (its mtime as
 // text). It is for the page's conflict dialog: the text of a Conflicted copy, and the stamp it compares again when the person chooses.
-// Errors as ReloadDraftFromFile does (not there, not text, too large).
+// An error says why when the file is not there, not text or too large.
 func (s *DraftService) LinkedFileText(id string) (FileText, error) {
 	st, err := s.db.open()
 	if err != nil {
@@ -467,88 +393,64 @@ func (s *DraftService) UndoUnlinkDraftFile(id string) (store.Draft, error) {
 	if cur.FilePath != "" {
 		return store.Draft{}, errors.New("the draft is linked to a file already")
 	}
-	if err := st.RestoreFile(id, before.FilePath, before.FileMTime, before.FileHash, before.FileSize); err != nil {
+	if err := st.RestoreFile(id, before.FilePath, before.FileMTime, before.FileHash); err != nil {
 		return store.Draft{}, err
 	}
 	return st.Get(id)
 }
 
-// ReloadDraftFromFile replaces the draft's text with the contents of its file and returns the draft as stored. The path is the one
-// stored for the draft, never one from the page. The file is taken as the new baseline (its mtime is recorded), so the next save does
-// not report it as changed. A file that is missing, not a regular file, too large or not valid UTF-8 is an error and nothing changes.
-func (s *DraftService) ReloadDraftFromFile(id string) (store.Draft, error) {
+// RecordLinkedFile makes the file's current text the baseline of the draft's link (its modified time and text hash), once the page has taken
+// that text into the draft: the draft is clean afterwards, and a later change of the file is a change. `stamp` is the one LinkedFileText
+// returned; if the file changed again since, nothing is recorded and the error says so.
+func (s *DraftService) RecordLinkedFile(id, stamp string) error {
 	st, err := s.db.open()
 	if err != nil {
-		return store.Draft{}, err
+		return err
 	}
 	d, err := st.Get(id)
 	if err != nil {
-		return store.Draft{}, err
+		return err
 	}
-	path := d.FilePath
-	if path == "" {
-		return store.Draft{}, errors.New("the draft has no file")
+	if d.FilePath == "" {
+		return errors.New("the draft has no file")
 	}
-	fi, err := os.Stat(path) // before reading: a change in between is noticed by the next save
+	fi, err := os.Stat(d.FilePath)
 	if err != nil {
-		return store.Draft{}, fmt.Errorf("could not read %s: %w", path, readError(err))
+		return fmt.Errorf("could not read %s: %w", d.FilePath, readError(err))
 	}
-	raw, err := readTextFile(path)
+	if strconv.FormatInt(fi.ModTime().UnixNano(), 10) != stamp {
+		return errors.New("the file changed again")
+	}
+	raw, err := readTextFile(d.FilePath)
 	if err != nil {
-		return store.Draft{}, fmt.Errorf("could not read %s: %w", path, err)
+		return fmt.Errorf("could not read %s: %w", d.FilePath, err)
 	}
-	d.Content = normalizeNewlines(raw) // the editor holds "\n" only, so the stored text must too
-	saved, err := st.Save(d)
-	if err != nil {
-		return store.Draft{}, err
+	if err := st.SetFile(id, d.FilePath, fi.ModTime().UnixNano()); err != nil {
+		return err
 	}
-	if err := st.SetFile(saved.ID, path, fi.ModTime().UnixNano()); err != nil {
-		return store.Draft{}, err
-	}
-	if err := st.SetFileHash(saved.ID, saved.Content, fi.Size()); err != nil {
-		return store.Draft{}, err
-	}
-	saved.FilePath = path
-	return saved, nil
+	return st.SetFileHash(id, normalizeNewlines(raw))
 }
 
-// writeFileAtomic writes to a temporary file beside path and renames it over path, so a crash never leaves a half-written file.
-// Symbolic links are followed and an existing file keeps its permissions. Where a temporary file cannot be used (a read-only
-// folder, a rename Windows blocks) an existing file is written in place instead.
+// writeFileAtomic writes to a temporary file beside path and renames it over path, so a crash or a failed write never leaves a half-written
+// file: the write is whole or it fails with the reason. Symbolic links are followed and an existing file keeps its permissions.
 func writeFileAtomic(path string, data []byte) error {
 	if real, err := filepath.EvalSymlinks(path); err == nil {
 		path = real
 	}
 	mode := os.FileMode(0o644)
-	existing := false
 	if fi, err := os.Stat(path); err == nil {
 		if !fi.Mode().IsRegular() {
 			return errors.New("it is not a regular file")
 		}
-		mode, existing = fi.Mode().Perm(), true
+		mode = fi.Mode().Perm()
 	}
-	err := writeViaTemp(path, data, mode)
-	var noTemp *tempUnusable
-	if err != nil && existing && errors.As(err, &noTemp) {
-		// Only when no temporary file could be made or moved into place. A failed write (disk full) is not retried in place: that would
-		// truncate the file that is still intact.
-		if werr := os.WriteFile(path, data, mode); werr == nil {
-			return nil
-		}
-	}
-	return err
+	return writeViaTemp(path, data, mode)
 }
-
-// tempUnusable marks a failure to create the temporary file or to rename it over the target, the cases where writing in place may work.
-type tempUnusable struct{ err error }
-
-func (e *tempUnusable) Error() string { return e.err.Error() }
-func (e *tempUnusable) Unwrap() error { return e.err }
 
 func writeViaTemp(path string, data []byte, mode os.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".harper-pad-*")
 	if err != nil {
-		return &tempUnusable{err}
+		return err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }() // a no-op after a successful rename
 	if _, err := tmp.Write(data); err != nil {
@@ -566,8 +468,5 @@ func writeViaTemp(path string, data []byte, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return &tempUnusable{err}
-	}
-	return nil
+	return os.Rename(tmp.Name(), path)
 }

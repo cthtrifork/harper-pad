@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { copiesFor, describeConflict, resolveConflict } from "./conflict.js";
+import { copiesFor, describeConflict, lineCount, resolveConflict, summaryRows } from "./conflict.js";
 
 const side = (text, stamp = "1") => ({ text, stamp });
 
@@ -158,4 +158,48 @@ test("when the file and the server hold the same text it is said once, in the si
   );
   const two = describeConflict({ name: "plan.md", yours: "a", file: side("one"), server: side("two") });
   assert.match(two.keep, /The text now in plan\.md and the server's text are saved first as two Conflicted copies\./);
+});
+
+test("the summary has one short row per version that exists, with line counts and times", () => {
+  const now = new Date(2026, 10, 6, 15, 0);
+  const at = (h, m) => new Date(2026, 10, 6, h, m).getTime();
+  const rows = summaryRows(
+    {
+      name: "plan.md",
+      yours: "a\nb\nc\nd\n",
+      draftAt: at(14, 7),
+      file: { text: "x\ny\nz", at: at(14, 5) },
+      server: { text: "one\ntwo\nthree\n", at: new Date(2026, 10, 5, 13, 58).getTime() },
+    },
+    now,
+  );
+  assert.deepEqual(rows, [
+    { label: "Your draft", lines: "4 lines", when: "edited 14:07" },
+    { label: "plan.md", lines: "3 lines", when: "changed 14:05" },
+    { label: "The server", lines: "3 lines", when: "changed Yesterday" },
+  ]);
+});
+
+test("only the rows that exist, an unedited draft's file row is labelled as yours, and an unknown time is left out", () => {
+  const now = new Date(2026, 10, 6, 15, 0);
+  assert.deepEqual(summaryRows({ name: "plan.md", yours: "x", file: { text: "y" } }, now), [
+    { label: "Your draft", lines: "1 line", when: "" },
+    { label: "plan.md", lines: "1 line", when: "" },
+  ]);
+  assert.deepEqual(
+    summaryRows({ name: "plan.md", yours: "b", applyFile: true, file: { text: "b\nc", at: NaN }, server: { text: "", at: 0 } }, now),
+    [
+      { label: "plan.md, yours", lines: "2 lines", when: "" },
+      { label: "The server", lines: "0 lines", when: "" },
+    ],
+  );
+  assert.deepEqual(
+    summaryRows({ name: "", yours: "q", server: { text: "r" } }, now).map((r) => r.label),
+    ["Your draft", "The server"],
+  );
+  assert.equal(summaryRows({ yours: "q", file: { text: "a" }, server: { text: "b" } }, now).length, 3, "never more than three");
+});
+
+test("lines are counted without a final newline's empty line", () => {
+  assert.deepEqual(["", "a", "a\n", "a\nb", "a\nb\n", "\n"].map(lineCount), [0, 1, 1, 2, 2, 1]);
 });

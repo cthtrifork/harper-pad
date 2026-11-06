@@ -56,7 +56,7 @@ export function LinkedFileStatus(id) {
 /**
  * LinkedFileText returns the text of the draft's file (CRLF as LF), read from the stored path, with the file's version stamp (its mtime as
  * text). It is for the page's conflict dialog: the text of a Conflicted copy, and the stamp it compares again when the person chooses.
- * Errors as ReloadDraftFromFile does (not there, not text, too large).
+ * An error says why when the file is not there, not text or too large.
  * @param {string} id
  * @returns {$CancellablePromise<$models.FileText>}
  */
@@ -79,27 +79,15 @@ export function ListDrafts(limit, offset) {
 }
 
 /**
- * MarkFileDiffers records that the draft's file no longer matches what the draft holds (the page took the file's text while the person was typing,
- * so the file has a version they never saw), so the next save of
- * the file reports it as changed instead of replacing it silently. Nothing is written to the file.
+ * RecordLinkedFile makes the file's current text the baseline of the draft's link (its modified time and text hash), once the page has taken
+ * that text into the draft: the draft is clean afterwards, and a later change of the file is a change. `stamp` is the one LinkedFileText
+ * returned; if the file changed again since, nothing is recorded and the error says so.
  * @param {string} id
+ * @param {string} stamp
  * @returns {$CancellablePromise<void>}
  */
-export function MarkFileDiffers(id) {
-    return $Call.ByID(3077028281, id);
-}
-
-/**
- * ReloadDraftFromFile replaces the draft's text with the contents of its file and returns the draft as stored. The path is the one
- * stored for the draft, never one from the page. The file is taken as the new baseline (its mtime is recorded), so the next save does
- * not report it as changed. A file that is missing, not a regular file, too large or not valid UTF-8 is an error and nothing changes.
- * @param {string} id
- * @returns {$CancellablePromise<store$0.Draft>}
- */
-export function ReloadDraftFromFile(id) {
-    return $Call.ByID(2613979643, id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType0($result);
-    }));
+export function RecordLinkedFile(id, stamp) {
+    return $Call.ByID(1974444409, id, stamp);
 }
 
 /**
