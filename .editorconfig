@@ -26,4 +26,4 @@ insert_final_newline = unset
 trim_trailing_whitespace = unset
 
 [*.{nsi,nsh}]
-indent_size = 4
+indent_size = unset
