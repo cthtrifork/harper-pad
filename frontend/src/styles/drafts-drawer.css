@@ -465,12 +465,3 @@
   color: var(--mute);
 }
 
-/* Only a phone shows the version (responsive.css): the desktop app and a wide window have it in the header. */
-.drawer .version {
-  display: none;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--mute);
-  font-size: 11px;
-}

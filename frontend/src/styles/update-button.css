@@ -21,6 +21,10 @@
   color: var(--text);
 }
 
+.wrap .info {
+  display: none; /* a phone shows this in place of the version text (responsive.css) */
+}
+
 .wrap .dot {
   width: 8px;
   height: 8px;
@@ -41,6 +45,7 @@
   max-width: calc(100vw - 24px);
   box-sizing: border-box;
   overflow-wrap: anywhere;
+  white-space: normal;
   display: flex;
   flex-direction: column;
   gap: 10px;
