@@ -110,6 +110,8 @@
 }
 
 .bar .folder {
+  /* The folder gives way long before the file name does: it shrinks 50 times faster, and is dropped below 1100 px. */
+  flex-shrink: 50;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -217,6 +219,12 @@
 @media (max-width: 1240px) {
   .bar .drawer-btn .kbd,
   .bar .tool .kbd {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .bar .folder {
     display: none;
   }
 }

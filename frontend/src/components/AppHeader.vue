@@ -80,7 +80,7 @@ function onMain() {
     </span>
     <span class="sep" aria-hidden="true"></span>
     <template v-if="filePath">
-      <span id="file-name" class="file-name">{{ fileName }}</span>
+      <span id="file-name" class="file-name" :title="fileName">{{ fileName }}</span>
       <span v-if="fileDir" class="mute folder" :title="fileDir">in {{ fileDir }}</span>
     </template>
     <span v-else id="file-badge" class="badge">Draft, not on disk</span>
