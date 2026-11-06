@@ -75,9 +75,9 @@ function open(id) {
   swiped = false;
 }
 
-// The release the web build was made from (the desktop app shows its version in the header).
-// A preview or local web build has none, and shows "dev" so the button is still there.
-const version = import.meta.env?.APP_VERSION || (import.meta.env?.MODE === "web" ? "dev" : "");
+// The release the web build was made from. Only the web build shows it here, and only on a phone (CSS); the desktop app and a wide
+// window show it in the header. A preview or local web build has none, and shows "dev" so the button is still there.
+const version = import.meta.env?.MODE === "web" ? import.meta.env?.APP_VERSION || "dev" : "";
 // Pressing the version copies a diagnostics report (lib/diagnostics.js); the button says what happened for two seconds.
 const copied = ref("");
 let copiedTimer = 0;
