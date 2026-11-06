@@ -34,7 +34,9 @@ onMounted(() => {
     onFixed: (ids) => emit("fixed", ids),
     onUserEdit: () => emit("user-edit"),
   });
-  view.focus();
+  // Not on a phone: iOS opens the keyboard only for a tap, and a focus without one leaves its bare accessory bar (the arrows and the
+  // checkmark) floating over the text. A tap on the page focuses the editor (see keepFocus and App.vue).
+  if (!window.matchMedia("(pointer: coarse)").matches) view.focus();
 });
 // A change to the autocorrect choices changes which findings are safe and whether they are fixed: check again.
 watch(
