@@ -16,6 +16,7 @@
 
 ## Header chip
 - [Clean](dirty-1-clean.png) · [Draft ahead of file (dot)](dirty-2-dot.png)
+- File chip with copy-path and unlink buttons: [linked](chip-1-linked.png), [path copied](chip-2-copied.png), [unlinked with Undo toast](chip-3-unlinked-toast.png)
 - [Unlinked](unlink-1-unlinked.png) · [Linked](unlink-2-linked.png) · [Unlink with Undo](unlink-3-toast.png) · [File gone (struck)](unlink-4-gone.png) · [Shortcut while linked](unlink-7-shortcut.png)
 - Narrow desktop window: [linked](header-narrow-desktop-linked.png), [unlinked](header-narrow-desktop-unlinked.png), [struck](header-narrow-desktop-struck.png), [dot](header-narrow-desktop-dot.png)
 - Web build in an untouched Chromium at [390 px](real-header-narrow-390.png) and [320 px](real-header-narrow-320.png), touch emulation only. A real iPhone (Share) and a real Android phone were not available, so there is no screenshot of them.
