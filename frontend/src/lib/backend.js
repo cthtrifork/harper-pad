@@ -6,6 +6,7 @@
 
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { createDesktopSyncDrafts } from "./desktopSync.js";
+import { withLastOpened } from "./lastOpened.js";
 import { createSettingsSyncStore } from "./settingsSync.js";
 import { createDeviceStore } from "./syncDevice.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
@@ -86,10 +87,12 @@ export const syncDrafts = web
   : createDesktopSyncDrafts(bindings);
 
 // Everything the page needs before it shows the editor, in one call: {demo, open, total, error}. `demo` is the banner text in a
-// desktop development build's demo mode (empty otherwise), `open` the most recent draft with its text (or null), `total` how many
+// desktop development build's demo mode (empty otherwise), `open` the draft to show (the last opened, else the most recent one) with its text (or null), `total` how many
 // drafts there are, and `error` why drafts are unavailable (empty when they are).
+// The draft that was open last on this device (lib/lastOpened.js) replaces the most recent one when it still exists.
 export async function startup() {
-  return isWeb ? web.startup() : (await bindings()).PadService.Startup();
+  const start = await (isWeb ? web.startup() : (await bindings()).PadService.Startup());
+  return withLastOpened(start, getDraft);
 }
 
 // Desktop only: move the database aside (as harper-pad.db.bad-<time>, never deleted) and start a new, empty one. Offered when the
