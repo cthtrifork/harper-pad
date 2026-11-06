@@ -27,26 +27,34 @@ export function noteOpen(now = Date.now(), store = globalThis.localStorage) {
   recorded.opens = { count: seen.count + 1, first: seen.first, previous: seen.last };
 }
 
-const round = (v) => (typeof v === "number" ? Math.round(v) : undefined);
+const seconds = (ms) => (typeof ms === "number" ? Math.round(ms) / 1000 : undefined);
+const bit = (v) => (v === undefined ? undefined : v ? 1 : 0);
 
-// The report as one line of JSON, from what collect() returns. Undefined values (what the browser cannot tell) drop out.
+// The report as one line of JSON, from what collect() returns. The names follow Prometheus conventions (snake_case, base units in the name,
+// booleans as 0 or 1, timestamps in seconds), so the same fields can become metrics if they are ever collected. Values the browser cannot
+// give drop out. `service_worker_controlling` 0 with a registration is normal on the very first open.
 export const formatDiagnostics = (info) =>
   JSON.stringify({
     version: info.version || undefined,
-    at: info.at,
-    standalone: info.standalone,
-    opens: info.opens,
-    openMs: round(info.openMs),
-    draftMs: round(info.dataMs),
-    harperMs: round(info.setupMs),
-    paintMs: round(info.firstPaint),
-    responseMs: round(info.responseEnd),
-    loadMs: round(info.load),
-    worker: info.worker,
-    net: info.net,
-    storage: info.storage,
-    slowest: info.resources?.map((r) => ({ name: r.name, ms: round(r.duration), bytes: r.size })),
-    agent: info.agent,
+    user_agent: info.agent,
+    timestamp_seconds: seconds(info.at),
+    standalone: bit(info.standalone),
+    open_total: info.opens?.count,
+    first_open_timestamp_seconds: seconds(info.opens?.first),
+    last_open_timestamp_seconds: info.opens?.previous ? seconds(info.opens.previous) : undefined,
+    mount_duration_seconds: seconds(info.openMs), // from the start of the page load until the editor was mounted; includes the draft read
+    draft_read_duration_seconds: seconds(info.dataMs),
+    harper_start_duration_seconds: seconds(info.setupMs),
+    first_paint_duration_seconds: seconds(info.firstPaint),
+    page_response_duration_seconds: seconds(info.responseEnd),
+    page_load_duration_seconds: seconds(info.load),
+    service_worker_controlling: bit(info.worker),
+    network_downlink_megabits_per_second: info.net?.mbit,
+    network_rtt_seconds: seconds(info.net?.rtt),
+    storage_usage_bytes: info.storage?.usage,
+    storage_quota_bytes: info.storage?.quota,
+    storage_persisted: bit(info.storage?.persisted),
+    slow_requests: info.resources?.map((r) => ({ name: r.name, duration_seconds: seconds(r.duration), transfer_bytes: r.size })), // transfer_bytes 0: from cache
   });
 
 // The facts of this page load, read from the browser. Each read is guarded: a browser without one of these APIs leaves it out.
