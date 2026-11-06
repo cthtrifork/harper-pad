@@ -29,6 +29,19 @@ const contentSecurityPolicy = (policy) => ({
   ],
 });
 
+// The splash in index.html paints before the bundled stylesheet has arrived, so it cannot read the tokens from it. Rather than copy
+// the colours there, the tokens are inlined into <head> from the one file that defines them (the stylesheet still loads them as usual).
+const inlineTokens = () => ({
+  name: "inline-tokens",
+  transformIndexHtml: () => [
+    {
+      tag: "style",
+      children: readFileSync(new URL("./src/styles/tokens.css", import.meta.url), "utf8"),
+      injectTo: "head-prepend",
+    },
+  ],
+});
+
 // What makes the web build an installable offline app: the manifest, the service worker and the icons in web/, copied to the
 // site root, plus the <head> tags that point at them. The desktop build has none of it (its page would load nothing from them, and
 // its policy has no manifest-src), so desktop dist/ and index.html stay as they were.
@@ -84,7 +97,7 @@ export default defineConfig(({ mode }) => {
     worker: { format: "es" },
     // The web build has no Go side: no Wails plugin, and no dist/ placeholder to keep.
     plugins: web
-      ? [vue(), contentSecurityPolicy(WEB_POLICY), webApp()]
-      : [vue(), wails("./bindings"), contentSecurityPolicy(POLICY), keepPlaceholder()],
+      ? [vue(), inlineTokens(), contentSecurityPolicy(WEB_POLICY), webApp()]
+      : [vue(), wails("./bindings"), inlineTokens(), contentSecurityPolicy(POLICY), keepPlaceholder()],
   };
 });
