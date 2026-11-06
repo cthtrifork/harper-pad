@@ -97,6 +97,7 @@ jobs:
               - frontend/**
               - build/**
               - scripts/package-*
+              - scripts/check-windows-installer.sh
               - scripts/lib/**
               - .github/workflows/ci.yml
               - .github/actions/**
@@ -578,3 +579,9 @@ jobs:
           export PATH="$(go env GOPATH)/bin:$PATH"
           (cd frontend && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
           scripts/package-windows.sh "ci-${GITHUB_SHA::7}" dist
+
+      - name: Build the installer and try it
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          scripts/package-windows-installer.sh "ci-${GITHUB_SHA::7}" dist/harper-pad_windows_amd64.exe dist
+          scripts/check-windows-installer.sh "dist/harper-pad_ci-${GITHUB_SHA::7}_windows_amd64_installer.exe"

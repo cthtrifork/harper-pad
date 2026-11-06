@@ -20,7 +20,7 @@ The workflow then:
 1. refuses to run anywhere but `main`;
 2. works out the version (the `tag` input, otherwise Release Drafter's) and stops if a git tag of that name already exists (see *Retrying* for an existing tag);
 3. calls `release.yml` with that version and the commit it started on (the head of `main`). That commit is built, and **no tag exists yet**: `release.yml` re-runs vet, tests and `govulncheck` (in a `checks` job beside the binary build, not before it), builds the Linux binary and, on a Windows runner, the Windows exe (see [windows](windows.md)), pushes the two backend images (`harper-pad-sync`, `harper-pad-admin`) to ghcr.io, and publishes the
-   release: the draft Release Drafter wrote for that version, with the assets attached (Linux binary, tarball, signed `.deb` and `.rpm`, public key, Windows exe, CycloneDX SBOM, `SHA256SUMS`) and signed attestations. Publishing sets the release's target to the built commit and GitHub creates the tag there. See [self-update](self-update.md) for why those assets
+   release: the draft Release Drafter wrote for that version, with the assets attached (Linux binary, tarball, signed `.deb` and `.rpm`, public key, Windows exe and installer, CycloneDX SBOM, `SHA256SUMS`) and signed attestations. Publishing sets the release's target to the built commit and GitHub creates the tag there. See [self-update](self-update.md) for why those assets
    have the names they do;
 4. for a final release (not a pre-release), publishes that tag's web version to the root of the GitHub Pages site (`pages.yml`, see [pages](pages.md)); the head of `main` is at `/preview/`.
 
@@ -87,8 +87,9 @@ WebKitGTK 6 and a glibc that new. Try it locally with a built binary: `make wail
 `build windows/amd64` in `release.yml` runs `scripts/package-windows.sh` on a `windows-2022` runner: a cgo-free build
 (`GOOS=windows`, `-H windowsgui`, version resources and icon from `build/windows`). For a real release it then signs the
 exe through SignPath when the repository is set up for it, and checks the signature. It starts the exe and checks it is
-still running after 20 seconds, so a release whose exe dies on start is not published. CI's `windows` job runs vet, the
-tests and the exe build on every pull request. See [windows](windows.md) for the SignPath setup and what is not covered.
+still running after 20 seconds, so a release whose exe dies on start is not published. It then builds the NSIS installer
+(`scripts/package-windows-installer.sh`) from the signed exe and installs and uninstalls it silently as a check. CI's `windows`
+job runs vet, the tests, the exe build and the installer with its check on every pull request. See [windows](windows.md) for the SignPath setup and what is not covered.
 
 ## Retrying
 

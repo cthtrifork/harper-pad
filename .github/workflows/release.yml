@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes a GitHub release (and the two backend container images on ghcr.io) with signed Linux and Windows binaries, packages,
+# Publishes a GitHub release (and the two backend container images on ghcr.io) with signed Linux and Windows binaries, packages, the Windows installer,
 # SHA256SUMS, an SBOM and attestations. The in-app updater installs the raw binary of its platform and verifies it against
 # SHA256SUMS, so those asset names are an interface. Three ways to run it:
 #   - the "Tag and release" workflow calls it (workflow_call) with a version and a commit. This is the normal route: the tag does
@@ -374,10 +374,26 @@ jobs:
           echo "${APP}_windows_amd64.exe is running"
           taskkill /F /IM ${APP}_windows_amd64.exe
 
+      # The installer (NSIS, per user, build/windows/nsis) is built from the exe above, so after signing it carries the
+      # signed file. The installer itself is not signed yet (docs/windows.md). The check installs it silently and removes it again.
+      - name: Build the installer
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          scripts/package-windows-installer.sh "$VERSION" dist/${APP}_windows_amd64.exe dist
+
+      - name: Installer installs and uninstalls
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: scripts/check-windows-installer.sh "dist/${APP}_${VERSION}_windows_amd64_installer.exe"
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-files-windows
-          path: dist/${{ env.APP }}_windows_amd64.exe
+          path: |
+            dist/${{ env.APP }}_windows_amd64.exe
+            dist/${{ env.APP }}_*_windows_amd64_installer.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -499,6 +515,7 @@ jobs:
             dist/*.rpm
             dist/*_linux_amd64
             dist/*_windows_amd64.exe
+            dist/*_windows_amd64_installer.exe
             dist/*.sbom.cdx.json
 
       # Unlike subject-path, sbom-path takes one literal path (no glob), so resolve it first.
@@ -518,7 +535,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          for f in dist/*_linux_amd64 dist/*_windows_amd64.exe \
+          for f in dist/*_linux_amd64 dist/*_windows_amd64.exe dist/*_windows_amd64_installer.exe \
                    dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.cdx.json; do
             gh attestation verify "$f" --repo "$REPO" \
               --signer-workflow "$REPO/.github/workflows/release.yml"
