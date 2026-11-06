@@ -1,17 +1,9 @@
 import { loadSettings, saveSettings } from "./backend.js";
+import { exportList, hashesOf } from "./ignoreList.js";
 
 // What each ignored finding was, by hash. Harper's export holds only hashes of the finding in its context, so without this the list
 // could not say what was ignored. Hashes are kept as text: they are 64-bit and do not fit a JS number.
 let labels = {};
-
-// The hashes in Harper's exported ignore list, {"context_hashes": [...]}, as text. Read with a pattern, not JSON.parse, which would round them.
-function hashesOf(json) {
-  const list = /"context_hashes"\s*:\s*\[([^\]]*)\]/.exec(json ?? "");
-  return list?.[1].match(/\d+/g) ?? [];
-}
-
-// The same list as text, built by hand for the same reason.
-const exportList = (hashes) => `{"context_hashes":[${hashes.join(",")}]}`;
 
 // What the Problems panel shows: the dictionary, and the ignored findings.
 async function snapshot(harper) {

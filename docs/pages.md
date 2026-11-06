@@ -108,7 +108,12 @@ Browser data belongs to one site in one browser on one device.
   browser to keep its data (`navigator.storage.persist()`).
 - A different address (a renamed repo or owner, a custom domain) starts with empty storage.
 
-There is no export or import yet. The dictionary is small, but if it matters, add one before relying on the web version.
+**Back up and Restore** (in the drafts drawer, web build only) are the way to move or protect it. Back up writes one JSON file with every
+draft (id, format, text, times) and the dictionary and ignore list (`frontend/src/lib/backup.js`): the share sheet on an iPhone, a download
+elsewhere. Restore reads such a file and only ever adds: a draft that is not here is added, one that is older here is replaced, one that is as
+new or newer here is kept, and the dictionary and ignore lists are merged. Nothing is deleted, so restoring twice is harmless. Restored drafts
+count as changed for sync. File links and sync state are device-specific and are not in the file. To move to the Home Screen app: Back up in
+Safari, install, then Restore in the app.
 
 ### Changing the schema
 
