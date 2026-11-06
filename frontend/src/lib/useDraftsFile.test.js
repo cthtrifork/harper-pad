@@ -205,7 +205,7 @@ test("unlinking removes the link only, offers Undo with the file's name, and Und
   await settle();
   assert.equal(drafts.current.value.filePath, "/home/me/plan.md");
   await drafts.unlinkFile();
-  assert.equal(drafts.current.value.filePath, "", "the chip is gone and Save as file is back");
+  assert.equal(drafts.current.value.filePath, "", "the chip is gone and Save to disk is back");
   assert.equal(drafts.fileState.value, "none");
   assert.equal(drafts.unlinkedToast.value.name, "plan.md");
   assert.equal(drafts.current.value.id, ID, "the draft stays");

@@ -104,7 +104,7 @@ const baseName = (path) => path.split(/[\\/]/).pop();
         </button>
       </div>
     </header>
-    <p class="hint">Kept inside Harper Pad and saved as you type. Nothing is written to your files until you choose Save as file.</p>
+    <p class="hint">Kept inside Harper Pad and saved as you type. Nothing is written to your files until you choose Save to disk.</p>
     <div class="search">
       <label for="draft-search" class="sr-only">Search drafts</label>
       <input id="draft-search" v-model="q" type="search" placeholder="Search drafts" autocomplete="off" spellcheck="false" @input="emit('search', q)" />

@@ -141,7 +141,7 @@ export function StartFresh() {
 
 /**
  * UndoUnlinkDraftFile restores the link UnlinkDraftFile removed last for this draft: the same path and the same baseline (modified time,
- * size and text hash), and nothing else. Another draft linked to that path in the meantime loses it, as after Save as file. An error when
+ * size and text hash), and nothing else. Another draft linked to that path in the meantime loses it, as after Save to disk. An error when
  * there is nothing to restore or the draft got a link since.
  * @param {string} id
  * @returns {$CancellablePromise<store$0.Draft>}

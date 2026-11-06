@@ -435,7 +435,7 @@ func TestUndoUnlinkRestoresTheSameLinkAndBaseline(t *testing.T) {
 	if _, err := s.UnlinkDraftFile(id); err != nil {
 		t.Fatal(err)
 	}
-	other, err := s.SaveDraftToFile(store.Draft{Content: "other"}, false, false) // another draft takes the path through Save as file
+	other, err := s.SaveDraftToFile(store.Draft{Content: "other"}, false, false) // another draft takes the path through Save to disk
 	if err != nil {
 		t.Fatal(err)
 	}

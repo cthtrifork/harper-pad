@@ -25,7 +25,7 @@ const props = defineProps({
   fileDir: { type: String, default: "" },
   // Why the file cannot be used right now ("file not found", "permission denied", ...), or "" when it can. The chip is struck through while it is set.
   fileProblem: { type: String, default: "" },
-  // The desktop build can unlink a file (the unlink button on the chip). The web build never does: Save as file is always offered there.
+  // The desktop build can unlink a file (the unlink button on the chip). The web build never does: Save to disk is always offered there.
   canUnlink: { type: Boolean, default: false },
   // useDrafts' fileState: "stale" means your draft has changes the file does not have yet (the dot).
   fileState: { type: String, default: "none" },
@@ -42,7 +42,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view", "unlink"]);
 
-const exportLabel = computed(() => (props.sharing ? "Share" : "Save as file"));
+const exportLabel = computed(() => (props.sharing ? "Share" : "Save to disk"));
 const mainLabel = computed(() => {
   return props.syncOn ? "Sync" : "Save";
 });
@@ -103,7 +103,7 @@ function onMain() {
         <span class="label">{{ exportLabel }}</span> <span class="kbd">Ctrl+Shift+S</span>
       </button>
     </span>
-    <span class="sep" aria-hidden="true"></span>
+    <span v-if="filePath" class="sep" aria-hidden="true"></span>
     <!-- The same chip as the draft badge: the file's name, and its folder in muted type when there is room. -->
     <span v-if="filePath" class="badge on-disk" :class="{ broken: fileProblem }" :title="chipTitle">
       <svg v-if="fileProblem" class="broken-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5l5 9H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path d="M6 5v2.5M6 9v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>
@@ -121,7 +121,6 @@ function onMain() {
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M5 3.2l.7-.7a2.1 2.1 0 0 1 3 3l-.7.7M7 8.800l-.7.7a2.1 2.1 0 0 1-3-3l.7-.7M2 2l1 1M10 10l-1-1M1.5 4.500h1.200M9.3 7.500h1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg>
       </button>
     </span>
-    <span v-if="!filePath" id="file-badge" class="badge">Draft, not on disk</span>
     <span v-if="copyBadge" class="badge copy" :title="copyBadge">{{ copyBadge }}</span>
     <span class="sr-only" role="status">{{ problemText || dirtyText_ }}</span>
     <span class="spacer"></span>

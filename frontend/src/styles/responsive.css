@@ -12,7 +12,7 @@
     flex-direction: column;
   }
 
-  /* Header: one row of icon buttons, 40 px square (touch.css asks 44 px high; 40 is what makes the row fit with Save as file beside Sync at
+  /* Header: one row of icon buttons, 40 px square (touch.css asks 44 px high; 40 is what makes the row fit with Save to disk beside Sync at
      390 px): scratch pad, the views (Edit and Preview: Split would stack two panes in a phone's height), sync, save as file, problems. The
      labels, brand, shortcut hints and file name are hidden; the buttons keep their accessible names (aria-label), and the count shows as a
      badge on the Problems icon. The switcher keeps its natural width; when even that does not fit (320 px), the last items wrap to a

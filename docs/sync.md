@@ -25,7 +25,7 @@ The server is described next to its code: [backend README](../backend/README.md)
 | Your draft is edited and the server holds different text | The same dialog | Keep, Overwrite |
 | Your draft is unedited, and the file and the server disagree | The same dialog; the changed file counts as your edit | Keep, Overwrite |
 | The open draft was deleted on another device | A dialog | Keep Creates the server draft again; Remove Deletes the draft here (the toast offers Undo) |
-| The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the full path and the reason | Ctrl+S retries; the unlink button on the file name Deletes the link; Save as file beside it picks another path. A file that is not text is never updated |
+| The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the full path and the reason | Ctrl+S retries; the unlink button on the file name Deletes the link; Save to disk beside it picks another path. A file that is not text is never updated |
 | The token was revoked | The chip says "Sign in again" | Paste a fresh invite |
 | Enrolling | The Sync chip | Paste the invite URL |
 
@@ -57,12 +57,13 @@ The server is described next to its code: [backend README](../backend/README.md)
 | Every file update | The file is read again first; if something else changed it since your last update, the dialog opens instead (Overwrite skips this, but never Updates a file that is not text) |
 | A file update fails, or the file is unreadable | The draft is kept and Ctrl+S tries again; a gone file is Created again ("Recreated <name>") |
 | Delete a linked draft | The file is untouched. Undo Creates the draft again without the link |
-| Save as file | Offered only for a draft without a link, and beside a struck file name. Ctrl+Shift+S on a linked, healthy draft only shows "Unlink first to save as another file" |
+| Sync or Save button (Ctrl+S) | Says **Sync** once sync is set up and this device is enrolled, and always has something to do: it Updates the draft, Updates its file when the draft changed, and asks the server. Says **Save** without sync: it does the first two, and is disabled while there is nothing to Update |
+| Save to disk | Offered only for a draft without a link, and beside a struck file name. Ctrl+Shift+S on a linked, healthy draft only shows "Unlink first to save as another file" |
 | A dot beside the file name | Your draft has changes the file does not have yet; Ctrl+S or Save Updates the file and the dot goes. Never shown with a struck file name |
 | The copy button on the file name | Copies the full path of the file to the clipboard; the icon turns into a check for two seconds |
-| The unlink button on the file name (a broken link) | Deletes the link only; the file and your draft are untouched. A toast "Unlinked <name>" has Undo, which Creates the same link again (path and baseline); then Save as file returns |
-| Save as file onto the path of another draft | The link moves to this draft and the other draft is unlinked, with a toast naming it |
-| Web build | It never links a draft to a file; the header offers Save as file, or Share on iPhone and iPad |
+| The unlink button on the file name (a broken link) | Deletes the link only; the file and your draft are untouched. A toast "Unlinked <name>" has Undo, which Creates the same link again (path and baseline); then Save to disk returns |
+| Save to disk onto the path of another draft | The link moves to this draft and the other draft is unlinked, with a toast naming it |
+| Web build | It never links a draft to a file; the header offers Save to disk, or Share on iPhone and iPad |
 | Second launch of the app | It focuses the open window (desktop) |
 
 ## Sync moments

@@ -58,6 +58,6 @@ and `pprof`, which `production` rejects.
 1. Typing updates the CodeMirror document; the lint source debounces and asks the Harper worker for lints.
 2. Lints become diagnostics in the editor and rows in the Problems panel. Applying a fix is a normal edit.
 3. The same edit schedules a draft save through `backend.js`: `DraftService.SaveDraft` on desktop, IndexedDB on the web.
-4. "Save as file" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
+4. "Save to disk" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
    on the web) and keeps the path on the draft.
 5. With sync on (either build), `useSync` asks `createSyncer` to sync the draft and, at other moments, every draft; [sync](sync.md#sync-moments) says when.

@@ -4,7 +4,7 @@ import { dirtyText, fileControls, saveAsAction, UNLINK_FIRST } from "./fileLink.
 
 const linked = { filePath: "/home/me/plan.md", fileProblem: "", canUnlink: true };
 
-test("no link: Save as file, no x", () => {
+test("no link: Save to disk, no x", () => {
   assert.deepEqual(fileControls({ ...linked, filePath: "" }), { showSaveAs: true, showChipX: false, showDirty: false });
   assert.equal(saveAsAction({ ...linked, filePath: "" }), "ask");
 });
@@ -15,13 +15,13 @@ test("linked and healthy: the chip's unlink button only, and Ctrl+Shift+S only h
   assert.equal(UNLINK_FIRST, "Unlink first to save as another file");
 });
 
-test("linked with the chip struck through: the unlink button and Save as file beside it", () => {
+test("linked with the chip struck through: the unlink button and Save to disk beside it", () => {
   const struck = { ...linked, fileProblem: "file not found" };
   assert.deepEqual(fileControls(struck), { showSaveAs: true, showChipX: true, showDirty: false });
   assert.equal(saveAsAction(struck), "ask");
 });
 
-test("the web build is unchanged: Save as file is always there and there is no x", () => {
+test("the web build is unchanged: Save to disk is always there and there is no x", () => {
   const web = { filePath: "plan.md", fileProblem: "", canUnlink: false };
   assert.deepEqual(fileControls(web), { showSaveAs: true, showChipX: false, showDirty: false });
   assert.equal(saveAsAction(web), "ask");
