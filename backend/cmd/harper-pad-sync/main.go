@@ -63,6 +63,7 @@ func run(args []string) error {
 	defer verifier.Close()
 	api := syncapi.New(cfg.PublicURL, cfg.AllowedOrigins, sync, verifier)
 	api.Version = version
+	api.Metrics = m.Sync()
 	api.Register(mux)
 	if len(cfg.AllowedOrigins) == 0 {
 		slog.Warn("CORS_ALLOWED_ORIGINS is empty: browsers on other origins cannot call the API")

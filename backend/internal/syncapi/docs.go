@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cthtrifork/harper-pad/backend/internal/metrics"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -195,9 +196,11 @@ func (a *API) putDoc(ctx context.Context, in *putDocInput) (*putDocOutput, error
 	b := &in.Body
 	if b.Deleted {
 		if b.Data != "" {
+			a.Metrics.DocWrite(metrics.WriteInvalid)
 			return nil, huma.Error422UnprocessableEntity("a deleted draft has no data")
 		}
 	} else if err := validateData(b.Data); err != nil {
+		a.Metrics.DocWrite(metrics.WriteInvalid)
 		return nil, huma.Error422UnprocessableEntity("invalid draft")
 	}
 	d, err := a.store.PutDoc(ctx, dev.ClientID, in.ID,
@@ -205,15 +208,23 @@ func (a *API) putDoc(ctx context.Context, in *putDocInput) (*putDocOutput, error
 		store.DocWrite{CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt, Deleted: b.Deleted, Data: b.Data})
 	switch {
 	case errors.Is(err, store.ErrConflict):
+		a.Metrics.DocWrite(metrics.WriteConflict)
 		c := &conflictBody{Title: "Conflict", Status: http.StatusConflict, Detail: "the draft changed on the server"}
 		if d.ID != "" {
 			c.Current = toDoc(d)
 		}
 		return nil, c
 	case errors.Is(err, store.ErrTooLarge):
+		a.Metrics.DocWrite(metrics.WriteTooLarge)
 		return nil, huma.NewError(http.StatusRequestEntityTooLarge, "draft too large")
 	case err != nil:
+		a.Metrics.DocWrite(metrics.WriteError)
 		return nil, serverError("put doc", err)
+	}
+	if b.Deleted {
+		a.Metrics.DocWrite(metrics.WriteDeleted)
+	} else {
+		a.Metrics.DocWrite(metrics.WriteOK)
 	}
 	out := &putDocOutput{CacheControl: "no-store", ETag: etag(d.UpdatedAt, d.Deleted)}
 	out.Body.Version = d.Version
