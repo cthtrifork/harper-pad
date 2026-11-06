@@ -89,7 +89,7 @@ WebKitGTK 6 and a glibc that new. Try it locally with a built binary: `make wail
 exe through SignPath when the repository is set up for it, and checks the signature. It starts the exe and checks it is
 still running after 20 seconds, so a release whose exe dies on start is not published. It then builds the NSIS installer
 (`scripts/package-windows-installer.sh`) from the signed exe and installs and uninstalls it silently as a check. CI's `windows`
-job runs vet, the tests, the exe build and the installer with its check on every pull request. See [windows](windows.md) for the SignPath setup and what is not covered.
+job runs vet, the tests, the exe build and the installer with its check on a pull request only when something Windows-specific changed (and always on pushes to main). See [windows](windows.md) for the SignPath setup and what is not covered.
 
 ## Retrying
 

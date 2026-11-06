@@ -1,7 +1,7 @@
 Unicode true
 
 ####
-## NSIS installer for Harper Pad, from the Wails v3 template (`wails3 generate build-assets`), see docs/windows.md.
+## NSIS installer for Harper Pad. Started from the Wails v3 template (`wails3 generate build-assets`), then edited by hand; see docs/windows.md.
 ## scripts/package-windows-installer.sh runs makensis in this directory and passes every define below on the command line:
 ##   -DARG_WAILS_AMD64_BINARY=<the exe>   -DINFO_PRODUCTVERSION=<x.y.z>   -DOUTFILE=<installer to write>
 ## The install is per user ($LOCALAPPDATA\Programs\harper-pad, no UAC prompt). That is deliberate: the in-app updater replaces

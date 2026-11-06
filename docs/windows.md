@@ -75,7 +75,7 @@ generated Taskfile, so the script replaces `wails3 package`. `scripts/check-wind
 scratch folder, checks the exe is there, uninstalls and checks it is gone. MSIX, the guide's other format, is not built.
 
 `release.yml` runs this on a Windows runner, signs the result (above), starts it and checks it stays up for 20 seconds
-before anything is published, then builds the installer from it and runs the install check. `ci.yml` has a `windows` job (vet, tests, the exe build and the installer with its check) on every pull request.
+before anything is published, then builds the installer from it and runs the install check. `ci.yml` has a `windows` job (vet, tests, the exe build and the installer with its check) that runs on a pull request only when something Windows-specific changed (`build/windows`, the Windows scripts, `*_windows.go`, `tray_other.go`, `ci.yml`), and always on pushes to main.
 
 ## Differences from Linux
 

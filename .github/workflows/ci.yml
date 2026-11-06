@@ -38,6 +38,7 @@ jobs:
       backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend }}
       e2e: ${{ github.event_name != 'pull_request' || steps.filter.outputs.e2e }}
       build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build }}
+      windows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.windows }}
     steps:
       # On pull requests it lists the files through the API (no checkout needed); on pushes and manual
       # runs the filter is bypassed above.
@@ -97,10 +98,20 @@ jobs:
               - frontend/**
               - build/**
               - scripts/package-*
-              - scripts/check-windows-installer.sh
               - scripts/lib/**
               - .github/workflows/ci.yml
               - .github/actions/**
+            # Only what is Windows-specific: the icon, manifest and installer, the scripts that build them, Go files that only
+            # compile for Windows or only off Linux. Everything else the Windows build shares with Linux is covered by the jobs
+            # above and, for a release, by release.yml (which vets for Windows on Linux and builds on Windows before publishing).
+            windows:
+              - build/windows/**
+              - scripts/package-windows*.sh
+              - scripts/check-windows-installer.sh
+              - '**/*_windows.go'
+              - '**/*_windows_test.go'
+              - internal/app/tray_other.go
+              - .github/workflows/ci.yml
 
   # --- lint: independent jobs, aggregated by `lint` below ---------------------------------------------------------
 
@@ -540,11 +551,12 @@ jobs:
           retention-days: 7
 
   # The Windows build needs no cgo or GUI libraries, so this runs the real thing: vet and test with the production
-  # tag, then the same script the release uses to build the exe.
+  # tag, then the same script the release uses to build the exe and the installer. Runs only when something Windows-specific
+  # changed (the `windows` filter above).
   windows:
     name: windows
     needs: changes
-    if: needs.changes.outputs.build == 'true'
+    if: needs.changes.outputs.windows == 'true'
     runs-on: windows-latest
     timeout-minutes: 25
     defaults:
