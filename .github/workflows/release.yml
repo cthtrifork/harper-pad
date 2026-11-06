@@ -127,6 +127,12 @@ jobs:
         run: make vet test
 
       # The Windows build needs no cgo, so the Linux runner can prove it still compiles (the Windows job below builds it).
+      # The backend is its own module and its images are published below, so it is checked here too. The database tests need the
+      # compose stack and run in CI (test-backend); the rest runs without one.
+      - name: Vet, build and test (backend)
+        working-directory: backend
+        run: make vet build test
+
       - name: Vet (windows/amd64)
         run: |
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./...
@@ -137,6 +143,12 @@ jobs:
           # renovate: datasource=go depName=golang.org/x/vuln
           GOVULNCHECK_VERSION: v1.9.0
         run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+
+      - name: govulncheck (backend)
+        working-directory: backend
+        env:
+          GOVULNCHECK_VERSION: v1.9.0
+        run: go run golang.org/x/vuln/cmd/govulncheck@"${GOVULNCHECK_VERSION}" ./...
 
   build:
     name: build linux/amd64

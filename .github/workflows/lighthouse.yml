@@ -27,7 +27,7 @@ env:
 jobs:
   lighthouse:
     name: lighthouse
-    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+    if: github.actor != 'dependabot[bot]' && !startsWith(github.head_ref, 'renovate/') # Renovate runs as its own GitHub App, so match its branches
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
