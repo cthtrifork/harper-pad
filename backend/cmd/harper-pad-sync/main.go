@@ -71,7 +71,7 @@ func run(args []string) error {
 }
 
 // waitForSchema keeps /readyz at 503 until the schema is current. harper-pad-admin owns the tables and applies the migrations
-// (docs/sync.md, "Database access"); this service has no DDL rights and only waits for them, so it never serves a database that
+// (backend/README.md); this service has no DDL rights and only waits for them, so it never serves a database that
 // lacks its tables or its grants. It checks every 2 s, so it also copes with the database being down at start.
 func waitForSchema(ctx context.Context, db *pgxpool.Pool, health *server.Health) {
 	var lastErr string

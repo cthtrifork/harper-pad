@@ -93,34 +93,11 @@ Things to know:
 Not planned: scheduled token rotation with reuse detection. It is the one measure that would notice a copied profile being used,
 and the fallback if iOS turns out to clear the key.
 
-## Server schema (PostgreSQL)
-
-The schema is `backend/internal/store/migrations/0001_init.sql`; the code is the documentation. What the code does not say:
-
-- The server stores drafts as opaque strings by id and version. v1 has one client account, but every row carries a `client_id` and
-  every device is bound to one, so more can be added without reshaping the schema. The account comes from the token's device row,
-  never from the request, and every query on account data filters on it.
-- A write is compare-and-set on `version` and `updated_at`; a mismatch changes nothing and returns the current row as the 409.
-  `version` exists only for that.
-- Tombstones clear the text and are kept forever. Revoking a device deletes its row.
-- The 2 MiB `CHECK` on a draft is a backstop; the app enforces 1 MiB.
-
-### Database access
-
-Two roles, both authenticating with client certificates from cert-manager (no passwords). `harper_admin` owns the tables and applies
-the migrations; `harper_sync`, the internet-facing API's role, gets only the row access it needs (no DDL, no `DELETE`).
-Forced row security hides notes from the admin role's ordinary SQL. Its owner can still switch that off, so a compromised admin
-process could read notes (it could already enroll a device that does). A later migration that changes `docs` rows must lift the
-force for its own statements.
-
 ## Protocol
 
-JSON over HTTPS; the routes, fields, limits and errors are in [openapi.yaml](openapi.yaml), generated from the server's Go types
-(`make openapi` in `backend/`). The server is plain storage; a stale `base` on a `PUT` is a 409 carrying the server's copy.
-
-- **A draft's state is the pair `(updatedAt, deleted)`**, set by the device that saved it. The device records the state it last
-  synced, and "the server changed" means the state differs from that record. Only equality is tested, never order, so device
-  clocks do not matter. `version` is only for compare-and-set.
+The schema is `backend/internal/store/migrations/0001_init.sql`, the routes are in [openapi.yaml](openapi.yaml) and the
+[backend README](../backend/README.md) covers the database roles; the code is the documentation. The server is plain storage, so
+all sync logic is on the device ([Conflicts](#conflicts)).
 
 ### When sync happens
 
@@ -198,7 +175,7 @@ A device-token model with DPoP key binding, TLS and no content encryption.
 | Stolen token | Revoke the device. See [Limiting the damage of a stolen device](#limiting-the-damage-of-a-stolen-device). |
 | Invite theft | One use, 15 minutes, hashed at rest, in the URL fragment. |
 | Account isolation | The account comes from the device row and every query filters on it. v1 has one account, so this is a guard for the future; before adding a second, narrow the `sync_rows` policy to the account and test isolation. |
-| Database and cluster | Client certificates only, PostgreSQL reachable only from the sync and admin pods, separate roles ([Database access](#database-access)). Default-deny NetworkPolicies, hardened pods, no Kubernetes API token, images pinned by digest. |
+| Database and cluster | Client certificates only, PostgreSQL reachable only from the sync and admin pods, separate roles ([backend README](../backend/README.md)). Default-deny NetworkPolicies, hardened pods, no Kubernetes API token, images pinned by digest. |
 | Admin UI | No Service and no listener outside its pod, reached only through a Cloudflare Tunnel behind Cloudflare Access (OIDC, MFA). The app does no authentication of its own, so the Access policy is the only access control. It adds same-origin checks, CSRF tokens and a strict CSP. See the [admin README](../backend/cmd/harper-pad-admin/README.md#access). |
 | Draft text from the server | Untrusted like pasted text: never run, never inserted as HTML, validated before it is stored. |
 

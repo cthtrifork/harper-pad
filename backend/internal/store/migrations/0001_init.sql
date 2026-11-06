@@ -1,4 +1,4 @@
--- Schema of docs/sync.md, "Server schema (PostgreSQL)", applied by harper-pad-admin as harper_admin, which owns the tables. Times are
+-- Schema of the sync service, applied by harper-pad-admin as harper_admin, which owns the tables. Times are
 -- Unix milliseconds. Later changes are new files; one that changes rows of docs must lift the row security below for its own
 -- statements, because the owner cannot see them either.
 
@@ -59,7 +59,7 @@ GRANT SELECT, INSERT, UPDATE ON docs TO harper_sync;    -- drafts are compare-an
 
 -- Row security keeps the notes out of the admin role's reach: FORCE applies it to the owner too, and the only policy is for
 -- harper_sync, so harper_admin sees and writes no row of docs, whatever SQL the admin app runs. It is a seatbelt, not a wall: the
--- owner can still change policies (DDL), so whoever holds its credential can read notes (docs/sync.md, "Database access").
+-- owner can still change policies (DDL), so whoever holds its credential can read notes (backend/README.md).
 ALTER TABLE docs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE docs FORCE ROW LEVEL SECURITY;
 CREATE POLICY sync_rows ON docs FOR ALL TO harper_sync USING (true) WITH CHECK (true);
