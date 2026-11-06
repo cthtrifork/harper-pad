@@ -6,20 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
-	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 	"github.com/danielgtaylor/huma/v2"
-)
-
-const (
-	// The limits are the client's too (frontend/src/lib/settingsItems.js, LIMITS; a frontend test compares them). A personal dictionary
-	// is tens to a few hundred words, so these leave a wide margin and keep a write, and a linter rebuild, small.
-	maxWords     = 5000
-	maxIgnored   = 2000
-	maxWordRunes = 64
 )
 
 // Setting is the synced settings of the account: the dictionary and the ignore list in one document.
@@ -45,27 +35,17 @@ func (e *settingConflict) ContentType(ct string) string {
 	return ct
 }
 
-// validateSetting checks the document: valid UTF-8, version 1, a bounded list of words (each one short word without spaces or control
-// characters) and a bounded list of ignored findings (each one its hash, digits only).
+// validateSetting checks the shape of the document and nothing more: valid UTF-8 JSON, version 1, a list of words and a list of ignored
+// hashes, all strings. The server never reads them. The devices check each entry when they read (settingsItems.js) and send only
+// clean ones, and the size is the database's.
 func validateSetting(data string) error {
 	var b struct {
 		V       int      `json:"v"`
 		Words   []string `json:"words"`
 		Ignored []string `json:"ignored"`
 	}
-	if !utf8.ValidString(data) || json.Unmarshal([]byte(data), &b) != nil || b.V != 1 || b.Words == nil || b.Ignored == nil ||
-		len(b.Words) > maxWords || len(b.Ignored) > maxIgnored {
+	if !utf8.ValidString(data) || json.Unmarshal([]byte(data), &b) != nil || b.V != 1 || b.Words == nil || b.Ignored == nil {
 		return errInvalid
-	}
-	for _, w := range b.Words {
-		if w == "" || utf8.RuneCountInString(w) > maxWordRunes || strings.IndexFunc(w, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
-			return errInvalid
-		}
-	}
-	for _, h := range b.Ignored {
-		if h == "" || len(h) > 20 || strings.Trim(h, "0123456789") != "" {
-			return errInvalid
-		}
 	}
 	return nil
 }

@@ -2,31 +2,20 @@
 // left them: {"v":1,"words":["Wails"],"ignored":["18446744073709551615"]}. Hashes are decimal text because Harper's are 64-bit. Pure
 // functions; no storage and no network.
 
-// What the server accepts (backend/internal/syncapi/settings.go; settingsLimits.test.js compares the two). A personal dictionary is
-// tens to a few hundred words, so these leave a wide margin and keep each send, and a linter rebuild, small.
-export const LIMITS = { words: 5000, ignored: 2000, wordChars: 64 };
-
+const MAX_WORD = 64;
 const isHash = (h) => typeof h === "string" && /^\d{1,20}$/.test(h);
-const isWord = (w) => typeof w === "string" && w.length > 0 && [...w].length <= LIMITS.wordChars && !/[\s\p{Cc}]/u.test(w);
+const isWord = (w) => typeof w === "string" && w.length > 0 && [...w].length <= MAX_WORD && !/[\s\p{Cc}]/u.test(w);
 
 const sorted = (list) => [...new Set(list)].sort();
 
-// The lists to sync, from what Harper holds: surrounding spaces are trimmed, repeats and empty entries dropped, and an entry the server
-// would refuse (a phrase, a control character, a word over the length limit) is left out of the document, not allowed to fail the whole
-// sync. It stays in the local dictionary; it is only not shared.
+// The lists to sync, from what Harper holds: surrounding spaces are trimmed, repeats and empty entries dropped, and an entry that another
+// device would refuse to read (a phrase, a control character, a word over the length limit) is left out of the document: parseSettings
+// refuses a document with one in it whole. It stays in the local dictionary; it is only not shared.
 export function cleanLists({ words, ignored }) {
   return {
     words: sorted(words.map((w) => String(w).trim()).filter(isWord)),
     ignored: sorted(ignored.map((h) => String(h).trim()).filter(isHash)),
   };
-}
-
-// A message when a list is over its limit, else null. Checked before sending so the person is told what to do, not shown a refusal.
-export function limitMessage({ words, ignored }) {
-  if (words.length > LIMITS.words) return `The dictionary is too large to sync (${LIMITS.words.toLocaleString("en-GB")} words at most).`;
-  if (ignored.length > LIMITS.ignored)
-    return `The ignore list is too large to sync (${LIMITS.ignored.toLocaleString("en-GB")} findings at most).`;
-  return null;
 }
 
 // The text to store for the lists held now.

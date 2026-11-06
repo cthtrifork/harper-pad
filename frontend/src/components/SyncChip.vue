@@ -113,7 +113,7 @@ onBeforeUnmount(() => {
           <h2>{{ status === "offline" ? "Offline" : `Synced with ${host}` }}</h2>
           <p v-if="status === 'pending'" class="mute">Some drafts are not sent yet.</p>
           <p v-if="sync.setsFailed.value" id="sync-sets-failed" class="error" role="alert">
-            {{ sync.setsFailed.value }}
+            Could not sync the dictionary and ignore list. Choose Sync all to try again.
           </p>
           <p v-if="status === 'offline'" class="mute">Server not reachable. Drafts are kept here.</p>
           <p v-if="sync.summary.value" id="sync-summary" class="summary" role="status">
