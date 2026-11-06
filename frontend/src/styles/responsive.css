@@ -179,7 +179,7 @@
   }
 
   .status .spacer,
-  .status > .mute:not(#draft-status),
+  .status > .mute:not(#draft-status):not(.open-timing),
   #cursor-pos,
   #autocorrect-state,
   #selection {
