@@ -1,14 +1,8 @@
 import { computed, ref, watch } from "vue";
-import {
-  deleteDraft,
-  getDraft,
-  isWeb,
-  listDrafts,
-  startFresh as moveDatabaseAside,
-  saveDraft,
-  saveDraftToFile,
-  searchDrafts,
-} from "./backend.js";
+import * as backend from "./backend.js";
+
+const { isWeb } = backend;
+import { createFileChange } from "./fileChange.js";
 import { saveLastOpened } from "./lastOpened.js";
 
 // Kept short: the flush on pagehide cannot finish writing to IndexedDB, so a reload before the save has started loses the text.
@@ -24,7 +18,8 @@ const message = (err) => String(err?.message || err);
 //
 // A draft can also be saved to a file (Ctrl+Shift+S, then Ctrl+S). That only happens on request, never by the autosave.
 // A draft is created by its first save, so an empty editor leaves none behind.
-export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } = {}) {
+export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, probeServer } = {}, api = {}) {
+  const be = { ...backend, ...api }; // `api` replaces backend functions in tests
   const current = ref({ id: "", createdAt: 0, format: "markdown", filePath: "" });
   const state = ref("idle"); // idle | dirty | saving | saved | error
   const error = ref("");
@@ -36,7 +31,41 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   const home = ref(""); // the user's home folder, from the backend
   const fileState = ref("none"); // none | unknown (linked, not written in this session) | synced | stale (edited since the file was written)
 
-  const overwriteOk = ref(false); // set after a save was refused because the file changed outside the app: the next save replaces it
+  // The linked file no longer matches the draft. Looked at when a draft is opened and when the window comes back, and raised by a save that
+  // found it; a real conflict stays (ConflictDialog.vue) until the person chooses Keep or Overwrite. A draft with no edits of its own takes the
+  // file's text quietly, unless the server also holds something else: then the dialog asks, with the file's text as "yours".
+  const fileChange = createFileChange((id) => be.linkedFileStatus(id), {
+    can: () => canAutoRefresh(),
+    run: async (draft, name) => {
+      let ahead = null;
+      try {
+        ahead = await probeServer?.(draft.id); // one conditional request; null when sync is off or the server cannot be reached
+      } catch {
+        ahead = null;
+      }
+      if (ahead?.ahead) {
+        const f = await be.linkedFileText(draft.id).catch(() => null);
+        if (!f || ahead.text === f.text) return; // the server already holds the file's text: nothing more to do here
+        fileChange.raiseClean(draft, { stamp: f.stamp, serverText: ahead.text });
+        return;
+      }
+      return reloadFromFile({ auto: name });
+    },
+  });
+  // The "Conflicted copy" labels: draft id -> "file" | "server" | "file and server", only in memory. Nothing is saved or synced: not the text, not
+  // the database. A label goes when its draft is edited or deleted, from its x, or when the app restarts.
+  const copies = ref({});
+  const linkMoved = ref(null); // {text, tick}: Save as took a file from another draft
+  const fileNameOf = (p) => String(p).split(/[\\/]/).pop();
+  const recreated = ref(false); // the last write recreated a file that was gone
+  const dropCopy = (id) => {
+    if (copies.value[id]) {
+      const { [id]: _gone, ...rest } = copies.value;
+      copies.value = rest;
+    }
+  };
+  let checkDone = Promise.resolve(); // the look at the file of the draft just opened: sync waits for it, so the two never race
+  const refreshed = ref(null); // {name, tick} while the "Updated from <file>" toast shows
   let dirty = false;
   let stored = null; // {text, format} the saved draft holds, so a save that would change nothing is skipped and the timestamp stays
   let edits = 0;
@@ -63,6 +92,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     if (state.value === "saving") return "Saving...";
     if (state.value === "dirty") return "Unsaved changes";
     if (state.value === "saved") {
+      if (recreated.value && fileState.value === "synced") return `Recreated ${fileName.value}`;
       if (fileState.value === "synced") return `Saved to ${fileName.value}`;
       if (fileState.value === "stale") return `Draft saved, ${fileName.value} not updated (Ctrl+S)`;
       if (fileState.value === "unknown") return `Saved, file: ${fileName.value}`;
@@ -74,7 +104,9 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   // Whether Save (sync off) has anything to do: unsaved text, a failed save, or a file the draft has moved on from. The button is disabled
   // when this is false, which is how it shows there is nothing to save.
   const needsSave = computed(
-    () => ["dirty", "saving", "error"].includes(state.value) || (!!current.value.filePath && fileState.value === "stale"),
+    () =>
+      ["dirty", "saving", "error"].includes(state.value) ||
+      (!!current.value.filePath && (fileState.value === "stale" || !!fileChange.problem.value)),
   );
 
   // Remember the open draft on this device, so a reload or relaunch shows it (a new draft counts once its first save gives it an id).
@@ -87,16 +119,20 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   const asCurrent = (d) => ({ id: d.id, createdAt: d.createdAt, format: d.format, filePath: d.filePath ?? "" });
 
   function setCurrent(d) {
+    refreshed.value = null;
     current.value = asCurrent(d);
     fileState.value = current.value.filePath ? "unknown" : "none";
-    overwriteOk.value = false;
     dirty = false;
     stored = d.id && typeof d.content === "string" ? { text: d.content, format: d.format } : null;
     state.value = d.id ? "saved" : "idle";
+    checkDone = fileChange.check(current.value); // also clears the dialog of the draft that was open
   }
 
   // Called after every change the user makes to the text.
   function edited() {
+    refreshed.value = null; // the Undo offer is for the refresh alone, not for text typed after it
+    recreated.value = false;
+    dropCopy(current.value.id); // a Conflicted copy that is edited is an ordinary draft
     if (!available.value) return;
     dirty = true;
     edits++;
@@ -137,7 +173,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     }
     state.value = "saving";
     try {
-      const d = await saveDraft({
+      const d = await be.saveDraft({
         id: current.value.id,
         format: current.value.format,
         content: text,
@@ -173,21 +209,158 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   // file keeps its modified time), and always asks sync to look at the server (`onSaved` with `explicit`).
   function saveFile(saveAs = false) {
     if (!available.value) return Promise.resolve();
-    if (!saveAs && !(current.value.filePath && fileState.value === "stale")) {
-      return flush().then(() => current.value.id && onSaved?.(current.value.id, { explicit: true }));
+    // A file that cannot be used right now (gone, no permission) is written again by every Ctrl+S, whatever the draft's state.
+    if (!saveAs && !(current.value.filePath && (fileState.value === "stale" || fileChange.problem.value))) {
+      return flush().then(async () => {
+        // An untouched draft does not write its file, unless the file is gone or unusable: then Ctrl+S writes it again.
+        if (current.value.filePath && !isWeb && (await fileGone())) {
+          chain = chain.then(() => writeFile(false));
+          return chain;
+        }
+        return current.value.id && onSaved?.(current.value.id, { explicit: true });
+      });
     }
     chain = chain.then(() => writeFile(saveAs));
     return chain;
   }
 
-  async function writeFile(saveAs) {
+  // True when the draft's file is gone or cannot be used at all (not a bar's business: Ctrl+S just writes it again).
+  async function fileGone() {
+    try {
+      const st = await be.linkedFileStatus(current.value.id);
+      return st.state === "missing" || st.state === "broken";
+    } catch {
+      return false;
+    }
+  }
+
+  // "Overwrite file" in the toast: write the draft to its file even though something else changed it. The path is the stored one.
+  function overwriteFile() {
+    fileChange.clear();
+    if (!available.value || !current.value.filePath) return Promise.resolve("");
+    chain = chain.then(() => writeFile(false, true, false));
+    return chain;
+  }
+
+  // The operations the Keep or Overwrite dialog needs (useConflict.js).
+  const dialog = {
+    // The file's text and version stamp.
+    fileText: () => be.linkedFileText(current.value.id),
+    // The file's version stamp when it differs from the draft, else null.
+    async fileStamp() {
+      const st = await be.linkedFileStatus(current.value.id);
+      return st.state === "changed" ? st.stamp : null;
+    },
+    // A new, ordinary, unlinked draft; labelled "Conflicted copy" in memory only. Returns its id.
+    async saveCopy(text, from) {
+      const d = await be.saveDraft({ format: current.value.format, content: text });
+      copies.value = { ...copies.value, [d.id]: from };
+      refreshListSoon();
+      onSaved?.(d.id);
+      return d.id;
+    },
+    // Write the draft's text to its file (never the autosave's job). Rejects with the reason.
+    async writeFile() {
+      await flush();
+      const why = await (chain = chain.then(() => writeFile(false, true, false)));
+      if (why) throw new Error(why);
+    },
+    // The draft takes the file's text (it has no edits of its own), without pushing: the dialog pushes.
+    applyFile: () => reloadFromFile({ push: false }),
+    current: () => ({ id: current.value.id, text: editor.value?.getText() ?? "" }),
+  };
+
+  // "Reload from file" in the toast: the draft's text becomes the file's text, as one edit that Ctrl+Z takes back. Go reads the stored path and
+  // makes the file the baseline, so the next save does not report it again.
+  // `auto` (the file's name) is the quiet refresh of a draft with no edits of its own: it runs only if nothing is unsaved, being typed or
+  // saved, before and after the file is read, and shows the "Updated from" toast.
+  function reloadFromFile({ auto = "", push = true } = {}) {
+    const id = current.value.id;
+    if (!auto) fileChange.clear();
+    if (!available.value || !id || !current.value.filePath) return Promise.resolve();
+    const startEdits = edits;
+    chain = chain.then(async () => {
+      try {
+        if (auto && (edits !== startEdits || !canAutoRefresh())) return; // the next look tries again
+        const d = await be.reloadDraftFromFile(id);
+        if (current.value.id !== id) return; // another draft was opened meanwhile
+        if (auto && (edits !== startEdits || !canAutoRefresh())) {
+          // Typing began while the file was read: the editor keeps the typed text, and the file is marked as differing so Ctrl+S asks.
+          await be.markFileDiffers(id);
+          return;
+        }
+        clearTimeout(timer);
+        timer = null;
+        editor.value?.replaceText(d.content); // reports an edit, which the lines below settle
+        stored = { text: d.content, format: d.format };
+        current.value = asCurrent(d);
+        dirty = false;
+        fileState.value = "synced";
+        state.value = "saved";
+        if (auto) refreshed.value = { name: auto, tick: Date.now() };
+        refreshListSoon();
+        if (push) onSaved?.(id, { explicit: true }); // the draft changed to match the file: push it at once, like Ctrl+S, so no other device pulls stale text
+      } catch (err) {
+        error.value = `Could not reload ${fileName.value}: ${message(err)}`;
+        state.value = "error";
+      }
+    });
+    return chain;
+  }
+
+  // Nothing unsaved, no save running, no IME composition: the editor's text is what is stored, so it may be replaced.
+  function canAutoRefresh() {
+    return !!editor.value && !dirty && !timer && state.value !== "saving" && state.value !== "dirty" && !editor.value.composing();
+  }
+
+  // Undo on the "Updated from" toast: the editor's own undo, which brings the old text back; edited() then notices and marks the file as differing.
+  function undoRefresh() {
+    refreshed.value = null;
+    editor.value?.undo();
+  }
+
+  // "Unlink": the draft stays, the file stays, the link goes.
+  function unlinkFile() {
+    const id = current.value.id;
+    fileChange.clear();
+    if (!available.value || !id || isWeb) return Promise.resolve();
+    chain = chain.then(async () => {
+      try {
+        const d = await be.unlinkDraftFile(id);
+        if (current.value.id !== id) return;
+        current.value = asCurrent(d);
+        fileState.value = "none";
+        refreshListSoon();
+      } catch (err) {
+        error.value = `Could not unlink: ${message(err)}`;
+        state.value = "error";
+      }
+    });
+    return chain;
+  }
+
+  // The window came back, or the app regained focus: the file may have changed meanwhile (nothing watches it). Only for the open linked draft,
+  // at most every few seconds, and after unsaved text was saved so the comparison is with what is on screen.
+  let lastCheck = 0;
+  async function checkFile() {
+    if (isWeb || !available.value || !current.value.id || !current.value.filePath) return;
+    if (state.value === "saving" || Date.now() - lastCheck < 2000) return;
+    lastCheck = Date.now();
+    await flush();
+    await chain;
+    await fileChange.check(current.value);
+  }
+
+  // Resolves to "" or the reason the file was not written. `push` false: the caller sends the draft to the server itself (the conflict dialog).
+  async function writeFile(saveAs, force = false, push = true) {
     const text = editor.value?.getText() ?? "";
-    if (!current.value.id && text.trim() === "") return;
+    if (!current.value.id && text.trim() === "") return "";
     const mine = edits;
+    const wasGone = fileChange.problem.value?.reason === "file not found";
     const before = state.value;
     state.value = "saving";
     try {
-      const r = await saveDraftToFile(
+      const r = await be.saveDraftToFile(
         {
           id: current.value.id,
           format: current.value.format,
@@ -196,26 +369,31 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
           filePath: current.value.filePath,
         },
         saveAs,
-        overwriteOk.value && !saveAs,
+        force && !saveAs,
       );
-      overwriteOk.value = false;
       if (r.conflict) {
-        // The draft is saved, the file is not: say so, and let the next Ctrl+S replace the file.
+        // The draft is saved, the file is not: the notice asks what to do with the file.
         current.value = asCurrent(r.draft);
         fileState.value = "stale";
-        overwriteOk.value = true;
-        error.value = `${fileName.value} was changed outside Harper Pad. Ctrl+S again replaces it, Ctrl+Shift+S saves elsewhere.`;
         if (edits === mine) dirty = false;
-        state.value = "error";
-        onSaved?.(current.value.id, { explicit: true }); // the draft itself was saved
-        return;
+        state.value = edits === mine ? "saved" : "dirty";
+        fileChange.raise(current.value);
+        if (push) onSaved?.(current.value.id, { explicit: true }); // the draft itself was saved
+        return "";
       }
       if (r.cancelled) {
         state.value = before === "saving" ? "saved" : before;
-        return;
+        return "";
       }
       stored = { text: r.draft.content ?? text, format: r.draft.format };
       current.value = asCurrent(r.draft);
+      fileChange.clear(); // the file was just written (or replaced by a new one)
+      recreated.value = wasGone && !saveAs;
+      if (r.unlinkedFrom?.length)
+        linkMoved.value = {
+          text: `${fileNameOf(r.draft.filePath)} now belongs to this draft, no longer to "${r.unlinkedFrom.join('", "')}"`,
+          tick: Date.now(),
+        };
       if (!current.value.filePath) {
         // The browser could only download a copy: the draft is saved, but not linked to a file.
         fileState.value = "none";
@@ -229,11 +407,14 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
         state.value = "dirty"; // typed during the save: its own timer is already running
       }
       refreshListSoon();
-      onSaved?.(current.value.id, { explicit: true });
+      if (push) onSaved?.(current.value.id, { explicit: true });
+      return "";
     } catch (err) {
+      if (!saveAs) fileChange.failed(current.value, message(err)); // the header's chip says why; the link stays
       error.value = `Not saved to a file: ${message(err)}`;
       state.value = "error"; // the text stays dirty, so the next edit or flush tries again
       dirty = true;
+      return message(err);
     }
   }
 
@@ -242,7 +423,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     const seq = ++listSeq;
     const q = query.value.trim();
     try {
-      const res = q ? await searchDrafts(q, shown) : await listDrafts(shown, 0);
+      const res = q ? await be.searchDrafts(q, shown) : await be.listDrafts(shown, 0);
       if (seq === listSeq) list.value = res;
     } catch (err) {
       showToast(`Could not read the drafts: ${message(err)}`);
@@ -316,7 +497,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   const canStartFresh = computed(() => !isWeb && !available.value);
   async function startFresh() {
     try {
-      await moveDatabaseAside();
+      await be.startFresh();
     } catch (err) {
       error.value = `Could not start fresh: ${message(err)}`;
       return;
@@ -333,9 +514,10 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     if (id === current.value.id) return;
     await flush();
     try {
-      const d = await getDraft(id);
+      const d = await be.getDraft(id);
       setCurrent(d);
       editor.value?.load(d.content, d.format);
+      await checkDone;
       onOpened?.(d.id);
     } catch (err) {
       showToast(`Could not open the draft: ${message(err)}`);
@@ -349,8 +531,11 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   // Shows the stored version of the open draft again (a newer one was stored by sync). Does nothing if something was typed meanwhile.
   async function reloadCurrent() {
     if (!current.value.id || !canReplace()) return;
-    const d = await getDraft(current.value.id);
+    const d = await be.getDraft(current.value.id);
+    const was = stored?.text;
     setCurrent(d);
+    // Newer text from the server: the linked file now lags the draft, so the next Ctrl+S writes it (and asks first if the file changed).
+    if (current.value.filePath && was !== d.content) fileState.value = "stale";
     editor.value?.load(d.content, d.format, true); // same draft, newer text: the person's selection stays
   }
 
@@ -368,7 +553,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   async function remove(id) {
     let draft;
     try {
-      draft = await getDraft(id);
+      draft = await be.getDraft(id);
     } catch (err) {
       showToast(`Could not delete the draft: ${message(err)}`);
       refreshList();
@@ -382,7 +567,8 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
       await chain;
     }
     try {
-      await deleteDraft(id);
+      await be.deleteDraft(id);
+      dropCopy(id);
     } catch (err) {
       showToast(`Could not delete the draft: ${message(err)}`);
       return;
@@ -400,7 +586,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
       "Draft deleted",
       async () => {
         try {
-          await saveDraft(draft);
+          await be.saveDraft(draft);
         } catch (err) {
           showToast(`Could not restore the draft: ${message(err)}`);
           return;
@@ -420,7 +606,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
       clearTimeout(timer);
       dirty = false;
       await chain;
-      const newest = (await listDrafts(1, 0)).drafts[0];
+      const newest = (await be.listDrafts(1, 0)).drafts[0];
       if (newest) await open(newest.id);
       else {
         setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
@@ -433,7 +619,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   // Undo of that removal: the draft comes back, is shown, and is uploaded again (an edit survives a delete).
   async function restore(draft) {
     try {
-      await saveDraft(draft);
+      await be.saveDraft(draft);
     } catch (err) {
       showToast(`Could not restore the draft: ${message(err)}`);
       return;
@@ -456,15 +642,18 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   };
   const onVisibility = () => {
     if (document.visibilityState === "hidden") flush();
+    else checkFile();
   };
   function attach() {
     window.addEventListener("blur", onLeave);
     window.addEventListener("pagehide", onLeave);
+    window.addEventListener("focus", checkFile);
     document.addEventListener("visibilitychange", onVisibility);
   }
   function detach() {
     window.removeEventListener("blur", onLeave);
     window.removeEventListener("pagehide", onLeave);
+    window.removeEventListener("focus", checkFile);
     document.removeEventListener("visibilitychange", onVisibility);
     for (const t of [timer, listTimer, searchTimer, toastTimer]) clearTimeout(t);
   }
@@ -475,7 +664,6 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     state,
     fileState,
     needsSave,
-    replacingFile: computed(() => overwriteOk.value && current.value.filePath !== ""), // the next Sync replaces a file that changed outside
     fileName,
     fileDir,
     list,
@@ -493,6 +681,23 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     removedElsewhere,
     restore,
     saveFile,
+    recreated,
+    fileConflict: fileChange.conflict,
+    fileCheckDone: () => checkDone,
+    recheckFile: () => fileChange.check(current.value, { force: true }),
+    clearFileConflict: fileChange.clearConflict,
+    dialog,
+    copies,
+    dropCopy,
+    linkMoved,
+    // Why the open draft's file cannot be used right now ("file not found", "permission denied", ...), or "".
+    fileProblem: computed(() => (fileChange.problem.value?.id === current.value.id ? fileChange.problem.value.reason : "")),
+    refreshed,
+    undoRefresh,
+    reloadFromFile,
+    overwriteFile,
+    unlinkFile,
+    checkFile,
     refreshList,
     setQuery,
     showMore,

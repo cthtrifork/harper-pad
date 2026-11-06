@@ -16,7 +16,9 @@ export {
 };
 
 export {
+    FileCheck,
     FileSave,
+    FileText,
     Settings,
     StartupState,
     UpdateInfo,

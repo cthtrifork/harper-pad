@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref, watch } from "vue";
 import { copyDiagnostics } from "../lib/diagnostics.js";
 import { whenLabel } from "../lib/when.js";
+import { COPY_LABELS } from "../lib/conflict.js";
 import SnippetsHelp from "./SnippetsHelp.vue";
 
 const props = defineProps({
@@ -10,8 +11,10 @@ const props = defineProps({
   currentId: { type: String, default: "" },
   query: { type: String, default: "" },
   toast: { type: Object, default: null },
+  // Draft id -> where a Conflicted copy came from, in memory only (useDrafts): the row says so until the copy is edited, deleted or dismissed.
+  copies: { type: Object, default: () => ({}) },
 });
-const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet"]);
+const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet", "dismiss-copy"]);
 
 const help = ref(false); // the snippets help page replaces the list
 const q = ref(props.query);
@@ -143,6 +146,10 @@ const baseName = (path) => path.split(/[\\/]/).pop();
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4l2.5 2.5v6.5H3zM7 1.5V4h2.5" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none" /></svg>
             <span class="sr-only">Saved to file: </span>{{ baseName(d.filePath) }}
           </span>
+          <span v-if="copies[d.id]" class="copy-badge">{{ COPY_LABELS[copies[d.id]] }}</span>
+        </button>
+        <button v-if="copies[d.id]" type="button" class="copy-x" :aria-label="`Dismiss the Conflicted copy label on ${d.title}`" @click="emit('dismiss-copy', d.id)">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7m0-7l-7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" /></svg>
         </button>
         <button type="button" class="del" :aria-label="`Delete ${d.title}`" @click="emit('remove', d.id)">
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 3.5h7M4.5 3.5V2.5h3v1M3.5 3.5l.4 6h4.2l.4-6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>

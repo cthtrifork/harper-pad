@@ -31,6 +31,16 @@
     display: none;
   }
 
+  /* A file that cannot be used still shows, as its warning triangle alone (the struck-through name does not fit); its title and the
+     announcement carry the reason. */
+  .bar .badge.broken {
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+
   .bar .save-icon {
     display: block;
   }

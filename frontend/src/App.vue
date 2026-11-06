@@ -7,6 +7,7 @@ import Editor from "./components/Editor.vue";
 import Preview from "./components/Preview.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
+import ConflictDialog from "./components/ConflictDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
@@ -16,6 +17,8 @@ import { createLinter } from "./lib/harper.js";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.js";
 import { statusLine } from "./lib/statusLine.js";
 import { useDrafts } from "./lib/useDrafts.js";
+import { COPY_LABELS } from "./lib/conflict.js";
+import { useConflict } from "./lib/useConflict.js";
 import { useSync } from "./lib/useSync.js";
 
 // What main.js asked the backend before mounting (see backend.js startup): the demo banner and the most recent draft.
@@ -66,7 +69,6 @@ const sync = useSync({
   prepare: () => drafts.flush(),
   skip: () => new Set([drafts.current.value.id].filter(Boolean)),
   onChanged: () => drafts.refreshList(),
-  openDraft: (id) => drafts.open(id),
   onRemoved: (draft) => drafts.removedElsewhere(draft),
   onRestore: (draft) => drafts.restore(draft),
   settings: {
@@ -77,6 +79,7 @@ const sync = useSync({
     store: settingsSync,
     apply: (changes) => applySettings(changes),
   },
+  isOpen: (id) => drafts.current.value.id === id,
 });
 // A draft that was opened is checked against the server in the background (a newer version is swapped in when nothing was typed).
 const openHooks = { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() };
@@ -86,13 +89,22 @@ const drafts = useDrafts(editor, showDrawer, {
   onSaved: (id, how) => (how?.explicit ? sync.syncRequested(id, openHooks) : sync.draftSaved(id)),
   onOpened: checkOpened,
   onDeleted: sync.draftDeleted,
+  probeServer: (id) => sync.probeServer(id),
 });
+// Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
+const conflict = useConflict({ drafts, sync });
+const copyBadge = computed(() => COPY_LABELS[drafts.copies.value[drafts.current.value.id]] ?? "");
 
 // The status line: where the open draft's text is and who has it, joined from the draft and the sync (lib/statusLine.js).
 const statusLineNow = computed(() =>
   statusLine({
-    draft: { state: drafts.state.value, text: drafts.status.value, fileState: drafts.fileState.value, fileName: drafts.fileName.value },
-    sync: { enrolled: sync.enrolled.value, status: sync.status.value, newer: sync.notice.value?.kind === "newer" },
+    draft: { state: drafts.state.value, text: drafts.status.value, fileState: drafts.fileState.value, fileName: drafts.fileName.value, recreated: drafts.recreated.value },
+    sync: {
+      enrolled: sync.enrolled.value,
+      status: sync.status.value,
+      newer: sync.notice.value?.kind === "newer",
+      rejected: sync.rejected.value?.id === drafts.current.value.id ? sync.rejected.value : null,
+    },
   }),
 );
 // The button only acts: Sync when sync is on, Save when it is off (disabled while there is nothing to save).
@@ -112,14 +124,11 @@ watch(
 const syncToast = computed(() => {
   const n = sync.notice.value;
   if (!n || n.kind === "newer") return null;
-  return { ...n, action: n.kind === "copy" ? "Open copy" : n.kind === "removed" ? "Undo" : "", ms: n.kind === "updated" ? 5000 : 12000 };
+  return { ...n, action: n.kind === "removed" ? "Undo" : "", ms: n.kind === "updated" ? 5000 : 12000 };
 });
 function syncToastAction() {
   const n = sync.notice.value;
-  if (n?.kind === "copy") {
-    sync.openCopy(n.copyId);
-    sync.clearNotice();
-  } else if (n?.kind === "removed") sync.undoRemoved();
+  if (n?.kind === "removed") sync.undoRemoved();
 }
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
@@ -361,8 +370,11 @@ const focusFromPress = (e) => {
 
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
+  // The linked file is looked at first and the server after it, so a clean draft is not changed by a pull before the file is seen.
+  let fileReady = Promise.resolve();
   sync
     .init()
+    .then(() => fileReady)
     .then(() => drafts.current.value.id && checkOpened(drafts.current.value.id))
     .catch(() => {});
   window.addEventListener("keydown", onKeydown);
@@ -371,6 +383,7 @@ onMounted(async () => {
   drafts.attach();
   keepData();
   await nextTick(); // the editor is in the page now; Harper starts loading after it has been painted
+  fileReady = drafts.checkFile(); // the draft open at start: its linked file may have changed while the app was closed
   try {
     harper.value = await loadHarper();
     setupMs.value = Math.round(performance.now() - t0);
@@ -414,11 +427,13 @@ onBeforeUnmount(() => {
       :file-path="drafts.current.value.filePath"
       :file-name="drafts.fileName.value"
       :file-dir="drafts.fileDir.value"
+      :file-problem="drafts.fileProblem.value"
+      :copy-badge="copyBadge"
+      @unlink="drafts.unlinkFile"
       :can-save="drafts.available.value"
       :sync-on="sync.enrolled.value"
       :sync-busy="syncBusy"
       :needs-save="drafts.needsSave.value"
-      :replacing-file="drafts.replacingFile.value"
       :sharing="sharing"
       :is-markdown="isMarkdown"
       :mode="mode"
@@ -439,6 +454,8 @@ onBeforeUnmount(() => {
         :current-id="drafts.current.value.id"
         :query="drafts.query.value"
         :toast="drafts.toast.value"
+        :copies="drafts.copies.value"
+        @dismiss-copy="drafts.dropCopy"
         @open="(id) => pickDraft(drafts.open, id)"
         @create="pickDraft(drafts.create, undefined, { always: true })"
         @remove="drafts.remove"
@@ -480,6 +497,12 @@ onBeforeUnmount(() => {
             <ToastBar v-if="toast" :message="`Fixed ${toast.ids.length} ${toast.ids.length === 1 ? 'thing' : 'things'}`" :action="toast.ids.length === 1 ? 'Undo' : 'Undo all'" :tick="toast.tick" @action="undoToast" @close="toast = null" />
           </Transition>
           <Transition name="toast-bar">
+            <ToastBar v-if="drafts.refreshed.value" :message="`Updated from ${drafts.refreshed.value.name}`" action="Undo" :tick="drafts.refreshed.value.tick" @action="drafts.undoRefresh" @close="drafts.refreshed.value = null" />
+          </Transition>
+          <Transition name="toast-bar">
+            <ToastBar v-if="drafts.linkMoved.value" :message="drafts.linkMoved.value.text" :tick="drafts.linkMoved.value.tick" :ms="9000" @close="drafts.linkMoved.value = null" />
+          </Transition>
+          <Transition name="toast-bar">
             <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
           </Transition>
         </div>
@@ -492,7 +515,8 @@ onBeforeUnmount(() => {
       </Transition>
     </div>
     <!-- A note that was deleted on another device: a modal, so the person has to choose Keep or Remove. -->
-    <DeletedElsewhereDialog v-if="sync.gone.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
+    <ConflictDialog v-if="conflict.model.value" :model="conflict.model.value" :busy="conflict.busy.value" :note="conflict.note.value" @choose="conflict.choose" />
+    <DeletedElsewhereDialog v-if="sync.gone.value && !conflict.model.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
     <StatusBar
       :state="state"
       :problem-count="problems.length"
@@ -502,7 +526,7 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' ? statusLineNow.text : ''"
+      :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' || sync.rejected.value?.id === drafts.current.value.id ? statusLineNow.text : ''"
       :draft-tone="statusLineNow.tone"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"

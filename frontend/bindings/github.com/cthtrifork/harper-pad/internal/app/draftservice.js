@@ -41,6 +41,32 @@ export function GetDraft(id) {
 }
 
 /**
+ * LinkedFileStatus compares the draft's file with the draft as stored. It reads the path stored for the draft; the page names only the
+ * draft. A file whose mtime moved but whose text equals the draft's is quietly taken as the new baseline (state "same"). The page saves
+ * the draft first (flush) so that "the draft as stored" is what is on screen.
+ * @param {string} id
+ * @returns {$CancellablePromise<$models.FileCheck>}
+ */
+export function LinkedFileStatus(id) {
+    return $Call.ByID(2003805254, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType1($result);
+    }));
+}
+
+/**
+ * LinkedFileText returns the text of the draft's file (CRLF as LF), read from the stored path, with the file's version stamp (its mtime as
+ * text). It is for the page's conflict dialog: the text of a Conflicted copy, and the stamp it compares again when the person chooses.
+ * Errors as ReloadDraftFromFile does (not there, not text, too large).
+ * @param {string} id
+ * @returns {$CancellablePromise<$models.FileText>}
+ */
+export function LinkedFileText(id) {
+    return $Call.ByID(2854430203, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType2($result);
+    }));
+}
+
+/**
  * ListDrafts returns a page of drafts, newest first, with a title, an excerpt and a task preview for each.
  * @param {number} limit
  * @param {number} offset
@@ -48,7 +74,31 @@ export function GetDraft(id) {
  */
 export function ListDrafts(limit, offset) {
     return $Call.ByID(1319362539, limit, offset).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType3($result);
+    }));
+}
+
+/**
+ * MarkFileDiffers records that the draft's file no longer matches what the draft holds (the page took the file's text while the person was typing,
+ * so the file has a version they never saw), so the next save of
+ * the file reports it as changed instead of replacing it silently. Nothing is written to the file.
+ * @param {string} id
+ * @returns {$CancellablePromise<void>}
+ */
+export function MarkFileDiffers(id) {
+    return $Call.ByID(3077028281, id);
+}
+
+/**
+ * ReloadDraftFromFile replaces the draft's text with the contents of its file and returns the draft as stored. The path is the one
+ * stored for the draft, never one from the page. The file is taken as the new baseline (its mtime is recorded), so the next save does
+ * not report it as changed. A file that is missing, not a regular file, too large or not valid UTF-8 is an error and nothing changes.
+ * @param {string} id
+ * @returns {$CancellablePromise<store$0.Draft>}
+ */
+export function ReloadDraftFromFile(id) {
+    return $Call.ByID(2613979643, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
     }));
 }
 
@@ -76,7 +126,7 @@ export function SaveDraft(d) {
  */
 export function SaveDraftToFile(d, saveAs, overwrite) {
     return $Call.ByID(89900998, d, saveAs, overwrite).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType2($result);
+        return $$createType4($result);
     }));
 }
 
@@ -88,7 +138,7 @@ export function SaveDraftToFile(d, saveAs, overwrite) {
  */
 export function SearchDrafts(query, limit) {
     return $Call.ByID(2798507011, query, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType1($result);
+        return $$createType3($result);
     }));
 }
 
@@ -101,7 +151,20 @@ export function StartFresh() {
     return $Call.ByID(3053477399);
 }
 
+/**
+ * UnlinkDraftFile removes the draft's link to its file. The draft and the file both stay as they are.
+ * @param {string} id
+ * @returns {$CancellablePromise<store$0.Draft>}
+ */
+export function UnlinkDraftFile(id) {
+    return $Call.ByID(3035261061, id).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType0($result);
+    }));
+}
+
 // Private type creation functions
 const $$createType0 = store$0.Draft.createFrom;
-const $$createType1 = store$0.List.createFrom;
-const $$createType2 = $models.FileSave.createFrom;
+const $$createType1 = $models.FileCheck.createFrom;
+const $$createType2 = $models.FileText.createFrom;
+const $$createType3 = store$0.List.createFrom;
+const $$createType4 = $models.FileSave.createFrom;

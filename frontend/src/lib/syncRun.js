@@ -1,5 +1,5 @@
 // The one place a draft is synced (docs/sync.md, "Conflicts"): `all()` for Sync all, `one(id)` for the push after a save and `open(id)` for
-// opening a note all decide with the same table, so a draft is uploaded, downloaded, removed or kept as a conflicted copy by this code only.
+// opening a note all decide with the same table, so a draft is uploaded, downloaded or removed by this code only.
 // `decide` and `settle` (syncPlan.js) are the pure table; nothing outside this file calls them or uploads a draft.
 //
 // No Vue and no network or storage of its own: `device` and `fetchFn` for the server, `drafts` for the local store (the web store's get, save,
@@ -11,22 +11,13 @@ import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone
 import { decide, settle } from "./syncPlan.js";
 import { SyncError } from "./syncEnroll.js";
 
-const pad = (n) => String(n).padStart(2, "0");
+const emptySum = () => ({ uploaded: 0, downloaded: 0, removed: 0, failed: 0, skipped: 0 });
 
-// The server's different version, kept here as a new draft: its first line gets "Conflicted copy <date time>: " in front.
-export function conflictedCopy(content, now = new Date()) {
-  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  return `Conflicted copy ${stamp}: ${content}`;
-}
-
-const emptySum = () => ({ uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 });
-
-// "3 uploaded, 2 downloaded, 1 conflicted copy" for a result of all().
+// "3 uploaded, 2 downloaded, 1 removed" for a result of all().
 export function summaryText(sum) {
   const parts = [
     [sum.uploaded, "uploaded"],
     [sum.downloaded, "downloaded"],
-    [sum.conflicted, sum.conflicted === 1 ? "conflicted copy" : "conflicted copies"],
     [sum.removed, "removed"],
     [sum.failed, "failed"],
     [sum.skipped, "left open"],
@@ -43,9 +34,11 @@ const parseData = (doc) => {
 const stateOf = (doc) => (doc ? { version: doc.version, updatedAt: doc.updatedAt, deleted: !!doc.deleted } : null);
 
 // A server that cannot be reached, or that refuses this device, stops everything with a SyncError; any other failure fails one draft.
-// `onCopy(copy)` is called with the new draft when a conflict keeps the server's version as a conflicted copy, and `onGone(id)` when Sync all
-// leaves a draft alone that was deleted on another device (it is the open one), so the person can be told.
-export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), onCopy = () => {}, onGone = () => {} }) {
+// A draft changed on both sides with different text is a conflict that only the person can settle (the modal: Keep or Overwrite): nothing
+// here replaces, copies or uploads it, and `all()` leaves it alone until it is open. `one()` and `open()` answer "conflict" for it, and
+// `inspect(id)` gives the server's text for the dialog and `force(id)` sends this device's text on top, once the person has chosen.
+// `onGone(id)` is called when Sync all leaves a draft alone that was deleted on another device (it is the open one), so the person can be told.
+export function createSyncer({ device, drafts, fetchFn, onGone = () => {}, onRejected = () => {} }) {
   // Uploads a draft on top of `state` (the server's state, or null when it has none) and records the answer. True when it was taken.
   async function upload(draft, state) {
     const out = await pushDraft({ device, draft, state, fetchFn });
@@ -60,7 +53,7 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
   }
 
   // Does what `decide` says for one draft. `local` is null or {changed}; `srv` is the server's state ({version, updatedAt, deleted}) or null.
-  // Resolves to the name of the count it adds to ("uploaded", "downloaded", "removed", "conflicted", "failed", "skipped"), "" for nothing
+  // Resolves to the name of the count it adds to ("uploaded", "downloaded", "removed", "failed", "skipped"), "conflict" for a draft changed on both sides with different text, "" for nothing
   // to do, or "stale" when `guessed` is set and the server refused the upload because its state was not the one assumed.
   async function settleOne(id, local, srv, { skip = false, guessed = false } = {}) {
     const st = await drafts.syncState(id);
@@ -106,17 +99,12 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
       await drafts.markSynced(id, { hash: mineHash, updatedAt: srv.updatedAt, version: srv.version, deleted: false });
       return "";
     }
-    // The server's text is kept as a new draft first, so nothing is lost if the next step fails; then this device's text goes on top.
-    const copy = await drafts.save({ format: remote.format, content: conflictedCopy(remote.content, now()) });
-    onCopy(copy);
-    const topped = await upload(mine, srv);
-    const copied = await upload(copy, null);
-    return topped && copied ? "conflicted" : "failed";
+    return "conflict"; // left exactly as it is: the person decides when the draft is open
   }
 
   const api = {
     // Sync all: every draft, both ways. `skip` is a set of ids to leave alone this time (the draft open in the editor, so a download
-    // cannot change text being typed). Resolves to {uploaded, downloaded, removed, conflicted, failed, skipped}.
+    // cannot change text being typed). Resolves to {uploaded, downloaded, removed, failed, skipped}.
     async all({ skip = new Set() } = {}) {
       const server = new Map((await listDocs({ device, fetchFn })).map((d) => [d.id, d]));
       const { changed, deleted } = await drafts.changes();
@@ -128,9 +116,10 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
           const key = await settleOne(id, localIds.has(id) ? { changed: changedSet.has(id) } : null, server.get(id) ?? null, {
             skip: skip.has(id),
           });
-          if (key) sum[key]++;
+          if (key && key in sum) sum[key]++; // "conflict" is not counted: it waits for the person
         } catch (err) {
           if (err?.code === "unreachable" || err?.code === "signin") throw err;
+          if (err?.code === "rejected") onRejected(id, err.message); // the server refused this draft: it stays here and is tried again next time
           sum.failed++;
         }
       }
@@ -155,7 +144,16 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
         synced: st ? { updatedAt: st.updatedAt, deleted: st.deleted } : null,
         server: { updatedAt: srv.updatedAt, deleted: srv.deleted },
       });
-      if (action === "resolve") return "newer";
+      if (action === "resolve") {
+        // Changed on both sides: the same text is adopted, a different one is for the person to settle.
+        const remote = parseData(got.doc);
+        const mineHash = await contentHash(mine.format, mine.content);
+        if (settle(mineHash, await contentHash(remote.format, remote.content)) === "adopt") {
+          await drafts.markSynced(id, { hash: mineHash, updatedAt: srv.updatedAt, version: srv.version, deleted: false });
+          return "none";
+        }
+        return "conflict";
+      }
       if (action === "remove-local") return "deleted"; // deleted on another device, and nothing was changed here: the person decides
       if (action !== "download") return "none";
       if (!canSwap()) return "newer";
@@ -175,6 +173,31 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
       });
       if (key !== "stale") return key;
       return settleOne(id, local, stateOf(await getDoc({ device, id, fetchFn })));
+    },
+
+    // What the server holds for a draft, for the conflict dialog: {text, format, stamp, deleted}, or null when it has nothing. The stamp is the
+    // server's state; the dialog compares it again when the person chooses, and redraws if it moved.
+    async inspect(id) {
+      const doc = await getDoc({ device, id, fetchFn });
+      if (!doc) return null;
+      const remote = doc.deleted ? { format: "markdown", content: "" } : parseData(doc);
+      return { text: remote.content, format: remote.format, stamp: `${doc.version}:${doc.updatedAt}`, deleted: !!doc.deleted };
+    },
+
+    // Before an automatic refresh from a file: has the server something this device has not seen? One conditional request. Resolves to
+    // {ahead: false} (a 304, or no copy) or {ahead: true, text}.
+    async probe(id) {
+      const st = await drafts.syncState(id);
+      const got = await getDocIfChanged({ device, id, state: st, fetchFn });
+      if (got.kind !== "doc" || got.doc.deleted) return { ahead: false };
+      return { ahead: true, text: parseData(got.doc).content };
+    },
+
+    // The person chose (Keep or Overwrite): this device's text goes to the server on top of whatever it holds now, and is recorded as synced.
+    // The server's version was copied first by the caller when the choice was Keep. A server with a tombstone or nothing takes it as an edit.
+    async force(id) {
+      const [mine, doc] = await Promise.all([drafts.get(id), getDoc({ device, id, fetchFn })]);
+      return upload(mine, doc ? stateOf(doc) : null);
     },
 
     // The person chose to keep a draft that was deleted on another device: the tombstone is taken as the known state, so the draft counts as

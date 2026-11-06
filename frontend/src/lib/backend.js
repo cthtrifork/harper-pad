@@ -11,7 +11,7 @@ import { createSettingsSyncStore } from "./settingsSync.js";
 import { createDeviceStore } from "./syncDevice.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
-export const isWeb = import.meta.env.MODE === "web";
+export const isWeb = import.meta.env?.MODE === "web";
 
 // The web build on a browser without a file picker (iPhone, iPad): Save opens the share sheet.
 export const sharing = isWeb && sharesFiles();
@@ -133,6 +133,37 @@ export async function saveDraftToFile(draft, saveAs, overwrite = false) {
     saveAs,
     overwrite,
   );
+}
+
+// Desktop only: how the file the draft is linked to compares with the draft: {state, reason, stamp, fileLines, draftLines, onlyInFile,
+// onlyInDraft} with state "none" | "same" | "changed" | "missing" | "broken". Go reads the stored path. The web build has no path to
+// look at, so it always answers "none".
+export async function linkedFileStatus(id) {
+  if (isWeb) return { state: "none" };
+  return (await bindings()).DraftService.LinkedFileStatus(id);
+}
+
+// Desktop only: the text and version stamp of the draft's file, read from the stored path ({text, stamp}); rejects when it is not text.
+export async function linkedFileText(id) {
+  if (isWeb) throw new Error("there is no file to read in the web build");
+  return (await bindings()).DraftService.LinkedFileText(id);
+}
+
+// Desktop only: replaces the draft's text with its file's text (Go reads the stored path) and returns the draft as stored.
+export async function reloadDraftFromFile(id) {
+  if (isWeb) throw new Error("there is no file to reload from in the web build");
+  return (await bindings()).DraftService.ReloadDraftFromFile(id);
+}
+
+// Desktop only: after a reload was undone, so that the next save of the linked file reports it as changed. Nothing is written.
+export async function markFileDiffers(id) {
+  if (!isWeb) await (await bindings()).DraftService.MarkFileDiffers(id);
+}
+
+// Desktop only: stops linking the draft to its file; both stay as they are. Returns the draft as stored.
+export async function unlinkDraftFile(id) {
+  if (isWeb) throw new Error("the web build cannot unlink a file");
+  return (await bindings()).DraftService.UnlinkDraftFile(id);
 }
 
 export async function deleteDraft(id) {
