@@ -471,7 +471,7 @@ test("a dictionary that fails to sync is named in the chip, and the drafts are n
   const { sync, ready } = setup({ fetchFn, settings });
   await ready();
   await sync.syncAll();
-  assert.match(sync.setsFailed.value, /^Could not sync the dictionary and ignore list/);
+  assert.equal(sync.setsFailed.value, true);
   assert.equal(sync.status.value, "synced");
   assert.match(sync.summary.value, /up to date/);
 });
@@ -490,11 +490,11 @@ test("changing the dictionary syncs it after the delay, and a later success clea
   await ready();
   sync.wordsChanged();
   await settle();
-  assert.match(sync.setsFailed.value, /Could not sync/);
+  assert.equal(sync.setsFailed.value, true);
   fail = false;
   sync.wordsChanged();
   await settle();
-  assert.equal(sync.setsFailed.value, "");
+  assert.equal(sync.setsFailed.value, false);
   assert.equal(puts, 1);
 });
 
@@ -506,20 +506,4 @@ test("turning sync off forgets what was synced, so enrolling again takes the ser
   await ready();
   await sync.turnOff();
   assert.equal(await store.load(), null);
-});
-
-test("a list over the limit is named in the chip, with what to do, and nothing is sent", async () => {
-  let sent = 0;
-  const fetchFn = async (url, init) => {
-    if (new URL(url).pathname === "/docs") return reply(200, [])();
-    if (init.method === "PUT") sent++;
-    return reply(404, {})();
-  };
-  const words = Array.from({ length: 5001 }, (_, i) => `w${i}`);
-  const settings = { current: async () => ({ words, ignored: [] }), store: memoryStore(), apply: async () => {} };
-  const { sync, ready } = setup({ fetchFn, settings });
-  await ready();
-  await sync.syncAll();
-  assert.equal(sync.setsFailed.value, "The dictionary is too large to sync (5,000 words at most).");
-  assert.equal(sent, 0);
 });

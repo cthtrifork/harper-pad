@@ -6,7 +6,7 @@
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.js";
-import { changesTo, cleanLists, limitMessage, parseSettings, sameLists, settingsData } from "./settingsItems.js";
+import { changesTo, cleanLists, parseSettings, sameLists, settingsData } from "./settingsItems.js";
 import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.js";
 import { decide, settle } from "./syncPlan.js";
 import { SyncError } from "./syncEnroll.js";
@@ -198,8 +198,6 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
     async syncSettings({ current, store, apply }) {
       const rec = await store.load();
       const held = cleanLists(await current());
-      const tooBig = limitMessage(held);
-      if (tooBig) throw new SyncError("limit", tooBig);
       const matched = async (version) => store.save({ version, ...cleanLists(await current()) });
       for (let attempt = 0; attempt < 3; attempt++) {
         const remote = await getSetting({ device, fetchFn });

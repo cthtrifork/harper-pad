@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateDeviceKey } from "./dpop.js";
-import { LIMITS, parseSettings, settingsData } from "./settingsItems.js";
+import { parseSettings, settingsData } from "./settingsItems.js";
 import { createSyncer } from "./syncRun.js";
 
 function fakeServer() {
@@ -166,21 +166,4 @@ test("input is trimmed and tidied before it is sent, and an entry the server wou
   assert.deepEqual(a.words, ["  Wails ", "Wails", "", "two words", "x".repeat(65), "Harper\n"], "nothing was removed locally");
   await a.sync();
   assert.equal(server.puts, 1, "tidying is not a change");
-});
-
-test("a list over the limit is refused before anything is sent", async () => {
-  const server = fakeServer();
-  const a = phone(
-    server,
-    Array.from({ length: LIMITS.words + 1 }, (_, i) => `w${i}`),
-  );
-  await assert.rejects(a.sync(), /too large to sync/);
-  assert.equal(server.puts, 0);
-  const b = phone(
-    server,
-    [],
-    Array.from({ length: LIMITS.ignored + 1 }, (_, i) => String(i)),
-  );
-  await assert.rejects(b.sync(), /ignore list is too large/);
-  assert.equal(server.puts, 0);
 });

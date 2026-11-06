@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -74,17 +73,11 @@ func TestSettingsValidation(t *testing.T) {
 	h, _ := setup(t, db)
 	a := enrollDevice(t, h, makeInvite(t, admin, "A"))
 	for name, data := range map[string]string{
-		"not json":         "nope",
-		"wrong version":    `{"v":2,"words":[],"ignored":[]}`,
-		"no words":         `{"v":1,"ignored":[]}`,
-		"no ignored":       `{"v":1,"words":[]}`,
-		"a phrase":         doc(`"two words"`, ``),
-		"a long word":      doc(`"`+strings.Repeat("a", 65)+`"`, ``),
-		"an empty word":    doc(`""`, ``),
-		"a hash with text": doc(``, `"abc"`),
-		"a long hash":      doc(``, `"123456789012345678901"`),
-		"too many words":   doc(manyItems(maxWords+1, "w"), ``),
-		"too many hashes":  doc(``, manyItems(maxIgnored+1, "")),
+		"not json":      "nope",
+		"wrong version": `{"v":2,"words":[],"ignored":[]}`,
+		"no words":      `{"v":1,"ignored":[]}`,
+		"no ignored":    `{"v":1,"words":[]}`,
+		"not strings":   `{"v":1,"words":[1],"ignored":[]}`,
 	} {
 		if rec := a.call("PUT", "/settings", settingBody{0, data}); rec.Code != 422 {
 			t.Errorf("%s = %d %s", name, rec.Code, rec.Body)
@@ -99,16 +92,14 @@ func TestSettingsValidation(t *testing.T) {
 	}
 }
 
-// manyItems is n quoted items: words "w0", "w1", ... with a prefix, or digit strings without one.
-func manyItems(n int, prefix string) string {
-	var sb strings.Builder
-	for i := range n {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteString(`"` + prefix + strconv.Itoa(i) + `"`)
+func TestSettingsOverTheSizeLimitAre413(t *testing.T) {
+	admin, db := newDB(t)
+	h, _ := setup(t, db)
+	a := enrollDevice(t, h, makeInvite(t, admin, "A"))
+	big := doc(`"`+strings.Repeat("a", store.MaxSettingData)+`"`, ``)
+	if rec := a.call("PUT", "/settings", settingBody{0, big}); rec.Code != 413 {
+		t.Errorf("over the limit = %d", rec.Code)
 	}
-	return sb.String()
 }
 
 func TestSettingsNeedADevice(t *testing.T) {

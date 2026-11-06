@@ -175,17 +175,15 @@ These are the exception to the rule above. The dictionary and the ignore list ar
 ```
 
 The ignore list holds the decimal hash of each ignored finding (text, because Harper's hashes are 64-bit). The server only checks
-the shape and the sizes. An empty list is valid.
+that it is valid UTF-8 JSON of this shape and not too large. An empty list is valid.
 
-**Limits.** 5,000 words and 2,000 ignored findings (a word is one word of 1 to 64 characters, a hash is 1 to 20 digits), and 256 KiB for
-the document. A personal dictionary is tens to a few hundred words, so these are 10 to 25 times what is used, and they keep each
-send and each linter rebuild small. The client holds the same numbers (`LIMITS` in `settingsItems.js`; a test compares them with the
-server's), and checks them **before** sending: a list over its limit sends nothing and the chip says "The dictionary is too large to
-sync (5,000 words at most)". The desktop app's own cap is 10,000 words, so a larger dictionary still loads and works; it is just not synced.
+**Limits.** The only limit is the document's size, 256 KiB (a database check; a larger write is refused with 413 and the chip says
+"Could not sync"). A personal dictionary is tens to a few hundred words, around 50 KB at 5,000 words, so it is not expected to matter;
+there is no cap on counts and no warning before it. The server does not look inside the lists.
 
-**Tidying.** What is sent is trimmed of surrounding spaces, without repeats or empty entries. An entry the server would refuse (a phrase,
-a control character, a word over 64 characters) is left out of the document rather than failing the whole sync; it stays in the local
-dictionary and is not shared.
+**Tidying.** What is sent is trimmed of surrounding spaces, without repeats or empty entries. An entry that another device would refuse
+to read (a phrase, a control character, a word over 64 characters, a hash that is not digits) is left out of the document, because a
+device reading the document refuses it whole. It stays in the local dictionary and is not shared. The desktop app's own cap is 10,000 words.
 
 **Rules** (`createSyncer.syncSettings`). Each device keeps one record, `sync-settings` in its IndexedDB `kv` store (on desktop too, so
 SQLite and the bindings are unchanged): the server `version` it last matched and the two lists it held then. It is never a source of
