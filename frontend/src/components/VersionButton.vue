@@ -36,12 +36,20 @@ onBeforeUnmount(() => {
 <template>
   <div ref="root" class="wrap web-version">
     <button type="button" class="btn" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="open = !open">{{ version }}</button>
-    <div v-if="open" class="pop" role="dialog" aria-label="Version">
-      <h3>Harper Pad {{ version }}</h3>
-      <p>The web app updates itself when it opens online.</p>
-      <div class="foot">
-        <button type="button" class="link" @click="copyReport">{{ copied || "Copy diagnostics" }}</button>
+    <Transition name="pop">
+      <div v-if="open" class="pop" role="dialog" aria-label="Version">
+        <div class="status">
+          <div>
+            <h3>Harper Pad {{ version }}</h3>
+            <p>The web app updates itself when it opens online.</p>
+          </div>
+        </div>
+        <div class="sep"></div>
+        <button type="button" class="row" @click="copyReport">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h8" /></svg>
+          {{ copied || "Copy diagnostics" }}
+        </button>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
