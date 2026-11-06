@@ -21,7 +21,6 @@
   white-space: nowrap;
 }
 
-.bar .file-name,
 .bar .badge {
   min-width: 0;
   overflow: hidden;
@@ -104,8 +103,19 @@
   background: var(--line);
 }
 
+/* The file's chip: the name in the text colour, then the folder muted. Both cut off with an ellipsis, the folder first. */
+.bar .badge.on-disk {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .bar .file-name {
-  font-size: 14px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
   font-weight: 500;
 }
 

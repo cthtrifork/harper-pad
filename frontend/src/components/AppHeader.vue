@@ -79,10 +79,11 @@ function onMain() {
       </button>
     </span>
     <span class="sep" aria-hidden="true"></span>
-    <template v-if="filePath">
-      <span id="file-name" class="file-name" :title="fileName">{{ fileName }}</span>
-      <span v-if="fileDir" class="mute folder" :title="fileDir">in {{ fileDir }}</span>
-    </template>
+    <!-- The same chip as the draft badge: the file's name, and its folder in muted type when there is room. -->
+    <span v-if="filePath" class="badge on-disk" :title="fileDir ? `${fileDir}/${fileName}` : fileName">
+      <span id="file-name" class="file-name">{{ fileName }}</span>
+      <span v-if="fileDir" class="folder">in {{ fileDir }}</span>
+    </span>
     <span v-else id="file-badge" class="badge">Draft, not on disk</span>
     <span class="spacer"></span>
     <span v-if="isMarkdown && !showDrawer" class="sep" aria-hidden="true"></span>
