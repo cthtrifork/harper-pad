@@ -25,7 +25,7 @@ The server is described next to its code: [backend README](../backend/README.md)
 | Your draft is edited and the server holds different text | The same dialog | Keep, Overwrite |
 | Your draft is unedited, and the file and the server disagree | The same dialog; the changed file counts as your edit | Keep, Overwrite |
 | The open draft was deleted on another device | A dialog | Keep Creates the server draft again; Remove Deletes the draft here (the toast offers Undo) |
-| The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the reason | Ctrl+S retries; the unlink button on the file name Deletes the link; Save as file beside it picks another path. A file that is not text is never updated |
+| The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the full path and the reason | Ctrl+S retries; the unlink button on the file name Deletes the link; Save as file beside it picks another path. A file that is not text is never updated |
 | The token was revoked | The chip says "Sign in again" | Paste a fresh invite |
 | Enrolling | The Sync chip | Paste the invite URL |
 

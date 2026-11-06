@@ -62,7 +62,7 @@
     margin: 0 0 0 auto;
   }
 
-  .bar .badge.on-disk .chip-btn + .chip-btn {
+  .bar .badge.on-disk .chip-split + .chip-btn {
     margin-left: 0;
   }
 

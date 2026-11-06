@@ -161,6 +161,15 @@
   color: var(--mute);
 }
 
+/* A thin divider between the copy and unlink buttons. */
+.bar .chip-split {
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 12px;
+  background: var(--line);
+}
+
 .bar .chip-btn:hover {
   background: var(--selected);
   color: var(--text);

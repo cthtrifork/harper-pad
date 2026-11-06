@@ -54,6 +54,8 @@ const mainDisabled = computed(() => !props.canSave || props.syncBusy || (!props.
 const controls = computed(() => fileControls({ filePath: props.filePath, fileProblem: props.fileProblem, canUnlink: props.canUnlink, fileState: props.fileState }));
 const dirtyText_ = computed(() => (controls.value.showDirty ? dirtyText(props.fileName) : ""));
 const problemText = computed(() => (props.fileProblem ? `Not linked: ${props.fileProblem}. Ctrl+S tries again` : ""));
+// Hovering the chip always shows the full path, then the reason or the dirty-dot note when there is one.
+const chipTitle = computed(() => [props.filePath, problemText.value || dirtyText_.value].filter(Boolean).join("\n"));
 const mainTitle = computed(() => (props.filePath ? `Also writes ${props.fileName} if the draft changed` : ""));
 
 // A click turns the sync icon once even when the server answers at once; it keeps turning while the sync is busy.
@@ -103,7 +105,7 @@ function onMain() {
     </span>
     <span class="sep" aria-hidden="true"></span>
     <!-- The same chip as the draft badge: the file's name, and its folder in muted type when there is room. -->
-    <span v-if="filePath" class="badge on-disk" :class="{ broken: fileProblem }" :title="problemText || dirtyText_ || (fileDir ? `${fileDir}/${fileName}` : fileName)">
+    <span v-if="filePath" class="badge on-disk" :class="{ broken: fileProblem }" :title="chipTitle">
       <svg v-if="fileProblem" class="broken-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5l5 9H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><path d="M6 5v2.5M6 9v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>
       <span id="file-name" class="file-name">{{ fileName }}</span>
       <Transition name="dot"><span v-if="controls.showDirty" class="dirty-dot" aria-hidden="true"></span></Transition>
@@ -113,6 +115,7 @@ function onMain() {
         <svg v-if="copied" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.3l2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <svg v-else width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 4V2.7A1.2 1.2 0 0 0 6.8 1.5H2.7A1.2 1.2 0 0 0 1.5 2.7v4.100A1.2 1.2 0 0 0 2.7 8H4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg>
       </button>
+      <span v-if="controls.showChipX" class="chip-split" aria-hidden="true"></span>
       <button v-if="controls.showChipX" type="button" class="chip-btn unlink" :aria-label="`Unlink ${fileName}`" :title="`Unlink ${fileName}`" @click="emit('unlink')">
         <!-- the broken link, as in word processors: two link halves with a gap -->
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M5 3.2l.7-.7a2.1 2.1 0 0 1 3 3l-.7.7M7 8.800l-.7.7a2.1 2.1 0 0 1-3-3l.7-.7M2 2l1 1M10 10l-1-1M1.5 4.500h1.200M9.3 7.500h1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg>
