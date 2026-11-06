@@ -3,6 +3,7 @@ import "../styles/update-button.css"; // loaded with this component, so the web 
 import { Browser } from "@wailsio/runtime";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { UpdateService } from "../../bindings/github.com/cthtrifork/harper-pad/internal/app";
+import { copyDiagnostics } from "../lib/diagnostics.js";
 
 const LATEST_RELEASE = "https://github.com/cthtrifork/harper-pad/releases/latest";
 
@@ -93,6 +94,16 @@ onBeforeUnmount(() => {
   document.removeEventListener("mousedown", outside);
   document.removeEventListener("keydown", onKey);
 });
+
+// Copy a diagnostics report (lib/diagnostics.js) for a bug report; the link says what happened for two seconds.
+const copied = ref("");
+let copiedTimer = 0;
+async function copyReport() {
+  copied.value = (await copyDiagnostics(info.value.version)) ? "Copied" : "Could not copy";
+  clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => (copied.value = ""), 2000);
+}
+onBeforeUnmount(() => clearTimeout(copiedTimer));
 </script>
 
 <template>
@@ -135,6 +146,7 @@ onBeforeUnmount(() => {
       <div class="foot">
         <button v-if="action" type="button" class="primary" @click="action.run">{{ action.label }}</button>
         <button type="button" class="link" @click="whatsNew">What is new</button>
+        <button type="button" class="link" @click="copyReport">{{ copied || "Copy diagnostics" }}</button>
       </div>
     </div>
   </div>

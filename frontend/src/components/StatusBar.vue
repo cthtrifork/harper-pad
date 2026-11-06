@@ -9,7 +9,6 @@ const props = defineProps({
   cursor: { type: Object, required: true },
   demo: { type: Boolean, default: false }, // demo mode shows fixed timings so screenshots are the same on every run
   setupMs: { type: Number, default: 0 },
-  opened: { type: Object, default: null }, // {dataMs, openMs} from main.js: reading the first draft, and navigation start until mount
   lintMs: { type: Number, default: 0 },
   saveError: { type: String, default: "" },
   draftStatus: { type: String, default: "" },
@@ -61,8 +60,6 @@ function fmt(ms) {
     </button>
     <SyncChip v-if="sync?.configured" :sync="sync" />
     <span id="doc-stats">{{ counts.words }} {{ counts.words === 1 ? "word" : "words" }}<span class="chars">, {{ counts.chars }} {{ counts.chars === 1 ? "char" : "chars" }}</span></span>
-    <!-- How long opening took: the one timing a phone keeps (responsive.css hides the rest), because a slow cold start is what it is for. -->
-    <span v-if="state === 'ready' && startup && opened && !demo" class="mute open-timing">opened in {{ fmt(opened.openMs) }} (draft {{ fmt(opened.dataMs) }})</span>
     <span v-if="state === 'ready' && startup" class="mute">started in {{ fmt(demo ? DEMO_SETUP_MS : setupMs) }}, last check {{ fmt(demo ? DEMO_LINT_MS : lintMs) }}</span>
     <span v-if="saveError" class="state failed clip" :title="saveError">{{ saveError }}</span>
     <span v-if="draftStatus" id="draft-status" :class="['state', 'clip', draftTone === 'bad' || draftState === 'error' ? 'failed' : draftTone === 'ok' ? 'good' : draftTone === 'accent' ? 'accent' : 'mute']" :title="draftStatus" role="status" aria-live="polite">{{ draftStatus }}</span>

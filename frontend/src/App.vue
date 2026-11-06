@@ -10,6 +10,7 @@ import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
@@ -338,6 +339,7 @@ onMounted(async () => {
   try {
     harper.value = await loadHarper();
     setupMs.value = Math.round(performance.now() - t0);
+    record("setupMs", setupMs.value);
     state.value = "ready";
   } catch (err) {
     state.value = "failed";
@@ -461,7 +463,6 @@ onBeforeUnmount(() => {
       :cursor="cursor"
       :demo="!!demo"
       :setup-ms="setupMs"
-      :opened="props.start.timing ?? null"
       :lint-ms="lintMs"
       :save-error="saveError"
       :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' ? statusLineNow.text : ''"
