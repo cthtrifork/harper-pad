@@ -65,8 +65,10 @@ const action = computed(() => {
     case "checking":
     case "downloading":
       return null;
-    default:
+    case "error":
       return { label: "Try again", run: check };
+    default:
+      return null; // idle and current offer "Check for updates" instead
   }
 });
 
