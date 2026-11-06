@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   deleteDraft,
   getDraft,
@@ -9,6 +9,7 @@ import {
   saveDraftToFile,
   searchDrafts,
 } from "./backend.js";
+import { saveLastOpened } from "./lastOpened.js";
 
 // Kept short: the flush on pagehide cannot finish writing to IndexedDB, so a reload before the save has started loses the text.
 const SAVE_DELAY_MS = 100;
@@ -74,6 +75,13 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
   // when this is false, which is how it shows there is nothing to save.
   const needsSave = computed(
     () => ["dirty", "saving", "error"].includes(state.value) || (!!current.value.filePath && fileState.value === "stale"),
+  );
+
+  // Remember the open draft on this device, so a reload or relaunch shows it (a new draft counts once its first save gives it an id).
+  watch(
+    () => current.value.id,
+    (id) => id && saveLastOpened(id),
+    { immediate: true, flush: "sync" },
   );
 
   const asCurrent = (d) => ({ id: d.id, createdAt: d.createdAt, format: d.format, filePath: d.filePath ?? "" });
