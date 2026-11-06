@@ -12,9 +12,12 @@ export const theme = EditorView.theme({
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font-doc)", lineHeight: "1.75" },
   ".cm-content": { caretColor: "var(--accent)", padding: "0" },
+  // drawSelection paints the caret as a border (and dropCursor the drop point), so the colour is set here, not with caret-color.
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--accent)" },
   ".cm-line": { padding: "0" },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
-    backgroundColor: "color-mix(in srgb, var(--accent) 28%, transparent)",
+  // Longer than CodeMirror's own focused rule (a lavender), which would otherwise win now that drawSelection paints the selection.
+  "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground": {
+    backgroundColor: "color-mix(in srgb, var(--accent) 28%, transparent) !important",
   },
   ".cm-lintRange-error": underline("var(--c-spelling)"),
   ".cm-lintRange-warning": underline("var(--c-grammar)"),
