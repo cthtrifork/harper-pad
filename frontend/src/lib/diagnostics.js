@@ -37,29 +37,25 @@ const ago = (then, now) => {
         ? `${Math.round(s / 3600)} h`
         : `${Math.round(s / 86400)} days`;
 };
-const mb = (b) => (typeof b === "number" ? `${(b / 1048576).toFixed(1)} MB` : "n/a");
+const mb = (b) => (typeof b === "number" ? `${Math.round(b / 1048576)} MB` : "n/a");
 const ms = (v) => (typeof v === "number" ? `${Math.round(v)} ms` : "n/a");
-const kb = (b) => (b ? `${Math.round(b / 1024)} kB` : "cached/0");
+const kb = (b) => (b ? `${Math.round(b / 1024)} kB` : "cached");
 
-// The text of the report from plain facts: `info` is what collect() returns. Pure, so a test can check it.
+// The text of the report from plain facts: `info` is what collect() returns. Mostly numbers on a few lines, so it is quick to read and
+// to compare between runs. Pure, so a test can check it.
 export function formatDiagnostics(info) {
+  const opens = info.opens
+    ? info.opens.count === 1
+      ? "open #1 (first)"
+      : `open #${info.opens.count} (first ${ago(info.opens.first, info.nowMs)} ago, last ${ago(info.opens.previous, info.nowMs)} ago)`
+    : "opens n/a";
   const lines = [
-    `Harper Pad ${info.version || "(no version)"}`,
-    `When: ${info.when}`,
-    `Agent: ${info.agent}`,
-    `Standalone (home-screen app): ${info.standalone}`,
-    `Service worker: ${info.worker}`,
-    `Connection: ${info.connection}`,
-    `Opens in this storage: ${info.opens ? (info.opens.count === 1 ? "1 (the first)" : `${info.opens.count}, first ${ago(info.opens.first, info.nowMs)} ago, previous ${ago(info.opens.previous, info.nowMs)} ago`) : "n/a"}`,
-    `Storage: ${info.storage}`,
-    `Opened in: ${ms(info.openMs)} (reading the draft ${ms(info.dataMs)})`,
-    `Harper started in: ${ms(info.setupMs)}`,
-    `Page: response ${ms(info.responseEnd)}, DOM ready ${ms(info.domReady)}, load ${ms(info.load)}, first paint ${ms(info.firstPaint)}`,
+    `Harper Pad ${info.version || "(no version)"} | ${info.standalone ? "home-screen app" : "browser tab"} | ${opens} | ${info.when}`,
+    `opened ${ms(info.openMs)} (draft ${ms(info.dataMs)}) | first paint ${ms(info.firstPaint)} | page response ${ms(info.responseEnd)}, load ${ms(info.load)} | Harper ${ms(info.setupMs)}`,
+    `worker ${info.worker} | net ${info.connection} | storage ${info.storage}`,
   ];
-  if (info.resources?.length) {
-    lines.push("Slowest requests (start, duration, transferred):");
-    for (const r of info.resources) lines.push(`  ${r.name}  ${ms(r.start)}, ${ms(r.duration)}, ${kb(r.size)}`);
-  }
+  if (info.resources?.length) lines.push(`slowest: ${info.resources.map((r) => `${r.name} ${ms(r.duration)}/${kb(r.size)}`).join(", ")}`);
+  lines.push(info.agent);
   return lines.join("\n");
 }
 
@@ -75,7 +71,7 @@ export async function collect(version) {
       size: r.transferSize,
     }))
     .sort((a, b) => b.duration - a.duration)
-    .slice(0, 6);
+    .slice(0, 3);
   const registration = await navigator.serviceWorker?.getRegistration?.().catch(() => undefined);
   const net = navigator.connection;
   const storage = navigator.storage;
@@ -86,20 +82,17 @@ export async function collect(version) {
   return {
     nowMs: Date.now(),
     opens: recorded.opens,
-    storage: storage ? `${persisted ? "persisted" : "not persisted"}, ${mb(estimate?.usage)} of ${mb(estimate?.quota)}` : "unknown",
+    storage: storage ? `${mb(estimate?.usage)}/${mb(estimate?.quota)}${persisted ? " persisted" : ""}` : "n/a",
     version: version || (import.meta.env?.APP_VERSION ?? ""),
     when: new Date().toISOString(),
     agent: navigator.userAgent,
     standalone: !!navigator.standalone || !!matchMedia("(display-mode: standalone)").matches,
-    worker: registration
-      ? `${registration.active ? "active" : "installing"}, ${navigator.serviceWorker.controller ? "controls this page" : "not controlling this page"}`
-      : "none",
-    connection: net ? `${net.effectiveType ?? "?"}, ${net.downlink ?? "?"} Mbit/s, ${net.rtt ?? "?"} ms rtt` : "unknown",
+    worker: registration ? (navigator.serviceWorker.controller ? "controlling" : "not controlling") : "none",
+    connection: net ? `${net.effectiveType ?? "?"} ${net.downlink ?? "?"} Mbit/s ${net.rtt ?? "?"} ms` : "n/a",
     openMs: recorded.openMs,
     dataMs: recorded.dataMs,
     setupMs: recorded.setupMs,
     responseEnd: nav?.responseEnd,
-    domReady: nav?.domContentLoadedEventEnd,
     load: nav?.loadEventEnd || undefined,
     firstPaint: paint?.startTime,
     resources,

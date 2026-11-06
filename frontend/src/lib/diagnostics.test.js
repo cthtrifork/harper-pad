@@ -11,26 +11,32 @@ const base = {
   connection: "4g, 10 Mbit/s, 50 ms rtt",
 };
 
-test("the report names the version, the timings and the slowest requests", () => {
+test("the report is a few metric lines: version, timings, slowest requests, agent", () => {
   const text = formatDiagnostics({
     ...base,
+    nowMs: 0,
+    opens: { count: 1, first: 0, previous: 0 },
+    storage: "1/500 MB",
     openMs: 3200.4,
     dataMs: 1900,
     setupMs: 2300,
     responseEnd: 400,
     resources: [{ name: "harper.wasm", start: 900, duration: 7000.2, size: 8 * 1024 * 1024 }],
   });
-  assert.match(text, /^Harper Pad v1\.2\.3/);
-  assert.match(text, /Opened in: 3200 ms \(reading the draft 1900 ms\)/);
-  assert.match(text, /Harper started in: 2300 ms/);
-  assert.match(text, /harper\.wasm {2}900 ms, 7000 ms, 8192 kB/);
+  const lines = text.split("\n");
+  assert.equal(lines.length, 5);
+  assert.match(lines[0], /^Harper Pad v1\.2\.3 \| home-screen app \| open #1 \(first\)/);
+  assert.match(lines[1], /opened 3200 ms \(draft 1900 ms\).*Harper 2300 ms/);
+  assert.match(lines[2], /storage 1\/500 MB/);
+  assert.match(lines[3], /slowest: harper\.wasm 7000 ms\/8192 kB/);
+  assert.equal(lines[4], "UA");
 });
 
 test("what the browser cannot tell is n/a, and a build with no version says so", () => {
-  const text = formatDiagnostics({ ...base, version: "" });
-  assert.match(text, /^Harper Pad \(no version\)/);
-  assert.match(text, /Opened in: n\/a/);
-  assert.doesNotMatch(text, /Slowest requests/);
+  const text = formatDiagnostics({ ...base, version: "", standalone: false });
+  assert.match(text, /^Harper Pad \(no version\) \| browser tab \| opens n\/a/);
+  assert.match(text, /opened n\/a/);
+  assert.doesNotMatch(text, /slowest/);
 });
 
 const memory = () => {
@@ -60,15 +66,15 @@ test("the report says whether this is the first open and how storage stands", ()
     ...base,
     nowMs: 10_000,
     opens: { count: 1, first: 10_000, previous: 0 },
-    storage: "not persisted, 1.0 MB of 500.0 MB",
+    storage: "1/500 MB",
   });
-  assert.match(first, /Opens in this storage: 1 \(the first\)/);
-  assert.match(first, /Storage: not persisted, 1\.0 MB of 500\.0 MB/);
+  assert.match(first, /open #1 \(first\)/);
+  assert.match(first, /storage 1\/500 MB/);
   const later = formatDiagnostics({
     ...base,
     nowMs: 3 * 3600_000,
     opens: { count: 4, first: 0, previous: 3600_000 },
-    storage: "persisted",
+    storage: "1/500 MB persisted",
   });
-  assert.match(later, /Opens in this storage: 4, first 3 h ago, previous 2 h ago/);
+  assert.match(later, /open #4 \(first 3 h ago, last 2 h ago\)/);
 });
