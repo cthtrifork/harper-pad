@@ -114,40 +114,83 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
       {{ info.version || "..." }}
     </button>
 
-    <div v-if="open" class="pop" role="dialog" aria-label="Updates">
-      <template v-if="!info.enabled">
-        <h3>Updates are off here</h3>
-        <p>{{ info.reason }}</p>
-      </template>
-      <template v-else-if="state === 'checking'">
-        <h3>Checking GitHub releases</h3>
-        <p>Looking for a newer version.</p>
-      </template>
-      <template v-else-if="state === 'current'">
-        <h3>You are up to date</h3>
-        <p>{{ info.version }} is the latest release.</p>
-      </template>
-      <template v-else-if="state === 'available'">
-        <h3>Version {{ found }} is available</h3>
-        <p>You have {{ info.version }}. The download is verified before it is installed.</p>
-      </template>
-      <template v-else-if="state === 'downloading'">
-        <h3>Downloading {{ found }}</h3>
-        <p>Keep working. The app stays as it is until you restart.</p>
-      </template>
-      <template v-else-if="state === 'ready'">
-        <h3>{{ found }} is ready</h3>
-        <p>Restart to finish the update.</p>
-      </template>
-      <template v-else>
-        <h3>Could not update</h3>
-        <p>{{ error }}</p>
-      </template>
-      <div class="foot">
-        <button v-if="action" type="button" class="primary" @click="action.run">{{ action.label }}</button>
-        <button type="button" class="link" @click="whatsNew">What is new</button>
-        <button type="button" class="link" @click="copyReport">{{ copied || "Copy diagnostics" }}</button>
+    <Transition name="pop">
+      <div v-if="open" class="pop" role="dialog" aria-label="Updates">
+        <div class="status" role="status">
+          <template v-if="!info.enabled">
+            <svg class="mark warn" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.1" /><circle cx="12" cy="12" r="9" /></svg>
+            <div>
+              <h3>Updates are off here</h3>
+              <p>{{ info.reason }}</p>
+            </div>
+          </template>
+          <template v-else-if="state === 'checking'">
+            <svg class="mark spin" width="16" height="16" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" /></svg>
+            <div>
+              <h3>Checking for updates</h3>
+              <p>Looking at GitHub releases.</p>
+            </div>
+          </template>
+          <template v-else-if="state === 'current'">
+            <svg class="mark ok" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+            <div>
+              <h3>Up to date</h3>
+              <p>{{ info.version }} is the latest release.</p>
+            </div>
+          </template>
+          <template v-else-if="state === 'available'">
+            <svg class="mark warn" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.1" /><circle cx="12" cy="12" r="9" /></svg>
+            <div>
+              <h3>{{ found }} is available</h3>
+              <p>You have {{ info.version }}. The download is verified before it is installed.</p>
+            </div>
+          </template>
+          <template v-else-if="state === 'downloading'">
+            <svg class="mark spin" width="16" height="16" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5a3.5 3.5 0 1 1-3.5 3.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" /></svg>
+            <div>
+              <h3>Downloading {{ found }}</h3>
+              <p>Keep working. The app stays as it is until you restart.</p>
+            </div>
+          </template>
+          <template v-else-if="state === 'ready'">
+            <svg class="mark ok" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+            <div>
+              <h3>{{ found }} is ready</h3>
+              <p>Restart to finish the update.</p>
+            </div>
+          </template>
+          <template v-else-if="state === 'error'">
+            <svg class="mark warn" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.1" /><circle cx="12" cy="12" r="9" /></svg>
+            <div>
+              <h3>Could not update</h3>
+              <p>{{ error }}</p>
+            </div>
+          </template>
+          <template v-else>
+            <div>
+              <h3>Harper Pad {{ info.version }}</h3>
+              <p>Updates are looked for on request.</p>
+            </div>
+          </template>
+        </div>
+        <div class="sep"></div>
+        <button v-if="action" type="button" class="row primary" @click="action.run">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" /></svg>
+          {{ action.label }}
+        </button>
+        <button v-if="info.enabled && !busy() && (state === 'current' || state === 'idle')" type="button" class="row" @click="check">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
+          Check for updates
+        </button>
+        <button type="button" class="row" @click="whatsNew">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /></svg>
+          What's new
+        </button>
+        <button type="button" class="row" @click="copyReport">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h8" /></svg>
+          {{ copied || "Copy diagnostics" }}
+        </button>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
