@@ -2,20 +2,19 @@ package syncapi
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
-	"unicode/utf8"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// Setting is the synced settings of the account: the dictionary and the ignore list in one document.
+// Setting is the synced settings of the account: the dictionary and the ignore list, as the last device to write left them.
 type Setting struct {
-	Version int64  `json:"version" doc:"Compare-and-set counter: 1 on creation, +1 on each accepted write"`
-	Data    string `json:"data" doc:"A JSON string, {\"v\":1,\"words\":[\"<word>\"],\"ignored\":[\"<decimal hash>\"]}: the whole dictionary and ignore list as the last device to write left them. The server stores it as it came."`
+	Version int64    `json:"version" doc:"Compare-and-set counter: 1 on creation, +1 on each accepted write"`
+	Words   []string `json:"words" nullable:"false" doc:"The personal dictionary. The server stores it as it came; the devices check each entry."`
+	Ignored []string `json:"ignored" nullable:"false" doc:"The decimal hashes of Harper's ignore list, as text because they are 64-bit. The server stores them as they came."`
 }
 
 // settingConflict is the body of a 409: a problem document that carries the server's current setting, when it has one.
@@ -33,21 +32,6 @@ func (e *settingConflict) ContentType(ct string) string {
 		return "application/problem+json"
 	}
 	return ct
-}
-
-// validateSetting checks the shape of the document and nothing more: valid UTF-8 JSON, version 1, a list of words and a list of ignored
-// hashes, all strings. The server never reads them. The devices check each entry when they read (settingsItems.js) and send only
-// clean ones, and the size is the database's.
-func validateSetting(data string) error {
-	var b struct {
-		V       int      `json:"v"`
-		Words   []string `json:"words"`
-		Ignored []string `json:"ignored"`
-	}
-	if !utf8.ValidString(data) || json.Unmarshal([]byte(data), &b) != nil || b.V != 1 || b.Words == nil || b.Ignored == nil {
-		return errInvalid
-	}
-	return nil
 }
 
 func (a *API) registerSettings() {
@@ -97,15 +81,16 @@ func (a *API) getSetting(ctx context.Context, in *getSettingInput) (*getSettingO
 	case err != nil:
 		return nil, serverError("get setting", err)
 	}
-	return &getSettingOutput{CacheControl: "no-store", Body: &Setting{Version: s.Version, Data: s.Data}}, nil
+	return &getSettingOutput{CacheControl: "no-store", Body: &Setting{Version: s.Version, Words: s.Words, Ignored: s.Ignored}}, nil
 }
 
 type putSettingInput struct {
 	DPoP          string `header:"DPoP" doc:"DPoP proof"`
 	Authorization string `header:"Authorization" doc:"DPoP <device token>"`
 	Body          struct {
-		BaseVersion int64  `json:"baseVersion" minimum:"0" doc:"The stored version the device saw; 0 when it believes the server has none"`
-		Data        string `json:"data" doc:"See GET"`
+		BaseVersion int64    `json:"baseVersion" minimum:"0" doc:"The stored version the device saw; 0 when it believes the server has none"`
+		Words       []string `json:"words" nullable:"false" doc:"See GET"`
+		Ignored     []string `json:"ignored" nullable:"false" doc:"See GET"`
 	}
 }
 
@@ -118,15 +103,12 @@ type putSettingOutput struct {
 
 func (a *API) putSetting(ctx context.Context, in *putSettingInput) (*putSettingOutput, error) {
 	dev, _ := DeviceFrom(ctx)
-	if err := validateSetting(in.Body.Data); err != nil {
-		return nil, huma.Error422UnprocessableEntity("invalid setting")
-	}
-	s, err := a.store.PutSetting(ctx, dev.ClientID, in.Body.BaseVersion, in.Body.Data)
+	s, err := a.store.PutSetting(ctx, dev.ClientID, in.Body.BaseVersion, store.Setting{Words: in.Body.Words, Ignored: in.Body.Ignored})
 	switch {
 	case errors.Is(err, store.ErrSettingConflict):
 		c := &settingConflict{Title: "Conflict", Status: http.StatusConflict, Detail: "the settings changed on the server"}
 		if s.Version != 0 {
-			c.Current = &Setting{Version: s.Version, Data: s.Data}
+			c.Current = &Setting{Version: s.Version, Words: s.Words, Ignored: s.Ignored}
 		}
 		return nil, c
 	case errors.Is(err, store.ErrSettingTooLarge):

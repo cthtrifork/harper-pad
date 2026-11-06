@@ -167,23 +167,24 @@ It changes nothing for a user who leaves sync off. The reasons behind the shape:
 
 These are the exception to the rule above. The dictionary and the ignore list are small and are meant to be the same on every device, so there is **no merge: the last device to sync wins, and absence is deletion**. A word removed on one device is removed on the others.
 
-**Data model.** One row per account in `settings` (a compare-and-set `version` and `data`, at most 256 KiB), written with `GET` and
-`PUT /settings` ([openapi.yaml](openapi.yaml)). The server stores `data` as it came and never merges it:
+**Data model.** One row per account in `settings`: a compare-and-set `version` and two `JSONB` columns, `words` (the dictionary) and `ignored`
+(the decimal hash of each ignored finding), each an array of strings. They are written whole with `GET` and `PUT /settings`
+([openapi.yaml](openapi.yaml)), as plain JSON fields, not a document inside a string:
 
 ```json
-{"v":1,"words":["Wails","Harper"],"ignored":["18446744073709551615","42"]}
+{"baseVersion":3,"words":["Wails","Harper"],"ignored":["18446744073709551615","42"]}
 ```
 
-The ignore list holds the decimal hash of each ignored finding (text, because Harper's hashes are 64-bit). The server only checks
-that it is valid UTF-8 JSON of this shape and not too large. An empty list is valid.
+Hashes are text because Harper's are 64-bit. The server checks that both fields are arrays of strings (an empty list is valid) and that
+they are not too large; it never looks at an entry and never merges.
 
-**Limits.** The only limit is the document's size, 256 KiB (a database check; a larger write is refused with 413 and the chip says
+**Limits.** The only limit is the size of the two lists together, 256 KiB of JSON (a database check; a larger write is refused with 413 and the chip says
 "Could not sync"). A personal dictionary is tens to a few hundred words, around 50 KB at 5,000 words, so it is not expected to matter;
 there is no cap on counts and no warning before it. The server does not look inside the lists.
 
 **Tidying.** What is sent is trimmed of surrounding spaces, without repeats or empty entries. An entry that another device would refuse
-to read (a phrase, a control character, a word over 64 characters, a hash that is not digits) is left out of the document, because a
-device reading the document refuses it whole. It stays in the local dictionary and is not shared. The desktop app's own cap is 10,000 words.
+to read (a phrase, a control character, a word over 64 characters, a hash that is not digits) is left out, because a
+device reading the lists refuses them whole. It stays in the local dictionary and is not shared. The desktop app's own cap is 10,000 words.
 
 **Rules** (`createSyncer.syncSettings`). Each device keeps one record, `sync-settings` in its IndexedDB `kv` store (on desktop too, so
 SQLite and the bindings are unchanged): the server `version` it last matched and the two lists it held then. It is never a source of
@@ -213,7 +214,7 @@ its context". Hashes depend on Harper's version, so a hash from a newer Harper m
 
 **Failures.** The lists sync independently of the drafts. If they fail (not "unreachable" or "Sign in again", which stop everything
 as for a draft), the chip's pop-up says "Could not sync the dictionary and ignore list" and the next Sync all or change tries
-again; the local lists are untouched. A server document that does not parse, or has any entry that is not a word or a hash, is
+again; the local lists are untouched. Lists from the server with any entry that is not a word or a hash, is
 refused whole and applied nowhere. At start-up the sync waits for Harper to load, which holds the sync queue for a moment.
 
 ## Security

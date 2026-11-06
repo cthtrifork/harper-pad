@@ -33,7 +33,7 @@ type Store interface {
 	GetDoc(ctx context.Context, clientID int64, id string) (store.Doc, error)
 	PutDoc(ctx context.Context, clientID int64, id string, base store.DocBase, w store.DocWrite) (store.Doc, error)
 	GetSetting(ctx context.Context, clientID int64) (store.Setting, error)
-	PutSetting(ctx context.Context, clientID int64, base int64, data string) (store.Setting, error)
+	PutSetting(ctx context.Context, clientID int64, base int64, w store.Setting) (store.Setting, error)
 }
 
 // API is the sync API: the routes, the CORS allowlist and the device authentication. The routes are registered with Huma, which
