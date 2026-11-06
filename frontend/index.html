@@ -10,12 +10,13 @@
          screen while the scripts download and the first draft is read. Vue replaces the contents of #app when it mounts. -->
     <style>
       body { margin: 0; background: #f6f7f9; color: #1a2028; font: 14px / 1.5 system-ui, sans-serif; }
-      #app > .splash { display: grid; place-items: center; min-height: 100dvh; font-size: 20px; font-weight: 600; opacity: 0.6; }
+      #app > .splash { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 100dvh; font-size: 20px; font-weight: 600; }
+      #app > .splash span { opacity: 0.6; }
       @media (prefers-color-scheme: dark) { body { background: #12161b; color: #e8ebef; } }
     </style>
   </head>
   <body>
-    <div id="app"><div class="splash">Harper Pad</div></div>
+    <div id="app"><div class="splash"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="72" height="72" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#f59e0b"/><path d="M20 16v26M44 16v26M20 29h24" fill="none" stroke="#1f2937" stroke-width="6" stroke-linecap="round"/><path d="M14 50q4-5 8 0t8 0 8 0 8 0 4-2" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Harper Pad</span></div></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
