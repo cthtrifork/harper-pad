@@ -57,7 +57,10 @@ onBeforeUnmount(() => view?.destroy());
 // it would not focus anything. Treat it as a click into the document: put the caret at the end and focus.
 function focusEnd() {
   if (!view) return;
-  view.dispatch({ selection: { anchor: view.state.doc.length }, scrollIntoView: true });
+  const end = view.state.doc.length;
+  const { anchor, head } = view.state.selection.main;
+  // Already a caret at the end: only focus, so the view does not scroll for nothing.
+  if (anchor !== end || head !== end) view.dispatch({ selection: { anchor: end }, scrollIntoView: true });
   view.focus();
 }
 
@@ -90,7 +93,7 @@ defineExpose({
   remeasure: () => view?.requestMeasure(),
   relint: () => view && relint(view),
   getText: () => view?.state.doc.toString() ?? "",
-  load: (text, format = props.format) =>
+  load: (text, format = props.format, keepSelection = false) =>
     view &&
     loadDocument(
       view,
@@ -99,6 +102,7 @@ defineExpose({
       { format, source: props.source },
       (t) => emit("doc", t),
       (c) => emit("cursor", c),
+      keepSelection,
     ),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),

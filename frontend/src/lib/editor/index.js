@@ -127,10 +127,14 @@ export function setMode(view, mode) {
 
 // Replace the whole document, as when another draft is opened. It starts a fresh state, so undo cannot cross into the previous
 // document, and it does not count as an edit. The stats and the caret are reported again, because no update is reported for it.
-export function loadDocument(view, text, onStats, mode = DEFAULT_MODE, onDoc, onCursor) {
+// `keepSelection` is for showing a newer copy of the draft that is already open (a background sync): the selection stays where it was
+// (cut to the new length) instead of falling back to the start, or the next key would act on the wrong text.
+export function loadDocument(view, text, onStats, mode = DEFAULT_MODE, onDoc, onCursor, keepSelection = false) {
   const { extensions, ctx, mode: compartment } = editors.get(view);
+  const { anchor, head } = view.state.selection.main;
   const withMode = extensions.map((e, i) => (i === 0 ? compartment.of(modeExtensions(mode)) : e));
-  view.setState(EditorState.create({ doc: text, extensions: withMode }));
+  const selection = keepSelection ? { anchor: Math.min(anchor, text.length), head: Math.min(head, text.length) } : undefined;
+  view.setState(EditorState.create({ doc: text, selection, extensions: withMode }));
   ctx.stats = null; // a new document always reports, even if the counts match
   const next = countDoc(view.state.doc);
   ctx.stats = next;

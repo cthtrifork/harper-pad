@@ -343,7 +343,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted } =
     if (!current.value.id || !canReplace()) return;
     const d = await getDraft(current.value.id);
     setCurrent(d);
-    editor.value?.load(d.content, d.format);
+    editor.value?.load(d.content, d.format, true); // same draft, newer text: the person's selection stays
   }
 
   async function create() {
