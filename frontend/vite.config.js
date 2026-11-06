@@ -32,6 +32,12 @@ const contentSecurityPolicy = (policy) => ({
 // What makes the web build an installable offline app: the manifest, the service worker and the icons in web/, copied to the
 // site root, plus the <head> tags that point at them. The desktop build has none of it (its page would load nothing from them, and
 // its policy has no manifest-src), so desktop dist/ and index.html stay as they were.
+// The status-bar colour of each scheme is the header's --panel in styles/tokens.css, read from there instead of copied: the first
+// --panel in the file is the light one, the second (inside the prefers-color-scheme: dark block) the dark one.
+const [LIGHT_PANEL, DARK_PANEL] = [
+  ...readFileSync(new URL("./src/styles/tokens.css", import.meta.url), "utf8").matchAll(/--panel:\s*(#[0-9a-f]{3,8});/gi),
+].map((m) => m[1]);
+
 const WEB_DIR = fileURLToPath(new URL("./web", import.meta.url));
 
 const webApp = () => {
@@ -49,8 +55,8 @@ const webApp = () => {
     transformIndexHtml: () => [
       // `default`: the status bar gets its own strip that follows light and dark (`black` would sit over the light header).
       // The safe-area insets (styles/safe-area.css) keep the page clear of the notch and home indicator.
-      { tag: "meta", attrs: { name: "theme-color", content: "#eceff3", media: "(prefers-color-scheme: light)" }, injectTo: "head" },
-      { tag: "meta", attrs: { name: "theme-color", content: "#181d23", media: "(prefers-color-scheme: dark)" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "theme-color", content: LIGHT_PANEL, media: "(prefers-color-scheme: light)" }, injectTo: "head" },
+      { tag: "meta", attrs: { name: "theme-color", content: DARK_PANEL, media: "(prefers-color-scheme: dark)" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "mobile-web-app-capable", content: "yes" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "apple-mobile-web-app-capable", content: "yes" }, injectTo: "head" }, // older iOS only knows this one
       { tag: "meta", attrs: { name: "apple-mobile-web-app-title", content: "Harper Pad" }, injectTo: "head" },
