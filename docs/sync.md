@@ -121,6 +121,7 @@ JSON over HTTPS; the routes, fields, limits and errors are in [openapi.yaml](ope
 - **A draft's state is the pair `(updatedAt, deleted)`**, set by the device that saved it. The device records the state it last
   synced, and "the server changed" means the state differs from that record. Only equality is tested, never order, so device
   clocks do not matter. `version` is only for compare-and-set.
+
 ### When sync happens
 
 All four moments use the same decision table ([Conflicts](#conflicts)).
