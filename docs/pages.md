@@ -89,6 +89,10 @@ Test locally: `cd frontend && npm run build:web && npx vite preview --mode web`,
 
 Open the site in **Safari**, tap Share, then Add to Home Screen. Use that icon from then on.
 
+The app offers this once, from the second visit, in a toast (`lib/installHint.js`): Chromium gets an Install button (`beforeinstallprompt`), an iPhone gets
+the Share steps and a reminder that the app starts empty. Nothing is shown when it is already installed. The count is in localStorage
+(`harper-pad.install`, scoped like the other keys).
+
 The Home Screen app uses `apple-mobile-web-app-capable` with `apple-mobile-web-app-status-bar-style: default` (a status bar of its own, with
 text that follows light and dark, and the page below it; `black-translucent` would draw the page under it, but reports say its text
 is always white, which the light header cannot show), and `viewport-fit=cover` with `env(safe-area-inset-*)` padding (`styles/safe-area.css`) for the notch, the home
