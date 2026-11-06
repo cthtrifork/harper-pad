@@ -39,7 +39,7 @@ jobs:
       build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build_any_changed }}
       windows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.windows_any_changed }}
     steps:
-      # On pull requests it diffs against the base branch (step-security/changed-files); on pushes and manual
+      # On pull requests it diffs against the base branch (tj-actions/changed-files); on pushes and manual
       # runs the filter is bypassed above.
       - if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +48,7 @@ jobs:
 
       - id: filter
         if: github.event_name == 'pull_request'
-        uses: step-security/changed-files@2e07db73e5ccdb319b9a6c7766bd46d39d304bad # v47.0.5
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
           files_yaml: |
             go:
