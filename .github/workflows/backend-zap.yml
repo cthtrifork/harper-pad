@@ -3,8 +3,8 @@ name: Backend ZAP scan
 # OWASP ZAP against the sync backend, for the OWASP Top 10 classes a scanner can see from outside (see backend/test/zap/rules.tsv).
 # It starts the end-to-end compose stack and runs ZAP's full scan against harper-pad-sync, then keeps the reports as an artifact,
 # writes the job summary, uploads SARIF and keeps one PR comment up to date. Rules marked FAIL in rules.tsv fail the job. The active
-# scan sends attacks, so it only ever targets this throwaway stack. Runs for pull requests that touch backend/ (not a required
-# check: it has a paths filter), weekly (new rules appear without a commit) and by hand.
+# scan sends attacks, so it only ever targets this throwaway stack. Runs for pull requests that change the sync service or its stack
+# (the `changes` job below; admin-only files, tests, docs and the e2e browser tests do not count; not a required check), weekly (new rules appear without a commit) and by hand.
 # It cannot find logic flaws in the sync protocol until the API scan is pointed at an OpenAPI description (docs/sync.md).
 on:
   pull_request:
@@ -27,8 +27,41 @@ env:
   ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable@sha256:c2d63bbb2d907a5c5257914fb20e26e969c92b25f265def7f89f08203f912882
 
 jobs:
+  # Pull requests only: did the sync service (or what the scan stack is built from) change? Weekly and manual runs always scan.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sync: ${{ github.event_name != 'pull_request' || steps.changed.outputs.any_changed }}
+    steps:
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: changed
+        if: github.event_name == 'pull_request'
+        uses: step-security/changed-files@2e07db73e5ccdb319b9a6c7766bd46d39d304bad # v47.0.5
+        with:
+          files: |
+            backend/cmd/harper-pad-sync/**
+            backend/internal/**
+            backend/go.mod
+            backend/go.sum
+            backend/Containerfile.sync
+            backend/test/e2e/**
+            backend/test/zap/**
+            .github/workflows/backend-zap.yml
+          files_ignore: |
+            backend/**/*_test.go
+            backend/**/*.md
+            backend/test/e2e/*.mjs
+
   zap:
     name: zap (sync backend)
+    needs: changes
+    if: needs.changes.outputs.sync == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
