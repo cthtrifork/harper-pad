@@ -29,24 +29,28 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read # dorny/paths-filter lists the files of a pull request through the API
     outputs:
-      go: ${{ github.event_name != 'pull_request' || steps.filter.outputs.go }}
-      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend }}
-      bindings: ${{ github.event_name != 'pull_request' || steps.filter.outputs.bindings }}
-      yaml: ${{ github.event_name != 'pull_request' || steps.filter.outputs.yaml }}
-      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend }}
-      e2e: ${{ github.event_name != 'pull_request' || steps.filter.outputs.e2e }}
-      build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build }}
-      windows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.windows }}
+      go: ${{ github.event_name != 'pull_request' || steps.filter.outputs.go_any_changed }}
+      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend_any_changed }}
+      bindings: ${{ github.event_name != 'pull_request' || steps.filter.outputs.bindings_any_changed }}
+      yaml: ${{ github.event_name != 'pull_request' || steps.filter.outputs.yaml_any_changed }}
+      backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend_any_changed }}
+      e2e: ${{ github.event_name != 'pull_request' || steps.filter.outputs.e2e_any_changed }}
+      build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build_any_changed }}
+      windows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.windows_any_changed }}
     steps:
-      # On pull requests it lists the files through the API (no checkout needed); on pushes and manual
+      # On pull requests it diffs against the base branch (step-security/changed-files); on pushes and manual
       # runs the filter is bypassed above.
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - id: filter
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        uses: step-security/changed-files@2e07db73e5ccdb319b9a6c7766bd46d39d304bad # v47.0.5
         with:
-          filters: |
+          files_yaml: |
             go:
               - main.go
               - internal/**
