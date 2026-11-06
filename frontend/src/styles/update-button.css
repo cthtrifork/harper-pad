@@ -55,6 +55,11 @@
   padding: 8px 10px 10px;
 }
 
+.wrap .status > div {
+  flex: 1;
+  min-width: 0; /* lets the text wrap inside the pop-up instead of widening it */
+}
+
 .wrap .status .mark {
   flex: none;
   margin-top: 2px;
@@ -81,6 +86,7 @@
   line-height: 1.4;
   color: var(--mute);
   overflow-wrap: anywhere;
+  text-wrap: pretty; /* no lone word on the last line */
 }
 
 .wrap .sep {
