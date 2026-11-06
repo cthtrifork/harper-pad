@@ -18,7 +18,7 @@ test("a device that never enrolled has no record", async () => {
 test("the record, with its non-extractable key, comes back as saved", async () => {
   const store = fresh();
   const key = await generateDeviceKey();
-  await store.save({ server: "https://sync.example.com", token: "tok", deviceName: "Phone", ...key });
+  await store.save({ server: "https://sync.example.com", token: "tok", ...key });
   const back = await store.load();
   assert.equal(back.server, "https://sync.example.com");
   assert.equal(back.token, "tok");

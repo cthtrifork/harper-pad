@@ -28,11 +28,11 @@ export function parseInviteUrl(text) {
   return { server: url.origin, invite };
 }
 
+// The device's name is the one typed in the admin UI when the invite was made, so it is not asked for here.
 // Spends the invite and saves the device record through `store` (syncDevice from backend.js). `fetchFn` is a parameter for tests.
 // A failed attempt saves nothing, and the invite is spent only when the server accepted it.
-export async function enrollDevice({ text, deviceName, store, fetchFn = fetch.bind(globalThis) }) {
+export async function enrollDevice({ text, store, fetchFn = fetch.bind(globalThis) }) {
   const { server, invite } = parseInviteUrl(text);
-  const name = deviceName.trim().slice(0, 64);
   const key = await generateDeviceKey();
   const url = `${server}/enroll`;
   const proof = await createProof({ ...key, method: "POST", url });
@@ -42,7 +42,7 @@ export async function enrollDevice({ text, deviceName, store, fetchFn = fetch.bi
     res = await fetchFn(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", DPoP: proof },
-      body: JSON.stringify({ invite, deviceName: name }),
+      body: JSON.stringify({ invite }),
       credentials: "omit",
       referrerPolicy: "no-referrer",
     });
@@ -56,6 +56,6 @@ export async function enrollDevice({ text, deviceName, store, fetchFn = fetch.bi
   if (typeof body?.deviceToken !== "string" || body.token_type !== "DPoP") {
     throw new SyncError("server", "Unexpected answer from the server.");
   }
-  await store.save({ server, token: body.deviceToken, deviceName: name, ...key });
-  return { server, deviceName: name };
+  await store.save({ server, token: body.deviceToken, ...key });
+  return { server };
 }

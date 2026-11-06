@@ -23,19 +23,6 @@ const root = ref(null);
 const invite = ref("");
 const busy = ref(false);
 
-// A name to start from, so the device list on the server says which device is which.
-function guessName() {
-  const ua = navigator.userAgent;
-  if (/iPhone/.test(ua)) return "iPhone";
-  if (/iPad/.test(ua)) return "iPad";
-  if (/Android/.test(ua)) return "Android";
-  if (/Windows/.test(ua)) return "Windows";
-  if (/Mac/.test(ua)) return "Mac";
-  if (/Linux/.test(ua)) return "Linux";
-  return "This device";
-}
-const deviceName = ref(guessName());
-
 const host = computed(() => {
   try {
     return new URL(props.sync.info.value?.server ?? "").host;
@@ -58,7 +45,7 @@ watch(open, async (isOpen) => {
 async function add() {
   if (busy.value || !invite.value.trim()) return;
   busy.value = true;
-  const ok = await props.sync.enroll(invite.value, deviceName.value);
+  const ok = await props.sync.enroll(invite.value);
   busy.value = false;
   if (ok) {
     invite.value = "";
@@ -115,8 +102,6 @@ onBeforeUnmount(() => {
           <label for="sync-invite">Invite link</label>
           <input id="sync-invite" v-model="invite" type="text" class="in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/join#…" :aria-invalid="!!sync.error.value" aria-describedby="sync-error" />
           <p v-if="sync.error.value" id="sync-error" class="error" role="alert">{{ sync.error.value }}</p>
-          <label for="sync-name">Device name</label>
-          <input id="sync-name" v-model="deviceName" type="text" class="in" maxlength="64" autocomplete="off" />
           <div class="actions">
             <button type="submit" class="primary" :class="{ busy }" :disabled="busy || !invite.trim()">
               <span class="label">Add this device</span>
@@ -126,7 +111,6 @@ onBeforeUnmount(() => {
         </form>
         <div v-else>
           <h2>{{ status === "offline" ? "Offline" : `Synced with ${host}` }}</h2>
-          <p class="mute">This device is “{{ sync.info.value?.deviceName }}”.</p>
           <p v-if="status === 'pending'" class="mute">Some drafts are not sent yet.</p>
           <p v-if="status === 'offline'" class="mute">Server not reachable. Drafts are kept here.</p>
           <p v-if="sync.summary.value" id="sync-summary" class="summary" role="status">
