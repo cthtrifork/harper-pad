@@ -38,9 +38,11 @@ const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view"]);
 const exportLabel = computed(() => (props.sharing ? "Share" : "Save as file"));
 const mainLabel = computed(() => {
   if (props.replacingFile) return `Replace ${props.fileName}`;
-  if (props.syncBusy) return "Syncing...";
   return props.syncOn ? "Sync" : "Save";
 });
+// The visible label never changes while a sync runs: a longer "Syncing..." moved the buttons beside it on every sync. The turning icon
+// shows that it is busy, and the status line says "Syncing...".
+const mainName = computed(() => (props.syncBusy ? "Syncing..." : mainLabel.value));
 const mainDisabled = computed(() => !props.canSave || props.syncBusy || (!props.syncOn && !props.needsSave && !props.replacingFile));
 // What the button also does when the draft has a file, since the label does not change for it.
 const mainTitle = computed(() => (props.filePath && !props.replacingFile ? `Also writes ${props.fileName} if the draft changed` : ""));
@@ -65,8 +67,8 @@ function onMain() {
          server about it; Save (sync is off) does the first two and is disabled while there is nothing to save. What happened is said by
          the status line in the status bar, not here. The export button beside it chooses a file (or opens the share sheet on iPhone and iPad). -->
     <span class="actions">
-      <button type="button" class="tool main" :class="{ replace: replacingFile }" :aria-label="mainLabel" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
-        <svg class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <button type="button" class="tool main" :class="{ replace: replacingFile }" :aria-label="mainName" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
+        <svg class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy, wide: syncOn }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <span class="label">{{ mainLabel }}</span> <span v-if="!replacingFile" class="kbd">Ctrl+S</span>
       </button>
       <button type="button" class="tool export" :aria-label="exportLabel" :title="exportLabel" :disabled="!canSave" @click="emit('save', true)">
