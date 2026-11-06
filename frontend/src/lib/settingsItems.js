@@ -32,6 +32,9 @@ export function sameSet(a, b) {
   return x.size === y.size && [...x].every((v) => y.has(v));
 }
 
+// Both lists of two sets joined: nothing in either is dropped.
+export const unionLists = (a, b) => ({ words: sorted([...a.words, ...b.words]), ignored: sorted([...a.ignored, ...b.ignored]) });
+
 export const sameLists = (a, b) => sameSet(a.words, b.words) && sameSet(a.ignored, b.ignored);
 
 // What each local list must do to become `to`: items to add and items to remove (Harper can only add; the caller rebuilds the linter).
