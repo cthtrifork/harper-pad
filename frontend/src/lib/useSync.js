@@ -31,7 +31,7 @@ export function useSync({
   const configured = !!origin && !!deviceStore && !!drafts;
   const status = ref("off");
   const error = ref(""); // the last message for the pop-up, "" when there is none
-  const info = ref(null); // {server, deviceName} while enrolled
+  const info = ref(null); // {server} while enrolled
   const summary = ref(""); // what the last Sync all did, "3 uploaded, 2 downloaded"
   const lastSync = ref(0); // when it finished, ms
   const gone = ref(null); // {id}: the open draft was deleted on another device and the person has not chosen yet
@@ -59,17 +59,17 @@ export function useSync({
   async function init() {
     if (!configured) return;
     device = await deviceStore.load();
-    info.value = device ? { server: device.server, deviceName: device.deviceName } : null;
+    info.value = device ? { server: device.server } : null;
     status.value = device ? "synced" : "off";
     if (device && autoSync) syncAll();
   }
 
-  async function enroll(text, deviceName) {
+  async function enroll(text) {
     error.value = "";
     try {
       // The page may only call the origin its policy names; an invite for another server would be blocked by the browser.
       if (parseInviteUrl(text).server !== origin) throw new SyncError("other-server", "This invite is for a different server.");
-      await enrollDevice({ text, deviceName, store: deviceStore, fetchFn });
+      await enrollDevice({ text, store: deviceStore, fetchFn });
     } catch (err) {
       error.value = err instanceof SyncError ? err.message : "Something went wrong. Try again.";
       return false;

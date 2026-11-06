@@ -1,6 +1,6 @@
 // What this device keeps to sync (docs/sync.md, "Changes to local storage"): one record in the existing "kv" store of the app's IndexedDB,
 // under "sync-device". It is the same on the web and on desktop (the webview's IndexedDB), so there is no Go side and no schema change.
-//   {server, token, deviceName, privateKey, publicJwk}
+//   {server, token, privateKey, publicJwk}
 // server is the origin the invite named, token the device token, privateKey the non-extractable CryptoKey (lib/dpop.js) and publicJwk its
 // public half. It is never uploaded. A missing record means this device is not enrolled.
 //

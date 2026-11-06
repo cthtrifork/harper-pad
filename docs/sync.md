@@ -46,7 +46,7 @@ Every device, including the first, enrolls the same way.
    not sent in requests or logged.
 2. In the app, open the **Sync chip**, paste the URL and choose **Add this device**. (Paste rather than open the link: on iPhone a
    tapped link opens Safari, which has separate storage from the Home Screen app.)
-3. The app generates a signing key pair that never leaves the device and calls `POST /enroll` with the invite, a device name and a
+3. The app generates a signing key pair that never leaves the device and calls `POST /enroll` with the invite and a
    DPoP proof from the new key. It gets back a device token bound to that key.
 4. The app runs the first sync, which is Sync all.
 

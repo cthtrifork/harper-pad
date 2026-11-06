@@ -32,7 +32,7 @@ function setup({ fetchFn, enrolled = true, origin = ORIGIN, draftOverrides = {},
   };
   const sync = useSync({ origin, deviceStore, drafts, fetchFn, delay: 5, autoSync: false, ...extra });
   const ready = async () => {
-    if (enrolled) kept.device = { server: ORIGIN, token: "tok", deviceName: "Phone", ...(await generateDeviceKey()) };
+    if (enrolled) kept.device = { server: ORIGIN, token: "tok", ...(await generateDeviceKey()) };
     await sync.init();
   };
   return { sync, kept, ready };
@@ -55,7 +55,7 @@ test("not enrolled: off; enrolled: synced, with the device's name", async () => 
   const b = setup();
   await b.ready();
   assert.equal(b.sync.status.value, "synced");
-  assert.deepEqual(b.sync.info.value, { server: ORIGIN, deviceName: "Phone" });
+  assert.deepEqual(b.sync.info.value, { server: ORIGIN });
 });
 
 test("an invite for another server is refused before anything is sent", async () => {

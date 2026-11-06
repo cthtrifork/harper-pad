@@ -34,11 +34,11 @@ test("enrolls: a proof without ath, the invite in the body only, and the record 
     call = { u, init };
     return reply(200, { deviceToken: "tok", token_type: "DPoP" })();
   };
-  const out = await enrollDevice({ text: url, deviceName: "  Phone ", store, fetchFn });
-  assert.deepEqual(out, { server: "https://sync.example.com", deviceName: "Phone" });
+  const out = await enrollDevice({ text: url, store, fetchFn });
+  assert.deepEqual(out, { server: "https://sync.example.com" });
   assert.equal(call.u, "https://sync.example.com/enroll");
   assert.equal(call.init.method, "POST");
-  assert.deepEqual(JSON.parse(call.init.body), { invite: INVITE, deviceName: "Phone" });
+  assert.deepEqual(JSON.parse(call.init.body), { invite: INVITE });
   assert.equal(call.u.includes(INVITE), false);
   const [h, p] = call.init.headers.DPoP.split(".");
   assert.deepEqual(decode(h).jwk, store.saved.publicJwk);
@@ -63,10 +63,7 @@ for (const [name, fetchFn, code] of [
 ]) {
   test(`${name} saves nothing`, async () => {
     const store = memoryStore();
-    await assert.rejects(
-      enrollDevice({ text: url, deviceName: "Phone", store, fetchFn }),
-      (err) => err instanceof SyncError && err.code === code,
-    );
+    await assert.rejects(enrollDevice({ text: url, store, fetchFn }), (err) => err instanceof SyncError && err.code === code);
     assert.equal(store.saved, null);
   });
 }
