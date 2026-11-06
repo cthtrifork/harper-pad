@@ -214,7 +214,7 @@ its context". Hashes depend on Harper's version, so a hash from a newer Harper m
 
 **Failures.** The lists sync independently of the drafts. If they fail (not "unreachable" or "Sign in again", which stop everything
 as for a draft), the chip's pop-up says "Could not sync the dictionary and ignore list" and the next Sync all or change tries
-again; the local lists are untouched. Lists from the server with any entry that is not a word or a hash, is
+again; the local lists are untouched. Lists from the server with any entry that is not a word or a hash are
 refused whole and applied nowhere. At start-up the sync waits for Harper to load, which holds the sync queue for a moment.
 
 ## Security
