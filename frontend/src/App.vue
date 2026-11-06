@@ -461,6 +461,7 @@ onBeforeUnmount(() => {
       :cursor="cursor"
       :demo="!!demo"
       :setup-ms="setupMs"
+      :opened="props.start.timing ?? null"
       :lint-ms="lintMs"
       :save-error="saveError"
       :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' ? statusLineNow.text : ''"
