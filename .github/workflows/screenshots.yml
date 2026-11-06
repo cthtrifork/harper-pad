@@ -32,7 +32,7 @@ permissions:
 
 concurrency:
   group: screenshots-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GOTOOLCHAIN: local
@@ -40,7 +40,7 @@ env:
 jobs:
   screenshots:
     name: screenshots
-    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+    if: github.actor != 'dependabot[bot]' && !startsWith(github.head_ref, 'renovate/') # Renovate runs as its own GitHub App, so match its branches
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

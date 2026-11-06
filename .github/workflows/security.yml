@@ -33,7 +33,7 @@ permissions:
 
 concurrency:
   group: security-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GOTOOLCHAIN: local
@@ -142,6 +142,8 @@ jobs:
 
   trivy-fs:
     name: trivy (filesystem)
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.npm == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

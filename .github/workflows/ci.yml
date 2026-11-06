@@ -427,11 +427,13 @@ jobs:
           go version
           make vet build test-db
 
-  # The aggregate check, named "test" for the same reason as "lint" above.
+  # The aggregate check, named "test" for the same reason as "lint" above. It also waits for the slow jobs (e2e, build, windows)
+  # and no-screenshots, which are declared further down, so that a broken build cannot be merged while "test" stays the only
+  # required check to maintain.
   test:
     name: test
     if: always()
-    needs: [changes, test-go, test-frontend, test-backend]
+    needs: [changes, test-go, test-frontend, test-backend, e2e, build, windows, no-screenshots]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
