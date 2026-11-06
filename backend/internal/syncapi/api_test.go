@@ -194,7 +194,12 @@ func TestEnrollThenAuthenticate(t *testing.T) {
 	if c := auth(got.DeviceToken, proof(t, other, "GET", "/whoami", got.DeviceToken)); c != 401 {
 		t.Errorf("token with another key = %d, want 401", c)
 	}
-	if c := auth("x"+got.DeviceToken[1:], proof(t, k, "GET", "/whoami", "x"+got.DeviceToken[1:])); c != 401 {
+	// A token that differs from the real one in its first character. A fixed "x" would equal the real token one time in 64.
+	unknown := "x" + got.DeviceToken[1:]
+	if got.DeviceToken[0] == 'x' {
+		unknown = "y" + got.DeviceToken[1:]
+	}
+	if c := auth(unknown, proof(t, k, "GET", "/whoami", unknown)); c != 401 {
 		t.Errorf("unknown token = %d, want 401", c)
 	}
 	if c := do(h, "GET", "/whoami", "", map[string]string{"Authorization": "DPoP " + got.DeviceToken}).Code; c != 401 {
