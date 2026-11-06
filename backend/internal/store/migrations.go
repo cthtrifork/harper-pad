@@ -28,7 +28,7 @@ const migrateLockKey int64 = 0x68703a6d696772 // "hp:migr"
 // Migrate applies the files of fsys (named like migrations/0001_init.sql) that are not yet recorded in schema_migrations, in
 // name order, each in its own transaction together with its record, so a failed file leaves nothing behind and is tried again at
 // the next start. It must run as the schema owner (harper_admin): the files create the tables and grant to the other roles. The
-// roles themselves are not created here; the cluster does that (docs/sync.md, "Database access").
+// roles themselves are not created here; the cluster does that (backend/README.md).
 func Migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) ([]string, error) {
 	names, err := fs.Glob(fsys, "migrations/*.sql")
 	if err != nil {

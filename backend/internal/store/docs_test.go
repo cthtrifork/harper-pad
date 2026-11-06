@@ -247,7 +247,7 @@ func TestDocConstraints(t *testing.T) {
 	}
 }
 
-// harper_admin owns the table but has no policy on it, so the notes are out of its reach (docs/sync.md, "Database access").
+// harper_admin owns the table but has no policy on it, so the notes are out of its reach (backend/README.md).
 func TestAdminRoleSeesNoDocs(t *testing.T) {
 	s, owner := docsFixture(t)
 	put(t, s, docA, DocBase{}, 10, "private")

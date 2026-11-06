@@ -7,7 +7,7 @@ import (
 )
 
 // Login points the libpq variables at the stack's PostgreSQL as one role: TLS 1.3 and that role's client certificate, no password,
-// the way the cluster configures the services (docs/sync.md, "Database access"). store.Open("") reads them. The certificates are
+// the way the cluster configures the services (backend/README.md). store.Open("") reads them. The certificates are
 // copied out of the stack's volume by `make test-db`; the test is skipped when TEST_PG_CERTS is not set.
 func Login(t *testing.T, role, cert string) {
 	t.Helper()
