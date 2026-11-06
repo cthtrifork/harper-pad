@@ -58,8 +58,6 @@ function onClick() {
 const action = computed(() => {
   if (!info.value.enabled) return null;
   switch (state.value) {
-    case "current":
-      return { label: "Check again", run: check };
     case "available":
       return { label: `Download ${found.value}`, run: download };
     case "ready":
