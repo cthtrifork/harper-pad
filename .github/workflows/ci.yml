@@ -61,6 +61,7 @@ jobs:
               - internal/store/testdata/** # the frontend tests run the same fixtures as the Go tests
               - internal/app/testdata/**
               - backend/internal/admin/web/static/tokens.css # a test keeps its colours equal to frontend/src/styles/tokens.css
+              - docs/design-cheatsheet.html # same, for its copy of the palette
               - .tool-versions
               - Makefile
               - .github/workflows/ci.yml
