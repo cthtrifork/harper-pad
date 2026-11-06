@@ -13,10 +13,19 @@
   font-weight: 600;
 }
 
-/* Toolbar items keep one line; the folder name is the one thing that gives way (it has its own ellipsis). Below 1240 px the shortcut
-   hints on the buttons are hidden, so the whole bar still fits the default 1100 px window. */
-.bar .bar > :not(.folder, .bar .spacer) {
+/* The bar never wraps on a wide window: every item keeps one line, and as the window narrows the bar gives up things in a fixed order
+   (the media queries below): shortcut hints, then the brand, then the button labels (icons only). What is left to shrink are the
+   file name, the folder and the badge, which cut off with an ellipsis. (The phone layout in responsive.css has its own rules.) */
+.bar > :not(.folder, .spacer, .file-name, .badge) {
   flex: none;
+  white-space: nowrap;
+}
+
+.bar .file-name,
+.bar .badge {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -209,6 +218,33 @@
   .bar .drawer-btn .kbd,
   .bar .tool .kbd {
     display: none;
+  }
+}
+
+@media (max-width: 1040px) {
+  .bar .brand {
+    display: none;
+  }
+}
+
+/* Narrow but not a phone: the buttons keep their icons and lose their labels (the accessible names and tooltips stay). */
+@media (max-width: 1000px) {
+  .bar .drawer-btn,
+  .bar .actions .tool {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .bar .drawer-btn .label,
+  .bar .tool .label,
+  .bar .toggle .label {
+    display: none;
+  }
+
+  .bar .save-icon {
+    display: block;
+    flex: none;
   }
 }
 
