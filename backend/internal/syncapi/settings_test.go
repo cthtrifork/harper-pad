@@ -83,8 +83,8 @@ func TestSettingsValidation(t *testing.T) {
 		"an empty word":    doc(`""`, ``),
 		"a hash with text": doc(``, `"abc"`),
 		"a long hash":      doc(``, `"123456789012345678901"`),
-		"too many words":   doc(manyItems(maxSettingItems+1, "w"), ``),
-		"too many hashes":  doc(``, manyItems(maxSettingItems+1, "")),
+		"too many words":   doc(manyItems(maxWords+1, "w"), ``),
+		"too many hashes":  doc(``, manyItems(maxIgnored+1, "")),
 	} {
 		if rec := a.call("PUT", "/settings", settingBody{0, data}); rec.Code != 422 {
 			t.Errorf("%s = %d %s", name, rec.Code, rec.Body)

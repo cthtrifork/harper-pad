@@ -19,7 +19,7 @@ var ErrSettingConflict = errors.New("setting changed")
 var ErrSettingTooLarge = errors.New("setting too large")
 
 // MaxSettingData is the limit of the CHECK on settings.data (migration 0002), in bytes.
-const MaxSettingData = 1 << 20
+const MaxSettingData = 256 << 10
 
 // Setting is the synced settings of an account (the dictionary and the ignore list): a compare-and-set version and the device-made document.
 type Setting struct {
