@@ -60,7 +60,8 @@ export const formatDiagnostics = (info) =>
 // The facts of this page load, read from the browser. Each read is guarded: a browser without one of these APIs leaves it out.
 export async function collect(version) {
   const nav = performance.getEntriesByType?.("navigation")?.[0];
-  const paint = performance.getEntriesByName?.("first-paint")?.[0];
+  // Safari reports only first-contentful-paint, which is the same moment here (the page has text from the start).
+  const paint = performance.getEntriesByName?.("first-paint")?.[0] ?? performance.getEntriesByName?.("first-contentful-paint")?.[0];
   const resources = (performance.getEntriesByType?.("resource") ?? [])
     .map((r) => ({ name: new URL(r.name, location.href).pathname.split("/").pop() || "/", duration: r.duration, size: r.transferSize }))
     .sort((a, b) => b.duration - a.duration)
