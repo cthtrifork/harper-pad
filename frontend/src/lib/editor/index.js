@@ -132,6 +132,7 @@ export function setMode(view, mode) {
 export function loadDocument(view, text, onStats, mode = DEFAULT_MODE, onDoc, onCursor, keepSelection = false) {
   const { extensions, ctx, mode: compartment } = editors.get(view);
   const { anchor, head } = view.state.selection.main;
+  const hadFocus = view.hasFocus;
   const withMode = extensions.map((e, i) => (i === 0 ? compartment.of(modeExtensions(mode)) : e));
   const selection = keepSelection ? { anchor: Math.min(anchor, text.length), head: Math.min(head, text.length) } : undefined;
   view.setState(EditorState.create({ doc: text, selection, extensions: withMode }));
@@ -141,5 +142,6 @@ export function loadDocument(view, text, onStats, mode = DEFAULT_MODE, onDoc, on
   onStats?.(next);
   onDoc?.(text);
   onCursor?.(cursorOf(view.state));
-  view.focus();
+  // A newer copy swapped in by a background sync (or a restore) is not a tap: focusing then would raise iOS's bare accessory bar.
+  if (!keepSelection || hadFocus) view.focus();
 }
