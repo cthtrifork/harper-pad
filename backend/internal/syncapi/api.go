@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cthtrifork/harper-pad/backend/internal/auth"
+	"github.com/cthtrifork/harper-pad/backend/internal/metrics"
 	"github.com/cthtrifork/harper-pad/backend/internal/store"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -39,7 +40,9 @@ type Store interface {
 // these types by `make openapi` in backend/).
 type API struct {
 	// Version is the release shown as the document's version (info.version). Set it before Register; New defaults it to "dev".
-	Version   string
+	Version string
+	// Metrics counts auth failures, enrollments, draft writes and rejected origins. Optional (nil is fine); set it before Register.
+	Metrics   *metrics.SyncMetrics
 	publicURL string
 	origins   map[string]bool
 	store     Store
@@ -143,6 +146,7 @@ func (a *API) CORS(next http.Handler) http.Handler {
 		w.Header().Add("Vary", "Origin")
 		allowed := a.origins[origin]
 		if !allowed {
+			a.Metrics.CORSRejected()
 			a.logRejected(origin)
 		} else {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -215,6 +219,7 @@ func DeviceFrom(ctx context.Context) (store.Device, bool) {
 func (a *API) requireProof(ctx huma.Context, next func(huma.Context)) {
 	proof, err := a.verifyProof(ctx, "")
 	if err != nil {
+		a.Metrics.AuthFailure(metrics.AuthInvalidProof)
 		a.unauthorized(ctx)
 		return
 	}
@@ -227,17 +232,20 @@ func (a *API) requireProof(ctx huma.Context, next func(huma.Context)) {
 func (a *API) RequireDevice(ctx huma.Context, next func(huma.Context)) {
 	scheme, token, ok := strings.Cut(ctx.Header("Authorization"), " ")
 	if !ok || scheme != "DPoP" || token == "" || len(token) > 128 {
+		a.Metrics.AuthFailure(metrics.AuthMissing)
 		a.unauthorized(ctx)
 		return
 	}
 	proof, err := a.verifyProof(ctx, token)
 	if err != nil {
+		a.Metrics.AuthFailure(metrics.AuthInvalidProof)
 		a.unauthorized(ctx)
 		return
 	}
 	dev, err := a.store.DeviceByToken(ctx.Context(), auth.HashToken(token))
 	switch {
 	case errors.Is(err, store.ErrUnknownToken):
+		a.Metrics.AuthFailure(metrics.AuthUnknownToken)
 		a.unauthorized(ctx)
 		return
 	case err != nil:
@@ -247,6 +255,7 @@ func (a *API) RequireDevice(ctx huma.Context, next func(huma.Context)) {
 	}
 	// The token alone is not enough: the proof must come from the key the device enrolled with.
 	if subtle.ConstantTimeCompare([]byte(proof.KeyThumbprint), []byte(dev.KeyThumbprint)) != 1 {
+		a.Metrics.AuthFailure(metrics.AuthKeyMismatch)
 		a.unauthorized(ctx)
 		return
 	}
@@ -277,11 +286,13 @@ func (a *API) enroll(ctx context.Context, in *enrollInput) (*enrollOutput, error
 	proof, _ := ctx.Value(proofKey).(auth.Proof)
 	name, ok := cleanName(in.Body.DeviceName)
 	if !ok {
+		a.Metrics.Enrollment(metrics.EnrollBadName)
 		return nil, huma.Error422UnprocessableEntity("bad device name")
 	}
 	// An invite is 256 random bits in base64url; anything else cannot be one, and need not reach the database. It is the same 401
 	// as a wrong invite: the shape of a token is not something to tell apart.
 	if raw, err := base64.RawURLEncoding.DecodeString(in.Body.Invite); err != nil || len(raw) != 32 {
+		a.Metrics.Enrollment(metrics.EnrollInvalid)
 		return nil, huma.Error401Unauthorized("unauthorized")
 	}
 	token, err := auth.NewToken()
@@ -295,10 +306,13 @@ func (a *API) enroll(ctx context.Context, in *enrollInput) (*enrollOutput, error
 	err = a.store.Enroll(ctx, auth.HashToken(in.Body.Invite), id, name, userAgent(in.UserAgent), proof.KeyThumbprint, auth.HashToken(token))
 	switch {
 	case errors.Is(err, store.ErrInvalidInvite):
+		a.Metrics.Enrollment(metrics.EnrollInvalid)
 		return nil, huma.Error401Unauthorized("unauthorized")
 	case err != nil:
+		a.Metrics.Enrollment(metrics.EnrollError)
 		return nil, serverError("enroll", err)
 	}
+	a.Metrics.Enrollment(metrics.EnrollOK)
 	out := &enrollOutput{CacheControl: "no-store"}
 	out.Body.DeviceToken, out.Body.TokenType = token, "DPoP"
 	return out, nil

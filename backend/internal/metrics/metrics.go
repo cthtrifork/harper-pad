@@ -16,6 +16,7 @@ import (
 
 // Metrics is a registry plus the HTTP instruments.
 type Metrics struct {
+	app      string
 	reg      *prometheus.Registry
 	requests *prometheus.CounterVec
 	duration *prometheus.HistogramVec
@@ -26,6 +27,7 @@ func New(app string) *Metrics {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	m := &Metrics{
+		app: app,
 		reg: reg,
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "harper_pad_http_requests_total",

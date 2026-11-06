@@ -89,7 +89,11 @@ Both commands run as `harper-pad-sync serve` / `harper-pad-admin serve` and are 
 Metrics (Prometheus, `client_golang`, a private registry): `GET :9102/metrics` has the Go runtime and process collectors,
 `harper_pad_http_requests_total` and `harper_pad_http_request_duration_seconds` labelled by method and route *pattern* (never the
 raw path, so the label values are bounded) and `harper_pad_db_pool_*` from the pgx pool (connections by state, acquires, empty
-acquires and wait time: a pool that is too small shows there before `/readyz` fails). The cluster needs a NetworkPolicy that lets
+acquires and wait time: a pool that is too small shows there before `/readyz` fails).
+The sync service adds `harper_pad_auth_failures_total{reason}` (the cause behind the one 401 clients see: `missing_credentials`,
+`invalid_proof`, `unknown_token`, `key_mismatch`), `harper_pad_enrollments_total{outcome}`, `harper_pad_doc_writes_total{outcome}`
+(`ok`, `deleted`, `conflict`, `too_large`, `invalid`, `error`), `harper_pad_cors_rejected_total` and
+`harper_pad_last_doc_write_timestamp_seconds` (per process, 0 until the first accepted write). Label values are fixed sets. The cluster needs a NetworkPolicy that lets
 Prometheus and the kubelet reach port 9102 and a PodMonitor; both live in the gitops repository. The probes point at port 9102, not at the
 public port, which no longer answers `/healthz` or `/readyz` (404).
 
