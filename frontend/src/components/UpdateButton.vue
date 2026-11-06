@@ -142,7 +142,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
             <svg class="mark warn" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.1" /><circle cx="12" cy="12" r="9" /></svg>
             <div>
               <h3>{{ found }} is available</h3>
-              <p>You have {{ info.version }}. The download is verified before it is installed.</p>
+              <p>The download is verified before it is installed.</p>
             </div>
           </template>
           <template v-else-if="state === 'downloading'">
