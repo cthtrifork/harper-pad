@@ -1,8 +1,8 @@
 name: Backend images
 
 # Checks the two backend container images (backend/Containerfile.sync and .admin) the way they are shipped: built, scanned with
-# Trivy and started. Nothing is published from here; release.yml pushes them to ghcr.io. Runs for pull requests that touch backend/
-# (not a required check: it has a paths filter), weekly (a new base-image CVE needs no commit) and by hand. See backend/README.md.
+# Trivy and started. Nothing is published from here; release.yml pushes them to ghcr.io. Runs for pull requests, per image: only the
+# image whose inputs changed (the `changes` job below; not a required check), weekly (a new base-image CVE needs no commit) and by hand. See backend/README.md.
 on:
   pull_request:
     paths:
@@ -26,13 +26,71 @@ env:
   TRIVY_SKIP_DB_UPDATE: 'true'
 
 jobs:
+  # Pull requests only: which images changed. Weekly and manual runs build both. `matrix` is the list of image names for the job below.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # internal/** and the module files go into both binaries; the cmd directory and the Containerfile are per image.
+      - id: sync
+        if: github.event_name == 'pull_request'
+        uses: step-security/changed-files@2e07db73e5ccdb319b9a6c7766bd46d39d304bad # v47.0.5
+        with:
+          files: |
+            backend/cmd/harper-pad-sync/**
+            backend/internal/**
+            backend/go.mod
+            backend/go.sum
+            backend/Containerfile.sync
+            .github/workflows/backend-image.yml
+          files_ignore: |
+            backend/**/*_test.go
+            backend/**/*.md
+
+      - id: admin
+        if: github.event_name == 'pull_request'
+        uses: step-security/changed-files@2e07db73e5ccdb319b9a6c7766bd46d39d304bad # v47.0.5
+        with:
+          files: |
+            backend/cmd/harper-pad-admin/**
+            backend/internal/**
+            backend/go.mod
+            backend/go.sum
+            backend/Containerfile.admin
+            .github/workflows/backend-image.yml
+          files_ignore: |
+            backend/**/*_test.go
+            backend/**/*.md
+
+      - id: matrix
+        env:
+          EVENT: ${{ github.event_name }}
+          SYNC: ${{ steps.sync.outputs.any_changed }}
+          ADMIN: ${{ steps.admin.outputs.any_changed }}
+        run: |
+          names=()
+          if [ "$EVENT" != pull_request ] || [ "$SYNC" = true ]; then names+=(sync); fi
+          if [ "$EVENT" != pull_request ] || [ "$ADMIN" = true ]; then names+=(admin); fi
+          echo "matrix=$(jq -nc '$ARGS.positional' --args "${names[@]}")" >> "$GITHUB_OUTPUT"
+
   image:
     name: image (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.matrix != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
+        name: ${{ fromJSON(needs.changes.outputs.matrix) }}
         include:
           - name: sync
             port: 9000
