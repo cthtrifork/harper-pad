@@ -6,7 +6,7 @@
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.js";
-import { changesTo, cleanLists, readSettings, sameLists } from "./settingsItems.js";
+import { changesTo, cleanLists, readSettings, sameLists, unionLists } from "./settingsItems.js";
 import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.js";
 import { decide, settle } from "./syncPlan.js";
 import { SyncError } from "./syncEnroll.js";
@@ -187,41 +187,49 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
       return api.one(id);
     },
 
-    // The personal dictionary and the ignore list, one document, docs/sync.md "Settings": `current()` gives {words, ignored} held now,
-    // `store` is the sync record (settingsSync.js), `apply(changes)` makes the local lists match the server's. The last device to
-    // sync wins, the whole document at a time:
+    // The personal dictionary and the ignore list, docs/sync.md "Settings": `current()` gives {words, ignored} held now, `store` is the
+    // sync record (settingsSync.js), `apply(changes)` makes the local lists match what was decided. The last device to sync wins, both
+    // lists at a time, except that a device syncing for the first time deletes nothing:
     //   - the server has nothing: send this device's lists;
-    //   - this device never synced them (just enrolled): the server's lists replace the local ones;
+    //   - this device never synced them (just enrolled): the union of both is sent and applied, so no word on either side is lost;
     //   - changed here since the last sync: send them, over whatever the server holds (a write that lost a race is read and sent again);
     //   - not changed here: take the server's lists when its version moved.
-    // The record is saved only after the lists were sent or applied, so a failure is retried and never mistaken for a local edit.
+    // The record is saved only after the lists were sent and applied, so a failure is retried and never mistaken for a local edit.
     async syncSettings({ current, store, apply }) {
       const rec = await store.load();
       const held = cleanLists(await current());
-      const matched = async (version) => store.save({ version, ...cleanLists(await current()) });
+      const settle = async (version, target) => {
+        const changes = changesTo(target, held);
+        if (changes.any) await apply(changes);
+        await store.save({ version, ...cleanLists(await current()) });
+      };
       for (let attempt = 0; attempt < 3; attempt++) {
         const remote = await getSetting({ device, fetchFn });
-        const send = async () => {
-          const out = await putSetting({ device, baseVersion: remote?.version ?? 0, ...held, fetchFn });
-          if (out.result === "ok") await store.save({ version: out.version, ...held });
-          return out.result === "ok";
+        const send = async (lists) => {
+          const out = await putSetting({ device, baseVersion: remote?.version ?? 0, ...lists, fetchFn });
+          if (out.result !== "ok") return false;
+          await settle(out.version, lists);
+          return true;
         };
         if (!remote) {
-          if (await send()) return;
+          if (await send(held)) return;
           continue;
         }
         const theirs = readSettings(remote);
         if (!theirs) throw new SyncError("server", "The server's dictionary is not readable.");
-        const changedHere = rec && !sameLists(held, rec);
+        if (!rec) {
+          const both = unionLists(held, theirs);
+          if (sameLists(both, theirs)) await settle(remote.version, both);
+          else if (!(await send(both))) continue;
+          return;
+        }
+        const changedHere = !sameLists(held, rec);
         if (changedHere && !sameLists(held, theirs)) {
-          if (await send()) return;
+          if (await send(held)) return;
           continue;
         }
-        if (!changedHere && (!rec || rec.version !== remote.version)) {
-          const changes = changesTo(theirs, held);
-          if (changes.any) await apply(changes);
-        }
-        await matched(remote.version);
+        if (!changedHere && rec.version !== remote.version) await settle(remote.version, theirs);
+        else await store.save({ version: remote.version, ...cleanLists(await current()) });
         return;
       }
       throw new SyncError("server", "The settings changed on the server. Try again.");

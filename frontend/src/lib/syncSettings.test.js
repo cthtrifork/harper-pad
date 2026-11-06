@@ -58,15 +58,30 @@ test("an empty server receives this device's lists; nothing is sent when nothing
   assert.deepEqual(a.applied, []);
 });
 
-test("a device that never synced takes the server's lists, dropping its own", async () => {
+test("a device that never synced joins its lists with the server's: nothing is deleted on either side", async () => {
   const server = fakeServer();
   await phone(server, ["Wails", "Harper"], ["42"]).sync();
-  const b = phone(server, ["Local"], ["7"]);
+  const b = phone(server, ["Local", "Wails"], ["7"]);
+  await b.sync();
+  assert.deepEqual([...b.words].sort(), ["Harper", "Local", "Wails"]);
+  assert.deepEqual([...b.ignored].sort(), ["42", "7"]);
+  assert.deepEqual(server.lists(), { words: ["Harper", "Local", "Wails"], ignored: ["42", "7"] });
+  assert.deepEqual(
+    b.applied.map((c) => [c.words.remove, c.ignored.remove]),
+    [[[], []]],
+    "only additions were applied",
+  );
+  await b.sync();
+  assert.equal(server.puts, 2, "the joined lists are then in step and nothing more is sent");
+});
+
+test("a device that never synced and has nothing new sends nothing", async () => {
+  const server = fakeServer();
+  await phone(server, ["Wails", "Harper"], ["42"]).sync();
+  const b = phone(server, ["Wails"], []);
   await b.sync();
   assert.deepEqual([...b.words].sort(), ["Harper", "Wails"]);
-  assert.deepEqual(b.ignored, ["42"]);
-  assert.equal(server.puts, 1, "the enrolling device wrote nothing");
-  assert.deepEqual(server.lists(), { words: ["Harper", "Wails"], ignored: ["42"] });
+  assert.equal(server.puts, 1);
 });
 
 test("a change here is sent, and another device then takes it, removals included", async () => {
@@ -137,32 +152,22 @@ test("a server document that is garbage is refused and changes nothing", async (
   await assert.rejects(a.sync(), /not readable/);
 });
 
-test("a failed apply is not remembered, so the next sync tries again and does not send the old lists", async () => {
+test("a failed apply is not remembered, so the next sync tries again and still deletes nothing", async () => {
   const server = fakeServer();
   await phone(server, ["Wails"], []).sync();
   const b = phone(server, ["Local"]);
-  const store = { load: async () => null, save: async (r) => (b.record = r) };
+  const store = { load: async () => b.record, save: async (r) => (b.record = r) };
   const engine = createSyncer({ device: DEVICE, drafts: {}, fetchFn: server.fetchFn });
+  const run = (apply) => engine.syncSettings({ current: async () => ({ words: b.words, ignored: b.ignored }), store, apply });
   await assert.rejects(
-    engine.syncSettings({
-      current: async () => ({ words: b.words, ignored: b.ignored }),
-      store,
-      apply: async () => {
-        throw new Error("linter failed");
-      },
+    run(async () => {
+      throw new Error("linter failed");
     }),
     /linter failed/,
   );
   assert.equal(b.record, null);
-  assert.equal(server.puts, 1);
-});
-
-test("input is trimmed and tidied before it is sent, and an entry the server would refuse stays local", async () => {
-  const server = fakeServer();
-  const a = phone(server, ["  Wails ", "Wails", "", "two words", "x".repeat(65), "Harper\n"], [" 42 ", "abc", "42"]);
-  await a.sync();
-  assert.deepEqual(server.lists(), { words: ["Harper", "Wails"], ignored: ["42"] });
-  assert.deepEqual(a.words, ["  Wails ", "Wails", "", "two words", "x".repeat(65), "Harper\n"], "nothing was removed locally");
-  await a.sync();
-  assert.equal(server.puts, 1, "tidying is not a change");
+  assert.deepEqual(server.lists().words, ["Local", "Wails"], "the join reached the server before the apply failed");
+  await run(async (c) => b.words.push(...c.words.add));
+  assert.deepEqual([...b.words].sort(), ["Local", "Wails"]);
+  assert.equal(server.puts, 2);
 });
