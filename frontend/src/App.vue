@@ -112,7 +112,7 @@ const statusLineNow = computed(() =>
 const syncBusy = computed(() => sync.status.value === "syncing");
 // A draft that has just opened says nothing about saving until something is typed; pressing Sync or Save asks for an answer, so it shows.
 const syncAsked = ref(false);
-// A linked draft cannot be saved as another file until it is unlinked (the x on the file chip); Ctrl+Shift+S only says so in the status line.
+// A linked draft cannot be saved as another file until it is unlinked (the unlink button on the file chip); Ctrl+Shift+S only says so in the status line.
 const saveAsHint = ref("");
 let saveAsHintTimer = 0;
 watch(

@@ -144,8 +144,8 @@
   transform: scale(0.4);
 }
 
-/* The x on the file chip: Unlink. The draft and the file stay as they are. */
-.bar .chip-x {
+/* The two small buttons on the file chip: copy the full path, and unlink (the draft and the file stay as they are). */
+.bar .chip-btn {
   flex: none;
   align-self: center;
   display: inline-flex;
@@ -161,7 +161,7 @@
   color: var(--mute);
 }
 
-.bar .chip-x:hover {
+.bar .chip-btn:hover {
   background: var(--selected);
   color: var(--text);
 }

@@ -9,13 +9,13 @@ test("no link: Save as file, no x", () => {
   assert.equal(saveAsAction({ ...linked, filePath: "" }), "ask");
 });
 
-test("linked and healthy: the chip's x only, and Ctrl+Shift+S only hints", () => {
+test("linked and healthy: the chip's unlink button only, and Ctrl+Shift+S only hints", () => {
   assert.deepEqual(fileControls(linked), { showSaveAs: false, showChipX: true, showDirty: false });
   assert.equal(saveAsAction(linked), "hint");
   assert.equal(UNLINK_FIRST, "Unlink first to save as another file");
 });
 
-test("linked with the chip struck through: the x and Save as file beside it", () => {
+test("linked with the chip struck through: the unlink button and Save as file beside it", () => {
   const struck = { ...linked, fileProblem: "file not found" };
   assert.deepEqual(fileControls(struck), { showSaveAs: true, showChipX: true, showDirty: false });
   assert.equal(saveAsAction(struck), "ask");

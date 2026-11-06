@@ -25,7 +25,7 @@ const props = defineProps({
   fileDir: { type: String, default: "" },
   // Why the file cannot be used right now ("file not found", "permission denied", ...), or "" when it can. The chip is struck through while it is set.
   fileProblem: { type: String, default: "" },
-  // The desktop build can unlink a file (the x on the chip). The web build never does: Save as file is always offered there.
+  // The desktop build can unlink a file (the unlink button on the chip). The web build never does: Save as file is always offered there.
   canUnlink: { type: Boolean, default: false },
   // useDrafts' fileState: "stale" means your draft has changes the file does not have yet (the dot).
   fileState: { type: String, default: "none" },
@@ -58,6 +58,20 @@ const mainTitle = computed(() => (props.filePath ? `Also writes ${props.fileName
 
 // A click turns the sync icon once even when the server answers at once; it keeps turning while the sync is busy.
 const turning = ref(false);
+
+// The copy button: the full path goes to the clipboard and the icon is a check for two seconds. A failed copy (no permission) says nothing.
+const copied = ref(false);
+let copiedTimer = 0;
+async function copyPath() {
+  try {
+    await navigator.clipboard.writeText(props.filePath);
+  } catch {
+    return;
+  }
+  copied.value = true;
+  clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => (copied.value = false), 2000);
+}
 function onMain() {
   turning.value = true;
   emit("save", false);
@@ -95,8 +109,13 @@ function onMain() {
       <Transition name="dot"><span v-if="controls.showDirty" class="dirty-dot" aria-hidden="true"></span></Transition>
       <span v-if="controls.showDirty" class="sr-only">{{ dirtyText_ }}</span>
       <span v-if="fileDir" class="folder">in {{ fileDir }}</span>
-      <button v-if="controls.showChipX" type="button" class="chip-x" :aria-label="`Unlink ${fileName}`" :title="`Unlink ${fileName}`" @click="emit('unlink')">
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6m0-6L2 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+      <button type="button" class="chip-btn copy-path" :aria-label="copied ? 'Path copied' : `Copy full path of ${fileName}`" :title="copied ? 'Copied' : 'Copy full path'" @click="copyPath">
+        <svg v-if="copied" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.3l2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg v-else width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 4V2.7A1.2 1.2 0 0 0 6.8 1.5H2.7A1.2 1.2 0 0 0 1.5 2.7v4.100A1.2 1.2 0 0 0 2.7 8H4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg>
+      </button>
+      <button v-if="controls.showChipX" type="button" class="chip-btn unlink" :aria-label="`Unlink ${fileName}`" :title="`Unlink ${fileName}`" @click="emit('unlink')">
+        <!-- the broken link, as in word processors: two link halves with a gap -->
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M5 3.2l.7-.7a2.1 2.1 0 0 1 3 3l-.7.7M7 8.800l-.7.7a2.1 2.1 0 0 1-3-3l.7-.7M2 2l1 1M10 10l-1-1M1.5 4.500h1.200M9.3 7.500h1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg>
       </button>
     </span>
     <span v-if="!filePath" id="file-badge" class="badge">Draft, not on disk</span>

@@ -322,7 +322,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     editor.value?.undo();
   }
 
-  // "Unlink" (the x on the file chip): the draft stays, the file stays, the link goes. A toast offers Undo, which puts the link back as it was.
+  // "Unlink" (the unlink button on the file chip): the draft stays, the file stays, the link goes. A toast offers Undo, which puts the link back as it was.
   const unlinkedToast = ref(null); // {id, name, tick}
   function unlinkFile() {
     const id = current.value.id;
