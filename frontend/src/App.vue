@@ -9,7 +9,7 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData, sharing, ignoredSync, syncDevice, syncDrafts, wordsSync } from "./lib/backend.js";
+import { keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
@@ -69,8 +69,14 @@ const sync = useSync({
   openDraft: (id) => drafts.open(id),
   onRemoved: (draft) => drafts.removedElsewhere(draft),
   onRestore: (draft) => drafts.restore(draft),
-  dictionary: { items: async () => (await linter()).exportWords(), store: wordsSync, apply: (changes) => applyWords(changes) },
-  ignoreList: { items: async () => ignoredHashes(await linter()), store: ignoredSync, apply: (changes) => applyIgnoredHashes(changes) },
+  settings: {
+    current: async () => {
+      const h = await linter();
+      return { words: await h.exportWords(), ignored: await ignoredHashes(h) };
+    },
+    store: settingsSync,
+    apply: (changes) => applySettings(changes),
+  },
 });
 // A draft that was opened is checked against the server in the background (a newer version is swapped in when nothing was typed).
 const openHooks = { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() };
@@ -312,19 +318,18 @@ async function changePersonal(work) {
   }
 }
 
-// What syncing the dictionary decided (docs/sync.md, "Settings"): words to add, and words another device removed (a new linter without them).
-const applyWords = ({ add, remove }) =>
+// What syncing the dictionary and ignore list decided (docs/sync.md, "Settings"): they become the server's. Words the server lacks are
+// removed with a new linter (Harper cannot drop one), the others imported; hashes likewise.
+const applySettings = ({ words, ignored }) =>
   changePersonal(async () => {
-    if (remove.length) {
+    if (words.remove.length) {
       const old = harper.value;
-      harper.value = await withoutWords(old, remove, createLinter);
+      harper.value = await withoutWords(old, words.remove, createLinter);
       old.dispose().catch(() => {});
     }
-    if (add.length) await harper.value.importWords(add);
+    if (words.add.length) await harper.value.importWords(words.add);
+    await applyIgnored(harper.value, ignored);
   });
-
-// The same for the ignore list: hashes another device ignored are imported, ones it stopped ignoring are cleared.
-const applyIgnoredHashes = (changes) => changePersonal(() => applyIgnored(harper.value, changes));
 
 const stopIgnoring = (hash) => changePersonal(() => removeIgnored(harper.value, hash));
 // Harper cannot drop a word, so this swaps in a new linter without it; the editor checks again with it when it arrives.

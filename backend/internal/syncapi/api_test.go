@@ -481,10 +481,10 @@ func TestServesOpenAPI(t *testing.T) {
 	}
 }
 
-func (b brokenStore) GetSetting(context.Context, int64, string) (store.Setting, error) {
+func (b brokenStore) GetSetting(context.Context, int64) (store.Setting, error) {
 	return store.Setting{}, b.err
 }
 
-func (b brokenStore) PutSetting(context.Context, int64, string, int64, string) (store.Setting, error) {
+func (b brokenStore) PutSetting(context.Context, int64, int64, string) (store.Setting, error) {
 	return store.Setting{}, b.err
 }

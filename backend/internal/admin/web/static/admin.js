@@ -1,5 +1,5 @@
 // The only script of the admin UI besides htmx. No inline script is allowed by the Content-Security-Policy, so this file
-// handles three things with delegated listeners: copying the enrollment URL, the expiry countdown, and letting htmx swap
+// handles four things with delegated listeners: copying the enrollment URL, the expiry countdown, "last seen" in local time, and letting htmx swap
 // error responses (the server sends them as small fragments with the right HX-Retarget).
 (() => {
   'use strict';
@@ -42,9 +42,35 @@
     const s = Math.floor(ms / 1000);
     return `in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
-  setInterval(() => {
+  // "Last seen" labels. Times travel as Unix milliseconds (UTC); the page shows them in the browser's time zone. The server renders the
+  // same wording in UTC as the fallback (lastSeen in handler.go); keep the two in step.
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const dayOf = (d) => d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();
+  const seen = (ms, now = new Date()) => {
+    const t = new Date(ms);
+    const d = now - t;
+    const day = 864e5;
+    if (d < 6e4) return 'just now';
+    if (d < 36e5) return `${Math.floor(d / 6e4)} min ago`;
+    if (d < day) return `${Math.floor(d / 36e5)} h ago`;
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const date = `${t.getDate()} ${MONTHS[t.getMonth()]} ${t.getFullYear()}`;
+    const time = `${pad2(t.getHours())}:${pad2(t.getMinutes())}`;
+    if (dayOf(yesterday) === dayOf(t)) return `Yesterday, ${time}`;
+    if (d < 14 * day) return `${date}, ${time}`;
+    return `${date} (${Math.floor(d / day)} days ago)`;
+  };
+  const tick = () => {
     for (const el of document.querySelectorAll('[data-expires]')) {
       el.textContent = fmt(Number(el.dataset.expires) - Date.now());
     }
-  }, 1000);
+    for (const el of document.querySelectorAll('[data-seen]')) {
+      el.textContent = seen(Number(el.dataset.seen));
+    }
+  };
+  setInterval(tick, 1000);
+  document.addEventListener('htmx:afterSwap', tick);
+  tick();
 })();

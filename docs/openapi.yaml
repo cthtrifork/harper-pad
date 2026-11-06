@@ -217,7 +217,7 @@ components:
       additionalProperties: false
       properties:
         data:
-          description: "A JSON string, {\"v\":1,\"items\":{\"<item>\":{\"at\":<unix ms>,\"del\":<bool>}}}: per item the time of its last change and whether it was removed (a tombstone). The server stores it as it came; the devices merge it."
+          description: "A JSON string, {\"v\":1,\"words\":[\"<word>\"],\"ignored\":[\"<decimal hash>\"]}: the whole dictionary and ignore list as the last device to write left them. The server stores it as it came."
           type: string
         version:
           description: "Compare-and-set counter: 1 on creation, +1 on each accepted write"
@@ -560,10 +560,10 @@ paths:
       summary: Enroll a device
       tags:
         - enrollment
-  /settings/{key}:
+  /settings:
     get:
-      description: "`words` is the personal dictionary, `ignored` the hashes of Harper's ignore list. 404 until a device has stored one."
-      operationId: getSetting
+      description: The personal dictionary (`words`) and the hashes of Harper's ignore list (`ignored`) in one document. 404 until a device has stored it.
+      operationId: getSettings
       parameters:
         - description: DPoP proof
           in: header
@@ -576,14 +576,6 @@ paths:
           name: Authorization
           schema:
             description: DPoP <device token>
-            type: string
-        - in: path
-          name: key
-          required: true
-          schema:
-            enum:
-              - words
-              - ignored
             type: string
       responses:
         "200":
@@ -622,12 +614,12 @@ paths:
           description: Internal Server Error
       security:
         - DPoP: []
-      summary: Get one synced setting
+      summary: Get the synced settings
       tags:
         - settings
     put:
-      description: Accepted only if the stored version is `baseVersion` (0 for a key the server does not have). Otherwise nothing changes and the 409 carries the current setting, so the device merges and writes again.
-      operationId: putSetting
+      description: "Accepted only if the stored version is `baseVersion` (0 when the server has none). Otherwise nothing changes and the 409 carries the current settings. The server never merges: the last write wins."
+      operationId: putSettings
       parameters:
         - description: DPoP proof
           in: header
@@ -640,14 +632,6 @@ paths:
           name: Authorization
           schema:
             description: DPoP <device token>
-            type: string
-        - in: path
-          name: key
-          required: true
-          schema:
-            enum:
-              - words
-              - ignored
             type: string
       requestBody:
         content:
@@ -699,7 +683,7 @@ paths:
                   - status
                   - detail
                 type: object
-          description: The stored setting is not the base the write was made against
+          description: The stored settings are not the base the write was made against
         "413":
           content:
             application/problem+json:
@@ -720,7 +704,7 @@ paths:
           description: Internal Server Error
       security:
         - DPoP: []
-      summary: Write one synced setting (compare-and-set)
+      summary: Write the synced settings (compare-and-set)
       tags:
         - settings
 servers:
@@ -730,5 +714,5 @@ tags:
     name: enrollment
   - description: List, read and write the end-to-end encrypted drafts of an enrolled device.
     name: drafts
-  - description: The personal dictionary and the ignore list, merged by the devices.
+  - description: The personal dictionary and the ignore list, one document; the last device to write wins.
     name: settings

@@ -1,6 +1,5 @@
-import { ignoredSync, loadSettings, saveSettings, syncDevice, wordsSync } from "./backend.js";
+import { loadSettings, saveSettings } from "./backend.js";
 import { hashesOf } from "./personalSets.js";
-import { reconcile } from "./settingsItems.js";
 
 export { applyIgnored, ignoredHashes, removeIgnored, withoutWord, withoutWords } from "./personalSets.js";
 
@@ -37,23 +36,5 @@ export async function savePersonal(harper) {
   const keep = new Set(hashesOf(ignored));
   labels = Object.fromEntries(Object.entries(labels).filter(([hash]) => keep.has(hash)));
   await saveSettings({ version: 1, words, ignored, ignoredLabels: labels });
-  await noteSets(words, hashesOf(ignored));
   return snapshot(harper);
-}
-
-// Remember when the dictionary and the ignore list changed, so syncing them can tell an item removed here from one never added
-// (docs/sync.md, "Settings"). Only for a device that syncs; a failure here must not fail the save.
-async function noteSets(words, hashes) {
-  try {
-    if (!(await syncDevice.load())) return;
-    for (const [store, current] of [
-      [wordsSync, words],
-      [ignoredSync, hashes],
-    ]) {
-      const rec = await store.load();
-      await store.save({ items: reconcile(rec.items, current, Date.now()) });
-    }
-  } catch {
-    // the next sync stamps what it finds
-  }
 }

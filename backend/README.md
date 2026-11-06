@@ -2,7 +2,7 @@
 
 The optional sync service for Harper Pad: `harper-pad-sync` (the API) and `harper-pad-admin` (Go + HTMX, for enrollment URLs
 and devices), on PostgreSQL. The design is in [`docs/sync.md`](../docs/sync.md). It offers the health endpoints, the admin
-pages, the schema migrations, device enrollment (`POST /enroll`) and the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`) and the settings routes (`GET` and `PUT /settings/<key>`).
+pages, the schema migrations, device enrollment (`POST /enroll`) and the draft routes (`GET /docs`, `GET` and `PUT /docs/<id>`) and the settings routes (`GET` and `PUT /settings`).
 
 This is its own Go module (`github.com/cthtrifork/harper-pad/backend`) and shares no code with the desktop app. The Kubernetes
 manifests are not kept in this repository.
@@ -96,7 +96,7 @@ public port, which no longer answers `/healthz` or `/readyz` (404).
 **Migrations.** `harper-pad-admin` applies the files in `internal/store/migrations/` at start, in name order, each in a transaction
 with its row in `schema_migrations`, under a PostgreSQL advisory lock so two pods never race. It connects as `harper_admin`, the owner
 of the database and the tables (the cluster creates both roles and the owner); the files create the tables and grant `harper_sync` its
-row-level rights, and `harper_sync` has no DDL. The schema is `0001_init.sql` plus `0002_settings.sql` (the synced dictionary and ignore list, with the same row security as `docs`). `docs` has row security forced with a policy for `harper_sync` only, so the admin role sees no note in ordinary SQL (the owner can still switch it off). While they run (and while the database is down) the admin's
+row-level rights, and `harper_sync` has no DDL. The schema is `0001_init.sql` plus `0002_settings.sql` (the synced dictionary and ignore list, one row per account, with the same row security as `docs`). `docs` has row security forced with a policy for `harper_sync` only, so the admin role sees no note in ordinary SQL (the owner can still switch it off). While they run (and while the database is down) the admin's
 `/readyz` is 503 and the start is retried every 2 to 30 s; `/healthz` stays 200. `harper-pad-sync` applies nothing: its `/readyz` is 503
 until every embedded migration is recorded in `schema_migrations`, so it never serves a database without its tables or grants. The two
 are versioned together; a new sync image waits for the matching admin.

@@ -6,7 +6,7 @@
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.js";
-import { changesFor, itemsData, mergeItems, parseItems, reconcile, sameItems } from "./settingsItems.js";
+import { changesTo, parseSettings, sameLists, settingsData } from "./settingsItems.js";
 import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.js";
 import { decide, settle } from "./syncPlan.js";
 import { SyncError } from "./syncEnroll.js";
@@ -187,24 +187,44 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
       return api.one(id);
     },
 
-    // The personal dictionary (key "words") or the ignore list (key "ignored"), docs/sync.md "Settings": `current` is the words or
-    // hashes held now, `store` the sync record (settingsSync.js). Notes this device's changes, merges them with the server's set
-    // (later change per item wins, an item is never dropped for being absent), writes the merge back if the server lacked something,
-    // and resolves to {add, remove}: what the local set must do to match. The caller applies it; nothing here touches Harper. A write
-    // that loses a race is merged again.
-    async settingSet({ key, current, store }) {
+    // The personal dictionary and the ignore list, one document, docs/sync.md "Settings": `current()` gives {words, ignored} held now,
+    // `store` is the sync record (settingsSync.js), `apply(changes)` makes the local lists match the server's. The last device to
+    // sync wins, the whole document at a time:
+    //   - the server has nothing: send this device's lists;
+    //   - this device never synced them (just enrolled): the server's lists replace the local ones;
+    //   - changed here since the last sync: send them, over whatever the server holds (a write that lost a race is read and sent again);
+    //   - not changed here: take the server's lists when its version moved.
+    // The record is saved only after the lists were sent or applied, so a failure is retried and never mistaken for a local edit.
+    async syncSettings({ current, store, apply }) {
       const rec = await store.load();
-      let items = reconcile(rec.items, current, now().getTime());
+      const held = await current();
+      const matched = async (version) => store.save({ version, ...(await current()) });
       for (let attempt = 0; attempt < 3; attempt++) {
-        const remote = await getSetting({ device, key, fetchFn });
-        const theirs = remote ? parseItems(remote.data, key) : {};
-        items = mergeItems(items, theirs);
-        await store.save({ items });
-        if (remote && sameItems(items, theirs)) return changesFor(items, current);
-        const out = await putSetting({ device, key, baseVersion: remote?.version ?? 0, data: itemsData(items), fetchFn });
-        if (out.result === "ok") return changesFor(items, current);
+        const remote = await getSetting({ device, fetchFn });
+        const send = async () => {
+          const out = await putSetting({ device, baseVersion: remote?.version ?? 0, data: settingsData(held), fetchFn });
+          if (out.result === "ok") await store.save({ version: out.version, ...held });
+          return out.result === "ok";
+        };
+        if (!remote) {
+          if (await send()) return;
+          continue;
+        }
+        const theirs = parseSettings(remote.data);
+        if (!theirs) throw new SyncError("server", "The server's dictionary is not readable.");
+        const changedHere = rec && !sameLists(held, rec);
+        if (changedHere && !sameLists(held, theirs)) {
+          if (await send()) return;
+          continue;
+        }
+        if (!changedHere && (!rec || rec.version !== remote.version)) {
+          const changes = changesTo(theirs, held);
+          if (changes.any) await apply(changes);
+        }
+        await matched(remote.version);
+        return;
       }
-      throw new SyncError("server", "The setting changed on the server. Try again.");
+      throw new SyncError("server", "The settings changed on the server. Try again.");
     },
 
     // The person chose to remove it here too. Only if the server still holds the tombstone. Resolves to the draft that was removed (so the

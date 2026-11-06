@@ -165,43 +165,48 @@ It changes nothing for a user who leaves sync off. The reasons behind the shape:
 
 ## Settings: the dictionary and the ignore list
 
-The same rules apply: the device holds the truth, and **absence is not deletion**. A word the server lacks is uploaded, never
-removed here; only an explicit removal (a tombstone) removes a word, and the server never merges.
+These are the exception to the rule above. The dictionary and the ignore list are small and are meant to be the same on every device, so there is **no merge: the last device to sync wins, and absence is deletion**. A word removed on one device is removed on the others.
 
-**Data model.** One row per account and key in `settings` (`key` is `words` or `ignored`, a compare-and-set `version`, and `data`,
-at most 1 MiB), written with `GET` and `PUT /settings/<key>` ([openapi.yaml](openapi.yaml)). The server stores `data` as it came:
+**Data model.** One row per account in `settings` (a compare-and-set `version` and `data`, at most 1 MiB), written with `GET` and
+`PUT /settings` ([openapi.yaml](openapi.yaml)). The server stores `data` as it came and never merges it:
 
 ```json
-{"v":1,"items":{"Wails":{"at":1762400000000,"del":false},"Harpr":{"at":1762400100000,"del":true}}}
+{"v":1,"words":["Wails","Harper"],"ignored":["18446744073709551615","42"]}
 ```
 
-Per item (a word, or for `ignored` the decimal hash of a finding) `at` is when it was last added or removed on a device and `del`
-marks a removal. Tombstones are kept forever, as for drafts. The server only checks the shape and the sizes (20,000 items; a word is
-one short word, a hash is digits).
+The ignore list holds the decimal hash of each ignored finding (text, because Harper's hashes are 64-bit). The server only checks
+the shape and the sizes (20,000 entries per list; a word is one short word, a hash is digits). An empty list is valid.
 
-**Merge, on the device** (`settingsItems.js`, run by `createSyncer.words`): per item the later `at` wins; at the same `at` the item
-stays. The result is the union of both sets, minus what has a newer tombstone. So removing a word on one device is not undone by a
-device that still has it, a word added again after a removal comes back, and a word missing on one side is simply added. The device
-stamps its own changes as they happen: when the dictionary is saved, a new word gets `at = now` and a word that is gone becomes a
-tombstone. It keeps those stamps in the `sync-words` and `sync-ignored` records of its IndexedDB `kv` store (never uploaded, not a source of words; on
-desktop too, so SQLite and the bindings are unchanged), and only while the device is enrolled. A word the device holds with no stamp is
-stamped when it first syncs, so enrolling never removes a word.
+**Rules** (`createSyncer.syncSettings`). Each device keeps one record, `sync-settings` in its IndexedDB `kv` store (on desktop too, so
+SQLite and the bindings are unchanged): the server `version` it last matched and the two lists it held then. It is never a source of
+words. A run is `GET`, then:
 
-**When.** **Sync all** (so at start-up and after enrolling) and about 2 s after the dictionary or ignore list changed here. Each run is: stamp local
-changes, `GET`, merge, and `PUT` the merge on the version just read when it differs from the server's; a `409` is read and merged
-again (three tries). What the merge says the dictionary must gain or lose is applied afterwards: Harper can only add words, so removals
-build a new linter without them ([personal.js](../frontend/src/lib/personal.js)). A failure leaves the dictionary as it is.
+| Situation | What happens |
+|---|---|
+| The server has nothing | This device's lists are sent. |
+| This device has no record (just enrolled, or turned sync off and on) | **The server's lists replace the local ones**, even if the device held words of its own. |
+| Changed here since the last sync | The lists are sent over whatever the server holds. A `409` is read and sent again (three tries), so nothing is merged. |
+| Not changed here, the server's `version` moved | The server's lists are applied here. |
 
-**The ignore list** is the same kind of set: `items` keyed by the finding's decimal hash (kept as text, because Harper's hashes are 64-bit),
-stamped and merged by the same code, under the key `ignored`. Applying it imports the hashes another device ignored and, for ones it
-stopped ignoring, clears Harper's list and imports the rest again. What each ignored finding was (the label in the Problems panel) is
-not synced; a hash from another device shows as "A finding in its context". Hashes depend on Harper's version, so a hash from a newer
-Harper may match nothing on an older one; that is harmless.
+"Changed here" is a comparison of the current lists with the record, not a flag, so a change is not lost if the app closes before
+the sync. The record is saved only after the lists were sent or applied: a failure is retried and never mistaken for a local edit.
 
-**Failures.** The dictionary and the ignore list sync independently of the drafts and of each other. If one fails (not "unreachable"
-or "Sign in again", which stop everything as for a draft), the chip's pop-up says "Could not sync the dictionary" (or "the ignore
-list") and the next Sync all or change tries again; the local sets are untouched. At start-up they wait for Harper to load, which
-holds the sync queue for a moment.
+**What this costs.** If two devices change the lists between syncs, the one that syncs later overwrites the other: a word added on
+the first is gone. A device that was offline for a long time and then changes something overwrites newer words from the others. An
+enrolling device loses the words it already had when the server holds a dictionary. Device clocks play no part (the server's
+`version` orders the writes), and there are no tombstones to grow.
+
+**When.** **Sync all** (so at start-up and after enrolling) and about 2 s after the dictionary or ignore list changed here. Applying
+the server's lists: Harper can only add words, so words the server lacks are removed by building a new linter without them
+([personal.js](../frontend/src/lib/personal.js)); for the ignore list, Harper's list is cleared and the rest imported again.
+
+**Not synced.** What each ignored finding was (the label in the Problems panel): a hash from another device shows as "A finding in
+its context". Hashes depend on Harper's version, so a hash from a newer Harper may match nothing on an older one; that is harmless.
+
+**Failures.** The lists sync independently of the drafts. If they fail (not "unreachable" or "Sign in again", which stop everything
+as for a draft), the chip's pop-up says "Could not sync the dictionary and ignore list" and the next Sync all or change tries
+again; the local lists are untouched. A server document that does not parse, or has any entry that is not a word or a hash, is
+refused whole and applied nowhere. At start-up the sync waits for Harper to load, which holds the sync queue for a moment.
 
 ## Security
 

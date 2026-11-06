@@ -53,9 +53,9 @@ func scanDevice(row pgx.Row) (admin.Device, error) {
 	if err := row.Scan(&d.ID, &d.Name, &d.UserAgent, &created, &seen); err != nil {
 		return admin.Device{}, err
 	}
-	d.CreatedAt = time.UnixMilli(created)
+	d.CreatedAt = time.UnixMilli(created).UTC()
 	if seen > 0 {
-		d.LastSeen = time.UnixMilli(seen)
+		d.LastSeen = time.UnixMilli(seen).UTC()
 	}
 	return d, nil
 }
@@ -119,7 +119,7 @@ func (a *Admin) PendingInvites(ctx context.Context, now time.Time) ([]admin.Invi
 		if err := rows.Scan(&hash, &inv.DeviceName, &expires); err != nil {
 			return nil, err
 		}
-		inv.ID, inv.ExpiresAt = inviteID(hash), time.UnixMilli(expires)
+		inv.ID, inv.ExpiresAt = inviteID(hash), time.UnixMilli(expires).UTC()
 		out = append(out, inv)
 	}
 	return out, rows.Err()
@@ -154,7 +154,7 @@ func (a *Admin) CreateInvite(ctx context.Context, deviceName string, ttl time.Du
 	if tag.RowsAffected() != 1 {
 		return "", admin.Invite{}, fmt.Errorf("expected exactly one client account: %w", admin.ErrInvalid)
 	}
-	return token, admin.Invite{ID: inviteID(hash[:]), DeviceName: deviceName, ExpiresAt: time.UnixMilli(expires.UnixMilli())}, nil
+	return token, admin.Invite{ID: inviteID(hash[:]), DeviceName: deviceName, ExpiresAt: time.UnixMilli(expires.UnixMilli()).UTC()}, nil
 }
 
 func (a *Admin) CancelInvite(ctx context.Context, id string) error {
