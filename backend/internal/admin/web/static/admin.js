@@ -42,8 +42,8 @@
     const s = Math.floor(ms / 1000);
     return `in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
-  // "Last seen" labels. Times travel as Unix milliseconds (UTC); the page shows them in the browser's time zone. The server renders the
-  // same wording in UTC as the fallback (lastSeen in handler.go); keep the two in step.
+  // "Last seen" labels, the only place they are worded. Times travel as Unix milliseconds (UTC) and the page shows them in the browser's
+  // time zone. The server sends the time (RFC 3339, UTC) and nothing else; without this script that is what shows.
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const pad2 = (n) => String(n).padStart(2, '0');
   const dayOf = (d) => d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();

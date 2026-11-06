@@ -81,9 +81,9 @@ func cached(next http.Handler) http.Handler {
 func (h *Handler) funcs() template.FuncMap {
 	return template.FuncMap{
 		"date":      func(t time.Time) string { return t.UTC().Format("2 Jan 2006") },
-		"lastSeen":  func(t time.Time) string { return lastSeen(h.cfg.Now(), t) },
 		"countdown": func(t time.Time) string { return countdown(h.cfg.Now(), t) },
 		"millis":    func(t time.Time) int64 { return t.UnixMilli() },
+		"iso":       func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
 		"idle":      func(t time.Time) bool { return t.IsZero() || h.cfg.Now().Sub(t) > idleAfter },
 	}
 }
@@ -364,27 +364,6 @@ func cleanName(s string) (name, problem string) {
 		return "", fmt.Sprintf("Use at most %d characters.", maxNameLen)
 	}
 	return s, ""
-}
-
-// lastSeen is the "Last seen" cell: relative while recent, a date with the age once it is old.
-func lastSeen(now, t time.Time) string {
-	if t.IsZero() {
-		return "never"
-	}
-	d := now.Sub(t)
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		return fmt.Sprintf("%d min ago", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d h ago", int(d.Hours()))
-	case now.UTC().Add(-24*time.Hour).Format("2006-01-02") == t.UTC().Format("2006-01-02"):
-		return "Yesterday, " + t.UTC().Format("15:04")
-	case d < 14*24*time.Hour:
-		return t.UTC().Format("2 Jan 2006, 15:04")
-	}
-	return fmt.Sprintf("%s (%d days ago)", t.UTC().Format("2 Jan 2006"), int(d.Hours()/24))
 }
 
 // countdown is "in m:ss" until t, or "expired". admin.js keeps it ticking in the browser.
