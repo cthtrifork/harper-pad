@@ -38,9 +38,11 @@ const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view"]);
 const exportLabel = computed(() => (props.sharing ? "Share" : "Save as file"));
 const mainLabel = computed(() => {
   if (props.replacingFile) return `Replace ${props.fileName}`;
-  if (props.syncBusy) return "Syncing...";
   return props.syncOn ? "Sync" : "Save";
 });
+// The visible label never changes while a sync runs: a longer "Syncing..." moved the buttons beside it on every sync. The turning icon
+// shows that it is busy, and the status line says "Syncing...".
+const mainName = computed(() => (props.syncBusy ? "Syncing..." : mainLabel.value));
 const mainDisabled = computed(() => !props.canSave || props.syncBusy || (!props.syncOn && !props.needsSave && !props.replacingFile));
 // What the button also does when the draft has a file, since the label does not change for it.
 const mainTitle = computed(() => (props.filePath && !props.replacingFile ? `Also writes ${props.fileName} if the draft changed` : ""));
@@ -56,7 +58,7 @@ function onMain() {
 <template>
   <header class="bar">
     <span class="brand">Harper Pad</span>
-    <button type="button" class="drawer-btn" :class="{ on: showDrawer }" aria-label="Scratch pad" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="emit('toggle-drawer')">
+    <button type="button" class="drawer-btn" :class="{ on: showDrawer }" aria-label="Scratch pad" title="Scratch pad" :aria-expanded="showDrawer" aria-controls="drafts-drawer" @click="emit('toggle-drawer')">
       <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="2.5" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M6 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
       <span class="label">Scratch pad</span> <span class="kbd">Ctrl+J</span>
     </button>
@@ -65,8 +67,8 @@ function onMain() {
          server about it; Save (sync is off) does the first two and is disabled while there is nothing to save. What happened is said by
          the status line in the status bar, not here. The export button beside it chooses a file (or opens the share sheet on iPhone and iPad). -->
     <span class="actions">
-      <button type="button" class="tool main" :class="{ replace: replacingFile }" :aria-label="mainLabel" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
-        <svg class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <button type="button" class="tool main" :class="{ replace: replacingFile }" :aria-label="mainName" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
+        <svg class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy, wide: syncOn }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <span class="label">{{ mainLabel }}</span> <span v-if="!replacingFile" class="kbd">Ctrl+S</span>
       </button>
       <button type="button" class="tool export" :aria-label="exportLabel" :title="exportLabel" :disabled="!canSave" @click="emit('save', true)">
@@ -77,10 +79,11 @@ function onMain() {
       </button>
     </span>
     <span class="sep" aria-hidden="true"></span>
-    <template v-if="filePath">
+    <!-- The same chip as the draft badge: the file's name, and its folder in muted type when there is room. -->
+    <span v-if="filePath" class="badge on-disk" :title="fileDir ? `${fileDir}/${fileName}` : fileName">
       <span id="file-name" class="file-name">{{ fileName }}</span>
-      <span v-if="fileDir" class="mute folder" :title="fileDir">in {{ fileDir }}</span>
-    </template>
+      <span v-if="fileDir" class="folder">in {{ fileDir }}</span>
+    </span>
     <span v-else id="file-badge" class="badge">Draft, not on disk</span>
     <span class="spacer"></span>
     <span v-if="isMarkdown && !showDrawer" class="sep" aria-hidden="true"></span>
@@ -100,7 +103,7 @@ function onMain() {
       </button>
     </div>
     <span v-if="isMarkdown && !showDrawer && mode !== 'preview'" class="sep" aria-hidden="true"></span>
-    <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-label="`Problems, ${problemCount}`" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
+    <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-label="`Problems, ${problemCount}`" title="Problems" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
       <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="10" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
       <span class="label">Problems</span> <span class="count">{{ problemCount }}</span>
       <span v-if="autocorrect" class="mark" role="img" aria-label="Autocorrect is on">
