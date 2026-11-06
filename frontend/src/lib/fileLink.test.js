@@ -15,10 +15,10 @@ test("linked and healthy: the chip's unlink button only, and Ctrl+Shift+S only h
   assert.equal(UNLINK_FIRST, "Unlink first to save as another file");
 });
 
-test("linked with the chip struck through: the unlink button and Save to disk beside it", () => {
+test("linked with the chip struck through: the unlink button, and still no Save to disk until it is unlinked", () => {
   const struck = { ...linked, fileProblem: "file not found" };
-  assert.deepEqual(fileControls(struck), { showSaveAs: true, showChipX: true, showDirty: false });
-  assert.equal(saveAsAction(struck), "ask");
+  assert.deepEqual(fileControls(struck), { showSaveAs: false, showChipX: true, showDirty: false });
+  assert.equal(saveAsAction(struck), "hint");
 });
 
 test("the web build is unchanged: Save to disk is always there and there is no x", () => {

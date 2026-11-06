@@ -1,7 +1,7 @@
 // Which controls the header offers for a draft's file link (desktop; the web build never unlinks, so it always offers Save to disk).
 //   no link          Save to disk, no chip.
 //   link, healthy    the file chip with its x (Unlink); no Save to disk; Ctrl+Shift+S only says "Unlink first to save as another file".
-//   link, struck     the struck chip with its x, and Save to disk beside it, so picking another path is one step.
+//   link, struck     the struck chip with its x; still no Save to disk until it is unlinked, and Ctrl+Shift+S says the same.
 export const UNLINK_FIRST = "Unlink first to save as another file";
 
 // `canUnlink` is false on the web, where a file is only a picker handle.
@@ -12,7 +12,7 @@ export const UNLINK_FIRST = "Unlink first to save as another file";
 export function fileControls({ filePath, fileProblem, canUnlink, fileState }) {
   const linked = !!filePath && canUnlink;
   return {
-    showSaveAs: !linked || !!fileProblem,
+    showSaveAs: !linked,
     showChipX: linked,
     showDirty: linked && !fileProblem && fileState === "stale",
   };
