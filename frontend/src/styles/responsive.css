@@ -64,6 +64,11 @@
     order: 5;
   }
 
+  /* The web build's version button is for a wide window; on a phone the version is in the drafts drawer. */
+  .bar .web-version {
+    display: none;
+  }
+
   .bar .drawer-btn,
   .bar .toggle,
   .bar .actions .tool {

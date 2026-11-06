@@ -41,6 +41,7 @@
   max-width: calc(100vw - 24px);
   box-sizing: border-box;
   overflow-wrap: anywhere;
+  white-space: normal;
   display: flex;
   flex-direction: column;
   gap: 10px;

@@ -28,7 +28,7 @@ const props = defineProps({
   // Edit / Split / Preview: markdown only. Hidden while the scratch pad is open (only Edit is available then).
   isMarkdown: { type: Boolean, default: false },
   mode: { type: String, default: "edit" },
-  // The in-app updater (desktop builds only), rendered at the end of the bar.
+  // The in-app updater (desktop) or the version button (web), rendered at the end of the bar.
   updateButton: { type: [Object, Function], default: null },
   // Autocorrect is on: a small check on the Problems button, so it shows while the panel (with its switch) is closed.
   autocorrect: { type: Boolean, default: false },

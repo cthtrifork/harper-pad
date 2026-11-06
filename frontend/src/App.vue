@@ -10,6 +10,7 @@ import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
@@ -20,8 +21,11 @@ import { useSync } from "./lib/useSync.js";
 // What main.js asked the backend before mounting (see backend.js startup): the demo banner and the most recent draft.
 const props = defineProps({ start: { type: Object, required: true } });
 
-// The in-app updater only exists in the desktop build; the web build loads the latest deploy and carries none of its code.
-const UpdateButton = import.meta.env.MODE === "web" ? null : defineAsyncComponent(() => import("./components/UpdateButton.vue"));
+// The header's last button, loaded after the first paint. The desktop build has the in-app updater, with its version; the web build loads
+// the latest deploy, so its button only shows the version. Both have "Copy diagnostics" (lib/diagnostics.js).
+const UpdateButton = defineAsyncComponent(() =>
+  import.meta.env.MODE === "web" ? import("./components/VersionButton.vue") : import("./components/UpdateButton.vue"),
+);
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
 const state = ref("loading");
@@ -338,6 +342,7 @@ onMounted(async () => {
   try {
     harper.value = await loadHarper();
     setupMs.value = Math.round(performance.now() - t0);
+    record("setupMs", setupMs.value);
     state.value = "ready";
   } catch (err) {
     state.value = "failed";
