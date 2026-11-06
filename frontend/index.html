@@ -6,11 +6,12 @@
     <meta name="description" content="Grammar-checked editor with a scratch pad drawer." />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- Painted before any script has arrived: the page colours (same as styles/tokens.css) and a title, so a cold start is not a blank
+    <!-- Painted before any script has arrived: the page colours (same as styles/tokens.css) and a title (on a phone only: the same query as App.vue's `narrow`), so a cold start is not a blank
          screen while the scripts download and the first draft is read. Vue replaces the contents of #app when it mounts. -->
     <style>
       body { margin: 0; background: #f6f7f9; color: #1a2028; font: 14px / 1.5 system-ui, sans-serif; }
-      #app > .splash { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 100dvh; font-size: 20px; font-weight: 600; }
+      #app > .splash { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 100dvh; font-size: 20px; font-weight: 600; }
+      @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) { #app > .splash { display: flex; } }
       #app > .splash span { opacity: 0.6; }
       @media (prefers-color-scheme: dark) { body { background: #12161b; color: #e8ebef; } }
     </style>
