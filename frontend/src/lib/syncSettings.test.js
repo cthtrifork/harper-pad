@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateDeviceKey } from "./dpop.js";
-import { parseSettings, settingsData } from "./settingsItems.js";
 import { createSyncer } from "./syncRun.js";
 
 function fakeServer() {
@@ -17,10 +16,10 @@ function fakeServer() {
     s.beforePut = null;
     if (body.baseVersion !== (s.row?.version ?? 0)) return json(409, { current: s.row });
     s.puts++;
-    s.row = { version: body.baseVersion + 1, data: body.data };
+    s.row = { version: body.baseVersion + 1, words: body.words, ignored: body.ignored };
     return json(200, { version: s.row.version });
   };
-  s.lists = () => parseSettings(s.row.data);
+  s.lists = () => ({ words: s.row.words, ignored: s.row.ignored });
   return s;
 }
 
@@ -106,7 +105,7 @@ test("a write that loses a race is read and sent again over the new version", as
   const a = phone(server, ["Shared"]);
   await a.sync();
   server.beforePut = () => {
-    server.row = { version: server.row.version + 1, data: settingsData({ words: ["Racer"], ignored: [] }) };
+    server.row = { version: server.row.version + 1, words: ["Racer"], ignored: [] };
   };
   a.words = ["Shared", "Mine"];
   await a.sync();
@@ -129,12 +128,12 @@ test("applying what the server holds does not send it back", async () => {
 
 test("a server document that is garbage is refused and changes nothing", async () => {
   const server = fakeServer();
-  server.row = { version: 4, data: "nope" };
+  server.row = { version: 4, words: "nope", ignored: [] };
   const a = phone(server, ["Keep"]);
   await assert.rejects(a.sync(), /not readable/);
   assert.deepEqual(a.words, ["Keep"]);
-  assert.equal(server.row.data, "nope");
-  server.row = { version: 5, data: JSON.stringify({ v: 1, words: ["ok", "two words"], ignored: [] }) };
+  assert.equal(server.row.words, "nope");
+  server.row = { version: 5, words: ["ok", "two words"], ignored: [] };
   await assert.rejects(a.sync(), /not readable/);
 });
 

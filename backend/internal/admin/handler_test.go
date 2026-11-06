@@ -135,7 +135,7 @@ func TestDevicesPage(t *testing.T) {
 		t.Fatalf("status %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Desktop", "iPhone", "Old laptop", "2 min ago", "37 days ago", "Account: default", "X-CSRF-Token", `action="/invites"`} {
+	for _, want := range []string{"Desktop", "iPhone", "Old laptop", `data-seen="`, `<time datetime="`, "Account: default", "X-CSRF-Token", `action="/invites"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)
 		}

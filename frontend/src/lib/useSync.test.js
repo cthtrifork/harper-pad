@@ -449,7 +449,7 @@ function memoryStore() {
 
 test("Sync all also syncs the dictionary and ignore list: a new device takes the server's", async () => {
   const applied = [];
-  const held = { version: 1, data: JSON.stringify({ v: 1, words: ["Remote"], ignored: ["12345"] }) };
+  const held = { version: 1, words: ["Remote"], ignored: ["12345"] };
   const fetchFn = async (url) => {
     if (new URL(url).pathname === "/docs") return reply(200, [])();
     return reply(200, held)();

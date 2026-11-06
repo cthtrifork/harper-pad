@@ -196,12 +196,20 @@ components:
           format: int64
           minimum: 0
           type: integer
-        data:
+        ignored:
           description: See GET
-          type: string
+          items:
+            type: string
+          type: array
+        words:
+          description: See GET
+          items:
+            type: string
+          type: array
       required:
         - baseVersion
-        - data
+        - words
+        - ignored
       type: object
     PutSettingOutputBody:
       additionalProperties: false
@@ -216,16 +224,24 @@ components:
     Setting:
       additionalProperties: false
       properties:
-        data:
-          description: "A JSON string, {\"v\":1,\"words\":[\"<word>\"],\"ignored\":[\"<decimal hash>\"]}: the whole dictionary and ignore list as the last device to write left them. The server stores it as it came."
-          type: string
+        ignored:
+          description: The decimal hashes of Harper's ignore list, as text because they are 64-bit. The server stores them as they came.
+          items:
+            type: string
+          type: array
         version:
           description: "Compare-and-set counter: 1 on creation, +1 on each accepted write"
           format: int64
           type: integer
+        words:
+          description: The personal dictionary. The server stores it as it came; the devices check each entry.
+          items:
+            type: string
+          type: array
       required:
         - version
-        - data
+        - words
+        - ignored
       type: object
   securitySchemes:
     DPoP:

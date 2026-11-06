@@ -94,18 +94,23 @@ export async function pushTombstone({ device, id, state, updatedAt, fetchFn }) {
   throw new SyncError("server", `Server error (${status}).`);
 }
 
-// The synced settings (dictionary and ignore list in one document): {version, data}, or null when the server has none yet.
+// The synced settings (dictionary and ignore list): {version, words, ignored}, or null when the server has none yet.
 export async function getSetting({ device, fetchFn }) {
   const { status, body } = await signedRequest({ device, method: "GET", path: "/settings", fetchFn });
   if (status === 404) return null;
-  if (status !== 200 || !Number.isInteger(body?.version) || typeof body?.data !== "string")
-    throw new SyncError("server", `Server error (${status}).`);
+  if (status !== 200 || !Number.isInteger(body?.version)) throw new SyncError("server", `Server error (${status}).`);
   return body;
 }
 
 // Writes the settings on top of `baseVersion` (0 for none). Resolves to {result: "ok", version} or {result: "conflict"}.
-export async function putSetting({ device, baseVersion, data, fetchFn }) {
-  const { status, body } = await signedRequest({ device, method: "PUT", path: "/settings", body: { baseVersion, data }, fetchFn });
+export async function putSetting({ device, baseVersion, words, ignored, fetchFn }) {
+  const { status, body } = await signedRequest({
+    device,
+    method: "PUT",
+    path: "/settings",
+    body: { baseVersion, words, ignored },
+    fetchFn,
+  });
   if (status === 200 && Number.isInteger(body?.version)) return { result: "ok", version: body.version };
   if (status === 409) return { result: "conflict" };
   throw new SyncError("server", `Server error (${status}).`);

@@ -6,7 +6,7 @@
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.js";
-import { changesTo, cleanLists, parseSettings, sameLists, settingsData } from "./settingsItems.js";
+import { changesTo, cleanLists, readSettings, sameLists } from "./settingsItems.js";
 import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.js";
 import { decide, settle } from "./syncPlan.js";
 import { SyncError } from "./syncEnroll.js";
@@ -202,7 +202,7 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
       for (let attempt = 0; attempt < 3; attempt++) {
         const remote = await getSetting({ device, fetchFn });
         const send = async () => {
-          const out = await putSetting({ device, baseVersion: remote?.version ?? 0, data: settingsData(held), fetchFn });
+          const out = await putSetting({ device, baseVersion: remote?.version ?? 0, ...held, fetchFn });
           if (out.result === "ok") await store.save({ version: out.version, ...held });
           return out.result === "ok";
         };
@@ -210,7 +210,7 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
           if (await send()) return;
           continue;
         }
-        const theirs = parseSettings(remote.data);
+        const theirs = readSettings(remote);
         if (!theirs) throw new SyncError("server", "The server's dictionary is not readable.");
         const changedHere = rec && !sameLists(held, rec);
         if (changedHere && !sameLists(held, theirs)) {

@@ -12,7 +12,7 @@ Settings, health checks and tests are in the [backend README](../../README.md).
 | `GET /docs` | The state of every draft (no text), paged |
 | `GET /docs/<id>` | One draft with its text; `ETag` and `If-None-Match` |
 | `PUT /docs/<id>` | Write if the stored state matches `base`, otherwise `409` with the server's current copy; a delete is a tombstone |
-| `GET /settings` | The synced dictionary and ignore list (one document) with its `version`; 404 until stored |
+| `GET /settings` | The synced dictionary and ignore list (two lists) with its `version`; 404 until stored |
 | `PUT /settings` | Write if the stored `version` equals `baseVersion` (0 for none), otherwise `409` with the current copy. The server checks the shape and never merges: the last device to write wins ([`docs/sync.md`](../../../docs/sync.md#settings-the-dictionary-and-the-ignore-list)) |
 | `:9102/healthz`, `:9102/readyz`, `:9102/metrics` | Probes and Prometheus metrics, on a port that is not routed publicly |
 
