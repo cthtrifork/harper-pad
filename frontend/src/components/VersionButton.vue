@@ -4,7 +4,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import { copyDiagnostics } from "../lib/diagnostics.js";
 
 // The web build's end of the header on a wide window (a phone has the version in the drafts drawer): the release it was made from (a preview or local build has none and says "dev"), and a popup with
-// "Copy diagnostics" for a bug report or a slow start. There is nothing to update here: a reload loads the latest deploy.
+// "Copy diagnostics" for a bug report or a slow start. A new version waits until you reload (a toast offers it).
 const version = import.meta.env.APP_VERSION || "dev";
 const open = ref(false);
 const root = ref(null);
@@ -38,7 +38,7 @@ onBeforeUnmount(() => {
     <button type="button" class="btn" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="open = !open">{{ version }}</button>
     <div v-if="open" class="pop" role="dialog" aria-label="Version">
       <h3>Harper Pad {{ version }}</h3>
-      <p>The web app updates itself when it opens online.</p>
+      <p>A Reload button appears when a new version is ready.</p>
       <div class="foot">
         <button type="button" class="link" @click="copyReport">{{ copied || "Copy diagnostics" }}</button>
       </div>

@@ -8,7 +8,11 @@ const CACHE = PREVIEW ? `harper-pad-${PREVIEW}-v1` : "harper-pad-v1";
 const isOwn = (key) =>
   PREVIEW ? key.startsWith(`harper-pad-${PREVIEW}-`) : key.startsWith("harper-pad-") && !/^harper-pad-(pr-\d+|preview)-/.test(key);
 
-self.addEventListener("install", () => self.skipWaiting());
+// A new version installs and then waits, so an open editor is never switched to new code under the person's hands. The page (lib/swUpdate.js)
+// offers a Reload, and answers with this message when it is taken. With no worker before it (the first install) there is nothing to wait for.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "skip-waiting") self.skipWaiting();
+});
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(

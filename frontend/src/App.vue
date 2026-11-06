@@ -9,12 +9,13 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { isWeb, keepData, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord } from "./lib/personal.js";
 import { statusLine } from "./lib/statusLine.js";
+import { applyUpdate, onUpdateReady } from "./lib/swUpdate.js";
 import { useDrafts } from "./lib/useDrafts.js";
 import { useSync } from "./lib/useSync.js";
 
@@ -102,6 +103,14 @@ function syncToastAction() {
     sync.openCopy(n.copyId);
     sync.clearNotice();
   } else if (n?.kind === "removed") sync.undoRemoved();
+}
+
+// Web build: a new version is waiting (lib/swUpdate.js). Reload saves what is typed first.
+const updateReady = ref(false);
+if (isWeb) onUpdateReady(() => (updateReady.value = true));
+async function reloadForUpdate() {
+  await drafts.flush();
+  applyUpdate();
 }
 
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
@@ -447,6 +456,9 @@ onBeforeUnmount(() => {
           </Transition>
           <Transition name="toast-bar">
             <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
+          </Transition>
+          <Transition name="toast-bar">
+            <ToastBar v-if="updateReady" message="A new version is ready." action="Reload" :ms="60000" :tick="1" @action="reloadForUpdate" @close="updateReady = false" />
           </Transition>
         </div>
         <Transition name="grow">

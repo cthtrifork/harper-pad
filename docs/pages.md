@@ -85,6 +85,12 @@ were rendered from `favicon.svg`; re-render them if the logo changes.
 
 Test locally: `cd frontend && npm run build:web && npx vite preview --mode web`, then open `http://127.0.0.1:4173/harper-pad/`.
 
+### Updates
+
+The service worker installs a new version and waits (`web/sw.js` does not call `skipWaiting` by itself). `lib/swUpdate.js` shows "A new version is ready.
+Reload"; Reload saves the draft first, then tells the worker to take over and reloads once it has. The page also asks for a new worker when the app
+comes to the front, at most hourly, because an installed iPhone app is rarely reloaded. A first install is not an update and shows nothing.
+
 ## Installing on an iPhone
 
 Open the site in **Safari**, tap Share, then Add to Home Screen. Use that icon from then on.
