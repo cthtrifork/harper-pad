@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -29,23 +28,6 @@ type FileSave struct {
 	// UnlinkedFrom holds the titles of other drafts that were linked to this file and are not any more: a file has one holder, the draft saved
 	// to it last.
 	UnlinkedFrom []string `json:"unlinkedFrom"`
-}
-
-var unsafeName = regexp.MustCompile(`[^\p{L}\p{N}._ -]+`)
-
-// suggestName is the file name offered in the save dialog: the draft's title, with the extension of its format.
-func suggestName(title, format string) string {
-	name := strings.Trim(unsafeName.ReplaceAllString(title, ""), " .-")
-	if name == "" {
-		name = "Untitled"
-	}
-	if r := []rune(name); len(r) > 60 {
-		name = strings.TrimSpace(string(r[:60]))
-	}
-	if format == store.FormatText {
-		return name + ".txt"
-	}
-	return name + ".md"
 }
 
 // pickSavePath asks the user where to save. It returns "" when they cancel. It is a field of the service so tests can replace it.
@@ -72,10 +54,11 @@ func pickSavePath(suggested, dir string) (string, error) {
 }
 
 // SaveDraftToFile saves the draft's text to a file as well as to the database. With saveAs, or when the draft has no file yet, the
-// user picks one in a dialog. The path never comes from the page.
+// user picks one in a dialog, which offers suggestedName (the page makes it from the title; only its base name is used). The path never
+// comes from the page.
 //
 // When something else changed the file since this app wrote it, nothing is written and Conflict is true, unless overwrite is set.
-func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (FileSave, error) {
+func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool, suggestedName string) (FileSave, error) {
 	st, err := s.db.open()
 	if err != nil {
 		return FileSave{}, err
@@ -96,7 +79,10 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 		if pick == nil {
 			pick = pickSavePath
 		}
-		dir, name := "", suggestName(store.Title(d.Content), d.Format)
+		dir, name := "", filepath.Base(suggestedName)
+		if name == "." || name == string(filepath.Separator) {
+			name = "Untitled.md"
+		}
 		if path != "" { // offer the file's own name and folder, not one made from the title
 			dir, name = filepath.Dir(path), filepath.Base(path)
 		}

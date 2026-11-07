@@ -36,7 +36,7 @@ Sources:
 | Part (filter) | It changed when a PR touches | Jobs |
 |---|---|---|
 | `go` | `main.go`, `internal/`, `go.mod`, `go.sum`, `.tool-versions`, `Makefile`, the golangci config, local actions, `ci.yml` | `lint-go`, `test-go` |
-| `frontend` | `frontend/`, the shared fixtures `internal/store/testdata/` and `internal/app/testdata/`, `.tool-versions`, `Makefile`, `ci.yml` | `lint-frontend`, `test-frontend` |
+| `frontend` | `frontend/`, the shared fixtures `internal/store/testdata/`, `.tool-versions`, `Makefile`, `ci.yml` | `lint-frontend`, `test-frontend` |
 | `bindings` | `internal/app/`, `frontend/bindings/`, `go.mod`, `go.sum`, `.tool-versions`, `Makefile`, `ci.yml` | `bindings` |
 | `yaml` | any `*.yml` or `*.yaml`, the yamllint config | `lint-yaml` |
 | `backend` | `backend/`, `.tool-versions`, the golangci config, `ci.yml` | `lint-backend`, `test-backend` |

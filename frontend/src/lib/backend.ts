@@ -9,7 +9,8 @@ import { createDesktopSyncDrafts } from "./desktopSync.ts";
 import { withLastOpened } from "./lastOpened.js";
 import { createSettingsSyncStore } from "./settingsSync.ts";
 import { createDeviceStore } from "./syncDevice.ts";
-import { saveWebFile, sharesFiles } from "./webFiles.js";
+import { summarize } from "./summarize.ts";
+import { fileName, saveWebFile, sharesFiles } from "./webFiles.js";
 
 type Bindings = typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
 type Settings = import("../../bindings/github.com/cthtrifork/harper-pad/internal/app").Settings;
@@ -132,7 +133,14 @@ export async function saveDraft(draft: Draft) {
 // Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. `conflict` is true when something
 // else changed the file since it was written, unless `overwrite` is set.
 export async function saveDraftToFile(draft: Draft, saveAs: boolean, overwrite = false) {
-  if (!isWeb) return (await bindings()).DraftService.SaveDraftToFile(draft, saveAs, overwrite);
+  // The name the save dialog offers is made here, from the title, as on the web; Go keeps only its base name.
+  if (!isWeb)
+    return (await bindings()).DraftService.SaveDraftToFile(
+      draft,
+      saveAs,
+      overwrite,
+      fileName(summarize(draft.content).title, draft.format),
+    );
   return saveWebFile(
     web,
     (id: string) => idbGet(`file:${id}`),
