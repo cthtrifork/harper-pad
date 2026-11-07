@@ -164,14 +164,14 @@ test("the title and the buttons name what differs: three versions, file only, se
   const three = describeConflict({ name: "plan.md", yours: "a", file: side("b"), server: side("c") });
   assert.deepEqual([three.title, three.keepLabel, three.overwriteLabel], ["Three versions differ", "Keep all", "Overwrite others"]);
   const file = describeConflict({ name: "plan.md", yours: "a", file: side("b"), server: null });
-  assert.deepEqual([file.title, file.keepLabel, file.overwriteLabel], ["plan.md changed on disk", "Keep both", "Overwrite"]);
+  assert.deepEqual([file.title, file.keepLabel, file.overwriteLabel], ["plan.md changed on disk", "Keep both", "Overwrite file"]);
   const server = describeConflict({ name: "", yours: "a", file: null, server: side("c") });
   assert.deepEqual(
     [server.title, server.keepLabel, server.overwriteLabel],
-    ["This draft changed on another device", "Keep both", "Overwrite"],
+    ["This draft changed on another device", "Keep both", "Overwrite server"],
   );
   const unedited = describeConflict({ name: "plan.md", yours: "b", applyFile: true, file: side("b"), server: side("c") });
-  assert.deepEqual([unedited.title, unedited.keepLabel, unedited.overwriteLabel], ["Two versions differ", "Keep both", "Overwrite"]);
+  assert.deepEqual([unedited.title, unedited.keepLabel, unedited.overwriteLabel], ["Two versions differ", "Keep both", "Overwrite server"]);
   assert.equal(three.versions, 3);
   assert.equal(file.versions, 2);
 });

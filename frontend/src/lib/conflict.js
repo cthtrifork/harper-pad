@@ -51,7 +51,8 @@ export function describeConflict(m) {
     title,
     versions,
     keepLabel: versions === 3 ? "Keep all" : "Keep both",
-    overwriteLabel: versions === 3 ? "Overwrite others" : "Overwrite",
+    // Names what is replaced: the file, the server, or both of them ("others"). With three versions the draft's own row is one of them.
+    overwriteLabel: versions === 3 ? "Overwrite others" : fileOther ? "Overwrite file" : "Overwrite server",
     keepTitle: others ? `Keeps ${other} as ${copies}.` : "Nothing else differs, so no copy is made.",
     overwriteTitle: others ? `Deletes ${other}. No undo.` : "Nothing else differs, so nothing is deleted.",
     footer: m.applyFile

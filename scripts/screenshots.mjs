@@ -135,9 +135,9 @@ if (filesDir) {
   writeFileSync(path.join(filesDir, "Meeting notes.md"), "Meeting notes\n\nThe release moved to Monday.");
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await page.waitForSelector("dialog.conflict-dialog[open]", { timeout: 15000 });
-  expect((await page.locator(".conflict-dialog .actions button").allTextContents()).map((t) => t.trim()).join() === "Overwrite,Keep both", "the dialog should offer Overwrite and Keep both");
+  expect((await page.locator(".conflict-dialog .actions button").allTextContents()).map((t) => t.trim()).join() === "Overwrite file,Keep both", "the dialog should offer Overwrite file and Keep both");
   await shot("06-keep-or-overwrite");
-  await page.getByRole("button", { name: "Overwrite", exact: true }).click();
+  await page.getByRole("button", { name: "Overwrite file" }).click();
   await page.waitForSelector("dialog.conflict-dialog", { state: "detached", timeout: 15000 });
 }
 
