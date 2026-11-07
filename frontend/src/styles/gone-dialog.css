@@ -1,34 +1,10 @@
-/* The "Deleted on another device" dialog (DeletedElsewhereDialog.vue): a modal that forces Keep or Remove. */
+/* The "Deleted on another device" dialog (DeletedElsewhereDialog.vue): what it adds to the shared choice-dialog.css. */
 .gone-dialog {
-  width: min(360px, calc(100vw - 32px));
-  box-sizing: border-box;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--raised);
-  color: var(--text);
-  box-shadow: var(--shadow-menu);
-  font-size: 14px;
-  animation: gone-in 0.12s var(--ease);
-}
-
-.gone-dialog::backdrop {
-  background: var(--scrim);
-}
-
-.gone-dialog h2 {
-  margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.gone-dialog p {
-  margin: 0;
-  color: var(--mute);
+  --dialog-width: 360px;
+  --dialog-title-gap: 6px;
 }
 
 .gone-dialog .actions {
-  display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
@@ -37,48 +13,10 @@
 .gone-dialog .actions button {
   height: 30px;
   padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  font: inherit;
-  transition:
-    background-color 0.15s var(--ease),
-    border-color 0.15s var(--ease),
-    filter 0.15s var(--ease);
 }
 
-/* Primary: accent fill, weight 600. Danger: --bad text, and the border turns --bad on hover; never filled red at rest. */
-.gone-dialog .actions .primary {
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 600;
-}
-
-.gone-dialog .actions .primary:hover {
-  filter: brightness(1.08);
-}
-
-.gone-dialog .actions .primary:active {
-  filter: brightness(0.92);
-}
-
-.gone-dialog .actions .danger {
-  border-color: var(--line);
-  color: var(--bad);
-}
-
-.gone-dialog .actions .danger:hover {
-  border-color: var(--bad);
-  background: var(--raised);
-}
-
-/* A phone: still centered like the Keep or Overwrite dialog, with text and buttons big enough to tap. */
+/* A phone: the buttons stack, Keep above Remove. */
 @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
-  .gone-dialog {
-    padding: 16px;
-    font-size: 15px;
-  }
-
   .gone-dialog .actions {
     flex-direction: column-reverse;
     gap: 10px;
@@ -86,12 +24,5 @@
 
   .gone-dialog .actions button {
     height: 44px;
-  }
-}
-
-@keyframes gone-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
   }
 }
