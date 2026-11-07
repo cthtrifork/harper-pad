@@ -676,6 +676,21 @@ func TestChangedContentWithTheMtimeKeptIsNotOverwrittenSilently(t *testing.T) {
 	}
 }
 
+func TestOfferedName(t *testing.T) {
+	long := strings.Repeat("é", 150)
+	for suggested, want := range map[string]string{
+		"Plan Q4.md":      "Plan Q4.md",
+		"../../etc/x.txt": "x.txt",
+		"":                "Untitled.md",
+		long + ".md":      strings.Repeat("é", 97) + ".md", // cut before the extension, which stays
+		"a." + long:       "a." + strings.Repeat("é", 98),  // an extension that long is not one: the whole name is cut
+	} {
+		if got := offeredName(suggested); got != want {
+			t.Errorf("offeredName(%.20q) = %.20q, want %.20q", suggested, got, want)
+		}
+	}
+}
+
 func TestSaveAsOntoAnotherDraftsFileMovesTheLink(t *testing.T) {
 	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "shared.md")

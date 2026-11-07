@@ -64,5 +64,23 @@
     "title": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeefffffffff gggg",
     "format": "text",
     "want": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddeeeeeeeeeefffffffff.txt"
+  },
+  {
+    "name": "a longer title ends at the last word that fits",
+    "title": "Quarterly planning notes for the whole engineering organisation and its partners",
+    "format": "markdown",
+    "want": "Quarterly planning notes for the whole engineering.md"
+  },
+  {
+    "name": "a cut that lands on a dot or a dash is trimmed",
+    "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.-bcccccccccccccccccccc",
+    "format": "markdown",
+    "want": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md"
+  },
+  {
+    "name": "a short first word is not worth backing up to",
+    "title": "Hi xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "format": "markdown",
+    "want": "Hi xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.md"
   }
 ]
