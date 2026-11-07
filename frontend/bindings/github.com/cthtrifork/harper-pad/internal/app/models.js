@@ -11,6 +11,62 @@ import { Create as $Create } from "@wailsio/runtime";
 import * as store$0 from "../store/models.js";
 
 /**
+ * FileCheck is the answer to LinkedFileStatus.
+ */
+export class FileCheck {
+    /**
+     * Creates a new FileCheck instance.
+     * @param {Partial<FileCheck>} [$$source = {}] - The source object to create the FileCheck.
+     */
+    constructor($$source = {}) {
+        if (!("state" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["state"] = "";
+        }
+        if (!("reason" in $$source)) {
+            /**
+             * Reason is a plain sentence fragment for FileBroken ("permission denied", "now a folder", ...).
+             * @member
+             * @type {string}
+             */
+            this["reason"] = "";
+        }
+        if (!("stamp" in $$source)) {
+            /**
+             * Stamp is the file's mtime as text (it does not fit a JavaScript number); the page uses it to remember "keep mine" for this version.
+             * @member
+             * @type {string}
+             */
+            this["stamp"] = "";
+        }
+        if (!("clean" in $$source)) {
+            /**
+             * Clean is true for FileChanged when the draft has no edits of its own since it last matched the file (its text still has the hash kept
+             * then), so the file's text can replace it without losing anything. False when that is unknown (a link without a hash).
+             * @member
+             * @type {boolean}
+             */
+            this["clean"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileCheck instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FileCheck}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FileCheck(/** @type {Partial<FileCheck>} */($$parsedSource));
+    }
+}
+
+/**
  * FileSave is the answer to SaveDraftToFile.
  */
 export class FileSave {
@@ -44,6 +100,15 @@ export class FileSave {
              */
             this["conflict"] = false;
         }
+        if (!("unlinkedFrom" in $$source)) {
+            /**
+             * UnlinkedFrom holds the titles of other drafts that were linked to this file and are not any more: a file has one holder, the draft saved
+             * to it last.
+             * @member
+             * @type {string[]}
+             */
+            this["unlinkedFrom"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -55,11 +120,53 @@ export class FileSave {
      */
     static createFrom($$source = {}) {
         const $$createField0_0 = $$createType0;
+        const $$createField3_0 = $$createType1;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("draft" in $$parsedSource) {
             $$parsedSource["draft"] = $$createField0_0($$parsedSource["draft"]);
         }
+        if ("unlinkedFrom" in $$parsedSource) {
+            $$parsedSource["unlinkedFrom"] = $$createField3_0($$parsedSource["unlinkedFrom"]);
+        }
         return new FileSave(/** @type {Partial<FileSave>} */($$parsedSource));
+    }
+}
+
+/**
+ * FileText is the answer to LinkedFileText.
+ */
+export class FileText {
+    /**
+     * Creates a new FileText instance.
+     * @param {Partial<FileText>} [$$source = {}] - The source object to create the FileText.
+     */
+    constructor($$source = {}) {
+        if (!("text" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["text"] = "";
+        }
+        if (!("stamp" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["stamp"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileText instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {FileText}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FileText(/** @type {Partial<FileText>} */($$parsedSource));
     }
 }
 

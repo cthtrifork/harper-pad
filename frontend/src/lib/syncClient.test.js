@@ -68,6 +68,22 @@ test("a draft that was synced before is pushed on top of the recorded state", as
 test("a 409 is a conflict to settle later, other answers are errors", async () => {
   const dev = await device();
   assert.deepEqual(await pushDraft({ device: dev, draft, state: null, fetchFn: answer(409, { current: {} }) }), { result: "conflict" });
-  await assert.rejects(pushDraft({ device: dev, draft, state: null, fetchFn: answer(422, {}) }), { code: "server" });
   await assert.rejects(pushDraft({ device: dev, draft, state: null, fetchFn: answer(200, {}) }), { code: "server" });
+  await assert.rejects(pushDraft({ device: dev, draft, state: null, fetchFn: answer(503, {}) }), { code: "server" }); // a server fault: tried again later
+});
+
+test("a draft the server refuses is rejected with a short reason: too large, or the server's own detail", async () => {
+  const dev = await device();
+  await assert.rejects(pushDraft({ device: dev, draft, state: null, fetchFn: answer(413, {}) }), {
+    code: "rejected",
+    message: "it is too large",
+  });
+  await assert.rejects(pushDraft({ device: dev, draft, state: null, fetchFn: answer(422, { detail: "format is not known." }) }), {
+    code: "rejected",
+    message: "format is not known",
+  });
+  await assert.rejects(pushDraft({ device: dev, draft, state: null, fetchFn: answer(400, null) }), {
+    code: "rejected",
+    message: "the server answered 400",
+  });
 });

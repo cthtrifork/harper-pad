@@ -26,6 +26,13 @@ export async function signedRequest({ device, method, path, body, headers: extra
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 
+// The server refused a draft itself (too large, malformed, not allowed): a SyncError "rejected" with a short reason for the chip. A 5xx is not
+// this: it is a server fault, which the callers treat as "try again later".
+function rejected(status, body) {
+  const text = status === 413 ? "it is too large" : String(body?.detail || body?.title || `the server answered ${status}`);
+  return new SyncError("rejected", text.replace(/\.$/, ""));
+}
+
 // Uploads one draft: PUT /docs/<id>, compare-and-set against `state`, the record of the last sync ({updatedAt, version}), or a draft the
 // server has never seen when there is none. Resolves to {result: "ok", version} when the server took it, or {result: "conflict"} when
 // somebody else changed it (settling that is the sync run's job, not this call's). Anything else is a SyncError.
@@ -41,6 +48,7 @@ export async function pushDraft({ device, draft, state, fetchFn }) {
   });
   if (status === 200 && Number.isInteger(body?.version)) return { result: "ok", version: body.version };
   if (status === 409) return { result: "conflict" };
+  if (status >= 400 && status < 500) throw rejected(status, body);
   throw new SyncError("server", `Server error (${status}).`);
 }
 

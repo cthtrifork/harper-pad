@@ -85,12 +85,6 @@
   gap: 8px;
 }
 
-/* Replace notes.md: the linked file changed outside the app and this press overwrites it, so the one button that says something else. */
-.bar .tool.replace {
-  border-color: var(--bad);
-  font-weight: 600;
-}
-
 .bar .tool:disabled {
   color: var(--mute);
   cursor: not-allowed;
@@ -108,6 +102,95 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
+}
+
+/* The file cannot be used right now (gone, no permission, not a file): the name is struck through and a warning triangle comes first, so it
+   does not rely on colour. Ctrl+S tries again and the chip returns to normal once the file is written. */
+.bar .badge.broken {
+  color: var(--bad);
+}
+
+.bar .badge.broken .file-name {
+  color: inherit;
+  text-decoration: line-through;
+}
+
+.bar .broken-icon {
+  flex: none;
+  align-self: center;
+}
+
+/* The dot: your draft has changes the file does not have yet. Shape and a title say it, not colour alone; it fades and grows in with the shared
+   easing (switched off by prefers-reduced-motion, see base.css). */
+.bar .dirty-dot {
+  flex: none;
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.bar .dot-enter-active,
+.bar .dot-leave-active {
+  transition:
+    opacity 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+
+.bar .dot-enter-from,
+.bar .dot-leave-to {
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+/* The two small buttons on the file chip: copy the full path, and unlink (the draft and the file stay as they are). */
+.bar .chip-btn {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mute);
+}
+
+/* A thin divider between the copy and unlink buttons. */
+.bar .chip-split {
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 12px;
+  background: var(--line);
+}
+
+.bar .chip-btn.unlink {
+  margin-right: -6px;
+}
+
+.bar .chip-btn:hover {
+  background: var(--selected);
+  color: var(--text);
+}
+
+/* "Conflicted copy, from ...": only in memory, beside the file chip. */
+.bar .badge.copy {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.bar .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .bar .file-name {
