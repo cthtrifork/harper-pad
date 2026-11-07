@@ -1,3 +1,4 @@
+// @ts-check
 // Where the app keeps its data and asks its host for things. Two builds share the frontend:
 //   - desktop: the Go side, through the Wails bindings;
 //   - web (GitHub Pages): no Go side, the same data in IndexedDB.
@@ -11,12 +12,18 @@ import { createSettingsSyncStore } from "./settingsSync.js";
 import { createDeviceStore } from "./syncDevice.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
+/** @typedef {typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app")} Bindings */
+/** @typedef {import("../../bindings/github.com/cthtrifork/harper-pad/internal/store").Draft} Draft */
+
 export const isWeb = import.meta.env?.MODE === "web";
 
 // The web build on a browser without a file picker (iPhone, iPad): Save opens the share sheet.
 export const sharing = isWeb && sharesFiles();
 
-const bindings = isWeb ? undefined : () => import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
+// Only called when !isWeb: in the web build the guard is a constant, so the import (and the Wails code) is dropped from the bundle.
+const bindings = /** @type {() => Promise<Bindings>} */ (
+  /** @type {unknown} */ (isWeb ? undefined : () => import("../../bindings/github.com/cthtrifork/harper-pad/internal/app"))
+);
 
 const emptySettings = () => ({ version: 1, words: [], ignored: "" });
 
@@ -26,6 +33,7 @@ const STORE = "kv";
 
 const openDb = openDatabase;
 
+/** @param {string} key */
 async function idbGet(key) {
   const db = await openDb();
   try {
@@ -35,6 +43,10 @@ async function idbGet(key) {
   }
 }
 
+/**
+ * @param {string} key
+ * @param {unknown} value
+ */
 async function idbPut(key, value) {
   const db = await openDb();
   try {
@@ -53,6 +65,7 @@ export async function loadSettings() {
   return { ...emptySettings(), ...saved };
 }
 
+/** @param {import("../../bindings/github.com/cthtrifork/harper-pad/internal/app").Settings} settings */
 export async function saveSettings(settings) {
   if (!isWeb) return (await bindings()).SettingsService.SaveSettings(settings);
   return idbPut("settings", settings);
@@ -69,7 +82,8 @@ export const settingsSync = createSettingsSyncStore(openDb);
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
 // The same operations on both builds: DraftService's methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).
 
-const web = isWeb ? createWebDrafts(openDb) : undefined;
+// Only used when isWeb (the guards below); typed as present so the call sites need no checks.
+const web = /** @type {ReturnType<typeof createWebDrafts>} */ (/** @type {unknown} */ (isWeb ? createWebDrafts(openDb) : undefined));
 
 // What sync needs from the drafts store: IndexedDB in the browser, the Go services on desktop (desktopSync.js). Same operations either way.
 export const syncDrafts = web
@@ -103,32 +117,46 @@ export async function startFresh() {
 }
 
 // A page of draft summaries, newest first: {drafts, total}. The summaries carry no text.
+/**
+ * @param {number} limit
+ * @param {number} offset
+ */
 export async function listDrafts(limit, offset) {
   return isWeb ? web.list(limit, offset) : (await bindings()).DraftService.ListDrafts(limit, offset);
 }
 
 // The drafts whose text contains `query`, newest first: {drafts, total}.
+/**
+ * @param {string} query
+ * @param {number} limit
+ */
 export async function searchDrafts(query, limit) {
   return isWeb ? web.search(query, limit) : (await bindings()).DraftService.SearchDrafts(query, limit);
 }
 
+/** @param {string} id */
 export async function getDraft(id) {
   return isWeb ? web.get(id) : (await bindings()).DraftService.GetDraft(id);
 }
 
 // Creates a draft (empty id) or updates one, and returns it as stored. Saving an id that is no longer stored brings it back.
+/** @param {Draft} draft */
 export async function saveDraft(draft) {
   return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(draft);
 }
 
 // Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. `conflict` is true when something
 // else changed the file since it was written, unless `overwrite` is set.
+/**
+ * @param {Draft} draft
+ * @param {boolean} saveAs
+ */
 export async function saveDraftToFile(draft, saveAs, overwrite = false) {
   if (!isWeb) return (await bindings()).DraftService.SaveDraftToFile(draft, saveAs, overwrite);
   return saveWebFile(
     web,
-    (id) => idbGet(`file:${id}`),
-    (id, handle) => idbPut(`file:${id}`, handle),
+    (/** @type {string} */ id) => idbGet(`file:${id}`),
+    (/** @type {string} */ id, /** @type {unknown} */ handle) => idbPut(`file:${id}`, handle),
     draft,
     saveAs,
     overwrite,
@@ -137,35 +165,44 @@ export async function saveDraftToFile(draft, saveAs, overwrite = false) {
 
 // Desktop only: how the file the draft is linked to compares with the draft: {state, reason, stamp, clean} with state "none" | "same" | "changed" | "missing" | "broken". Go reads the stored path. The web build has no path to
 // look at, so it always answers "none".
+/** @param {string} id */
 export async function linkedFileStatus(id) {
   if (isWeb) return { state: "none" };
   return (await bindings()).DraftService.LinkedFileStatus(id);
 }
 
 // Desktop only: the text and version stamp of the draft's file, read from the stored path ({text, stamp}); rejects when it is not text.
+/** @param {string} id */
 export async function linkedFileText(id) {
   if (isWeb) throw new Error("there is no file to read in the web build");
   return (await bindings()).DraftService.LinkedFileText(id);
 }
 
 // Desktop only: makes the file's text (as `linkedFileText` returned it, with its stamp) the baseline of the draft's link, once the draft has it.
+/**
+ * @param {string} id
+ * @param {string} stamp
+ */
 export async function recordLinkedFile(id, stamp) {
   if (isWeb) throw new Error("there is no file to read in the web build");
   return (await bindings()).DraftService.RecordLinkedFile(id, stamp);
 }
 
 // Desktop only: stops linking the draft to its file; both stay as they are. Returns the draft as stored.
+/** @param {string} id */
 export async function unlinkDraftFile(id) {
   if (isWeb) throw new Error("the web build cannot unlink a file");
   return (await bindings()).DraftService.UnlinkDraftFile(id);
 }
 
 // Desktop only: puts back the link the last unlink removed for this draft (the same file and baseline, kept in Go; the page names no path).
+/** @param {string} id */
 export async function undoUnlinkDraftFile(id) {
   if (isWeb) throw new Error("the web build cannot unlink a file");
   return (await bindings()).DraftService.UndoUnlinkDraftFile(id);
 }
 
+/** @param {string} id */
 export async function deleteDraft(id) {
   return isWeb ? web.remove(id) : (await bindings()).DraftService.DeleteDraft(id);
 }
