@@ -47,6 +47,13 @@
   // Rules apply in order and a later rule wins, so the general ones come first.
   packageRules: [
     {
+      // vue-tsc (the frontend type-check) and its Volar packages need TypeScript below 7, which dropped the
+      // `typescript/lib/tsc` entry point they load. Lift this once vue-tsc supports TypeScript 7.
+      matchPackageNames: ["typescript"],
+      matchUpdateTypes: ["major"],
+      enabled: false,
+    },
+    {
       // Patch and digest updates merge by themselves once CI is green. Only meaningful when CI runs
       // on Renovate's PRs, which the GitHub App token makes happen (see renovate.yml), and with branch
       // protection requiring the CI checks: without them nothing stands between a PR and the merge.

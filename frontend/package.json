@@ -36,7 +36,7 @@
     "@biomejs/biome": "2.6.5",
     "@vitejs/plugin-vue": "^6.0.0",
     "fake-indexeddb": "^6.2.7",
-    "typescript": "^7.0.0",
+    "typescript": "^6.0.3",
     "vite": "^8.0.0",
     "vue-tsc": "^3.3.14"
   }
