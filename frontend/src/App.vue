@@ -11,6 +11,7 @@ import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "
 import { record } from "./lib/diagnostics.ts";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
+import { loadOptIn, saveOptIn } from "./lib/harperOptIn.js";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.js";
 import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.js";
@@ -35,7 +36,7 @@ const DraftsDrawer = defineAsyncComponent(() => import("./components/DraftsDrawe
 const Preview = defineAsyncComponent(() => import("./components/Preview.vue"));
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
-const state = ref("loading");
+const state = ref("loading"); // loading | ready | failed | off (a phone, until the person turns Harper on)
 const error = ref("");
 const setupMs = ref(0);
 const lintMs = ref(0);
@@ -49,6 +50,9 @@ const showProblems = ref(!narrow.matches);
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
 const harper = ref(null);
+// On a phone Harper's wasm is opt-in: it is not fetched until the "?" on the Problems button is pressed (state "off" until then). Elsewhere
+// it always loads, after the first paint.
+const harperOptIn = ref(!narrow.matches || loadOptIn());
 // Syncing the dictionary and ignore list needs Harper, which loads after the first paint: they wait for it (or for its failure).
 let harperLoaded;
 const harperReady = new Promise((resolve) => {
@@ -76,6 +80,7 @@ const sync = useSync({
   onRemoved: (draft) => drafts.removedElsewhere(draft),
   onRestore: (draft) => drafts.restore(draft),
   settings: {
+    available: () => state.value !== "off", // Harper is not loaded: the dictionary and ignore list cannot be read, so they are left out
     current: async () => {
       const h = await linter();
       return { words: await h.exportWords(), ignored: await ignoredHashes(h) };
@@ -248,6 +253,13 @@ async function pickDraft(action, id, { always = false } = {}) {
 }
 
 function toggleProblems() {
+  if (state.value === "off") {
+    // The first press turns Harper on and opens the panel, where the findings will appear.
+    showProblems.value = true;
+    if (showDrawer.value) toggleDrawer();
+    enableHarper();
+    return;
+  }
   showProblems.value = !showProblems.value;
   if (showProblems.value && narrow.matches && showDrawer.value) toggleDrawer();
 }
@@ -299,7 +311,7 @@ const afterNextPaint = () =>
       }),
     );
   });
-const t0 = performance.now();
+let t0 = performance.now();
 async function loadHarper() {
   await afterNextPaint();
   const linter = await createLinter();
@@ -385,6 +397,27 @@ const focusFromPress = (e) => {
   if (isPlainPress(e)) editor.value?.focusEnd();
 };
 
+// Load Harper and start checking; used at start-up and by the opt-in. Never throws: a failure is the state "failed".
+async function startHarper() {
+  try {
+    harper.value = await loadHarper();
+    setupMs.value = Math.round(performance.now() - t0);
+    record("setupMs", setupMs.value);
+    state.value = "ready";
+  } catch (err) {
+    state.value = "failed";
+    error.value = String(err?.stack || err);
+  } finally {
+    harperLoaded();
+  }
+}
+function enableHarper() {
+  saveOptIn(true);
+  state.value = "loading";
+  t0 = performance.now();
+  return startHarper();
+}
+
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
   // The linked file is looked at first and the server after it, so a clean draft is not changed by a pull before the file is seen.
@@ -401,17 +434,8 @@ onMounted(async () => {
   keepData();
   await nextTick(); // the editor is in the page now; Harper starts loading after it has been painted
   fileReady = drafts.checkFile(); // the draft open at start: its linked file may have changed while the app was closed
-  try {
-    harper.value = await loadHarper();
-    setupMs.value = Math.round(performance.now() - t0);
-    record("setupMs", setupMs.value);
-    state.value = "ready";
-  } catch (err) {
-    state.value = "failed";
-    error.value = String(err?.stack || err);
-  } finally {
-    harperLoaded();
-  }
+  if (harperOptIn.value) await startHarper();
+  else state.value = "off";
 });
 // The page title follows the design: "notes.md — Harper Pad" for a file, "(draft)" for a draft.
 watch(
@@ -441,6 +465,7 @@ onBeforeUnmount(() => {
       :show-drawer="showDrawer"
       :show-problems="showProblems"
       :problem-count="problems.length"
+      :harper-off="state === 'off'"
       :file-path="drafts.current.value.filePath"
       :file-name="drafts.fileName.value"
       :file-dir="drafts.fileDir.value"

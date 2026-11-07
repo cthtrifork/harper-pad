@@ -185,7 +185,7 @@ export function useSync({
   // The personal dictionary and the ignore list, by the same engine, as one document. A failure sets `setsFailed` (the chip says so)
   // and does not hold the drafts back. "unreachable" and "signin" are not theirs: they throw to the caller, as for a draft.
   async function syncSets() {
-    if (!settings) return;
+    if (!settings || settings.available?.() === false) return;
     try {
       await syncer().syncSettings(settings);
       setsFailed.value = false;
