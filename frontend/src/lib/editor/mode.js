@@ -1,45 +1,22 @@
-import { markdown } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorView, highlightActiveLine, lineNumbers } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
-import { snippets } from "./snippets.js";
-import { taskBoxes } from "./tasks.js";
+// What the format (markdown or text) adds to the editor. The markdown side (markdownMode.js) pulls in the markdown parser and the HTML,
+// JavaScript and CSS ones it nests, about 230 KB of source that the first paint does not need: the editor appears as plain text and
+// gets the markdown highlighting when this file's loader has fetched it (loadMarkdownMode, called after the first paint).
+let markdownMode = null;
+let loading = null;
 
-// The markdown source view: line numbers, a highlighted current line, and the markup (`#`, `**`, `- [ ]`) dimmed so the words
-// stand out. Plain text gets none of it.
-const markdownStyle = HighlightStyle.define([
-  { tag: [tags.processingInstruction, tags.contentSeparator], color: "var(--mute)" },
-  { tag: tags.heading, fontWeight: "600" },
-  { tag: tags.strong, fontWeight: "700" },
-  { tag: tags.emphasis, fontStyle: "italic" },
-  { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: tags.monospace, fontFamily: "var(--font-mono)", fontSize: "0.9em" },
-  { tag: [tags.link, tags.url], color: "var(--c-style)" },
-]);
+// Resolves once markdownMode.js is loaded; every caller shares the one import.
+export function loadMarkdownMode() {
+  loading ??= import("./markdownMode.js").then((m) => {
+    markdownMode = m;
+  });
+  return loading;
+}
 
-// Split shows the source as the design does: a monospace face, 30 px lines, line numbers and the current line.
-const sourceTheme = EditorView.theme({
-  "&": { fontSize: "calc(var(--editor-size, 19px) * 15 / 19)" },
-  ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "30px" },
-  ".cm-content": { padding: "20px 0" },
-});
+export const markdownLoaded = () => markdownMode !== null;
 
-const markdownTheme = EditorView.theme({
-  ".cm-gutters": {
-    backgroundColor: "transparent",
-    color: "var(--mute)",
-    border: "0",
-    fontFamily: "var(--font-mono)",
-    fontSize: "12px",
-    marginRight: "14px",
-  },
-  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--accent) 7%, transparent)" },
-  ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--text)" },
-});
-
-// `mode` is { format: "markdown" | "text", source: boolean }; `source` is the Split view's source pane.
+// `mode` is { format: "markdown" | "text", source: boolean }; `source` is the Split view's source pane. Until the markdown side has
+// loaded, a markdown draft gets no extensions (it looks like plain text).
 export function modeExtensions({ format, source }) {
-  if (format === "text") return [];
-  const base = [markdown(), syntaxHighlighting(markdownStyle), snippets, taskBoxes];
-  return source ? [...base, markdownTheme, sourceTheme, lineNumbers(), highlightActiveLine()] : base;
+  if (format === "text" || !markdownMode) return [];
+  return markdownMode.markdownExtensions(source);
 }
