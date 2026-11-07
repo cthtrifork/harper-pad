@@ -13,14 +13,15 @@ export type Prefs = Record<Category, boolean> & { on: boolean };
 // Off until turned on: nothing changes their text unasked.
 export const DEFAULT_PREFS: Prefs = { on: false, typos: true, caps: true, reps: true, spaces: true };
 
-const BY_KIND: Record<string, Category> = { Typo: "typos", Spelling: "typos", Capitalization: "caps", Repetition: "reps" };
+// Keyed by harper.js's LintKind, so a misspelt kind fails to compile.
+const BY_KIND: Partial<Record<LintKind, Category>> = { Typo: "typos", Spelling: "typos", Capitalization: "caps", Repetition: "reps" };
 
 // null when it is never auto-fixed (grammar, style, several suggestions, or only inserting text).
 export function categoryOf(finding: Finding): Category | null {
   const [fix] = finding.fixes;
   if (finding.fixes.length !== 1 || fix.kind === "insert") return null;
   if (finding.kind === "Formatting") return isSpacing(fix) ? "spaces" : null;
-  return BY_KIND[finding.kind] ?? null;
+  return BY_KIND[finding.kind as LintKind] ?? null;
 }
 
 // Only changes the amount of spacing, such as "  " -> " ".
@@ -72,6 +73,7 @@ export function nonOverlapping<T extends { from: number; to: number }>(items: T[
   return out;
 }
 
+import type { LintKind } from "harper.js";
 import type { Finding, Fix } from "./harperCore.ts";
 import { scoped } from "./scope.ts";
 
