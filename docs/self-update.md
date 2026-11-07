@@ -2,7 +2,7 @@
 
 The app can update itself from GitHub Releases. This follows Wails' tutorial
 [Self-Updating Wails App](https://v3.wails.io/tutorials/04-self-update-a-wails-app/) and the Updater guide,
-adapted to this app. Click the version number at the right end of the top bar (`components/UpdateButton.vue`): the first click opens a small menu and checks for updates; the menu has a status row and the actions Check for updates, What's new and Copy diagnostics. The button keeps showing the version; an orange dot appears when an update is found or ready, and a spinner while checking or downloading.
+adapted to this app. Click the version number at the right end of the top bar (`components/UpdateButton.vue`): the first click opens a small menu and checks for updates; the menu has a status row and the actions Check for updates, What's new and Copy diagnostics. The button keeps showing the version; an orange dot appears when an update is found or ready, and a spinner while checking or downloading (on the button while the menu is closed; inside the menu the status row spins instead, so only one spinner shows at a time).
 
 ## What happens
 
