@@ -19,12 +19,21 @@ func main() {
 	}
 
 	svcs := app.NewServices()
+	var window *application.WebviewWindow // set below; the second-launch callback only runs after Run
 	wails := application.New(application.Options{
 		Name:        "Harper Pad",
 		Icon:        app.WindowIcon,
 		Description: "Grammar-checked editor with a scratch pad drawer (" + app.Version() + ")",
 		Services:    svcs.All(),
-		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(frontend), Middleware: app.AssetMiddleware},
+		// A second launch brings the open window forward instead of opening another app on the same database and files.
+		SingleInstance: app.SingleInstance(func() {
+			if window != nil {
+				window.Restore()
+				window.Show()
+				window.Focus()
+			}
+		}),
+		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(frontend), Middleware: app.AssetMiddleware},
 		// Linux: GTK4 reports the application id as the window's Wayland app_id and X11 class, and
 		// KDE/GNOME match it to the .desktop file of the same name (the launcher icon and grouping).
 		// Keep it equal to the desktop file name and its StartupWMClass in build/linux.
@@ -41,7 +50,7 @@ func main() {
 		background = application.NewRGB(0x12, 0x16, 0x1b)
 	}
 
-	window := wails.Window.NewWithOptions(application.WebviewWindowOptions{
+	window = wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Harper Pad",
 		Width:            1100,
 		Height:           760,
