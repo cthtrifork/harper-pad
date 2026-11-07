@@ -1,5 +1,5 @@
 import { computed, ref, watch } from "vue";
-import * as backend from "./backend.js";
+import * as backend from "./backend.ts";
 
 const { isWeb } = backend;
 import { createFileChange } from "./fileChange.js";

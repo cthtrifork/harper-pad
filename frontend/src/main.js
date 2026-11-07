@@ -1,7 +1,7 @@
 import "@fontsource-variable/literata";
 import { createApp } from "vue";
 import App from "./App.vue";
-import { isWeb, startup } from "./lib/backend.js";
+import { isWeb, startup } from "./lib/backend.ts";
 import { noteOpen, record } from "./lib/diagnostics.js";
 import "./styles/index.css";
 

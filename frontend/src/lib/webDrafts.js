@@ -13,7 +13,7 @@ const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 1000;
 const ID = /^[0-9a-f]{32}$/;
 
-// Called by backend.js when it opens the database: adds what the newer versions need and leaves everything else as it is. Every change
+// Called by backend.ts when it opens the database: adds what the newer versions need and leaves everything else as it is. Every change
 // so far only adds an object store, so a build that is one version behind opens the database as it is (see openDatabase) and nothing is
 // lost; keep it that way, and put sync state in its own store, never in the draft records, which an older build rewrites whole.
 export function upgrade(db) {
@@ -49,7 +49,7 @@ function newId(now) {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-// `open` is backend.js's openDb: it resolves to an open database, which the caller closes.
+// `open` is backend.ts's openDb: it resolves to an open database, which the caller closes.
 export function createWebDrafts(open) {
   async function withDb(work) {
     const db = await open();
@@ -100,7 +100,7 @@ export function createWebDrafts(open) {
     });
   }
 
-  // The name of the file a draft was saved to ("" clears it); the browser only knows the name, the handle is kept by backend.js.
+  // The name of the file a draft was saved to ("" clears it); the browser only knows the name, the handle is kept by backend.ts.
   async function setFilePath(id, filePath) {
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");

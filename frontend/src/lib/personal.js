@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from "./backend.js";
+import { loadSettings, saveSettings } from "./backend.ts";
 import { hashesOf } from "./personalSets.js";
 
 export { applyIgnored, ignoredHashes, removeIgnored, withoutWord, withoutWords } from "./personalSets.js";
