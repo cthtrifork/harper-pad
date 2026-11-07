@@ -1,11 +1,10 @@
-// The device's signing key and the DPoP proof sent with every sync request (docs/sync.md, "Limiting the damage of a stolen device";
-// RFC 9449). The server (backend/internal/auth/dpop.go) checks exactly what is built here: ES256, the public key in the header, htm,
-// htu without query or fragment, iat, a fresh jti and, with a token, ath. No storage and no network in this file, so it is unit-tested.
+// The DPoP proof sent with every sync request (docs/sync.md, "Authentication"). backend/internal/auth/dpop.go checks exactly what is
+// built here. No storage and no network, so it is unit-tested.
 
 const encoder = new TextEncoder();
 
 export type PublicJwk = Pick<JsonWebKey, "kty" | "crv" | "x" | "y">;
-export interface DeviceKey {
+interface DeviceKey {
   privateKey: CryptoKey;
   publicJwk: PublicJwk;
 }
@@ -17,22 +16,19 @@ const b64url = (bytes: ArrayBuffer | Uint8Array) => {
 };
 const b64urlJson = (value: unknown) => b64url(encoder.encode(JSON.stringify(value)));
 
-// A new ECDSA P-256 key. The private key is not extractable (script cannot read its bytes); the public key always can be. Keep only the
-// private CryptoKey (a whole CryptoKeyPair is rejected by older WebKit when stored in IndexedDB) and the public JWK next to it.
+// Keep the private CryptoKey and the public JWK, not the whole pair: older WebKit rejects a CryptoKeyPair in IndexedDB.
 export async function generateDeviceKey(): Promise<DeviceKey> {
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
   const { kty, crv, x, y } = await crypto.subtle.exportKey("jwk", pair.publicKey);
   return { privateKey: pair.privateKey, publicJwk: { kty, crv, x, y } };
 }
 
-// The URL as the server compares it: no query, no fragment.
 function htu(url: string | URL): string {
   const u = new URL(url);
   return `${u.origin}${u.pathname}`;
 }
 
-// A proof for one request: a compact JWS signed with ES256. WebCrypto's ECDSA signature is already the JWS format (raw r||s, 64
-// bytes), so no conversion is needed. `token` is the device token, or empty for POST /enroll. `now` is a parameter for tests.
+// WebCrypto's ECDSA signature is already the JWS format (raw r||s), so it needs no conversion. `token` is empty for POST /enroll.
 export async function createProof({
   privateKey,
   publicJwk,

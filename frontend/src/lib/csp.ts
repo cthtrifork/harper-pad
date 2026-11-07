@@ -1,11 +1,7 @@
-// The Content-Security-Policy of the production page, built for vite.config.js (a build-time file; the app never imports it). Kept here,
-// not in the config, so the unit tests can check it. See docs/security.md for what each directive is for.
-//
-// `syncOrigin` is the sync server's origin, from the SYNC_ORIGIN build setting (docs/sync.md). Empty means sync is not configured, and then
-// the policy is exactly what it was before sync existed: connect-src 'self'. When set, it is added to connect-src and nothing else changes.
+// The production page's Content-Security-Policy (docs/security.md), built for vite.config.js. Kept here so the unit tests can check it.
+// `syncOrigin` (the SYNC_ORIGIN build setting) is added to connect-src when set, and nothing else changes.
 
-// "https://sync.example.com" -> the same. "" -> "". Anything that is not a bare https origin is a build error, so a typo cannot widen the
-// policy (a path, a wildcard or a scheme-only value would).
+// Anything that is not a bare https origin is a build error, so a typo cannot widen the policy.
 export function syncOriginOf(value?: string | null): string {
   const text = (value ?? "").trim();
   if (text === "") return "";
@@ -21,7 +17,7 @@ export function syncOriginOf(value?: string | null): string {
   return url.origin;
 }
 
-// `web` adds manifest-src: the GitHub Pages build loads its own web app manifest, which `default-src 'none'` would block.
+// `web` adds manifest-src: the Pages build loads its own manifest, which `default-src 'none'` would block.
 export function buildPolicy({ web = false, syncOrigin = "" }: { web?: boolean; syncOrigin?: string } = {}): string {
   const origin = syncOriginOf(syncOrigin);
   return [

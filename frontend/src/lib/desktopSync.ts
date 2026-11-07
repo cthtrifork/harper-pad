@@ -1,9 +1,5 @@
-// The desktop build's drafts store for sync: the same nine operations as the web store (createWebDrafts in webDrafts.ts), over the Go services
-// instead of IndexedDB. The sync engine (syncRun.js) only sees this interface, so it is the same code on both builds. `bindings` is the
-// backend.ts function that imports the generated Wails bindings on demand, so this file carries no Wails code into the web bundle.
-//
-// The names and shapes match the web store: syncState is null when the server never had the draft, changes is {changed, deleted}, and
-// get rejects when there is no such draft. desktopSync.test.js checks that the two stores have the same operations.
+// The web store's sync operations (webDrafts.ts) over the Go services, so syncRun.js is the same code on both builds. `bindings` imports
+// the Wails bindings on demand, so no Wails code reaches the web bundle. desktopSync.test.js checks the two stores have the same operations.
 export const SYNC_STORE_METHODS = [
   "get",
   "save",

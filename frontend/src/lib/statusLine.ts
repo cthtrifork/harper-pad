@@ -1,13 +1,10 @@
-// The one line that says where the open draft's text is and who has it. It joins the draft's own state (useDrafts) with the sync state
-// (useSync) so the two stop saying the same thing in two places; the Sync button only acts, and this says what is true.
-//
-// Without sync set up the draft's own text is used as it is (`draftText`), so nothing changes for a build or a person that does not sync.
+// The one line that says where the open draft's text is and who has it, joining useDrafts' state with useSync's so the two stop saying
+// the same thing twice; the Sync button only acts. Without sync it is the draft's own text.
 
-// `draft`: {state, text, fileState, fileName, recreated} from useDrafts. `sync`: {enrolled, status, newer, rejected} from useSync (`newer` is true while a
-// "Newer on the server" marker is up, `rejected` is {title, reason} while the server refuses the open draft). Returns {text, tone}: tone is "mute" (a neutral fact), "ok", "accent" or "bad".
-export type Tone = "mute" | "ok" | "accent" | "bad";
+/** "mute" is a neutral fact. */
+type Tone = "mute" | "ok" | "accent" | "bad";
 
-export interface DraftStatus {
+interface DraftStatus {
   state: string;
   text: string;
   fileState?: string;
@@ -15,10 +12,12 @@ export interface DraftStatus {
   recreated?: boolean;
 }
 
-export interface SyncStatus {
+interface SyncStatus {
   enrolled: boolean;
   status?: string;
+  /** A "Newer on the server" marker is up. */
   newer?: boolean;
+  /** The server refuses the open draft. */
   rejected?: { title: string; reason: string } | null;
 }
 
