@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
-import { generateDeviceKey } from "./dpop.js";
-import { createDeviceStore } from "./syncDevice.js";
+import { generateDeviceKey } from "./dpop.ts";
+import { createDeviceStore } from "./syncDevice.ts";
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 
 const fresh = () => {

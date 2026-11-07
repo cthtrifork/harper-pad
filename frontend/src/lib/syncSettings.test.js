@@ -2,7 +2,7 @@
 // (compare-and-set on version). The last device to sync wins; a device that never synced takes the server's lists.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateDeviceKey } from "./dpop.js";
+import { generateDeviceKey } from "./dpop.ts";
 import { createSyncer } from "./syncRun.js";
 
 function fakeServer() {

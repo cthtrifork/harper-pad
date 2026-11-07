@@ -1,6 +1,6 @@
 // Enrolling this device (docs/sync.md, "Enrollment"): read the invite URL the user pasted, make the device key, call POST /enroll with a
 // proof signed by that key, and keep what comes back. Nothing here touches the UI; the caller shows `SyncError.message`.
-import { createProof, generateDeviceKey } from "./dpop.js";
+import { createProof, generateDeviceKey } from "./dpop.ts";
 
 // What went wrong, as a code the UI can switch on and a message it can show.
 export class SyncError extends Error {

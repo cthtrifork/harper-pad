@@ -15,7 +15,22 @@
 //   "remove-local"     the server's copy is a tombstone and this device has no edits: remove it here, with undo.
 //   "resolve"          changed on both sides: GET the server's text, then `settle` says whether it is the same text or a conflict.
 
-export function decide({ local, synced, server }) {
+export type Action = "none" | "upload" | "upload-tombstone" | "download" | "remove-local" | "resolve";
+
+interface State {
+  updatedAt: number;
+  deleted: boolean;
+}
+
+export function decide({
+  local,
+  synced,
+  server,
+}: {
+  local: { changed: boolean } | null;
+  synced: State | null;
+  server: State | null;
+}): Action {
   // Absence on the server is not a deletion: a device that has the draft uploads it (this is also how a lost server is rebuilt).
   if (!server) return local ? "upload" : "none";
 
@@ -41,4 +56,4 @@ export function decide({ local, synced, server }) {
 
 // For "resolve": the same format and text on both sides adopts the server's state, with no copy; otherwise it is a conflict.
 // Both arguments are contentHash values (lib/contentHash.ts), which cover the format as well as the text.
-export const settle = (localHash, serverHash) => (localHash === serverHash ? "adopt" : "conflict");
+export const settle = (localHash: string, serverHash: string): "adopt" | "conflict" => (localHash === serverHash ? "adopt" : "conflict");

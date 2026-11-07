@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateDeviceKey } from "./dpop.js";
+import { generateDeviceKey } from "./dpop.ts";
 import { pushDraft, signedRequest } from "./syncClient.js";
 
 const decode = (part) => JSON.parse(Buffer.from(part, "base64url").toString("utf8"));

@@ -3,9 +3,17 @@
 // server's version this device last matched and the lists it held then, which is how the next sync tells "changed here" from "changed
 // elsewhere". It is never a source of words: the dictionary itself stays in SettingsService / IndexedDB "settings". null means this
 // device has never synced them (just enrolled): the server's copy wins then.
-export function createSettingsSyncStore(open) {
+import type { IDBPDatabase } from "idb";
+
+export interface SettingsSyncRecord {
+  version: number;
+  words: string[];
+  ignored: string[];
+}
+
+export function createSettingsSyncStore(open: () => Promise<IDBPDatabase>) {
   const KEY = "sync-settings";
-  async function withDb(work) {
+  async function withDb<T>(work: (db: IDBPDatabase) => Promise<T>): Promise<T> {
     const db = await open();
     try {
       return await work(db);
@@ -14,8 +22,8 @@ export function createSettingsSyncStore(open) {
     }
   }
   return {
-    load: async () => withDb(async (db) => (await db.get("kv", KEY)) ?? null),
-    save: async (record) => withDb((db) => db.put("kv", record, KEY)),
+    load: async () => withDb(async (db) => ((await db.get("kv", KEY)) as SettingsSyncRecord | undefined) ?? null),
+    save: async (record: SettingsSyncRecord) => withDb((db) => db.put("kv", record, KEY)),
     clear: async () => withDb((db) => db.delete("kv", KEY)),
   };
 }

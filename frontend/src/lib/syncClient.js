@@ -1,6 +1,6 @@
 // Calls to the sync server for an enrolled device (docs/sync.md, "Protocol"): every request carries the device token and a fresh DPoP
 // proof. No Vue and no storage in here; `fetchFn` is a parameter for tests.
-import { createProof } from "./dpop.js";
+import { createProof } from "./dpop.ts";
 import { SyncError } from "./syncEnroll.js";
 
 // One signed request. `device` is the record from syncDevice. Resolves to {status, body} for any answer except a 401, which means the

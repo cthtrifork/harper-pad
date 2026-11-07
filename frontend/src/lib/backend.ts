@@ -7,8 +7,8 @@
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { createDesktopSyncDrafts } from "./desktopSync.ts";
 import { withLastOpened } from "./lastOpened.js";
-import { createSettingsSyncStore } from "./settingsSync.js";
-import { createDeviceStore } from "./syncDevice.js";
+import { createSettingsSyncStore } from "./settingsSync.ts";
+import { createDeviceStore } from "./syncDevice.ts";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
 type Bindings = typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
@@ -67,10 +67,10 @@ export async function saveSettings(settings: Settings) {
 
 // --- Sync device ----------------------------------------------------------------------------------------------------------------
 // The server, token and key this device syncs with: {load, save, clear}. The same on both builds, in the webview's or browser's IndexedDB
-// (see syncDevice.js); it is not part of the Go side.
+// (see syncDevice.ts); it is not part of the Go side.
 export const syncDevice = createDeviceStore(openDb);
 
-// What the last sync of the dictionary and ignore list matched, for the next one: {load, save, clear} (settingsSync.js). Same place, same builds.
+// What the last sync of the dictionary and ignore list matched, for the next one: {load, save, clear} (settingsSync.ts). Same place, same builds.
 export const settingsSync = createSettingsSyncStore(openDb);
 
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
