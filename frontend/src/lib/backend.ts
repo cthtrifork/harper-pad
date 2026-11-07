@@ -13,6 +13,7 @@ import { fileName, saveWebFile, sharesFiles } from "./webFiles.ts";
 type Bindings = typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
 type Settings = import("../../bindings/github.com/cthtrifork/harper-pad/internal/app").Settings;
 type Draft = import("../../bindings/github.com/cthtrifork/harper-pad/internal/store").Draft;
+type FileCheck = import("../../bindings/github.com/cthtrifork/harper-pad/internal/app").FileCheck;
 
 export const isWeb = import.meta.env?.MODE === "web";
 
@@ -98,16 +99,25 @@ export async function getDraft(id: string) {
   return isWeb ? web.get(id) : (await bindings()).DraftService.GetDraft(id);
 }
 
+// What a save needs; Go fills in the rest (id, times, summary).
+interface DraftInput {
+  id?: string;
+  format?: string;
+  content: string;
+  createdAt?: number;
+  filePath?: string;
+}
+
 // An empty id creates a draft; an id that is no longer stored brings it back.
-export async function saveDraft(draft: Draft) {
-  return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(withSummary(draft));
+export async function saveDraft(draft: DraftInput) {
+  return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(withSummary(draft) as Draft);
 }
 
 // `conflict` is true when something else changed the file since it was written, unless `overwrite` is set.
-export async function saveDraftToFile(draft: Draft, saveAs: boolean, overwrite = false) {
+export async function saveDraftToFile(draft: DraftInput, saveAs: boolean, overwrite = false) {
   // Go stores the summary as sent and keeps only the base name of the file; the name the dialog offers is made here, as on the web.
   if (!isWeb) {
-    const sent = withSummary(draft);
+    const sent = withSummary(draft) as Draft;
     return (await bindings()).DraftService.SaveDraftToFile(sent, saveAs, overwrite, fileName(sent.title, sent.format));
   }
   return saveWebFile(
@@ -121,7 +131,7 @@ export async function saveDraftToFile(draft: Draft, saveAs: boolean, overwrite =
 }
 
 // Desktop only; the web build has no path to look at and always answers "none".
-export async function linkedFileStatus(id: string) {
+export async function linkedFileStatus(id: string): Promise<Partial<FileCheck> & { state: string }> {
   if (isWeb) return { state: "none" };
   return (await bindings()).DraftService.LinkedFileStatus(id);
 }
