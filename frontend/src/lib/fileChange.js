@@ -1,18 +1,14 @@
 import { ref } from "vue";
 
-// What the page does when the file a draft is linked to no longer matches the draft: it looks (`checkStatus(id)` is the Go side's
-// LinkedFileStatus, which reads the stored path; the web build has no path and always answers "none").
+// What the page does when the file a draft is linked to no longer matches the draft (the paths are in docs/sync.md, "Other paths on this
+// device"). `checkStatus(id)` is the Go side's LinkedFileStatus, which reads the stored path; the web build has no path and answers "none".
 //
-//   conflict  null or {id, name, stamp, clean, serverText}: the file's text differs from the draft and the draft has edits of its own
-//             (a real conflict), or the draft has none and the server also holds something else (`clean`, `serverText`). It becomes the one
-//             Keep or Overwrite dialog (lib/conflict.js, useConflict.js); it stays until the person chooses, and is never hidden.
-//   problem   {id, reason} when the file is gone or cannot be used (deleted, moved, folder or drive gone, permission denied, now a folder,
-//             binary, not UTF-8, over 1 MiB): the header's chip is struck through. No dialog. Ctrl+S writes a gone file again, and a file
-//             that exists but is not text is never overwritten (Go refuses; the chip says so).
+//   conflict  null or {id, name, stamp, clean, serverText}: the file differs and the draft has edits of its own, or (`clean`) it has none and
+//             the server also holds other text. It becomes the Keep or Overwrite dialog (conflict.js, useConflict.js).
+//   problem   {id, reason} when the file is gone or cannot be used: the header's chip is struck through. No dialog.
 //
-// `auto` ({can(), run(draft, name)}) is the quiet path: a file whose text differs while the draft has no edits of its own (`clean`) is not a
-// conflict with the file, so `run` takes the file's text. It is tried only by `check` (open, focus), never by a save, and only when `can()`
-// says nothing is being typed or saved; if it cannot run now the next check tries again.
+// `auto` ({can(), run(draft, name)}) is the quiet refresh of a clean draft. Only `check` (open, focus) tries it, never a save, and only when
+// `can()` says nothing is being typed or saved; otherwise the next check tries again.
 export function createFileChange(checkStatus, auto = null) {
   const conflict = ref(null);
   const problem = ref(null);

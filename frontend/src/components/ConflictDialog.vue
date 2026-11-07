@@ -3,11 +3,8 @@ import { computed, ref } from "vue";
 import { describeConflict, summaryRows } from "../lib/conflict.js";
 import { useModalDialog } from "../lib/useModalDialog.js";
 
-// Keep or Overwrite: the one question when the open draft disagrees with its file, the server, or both. A modal dialog with no way out except a
-// choice: no close button, Escape is stopped (the cancel event), and a click on the backdrop does nothing. The page behind is inert, so the
-// text cannot change under it (the autosave keeps storing the draft). The versions are rows (a dot, the name, its timestamp); the buttons carry
-// the meaning, and their full sentences are tooltips and what assistive technology reads. Keep is focused and primary: it loses nothing.
-// Overwrite is the danger one.
+// Keep or Overwrite for the open draft (docs/sync.md, "The Keep or Overwrite dialog"). A modal with no way out except a choice: no close
+// button, Escape is stopped (the cancel event), and a click on the backdrop does nothing. Keep is focused and primary; Overwrite is the danger one.
 const props = defineProps({
   model: { type: Object, required: true },
   busy: { type: Boolean, default: false },

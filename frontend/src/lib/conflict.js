@@ -1,18 +1,11 @@
-// The one question for a draft that disagrees with its file, with the server, or with both: Keep or Overwrite. No Vue, no network and no
-// storage in here, so the rules are unit-tested; `useConflict.js` wires them to the page.
+// Keep or Overwrite: the rules for a draft that disagrees with its file, the server, or both (what each choice does is in docs/sync.md, "The Keep
+// or Overwrite dialog"). No Vue, no network and no storage in here, so the rules are unit-tested; `useConflict.js` wires them to the page.
 //
-// The draft always keeps its id and its file link. "Yours" is the draft's text; when the draft has no edits of its own and only the file
-// changed, the file's text is "yours" (`applyFile`: the draft takes it first).
-//
-//   Overwrite  your text is written to the file first (a failed write is skipped and reported, never a trap), then sent to the server.
-//              The other versions are lost, with no undo.
-//   Keep       first every other version that differs from yours is saved as a new, ordinary, unlinked draft (a "Conflicted copy": one
-//              from the file, one from the server, or one when both hold the same text; none for a side that does not differ or does not
-//              exist), then your text goes out exactly as for Overwrite.
-//
-// The model: {id, name, yours, file, server, applyFile, sync}, where `sync` says whether sync is on (the words mention the server then), and `file` and `server` are null (that side has no conflict) or {text, stamp}.
+// The model: {id, name, yours, file, server, applyFile, sync}. `file` and `server` are null (that side has no conflict) or {text, stamp, at}.
+// `applyFile` is true when the draft has no edits of its own and only the file changed: the file's text is "yours" and the draft takes it first.
+// `sync` says whether sync is on.
 
-// The badge text for a Conflicted copy, by where its text came from. Only ever shown, never saved, synced or put into the text.
+// The badge text for a Conflicted copy, by where its text came from (docs/sync.md).
 export const COPY_LABELS = {
   file: "Conflicted copy, from the file",
   server: "Conflicted copy, from the server",
