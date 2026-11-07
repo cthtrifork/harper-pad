@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
 
 // A short message with an optional action (Undo, Open copy), floating over the bottom of the page in the toast stack (App.vue). It fades

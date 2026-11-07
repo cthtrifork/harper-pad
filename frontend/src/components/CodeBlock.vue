@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 // A fenced code block in the preview. It shows the plain text at once and swaps in the coloured runs when the language's chunk
 // has loaded, so a block never waits and an unknown language (or a failed load) just stays plain. Runs are text nodes in spans,
 // never HTML (docs/security.md).
@@ -10,7 +10,7 @@ const props = defineProps({
   info: { type: String, default: "" },
 });
 
-const runs = ref(null);
+const runs = ref<{ text: string; cls: string }[] | null>(null);
 
 watchEffect((onCleanup) => {
   const lang = languageFor(props.info);

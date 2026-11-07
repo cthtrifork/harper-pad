@@ -1,17 +1,17 @@
-<script setup>
-import { computed, ref } from "vue";
-import { describeConflict, summaryRows } from "../lib/conflict.ts";
+<script setup lang="ts">
+import { computed, type PropType, ref } from "vue";
+import { type ConflictModel, describeConflict, summaryRows } from "../lib/conflict.ts";
 import { useModalDialog } from "../lib/useModalDialog.ts";
 
 // Keep or Overwrite for the open draft (docs/sync.md, "The Keep or Overwrite dialog"). A modal with no way out except a choice: no close
 // button, Escape is stopped (the cancel event), and a click on the backdrop does nothing. Keep is focused and primary; Overwrite is the danger one.
 const props = defineProps({
-  model: { type: Object, required: true },
+  model: { type: Object as PropType<ConflictModel>, required: true },
   busy: { type: Boolean, default: false },
   note: { type: String, default: "" },
 });
 const emit = defineEmits(["choose"]);
-const dialog = ref(null);
+const dialog = ref<HTMLDialogElement | null>(null);
 const text = computed(() => describeConflict(props.model));
 const rows = computed(() => summaryRows(props.model));
 

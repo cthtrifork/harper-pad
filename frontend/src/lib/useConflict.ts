@@ -1,14 +1,35 @@
-import { ref, watch } from "vue";
-import { resolveConflict, staleNote } from "./conflict.ts";
+import { type Ref, ref, watch } from "vue";
+import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
+import type { useSync } from "./useSync.ts";
 
-// The Keep or Overwrite dialog for the open draft (ConflictDialog.vue): what disagrees with it (its file, the server, or both), the model for
-// lib/conflict.ts, and the choice. `drafts` is useDrafts and `sync` is useSync. Only the open draft ever gets a dialog; any other draft in
-// conflict is left exactly as it is until it is opened.
-export function useConflict({ drafts, sync }) {
-  const model = ref(null); // {id, name, yours, file, server, applyFile} while the dialog shows
+// The parts of useDrafts the dialog uses.
+interface DraftsApi {
+  current: Ref<{ id: string; filePath?: string }>;
+  fileConflict: Ref<{ id: string; name: string; clean?: boolean } | null>;
+  dialog: {
+    fileText(): Promise<{ text: string; stamp: string }>;
+    fileStamp(): Promise<string | null | undefined>;
+    current(): { text: string; updatedAt: number };
+    applyFile(): Promise<unknown>;
+    saveCopy(text: string, from: Origin): Promise<string>;
+    writeFile(): Promise<unknown>;
+  };
+  recheckFile(): Promise<unknown>;
+  clearFileConflict(): void;
+}
+
+type SyncApi = Pick<
+  ReturnType<typeof useSync>,
+  "enrolled" | "serverConflict" | "checkNow" | "inspectServer" | "forcePush" | "clearConflict"
+>;
+
+// The Keep or Overwrite dialog for the open draft (ConflictDialog.vue): the model for lib/conflict.ts, and the choice. Only the open draft
+// ever gets a dialog; any other draft in conflict is left exactly as it is until it is opened.
+export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi }) {
+  const model = ref<ConflictModel | null>(null); // while the dialog shows
   const busy = ref(false);
   const note = ref(""); // a line under the buttons: "Something changed, look again"
-  const result = ref(null); // {copies, fileError} after the last choice, for the toast
+  const result = ref<{ copies: { id: string; from: Origin }[]; fileError: string; pushed: boolean | null } | null>(null); // for the toast
   let building = 0;
 
   const syncOn = () => sync.enrolled.value;
@@ -17,7 +38,8 @@ export function useConflict({ drafts, sync }) {
     const mine = ++building;
     const id = drafts.current.value.id;
     const f = drafts.fileConflict.value?.id === id ? drafts.fileConflict.value : null;
-    let sv = sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
+    let sv: { text: string; stamp: string; updatedAt: number } | null =
+      sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
     if (!f && !sv) {
       model.value = null;
       return;
@@ -28,8 +50,8 @@ export function useConflict({ drafts, sync }) {
       if (mine !== building) return;
       sv = sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
     }
-    let file = null;
-    let server = null;
+    let file: ConflictModel["file"] = null;
+    let server: ConflictModel["server"] = null;
     try {
       if (f) {
         const t = await drafts.dialog.fileText();
@@ -46,7 +68,7 @@ export function useConflict({ drafts, sync }) {
     }
     if (sv) server = { text: sv.text, stamp: sv.stamp, at: sv.updatedAt };
     if (mine !== building) return;
-    const yours = f?.clean ? file.text : drafts.dialog.current().text;
+    const yours = f?.clean ? (file as { text: string }).text : drafts.dialog.current().text;
     // An unedited draft takes the file's text. If the server then holds nothing or the same text, nothing differs after all: no dialog.
     if (f?.clean && (!server || server.text === yours)) {
       model.value = null;
@@ -66,25 +88,25 @@ export function useConflict({ drafts, sync }) {
 
   watch([() => drafts.fileConflict.value, () => sync.serverConflict.value, () => drafts.current.value.id], build, { immediate: true });
 
-  const ops = (m) => ({
+  const ops = (m: ConflictModel): ConflictOps => ({
     async recheck() {
-      const id = m.id;
+      const id = m.id as string;
       const file = m.file ? { stamp: await drafts.dialog.fileStamp() } : null;
-      let server = null;
+      let server: { stamp: string } | null = null;
       if (m.server) {
         const s = await sync.inspectServer(id);
         server = s === false ? { stamp: m.server.stamp } : s ? { stamp: s.stamp } : { stamp: "" }; // could not look: assume unchanged
       }
-      return { file: file?.stamp == null && m.file ? { stamp: "gone" } : file, server };
+      return { file: file?.stamp == null && m.file ? { stamp: "gone" } : (file as { stamp: string } | null), server };
     },
     applyFile: () => drafts.dialog.applyFile(),
-    saveCopy: (text, from) => drafts.dialog.saveCopy(text, from),
+    saveCopy: (text: string, from: Origin) => drafts.dialog.saveCopy(text, from),
     writeFile: drafts.current.value.filePath ? () => drafts.dialog.writeFile() : null,
-    push: syncOn() ? () => sync.forcePush(m.id) : null,
+    push: syncOn() ? () => sync.forcePush(m.id as string) : null,
   });
 
   // The person chose. Both sides are looked at again first; if either moved, the dialog is redrawn and nothing is written.
-  async function choose(choice) {
+  async function choose(choice: Choice) {
     const m = model.value;
     if (!m || busy.value) return;
     busy.value = true;
@@ -102,7 +124,8 @@ export function useConflict({ drafts, sync }) {
       sync.clearConflict();
       model.value = null;
     } catch (err) {
-      note.value = `Could not finish: ${String(err?.message || err).replace(/\.$/, "")}.${err?.untouched ? " Nothing was changed." : ""}`;
+      const e = err as Error & { untouched?: boolean };
+      note.value = `Could not finish: ${String(e?.message || err).replace(/\.$/, "")}.${e?.untouched ? " Nothing was changed." : ""}`;
     } finally {
       busy.value = false;
     }

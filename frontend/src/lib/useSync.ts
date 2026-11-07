@@ -1,22 +1,41 @@
 import { computed, ref } from "vue";
 import { summarize } from "./summarize.ts";
-import { createSyncer, summaryText } from "./syncRun.ts";
-import { parseInviteUrl, enrollDevice, SyncError } from "./syncEnroll.ts";
+import type { DeviceRecord } from "./syncDevice.ts";
+import { enrollDevice, parseInviteUrl, SyncError } from "./syncEnroll.ts";
+import { createSyncer, type LocalDraft, type SyncStore, summaryText } from "./syncRun.ts";
+
+type Syncer = ReturnType<typeof createSyncer>;
+type Status = "off" | "synced" | "syncing" | "pending" | "offline" | "signin";
+type Inspected = NonNullable<Awaited<ReturnType<Syncer["inspect"]>>>;
+
+/** What a push, an open or a Sync all found about the open draft. */
+interface Notice {
+  id: string;
+  kind: "updated" | "newer" | "removed";
+  text: string;
+  at?: number;
+  draft?: LocalDraft;
+}
+
+/** The dictionary and ignore list, synced with Sync all and after `wordsChanged()`. */
+type Settings = Parameters<Syncer["syncSettings"]>[0] & { store: { clear(): Promise<unknown> }; available?: () => boolean };
+
+interface Hooks {
+  canSwap?: () => boolean;
+  onSwapped?: () => void;
+}
 
 // How long after a save the draft is pushed (docs/sync.md, "When sync happens"): long enough that typing is one push, not many.
 const PUSH_DELAY_MS = 2000;
 
-// What the sync chip shows, and the work behind it: enrolling this device, pushing a draft after it is saved, and Sync all. Web build
-// only for now; opening a note is a later step (docs/sync.md).
+// What the sync chip shows, and the work behind it: enrolling this device, pushing a draft after it is saved, and Sync all (docs/sync.md,
+// "When sync happens"). All syncing, conflicts included, is done in createSyncer, not here.
 //
-//   status: off | synced | syncing | pending | offline | signin
-//
-// `origin` is the sync server this build was made for (SYNC_ORIGIN, "" when none: then nothing shows). `deviceStore` is syncDevice from
-// backend.ts and `drafts` the web store (see createSyncer: all syncing, conflicts included, is done there, not here). For Sync all: `prepare` saves what is typed first,
-// `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and `autoSync`
-// runs it when the app starts and after enrolling. `settings` ({current(), store, apply(changes)}) syncs the personal dictionary and the ignored findings
-// (hashes), with Sync all and after `wordsChanged()`; `current()` gives {words, ignored} now, `store` is settingsSync.ts's record and
-// `apply` makes the local lists match the server's. `isOpen(id)` says whether a draft is the one in the editor (only that one raises the conflict dialog), and `onRemoved(draft)` is told when the person chose to remove a draft that was deleted on another device (it shows another note), and `onRestore(draft)` when they undo that.
+// `origin` is the sync server this build was made for (SYNC_ORIGIN, "" when none: then nothing shows). For Sync all, `prepare` saves what is
+// typed first, `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and
+// `autoSync` runs it when the app starts and after enrolling. `isOpen(id)` says whether a draft is the one in the editor (only that one
+// raises the conflict dialog). `onRemoved(draft)` is told when the person removed a draft that was deleted on another device (it shows
+// another note), and `onRestore(draft)` when they undo that.
 export function useSync({
   origin,
   deviceStore,
@@ -31,34 +50,49 @@ export function useSync({
   onRestore = () => {},
   settings = null,
   isOpen = () => true,
+}: {
+  origin: string;
+  deviceStore: { load(): Promise<DeviceRecord | null>; clear(): Promise<unknown>; save(record: DeviceRecord): Promise<unknown> };
+  drafts: SyncStore;
+  fetchFn?: typeof fetch;
+  delay?: number;
+  autoSync?: boolean;
+  prepare?: () => Promise<unknown>;
+  skip?: () => Set<string>;
+  onChanged?: () => void;
+  onRemoved?: (draft: LocalDraft) => unknown;
+  onRestore?: (draft: LocalDraft) => void;
+  settings?: Settings | null;
+  isOpen?: (id: string) => boolean;
 }) {
   const configured = !!origin && !!deviceStore && !!drafts;
-  const status = ref("off");
+  const status = ref<Status>("off");
   const error = ref(""); // the last message for the pop-up, "" when there is none
-  const info = ref(null); // {server} while enrolled
+  const info = ref<{ server: string } | null>(null); // while enrolled
   const summary = ref(""); // what the last Sync all did, "3 uploaded, 2 downloaded"
   const lastSync = ref(0); // when it finished, ms
-  const gone = ref(null); // {id}: the open draft was deleted on another device and the person has not chosen yet
+  const gone = ref<{ id: string } | null>(null); // the open draft was deleted on another device and the person has not chosen yet
   const setsFailed = ref(false); // the dictionary and ignore list did not sync last time (not a draft's failure)
-  const rejected = ref(null); // {id, title, reason}: the server refused this draft (too large, malformed); it stays here and is tried again
-  const serverConflict = ref(null); // {id, text, format, stamp}: the open draft and the server hold different text, and the person has not chosen yet
-  const notice = ref(null); // {id, kind: "updated" | "newer", text} about the open draft, or null
+  const rejected = ref<{ id: string; title: string; reason: string } | null>(null); // the server refused this draft; it stays here and is tried again
+  const serverConflict = ref<(Inspected & { id: string }) | null>(null); // the open draft and the server hold different text, and the person has not chosen yet
+  const notice = ref<Notice | null>(null); // about the open draft
   const enrolled = computed(() => info.value !== null);
 
-  let device = null;
+  let device: DeviceRecord | null = null;
 
   // One syncer for every path, so a conflict is announced the same way wherever it was found.
-  const syncer = () => createSyncer({ device, drafts, fetchFn, onGone: (id) => (gone.value = { id }), onRejected: noteRejected });
+  const syncer = () =>
+    createSyncer({ device: device as DeviceRecord, drafts, fetchFn, onGone: (id) => (gone.value = { id }), onRejected: noteRejected });
 
   // The server refused a draft: the chip says which and why, with no dialog. The text stays local and goes again on the next push.
-  async function noteRejected(id, reason) {
+  async function noteRejected(id: string, reason: string) {
     const d = await drafts.get(id).catch(() => null);
     rejected.value = { id, title: d ? summarize(d.content).title : "the draft", reason };
   }
 
   // The open draft and the server hold different text: ask the server for its text so the dialog can show and copy it. Any other draft in
   // that state is left exactly as it is until it is opened (Sync all does not touch it and nothing is counted).
-  async function raiseConflict(id) {
+  async function raiseConflict(id: string) {
     if (!isOpen(id) || !device) return;
     try {
       const got = await syncer().inspect(id);
@@ -72,9 +106,9 @@ export function useSync({
   function clearNotice() {
     if (notice.value?.kind !== "newer") notice.value = null;
   }
-  let timer = null;
-  const waiting = new Set();
-  let chain = Promise.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const waiting = new Set<string>();
+  let chain: Promise<unknown> = Promise.resolve();
 
   async function init() {
     if (!configured) return;
@@ -84,7 +118,7 @@ export function useSync({
     if (device && autoSync) syncAll();
   }
 
-  async function enroll(text) {
+  async function enroll(text: string) {
     error.value = "";
     try {
       // The page may only call the origin its policy names; an invite for another server would be blocked by the browser.
@@ -147,7 +181,7 @@ export function useSync({
   }
 
   // The sign-in and offline states shared by a push and a Sync all. True when the error was one of them.
-  function stopped(err) {
+  function stopped(err: unknown) {
     if (!(err instanceof SyncError)) return false;
     if (err.code === "unreachable") status.value = "offline";
     else if (err.code === "signin") {
@@ -196,7 +230,7 @@ export function useSync({
   }
 
   // The dictionary or ignore list changed on this device: sync them once changes have stopped for `delay`.
-  let wordsTimer = null;
+  let wordsTimer: ReturnType<typeof setTimeout> | undefined;
   function wordsChanged() {
     if (!device || !settings || status.value === "signin") return;
     clearTimeout(wordsTimer);
@@ -214,7 +248,7 @@ export function useSync({
   // Call when a draft was opened (its text is already on screen). In the background the server is asked whether it holds something
   // different. `canSwap()` says whether nothing has been typed since; `onSwapped()` shows the draft again after a newer one was stored. An
   // error shows nothing: the local text stays (docs/sync.md, "When sync happens"). Only a refused device changes the chip.
-  function noteOpened(id, { canSwap = () => true, onSwapped = () => {} } = {}) {
+  function noteOpened(id: string, { canSwap = () => true, onSwapped = () => {} }: Hooks = {}) {
     notice.value = null;
     gone.value = null;
     serverConflict.value = null;
@@ -225,10 +259,10 @@ export function useSync({
   }
 
   // The hooks of the last opened note, so a push that finds its draft still marked can look again.
-  let openHooks = {};
+  let openHooks: Hooks = {};
 
   // Asks the server about a draft that is open and shows what it found: a swap, a marker, or nothing. Runs inside the chain.
-  async function checkOpen(id, { loud = false } = {}) {
+  async function checkOpen(id: string, { loud = false } = {}) {
     if (!device) return;
     const { canSwap = () => true, onSwapped = () => {} } = openHooks;
     try {
@@ -253,7 +287,7 @@ export function useSync({
 
   // Call after a draft was saved. It is pushed once typing has stopped for `delay`; a failure leaves it unsynced, which the next save
   // retries (the draft is "changed" until the server has its hash). A save that finds the server changed is settled by the same rules as Sync all.
-  function draftSaved(id) {
+  function draftSaved(id: string) {
     if (!device || status.value === "signin") return;
     waiting.add(id);
     clearTimeout(timer);
@@ -265,7 +299,7 @@ export function useSync({
   // The person asked to save (Save, Ctrl+S, also to a file): push now, without the two-second wait, whether or not anything was typed. The
   // push looks at the server again afterwards (see run), so a "Newer on the server" marker can clear even when there was nothing to save.
   // `hooks` are noteOpened's.
-  async function saveRequested(id, hooks) {
+  async function saveRequested(id: string, hooks?: Hooks) {
     if (!device || status.value === "signin") return;
     openHooks = hooks ?? openHooks;
     waiting.add(id);
@@ -277,7 +311,7 @@ export function useSync({
   // Sync (the button, Ctrl+S): push the draft if it changed, then ask the server about it whether or not anything was pushed, so a newer
   // version or a delete made on another device is found. The push alone would not: for a draft that is unchanged here it assumes the
   // server is unchanged too. Nothing is written locally unless the server had something newer (see checkOpen). `hooks` are noteOpened's.
-  async function syncRequested(id, hooks) {
+  async function syncRequested(id: string, hooks?: Hooks) {
     if (!device || status.value === "signin") return;
     openHooks = hooks ?? openHooks;
     waiting.add(id);
@@ -291,7 +325,7 @@ export function useSync({
 
   // The server's current text for a draft, for the conflict dialog and its check when the person chooses: {text, format, stamp, deleted}, null
   // when the server has nothing, false when there is no device or the server cannot be reached (so the dialog knows it could not look).
-  async function inspectServer(id) {
+  async function inspectServer(id: string) {
     if (!device || status.value === "signin") return false;
     try {
       return await syncer().inspect(id);
@@ -302,7 +336,7 @@ export function useSync({
   }
 
   // Ask the server about the open draft now, so a conflict with it is known before the dialog is drawn for a conflict with a file.
-  function checkNow(id) {
+  function checkNow(id: string) {
     if (!device || status.value === "signin") return Promise.resolve();
     chain = chain.then(() => checkOpen(id));
     return chain;
@@ -310,7 +344,7 @@ export function useSync({
 
   // Probe before an automatic refresh from a file: {ahead, text}, or null when sync is off or the server cannot be reached (then the file's text
   // is applied here and pushed later).
-  async function probeServer(id) {
+  async function probeServer(id: string) {
     if (!device || status.value === "signin") return null;
     try {
       return await syncer().probe(id);
@@ -322,10 +356,10 @@ export function useSync({
 
   // Send this device's text to the server on top of what it holds (the person chose Keep or Overwrite). False when it did not go: the draft
   // stays pending and the chip says so.
-  function forcePush(id) {
+  function forcePush(id: string): Promise<boolean> {
     if (!device || status.value === "signin") return Promise.resolve(false);
     status.value = "syncing";
-    chain = chain.then(async () => {
+    const pushed = chain.then(async () => {
       try {
         const ok = await syncer().force(id);
         status.value = ok ? "synced" : "pending";
@@ -335,7 +369,8 @@ export function useSync({
         return false;
       }
     });
-    return chain;
+    chain = pushed;
+    return pushed;
   }
 
   const clearConflict = () => {
@@ -382,11 +417,11 @@ export function useSync({
     const n = notice.value;
     if (n?.kind !== "removed") return;
     notice.value = null;
-    onRestore(n.draft);
+    onRestore(n.draft as LocalDraft);
   }
 
   // A draft was deleted and its Undo offer has ended: push the tombstone now (the same push as for a save; see createSyncer.one).
-  const draftDeleted = (id) => saveRequested(id);
+  const draftDeleted = (id: string) => saveRequested(id);
 
   return {
     configured,

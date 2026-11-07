@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import "../styles/update-button.css"; // loaded with this component, so the web build never carries it
 import { Browser } from "@wailsio/runtime";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
@@ -9,23 +9,23 @@ const LATEST_RELEASE = "https://github.com/cthtrifork/harper-pad/releases/latest
 
 const info = ref({ version: "", enabled: false, reason: "" });
 // idle -> checking -> current | available | error; available -> downloading -> ready | error
-const state = ref("idle");
+const state = ref<"idle" | "checking" | "current" | "available" | "downloading" | "ready" | "error">("idle");
 const found = ref("");
 const error = ref("");
 const open = ref(false);
-const root = ref(null);
+const root = ref<HTMLElement | null>(null);
 
 const busy = () => state.value === "checking" || state.value === "downloading";
 // One spinner at a time: the chip spins only while the pop-up (whose status row spins) is closed.
 const chipBusy = () => busy() && !open.value;
 
-async function run(next, work) {
+async function run(next: typeof state.value, work: () => Promise<unknown>) {
   state.value = next;
   error.value = "";
   try {
     await work();
   } catch (err) {
-    error.value = String(err?.message || err);
+    error.value = String((err as Error)?.message || err);
     state.value = "error";
     open.value = true;
   }
@@ -33,7 +33,7 @@ async function run(next, work) {
 
 // A check that answers at once would flash "Checking" and vanish, so it is shown for at least this long.
 const MIN_CHECK_MS = 600;
-const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const check = () =>
   run("checking", async () => {
@@ -80,10 +80,10 @@ const action = computed(() => {
 
 const whatsNew = () => Browser.OpenURL(LATEST_RELEASE).catch(() => {});
 
-function outside(e) {
-  if (open.value && root.value && !root.value.contains(e.target)) open.value = false;
+function outside(e: Event) {
+  if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false;
 }
-function onKey(e) {
+function onKey(e: KeyboardEvent) {
   if (e.key === "Escape") open.value = false;
 }
 
@@ -93,7 +93,7 @@ onMounted(async () => {
   try {
     info.value = await UpdateService.UpdateInfo();
   } catch (err) {
-    info.value = { version: "", enabled: false, reason: String(err?.message || err) };
+    info.value = { version: "", enabled: false, reason: String((err as Error)?.message || err) };
   }
 });
 onBeforeUnmount(() => {

@@ -1,12 +1,14 @@
-<script setup>
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+<script setup lang="ts">
+import { computed, onBeforeUnmount, type PropType, ref, watch } from "vue";
+import type { countDoc, cursorOf } from "../lib/editor/stats.ts";
+import type { useSync } from "../lib/useSync.ts";
 import SyncChip from "./SyncChip.vue";
 
 const props = defineProps({
   state: { type: String, required: true }, // loading | ready | failed | off (opt-in on a phone)
   problemCount: { type: Number, default: 0 },
-  counts: { type: Object, required: true },
-  cursor: { type: Object, required: true },
+  counts: { type: Object as PropType<ReturnType<typeof countDoc>>, required: true },
+  cursor: { type: Object as PropType<ReturnType<typeof cursorOf>>, required: true },
   demo: { type: Boolean, default: false }, // demo mode shows fixed timings so screenshots are the same on every run
   setupMs: { type: Number, default: 0 },
   lintMs: { type: Number, default: 0 },
@@ -18,7 +20,7 @@ const props = defineProps({
   mode: { type: String, default: "edit" }, // edit | split | preview: the preview has no problems, caret or selection
   isMarkdown: { type: Boolean, default: false },
   startup: { type: Boolean, default: true }, // show "Harper ready" and the start-up and check timings (false after the first edit is saved)
-  sync: { type: Object, default: null }, // useSync's result; the chip shows only when sync is set up in this build
+  sync: { type: Object as PropType<ReturnType<typeof useSync> | null>, default: null }, // useSync's result; the chip shows only when sync is set up in this build
   autocorrect: { type: Boolean, default: false }, // autocorrect is on (its switch is in the Problems panel, so it shows here too)
 });
 const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect"]);
@@ -26,7 +28,7 @@ const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect"]);
 // "Harper ready" shows for a few seconds, then gives its place to the format switch.
 const READY_MS = 4000;
 const readyGone = ref(false);
-let readyTimer = null;
+let readyTimer: ReturnType<typeof setTimeout> | undefined;
 watch(
   () => props.state,
   (st) => {
@@ -42,7 +44,7 @@ const DEMO_SETUP_MS = 1200;
 const DEMO_LINT_MS = 20;
 
 // 850 ms -> "850 ms", 1234 ms -> "1.2 s".
-function fmt(ms) {
+function fmt(ms: number) {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 </script>

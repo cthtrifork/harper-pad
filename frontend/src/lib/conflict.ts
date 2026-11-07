@@ -1,5 +1,5 @@
 // The rules of the Keep or Overwrite dialog (docs/sync.md, "The Keep or Overwrite dialog"). Pure, so they are unit-tested;
-// `useConflict.js` wires them to the page.
+// `useConflict.ts` wires them to the page.
 
 import { whenStamp } from "./when.ts";
 
@@ -15,7 +15,7 @@ interface Side {
   at?: number;
 }
 
-interface ConflictModel {
+export interface ConflictModel {
   id?: string;
   name?: string;
   yours?: string;
@@ -35,8 +35,8 @@ interface Row {
   tint: boolean;
 }
 
-type Choice = "keep" | "overwrite";
-type Origin = "file" | "server" | "file and server";
+export type Choice = "keep" | "overwrite";
+export type Origin = "file" | "server" | "file and server";
 
 const stampOf = (side: { stamp: string } | null | undefined) => (side ? side.stamp : null);
 
@@ -94,7 +94,7 @@ export function copiesFor(m: ConflictModel): { text: string; from: Origin }[] {
   return copies;
 }
 
-interface ConflictOps {
+export interface ConflictOps {
   /** The current stamps of both sides, looked at now. */
   recheck(): Promise<{ file: { stamp: string } | null; server: { stamp: string } | null }>;
   /** Only when `applyFile`. */
@@ -109,7 +109,11 @@ interface ConflictOps {
 
 // Carries out the choice. Resolves to "stale" (nothing was written; the caller redraws) when either side moved since the dialog was drawn.
 
-export async function resolveConflict(choice: Choice, m: ConflictModel, ops: ConflictOps) {
+type Resolved =
+  | { status: "stale"; changed: ("file" | "server")[] }
+  | { status: "done"; copies: { id: string; from: Origin }[]; fileError: string; pushed: boolean | null };
+
+export async function resolveConflict(choice: Choice, m: ConflictModel, ops: ConflictOps): Promise<Resolved> {
   const now = await ops.recheck();
   const changed = [stampOf(now.file) !== stampOf(m.file) && "file", stampOf(now.server) !== stampOf(m.server) && "server"].filter(
     (side): side is "file" | "server" => !!side,

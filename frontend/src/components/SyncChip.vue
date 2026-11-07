@@ -1,11 +1,12 @@
-<script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
+import type { useSync } from "../lib/useSync.ts";
 import { clock } from "../lib/when.ts";
 
 // The sync chip in the status bar and its pop-up (docs/sync.md). `sync` is useSync's result. A bottom sheet on a phone (styles/sync-chip.css).
-const props = defineProps({ sync: { type: Object, required: true } });
+const props = defineProps({ sync: { type: Object as PropType<ReturnType<typeof useSync>>, required: true } });
 
-const LABELS = {
+const LABELS: Record<string, string> = {
   off: "Sync off",
   // The chip is the connection only (what happened to the draft is the status line's job, see lib/statusLine.ts).
   synced: "Sync on",
@@ -20,7 +21,7 @@ const label = computed(() => LABELS[status.value] ?? "Sync");
 const showForm = computed(() => status.value === "off" || status.value === "signin");
 
 const open = ref(false);
-const root = ref(null);
+const root = ref<HTMLElement | null>(null);
 const invite = ref("");
 const busy = ref(false);
 
@@ -66,10 +67,10 @@ async function turnOff() {
 }
 
 // A click anywhere else, or Escape, closes it.
-function onPointerDown(e) {
-  if (open.value && !root.value?.contains(e.target)) open.value = false;
+function onPointerDown(e: Event) {
+  if (open.value && !root.value?.contains(e.target as Node)) open.value = false;
 }
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") open.value = false;
 }
 onMounted(() => {

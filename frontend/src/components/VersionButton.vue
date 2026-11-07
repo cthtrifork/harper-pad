@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import "../styles/update-button.css"; // the same look as the desktop update button, loaded with this component
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { copyDiagnostics } from "../lib/diagnostics.ts";
@@ -7,19 +7,19 @@ import { copyDiagnostics } from "../lib/diagnostics.ts";
 // "Copy diagnostics" for a bug report or a slow start. There is nothing to update here: a reload loads the latest deploy.
 const version = import.meta.env.APP_VERSION || "dev";
 const open = ref(false);
-const root = ref(null);
+const root = ref<HTMLElement | null>(null);
 const copied = ref("");
-let copiedTimer = 0;
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
 async function copyReport() {
   copied.value = (await copyDiagnostics(version)) ? "Copied" : "Could not copy";
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => (copied.value = ""), 2000);
 }
-function outside(e) {
-  if (open.value && root.value && !root.value.contains(e.target)) open.value = false;
+function outside(e: Event) {
+  if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false;
 }
-function onKey(e) {
+function onKey(e: KeyboardEvent) {
   if (e.key === "Escape") open.value = false;
 }
 onMounted(() => {
