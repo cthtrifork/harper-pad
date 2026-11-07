@@ -30,6 +30,21 @@ type FileSave struct {
 	UnlinkedFrom []string `json:"unlinkedFrom"`
 }
 
+// offeredName is the name the page suggested, as the dialog may offer it: a base name (never a folder), "Untitled.md" when there is none, and at
+// most 100 characters, cut from the part before the extension. The page keeps names much shorter (60); this holds whatever it sends.
+func offeredName(suggested string) string {
+	name := filepath.Base(suggested)
+	if name == "." || name == string(filepath.Separator) {
+		return "Untitled.md"
+	}
+	ext := filepath.Ext(name)
+	if len([]rune(ext)) > 10 {
+		ext = ""
+	}
+	stem := []rune(strings.TrimSuffix(name, ext))
+	return string(stem[:min(len(stem), 100-len([]rune(ext)))]) + ext
+}
+
 // pickSavePath asks the user where to save. It returns "" when they cancel. It is a field of the service so tests can replace it.
 func pickSavePath(suggested, dir string) (string, error) {
 	if demo := demoSaveDir(); demo != "" { // the headless demo has no dialog: save to its folder under the suggested name
@@ -79,10 +94,7 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool, su
 		if pick == nil {
 			pick = pickSavePath
 		}
-		dir, name := "", filepath.Base(suggestedName)
-		if name == "." || name == string(filepath.Separator) {
-			name = "Untitled.md"
-		}
+		dir, name := "", offeredName(suggestedName)
 		if path != "" { // offer the file's own name and folder, not one made from the title
 			dir, name = filepath.Dir(path), filepath.Base(path)
 		}

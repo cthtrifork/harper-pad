@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -42,7 +43,7 @@ func TestCreateGetUpdate(t *testing.T) {
 		t.Fatalf("created %+v", d)
 	}
 	got, err := s.Get(d.ID)
-	if err != nil || got != d {
+	if err != nil || !reflect.DeepEqual(got, d) {
 		t.Fatalf("Get = %+v, %v; want %+v", got, err, d)
 	}
 	d.Content = "changed"
@@ -86,7 +87,7 @@ func TestListNewestFirstAndPaging(t *testing.T) {
 	s, _ := open(t)
 	tick(s)
 	for i := range 7 {
-		if _, err := s.Save(Draft{Content: fmt.Sprintf("note %d", i)}); err != nil {
+		if _, err := s.Save(Draft{Content: fmt.Sprintf("note %d", i), Title: fmt.Sprintf("note %d", i)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -196,38 +197,32 @@ func TestSearch(t *testing.T) {
 	}
 }
 
+// The summary the page sends is what the list shows, cut to the list's bounds, and each save replaces it.
 func TestSummaries(t *testing.T) {
 	s, _ := open(t)
-	d, _ := s.Save(Draft{Content: "## Release checklist\n- [x] Tag v0.1.0 when CI is green\n- [ ] Check the .desktop file\n* [X] Swap the icon\n+ [ ] Ask about releases\n\nRemember to tell Mikkel."})
-	plain, _ := s.Save(Draft{Format: FormatText, Content: "\n\n  Words to remember\nHarper, Wails,\nWebKitGTK."})
+	tick(s)
+	long := strings.Repeat("word ", 100)
+	tasks := []Task{{"one", true}, {"two", false}, {strings.Repeat("t", 200), true}, {"four", false}}
+	d, _ := s.Save(Draft{Content: "x", Title: long, Excerpt: long, Tasks: tasks, TasksTotal: 4, TasksDone: 9})
 	empty, _ := s.Save(Draft{})
-	l, _ := s.List(10, 0)
 	by := map[string]Summary{}
+	l, _ := s.List(10, 0)
 	for _, x := range l.Drafts {
 		by[x.ID] = x
 	}
 	a := by[d.ID]
-	if a.Title != "Release checklist" || a.TasksTotal != 4 || a.TasksDone != 2 || len(a.Tasks) != 3 ||
-		a.Tasks[0] != (Task{"Tag v0.1.0 when CI is green", true}) || a.Tasks[1].Done || !a.Tasks[2].Done {
-		t.Errorf("task draft = %+v", a)
-	}
-	if a.Excerpt != "Remember to tell Mikkel." {
-		t.Errorf("excerpt = %q", a.Excerpt)
-	}
-	p := by[plain.ID]
-	if p.Title != "Words to remember" || p.Excerpt != "Harper, Wails, WebKitGTK." || p.TasksTotal != 0 || len(p.Tasks) != 0 || p.Format != FormatText {
-		t.Errorf("plain draft = %+v", p)
+	if len([]rune(a.Title)) != 80 || len([]rune(a.Excerpt)) != 160 || len(a.Tasks) != 3 || len([]rune(a.Tasks[2].Text)) != 120 || a.TasksTotal != 4 || a.TasksDone != 4 {
+		t.Errorf("summary = %+v", a)
 	}
 	if e := by[empty.ID]; e.Title != "Untitled" || e.Excerpt != "" || e.Tasks == nil {
 		t.Errorf("empty draft = %+v", e)
 	}
-	long := strings.Repeat("word ", 100)
-	title, excerpt, _, _, _ := summarize("# " + long + "\n" + long)
-	if n := len([]rune(title)); n != 80 || !strings.HasSuffix(title, "…") {
-		t.Errorf("title is %d characters: %q", n, title)
+	d.Title, d.Tasks = "Second", nil
+	if _, err := s.Save(d); err != nil {
+		t.Fatal(err)
 	}
-	if n := len([]rune(excerpt)); n != 160 {
-		t.Errorf("excerpt is %d characters", n)
+	if l, _ = s.List(10, 0); l.Drafts[0].Title != "Second" || len(l.Drafts[0].Tasks) != 0 {
+		t.Errorf("summary after the second save: %+v", l.Drafts[0])
 	}
 }
 

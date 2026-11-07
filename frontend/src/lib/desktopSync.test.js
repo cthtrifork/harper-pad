@@ -37,6 +37,7 @@ test("each operation goes to the Go method that does the same thing", async () =
   const { calls, bindings } = fakeBindings();
   const d = createDesktopSyncDrafts(bindings);
   const draft = { id: "a".repeat(32), content: "x" };
+  const sent = { ...draft, title: "x", excerpt: "", tasks: [], tasksTotal: 0, tasksDone: 0 }; // Go stores the summary the page makes
   await d.get("a");
   await d.save(draft);
   await d.allIds();
@@ -47,12 +48,12 @@ test("each operation goes to the Go method that does the same thing", async () =
   await d.applyRemoteDelete("e", 5, 6);
   assert.deepEqual(calls, [
     ["DraftService", "GetDraft", "a"],
-    ["DraftService", "SaveDraft", draft],
+    ["DraftService", "SaveDraft", sent],
     ["SyncService", "AllDraftIDs"],
     ["SyncService", "DraftChanged", "b"],
     ["SyncService", "DraftChanges"],
     ["SyncService", "DraftSyncState", "c"],
-    ["SyncService", "ApplyRemote", draft, 4],
+    ["SyncService", "ApplyRemote", sent, 4],
     ["SyncService", "ApplyRemoteDelete", "e", 5, 6],
   ]);
 });

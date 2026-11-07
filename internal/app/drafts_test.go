@@ -9,7 +9,7 @@ import (
 
 func TestDraftsThroughTheService(t *testing.T) {
 	s := newTestServices(t).Drafts
-	d, err := s.SaveDraft(store.Draft{Content: "# Plan\n- [ ] one\n- [x] two"})
+	d, err := s.SaveDraft(store.Draft{Content: "# Plan\n- [ ] one\n- [x] two", Title: "Plan", TasksTotal: 2, TasksDone: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

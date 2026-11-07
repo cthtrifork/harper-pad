@@ -9,13 +9,16 @@ const TYPES = [
 ];
 
 // The file name offered for a draft, on the web and (passed to DraftService.SaveDraftToFile) on desktop. Cases: testdata/filename.json.
+// At most 60 characters before the extension: a longer title ends at the last word that fits (when that keeps at least half of it, else it
+// is cut), and no name ends in a space, dot or dash.
+const MAX_NAME = 60;
 export const fileName = (title, format) => {
   const cleaned = title.replace(/[^\p{L}\p{N}._ -]+/gu, "").replace(/^[ .-]+|[ .-]+$/g, "");
-  const name =
-    Array.from(cleaned || "Untitled")
-      .slice(0, 60)
-      .join("")
-      .trim() || "Untitled";
+  const chars = Array.from(cleaned || "Untitled");
+  let kept = chars.slice(0, MAX_NAME);
+  const space = kept.lastIndexOf(" ");
+  if (chars.length > MAX_NAME && chars[MAX_NAME] !== " " && space >= MAX_NAME / 2) kept = kept.slice(0, space);
+  const name = kept.join("").replace(/[ .-]+$/, "") || "Untitled";
   return `${name}${format === "text" ? ".txt" : ".md"}`;
 };
 

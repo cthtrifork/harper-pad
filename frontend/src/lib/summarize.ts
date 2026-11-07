@@ -1,6 +1,6 @@
-// What the drafts list shows for a draft: its title, an excerpt, and a preview of its markdown task lines. This is the same
-// work as `summarize` in internal/store/drafts.go (the desktop build does it in Go when a draft is saved); the web build, which has
-// no Go side, does it here. Keep the two the same: both run the cases in internal/store/testdata/summarize.json (`npm test` here, TestSummarizeFixtures there), so add a case to that file when you change either.
+// What the drafts list shows for a draft: its title, an excerpt, and a preview of its markdown task lines. The page makes it for both
+// builds: the web store keeps it in IndexedDB, and on desktop it goes to Go with every write (`withSummary`), which stores it as it is
+// (within the list's bounds) so listing never reads the text. Cases: testdata/summarize.json.
 
 const TASK = /^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$/;
 const HEAD = /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?)/;
@@ -50,3 +50,6 @@ export function summarize(content: string) {
     tasksDone: done,
   };
 }
+
+// The draft with its summary filled in, ready for Go's DraftService.SaveDraft, SaveDraftToFile and SyncService.ApplyRemote.
+export const withSummary = <T extends { content: string }>(draft: T) => ({ ...draft, ...summarize(draft.content) });

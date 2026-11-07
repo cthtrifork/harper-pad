@@ -59,6 +59,16 @@ export class Draft {
     "updatedAt": number;
 
     /**
+     * Title, Excerpt, Tasks, TasksTotal and TasksDone are what the drafts list shows for the text. The page makes them (lib/summarize.ts
+     * has the text anyway), Save and ApplyRemote store them within the list's bounds so listing never reads the text, and Get leaves them empty.
+     */
+    "title": string;
+    "excerpt": string;
+    "tasks": Task[];
+    "tasksTotal": number;
+    "tasksDone": number;
+
+    /**
      * FilePath is the file the draft was saved to ("" when it never was). The draft stays here too; Save ignores this field
      * and only SetFile changes it, so the path always comes from the save dialog and never from the page.
      */
@@ -81,6 +91,21 @@ export class Draft {
         if (!("updatedAt" in $$source)) {
             this["updatedAt"] = 0;
         }
+        if (!("title" in $$source)) {
+            this["title"] = "";
+        }
+        if (!("excerpt" in $$source)) {
+            this["excerpt"] = "";
+        }
+        if (!("tasks" in $$source)) {
+            this["tasks"] = [];
+        }
+        if (!("tasksTotal" in $$source)) {
+            this["tasksTotal"] = 0;
+        }
+        if (!("tasksDone" in $$source)) {
+            this["tasksDone"] = 0;
+        }
         if (!("filePath" in $$source)) {
             this["filePath"] = "";
         }
@@ -92,7 +117,11 @@ export class Draft {
      * Creates a new Draft instance from a string or object.
      */
     static createFrom($$source: any = {}): Draft {
+        const $$createField7_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tasks" in $$parsedSource) {
+            $$parsedSource["tasks"] = $$createField7_0($$parsedSource["tasks"]);
+        }
         return new Draft($$parsedSource as Partial<Draft>);
     }
 }
@@ -120,7 +149,7 @@ export class List {
      * Creates a new List instance from a string or object.
      */
     static createFrom($$source: any = {}): List {
-        const $$createField0_0 = $$createType2;
+        const $$createField0_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("drafts" in $$parsedSource) {
             $$parsedSource["drafts"] = $$createField0_0($$parsedSource["drafts"]);
@@ -192,7 +221,7 @@ export class Summary {
      * Creates a new Summary instance from a string or object.
      */
     static createFrom($$source: any = {}): Summary {
-        const $$createField7_0 = $$createType4;
+        const $$createField7_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tasks" in $$parsedSource) {
             $$parsedSource["tasks"] = $$createField7_0($$parsedSource["tasks"]);
@@ -267,7 +296,7 @@ export class Task {
 
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = Summary.createFrom;
+const $$createType1 = Task.createFrom;
 const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = Task.createFrom;
+const $$createType3 = Summary.createFrom;
 const $$createType4 = $Create.Array($$createType3);

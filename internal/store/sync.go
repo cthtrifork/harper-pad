@@ -182,7 +182,7 @@ func (s *Store) ApplyRemote(d Draft, version int64) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
-	sm := summarizeColumns(d.Format, d.Content)
+	sm := clampSummary(d)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Draft{}, err

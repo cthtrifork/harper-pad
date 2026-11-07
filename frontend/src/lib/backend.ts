@@ -9,7 +9,7 @@ import { createDesktopSyncDrafts } from "./desktopSync.ts";
 import { withLastOpened } from "./lastOpened.ts";
 import { createSettingsSyncStore } from "./settingsSync.ts";
 import { createDeviceStore } from "./syncDevice.ts";
-import { summarize } from "./summarize.ts";
+import { withSummary } from "./summarize.ts";
 import { fileName, saveWebFile, sharesFiles } from "./webFiles.js";
 
 type Bindings = typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
@@ -127,20 +127,18 @@ export async function getDraft(id: string) {
 
 // Creates a draft (empty id) or updates one, and returns it as stored. Saving an id that is no longer stored brings it back.
 export async function saveDraft(draft: Draft) {
-  return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(draft);
+  return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(withSummary(draft));
 }
 
 // Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. `conflict` is true when something
 // else changed the file since it was written, unless `overwrite` is set.
 export async function saveDraftToFile(draft: Draft, saveAs: boolean, overwrite = false) {
-  // The name the save dialog offers is made here, from the title, as on the web; Go keeps only its base name.
-  if (!isWeb)
-    return (await bindings()).DraftService.SaveDraftToFile(
-      draft,
-      saveAs,
-      overwrite,
-      fileName(summarize(draft.content).title, draft.format),
-    );
+  // The summary goes with the draft (Go stores it as it is), and the name the save dialog offers is made here from its title, as on the web;
+  // Go keeps only the base name.
+  if (!isWeb) {
+    const sent = withSummary(draft);
+    return (await bindings()).DraftService.SaveDraftToFile(sent, saveAs, overwrite, fileName(sent.title, sent.format));
+  }
   return saveWebFile(
     web,
     (id: string) => idbGet(`file:${id}`),

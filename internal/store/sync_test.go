@@ -140,7 +140,7 @@ func TestApplyRemoteKeepsTheServersTimes(t *testing.T) {
 	if err := s.SetFile(local.ID, "/tmp/note.md", 77); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.ApplyRemote(Draft{ID: local.ID, Format: FormatMarkdown, Content: "# From the server\n- [x] done", CreatedAt: 1000, UpdatedAt: 2000}, 5)
+	got, err := s.ApplyRemote(Draft{ID: local.ID, Format: FormatMarkdown, Content: "# From the server\n- [x] done", Title: "From the server", TasksTotal: 1, TasksDone: 1, CreatedAt: 1000, UpdatedAt: 2000}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestApplyRemoteKeepsTheServersTimes(t *testing.T) {
 	}
 	l, _ := s.List(10, 0)
 	if len(l.Drafts) != 1 || l.Drafts[0].Title != "From the server" || l.Drafts[0].TasksDone != 1 {
-		t.Errorf("summary not recomputed: %+v", l.Drafts)
+		t.Errorf("the page's summary was not stored: %+v", l.Drafts)
 	}
 	if c := changes(t, s); len(c.Changed) != 0 {
 		t.Errorf("an applied draft counts as changed: %+v", c)
