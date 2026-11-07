@@ -1,4 +1,4 @@
-// The pure part of personal.js: changing Harper's dictionary and ignore list, so the sync wiring can be tested with a fake Harper.
+// The pure part of personal.ts: changing Harper's dictionary and ignore list, so the sync wiring can be tested with a fake Harper.
 
 // The parts of a Harper linter used here, so a fake can stand in.
 interface IgnoreList {
@@ -6,7 +6,7 @@ interface IgnoreList {
   clearIgnoredLints(): Promise<void>;
   importIgnoredLints(json: string): Promise<void>;
 }
-interface WordList extends IgnoreList {
+export interface WordList extends IgnoreList {
   exportWords(): Promise<string[]>;
   importWords(words: string[]): Promise<void>;
   dispose(): Promise<void>;

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { connect, lintText } from "./harper.js";
+import { connect, lintText } from "./harper.ts";
 
-// A stand-in for the worker: answers each message from `handlers` after a tick, like harperWorker.js does.
+// A stand-in for the worker: answers each message from `handlers` after a tick, like harperWorker.ts does.
 function fakeWorker(handlers) {
   const w = {
     sent: [],

@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from "vue";
-import { useModalDialog } from "../lib/useModalDialog.js";
+import { useModalDialog } from "../lib/useModalDialog.ts";
 
 // A note that was deleted on another device must be kept or removed before the person goes on, so this is a modal dialog: the page behind
 // it is inert, and Escape does not close it (the cancel event is stopped). It is the one place the app asks for a choice before it lets the

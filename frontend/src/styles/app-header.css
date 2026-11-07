@@ -366,7 +366,7 @@
 }
 
 /* Press feedback on every icon button: the icon shrinks a little while it is down and springs back (the :active state needs the
-   touchstart listener in main.js on iOS). Sync turns once per press and keeps turning while it is busy; export lifts. */
+   touchstart listener in main.ts on iOS). Sync turns once per press and keeps turning while it is busy; export lifts. */
 .bar .icon,
 .bar .save-icon,
 .bar .export-icon,

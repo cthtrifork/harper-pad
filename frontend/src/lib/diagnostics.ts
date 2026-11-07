@@ -1,5 +1,5 @@
 // The report pressing the version copies, to paste into a bug report: one line of JSON. Nothing is sent anywhere and it holds no draft
-// text. main.js and App.vue record the start-up timings.
+// text. main.ts and App.vue record the start-up timings.
 
 // The browser APIs below that lib.dom.d.ts does not declare.
 interface Connection {

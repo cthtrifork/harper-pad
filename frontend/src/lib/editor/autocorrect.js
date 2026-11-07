@@ -2,7 +2,7 @@ import { isolateHistory } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
 import { forEachDiagnostic } from "@codemirror/lint";
 import { Annotation, StateField } from "@codemirror/state";
-import { addRange, isFinished, isSpacing, nonOverlapping, touches } from "../autocorrect.js";
+import { addRange, isFinished, isSpacing, nonOverlapping, touches } from "../autocorrect.ts";
 
 // Autocorrect in the editor. Kept in the editor state, so opening another draft forgets it:
 //   - touched: the text the user typed or pasted. Autocorrect never fixes text that was already in the draft;
