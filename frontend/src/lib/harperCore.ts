@@ -22,6 +22,7 @@ export interface Finding {
   hash?: bigint;
 }
 
+// Strings, not the enum, for the page: importing a value from harper.js there would pull it into the main bundle (+41 KB).
 const SUGGESTION_KIND: Record<SuggestionKind, Fix["kind"]> = {
   [SuggestionKind.Replace]: "replace",
   [SuggestionKind.Remove]: "remove",
