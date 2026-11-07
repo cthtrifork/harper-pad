@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applySize, DEFAULT_SIZE, loadSize, SIZES, saveSize, stepSize } from "./fontSize.js";
+import { applySize, DEFAULT_SIZE, loadSize, SIZES, saveSize, stepSize } from "./fontSize.ts";
 
 const memory = () => {
   const m = new Map();

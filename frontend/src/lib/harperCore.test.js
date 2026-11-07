@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { LocalLinter } from "harper.js";
 import { slimBinaryInlined } from "harper.js/slimBinaryInlined";
-import { harperMethods } from "./harperCore.js";
+import { harperMethods } from "./harperCore.ts";
 
 // The real Harper, not a stand-in: these fail when a harper.js update changes what the worker relies on (the method names, the shape
 // of a finding, what a hash is), so a Renovate bump cannot merge unseen. The inlined binary is the one that loads in Node.

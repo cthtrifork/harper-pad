@@ -11,7 +11,7 @@ import {
   nonOverlapping,
   savePrefs,
   touches,
-} from "./autocorrect.js";
+} from "./autocorrect.ts";
 
 const finding = (kind, fixes) => ({ kind, fixes: fixes.map((text) => ({ kind: "replace", text })) });
 

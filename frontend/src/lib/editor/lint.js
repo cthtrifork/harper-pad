@@ -1,7 +1,7 @@
 import { linter } from "@codemirror/lint";
 import { StateEffect } from "@codemirror/state";
-import { isMarkdownSpacing, isSafe, isSpacing } from "../autocorrect.js";
-import { lintText } from "../harper.js";
+import { isMarkdownSpacing, isSafe, isSpacing } from "../autocorrect.ts";
+import { lintText } from "../harper.ts";
 import { applyFixes, dueFixes } from "./autocorrect.js";
 
 // Harper's lint kinds that are plain misspellings get the error colour; the rest are suggestions about style.
