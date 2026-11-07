@@ -680,7 +680,7 @@ func TestSaveAsOntoAnotherDraftsFileMovesTheLink(t *testing.T) {
 	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "shared.md")
 	s.pickPath = func(string, string) (string, error) { return target, nil }
-	first, err := s.SaveDraftToFile(store.Draft{Content: "# First\nbody"}, false, false, "")
+	first, err := s.SaveDraftToFile(store.Draft{Content: "# First\nbody", Title: "First"}, false, false, "")
 	if err != nil || len(first.UnlinkedFrom) != 0 {
 		t.Fatalf("first = %+v, %v", first, err)
 	}

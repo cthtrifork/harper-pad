@@ -1,0 +1,241 @@
+[
+  {
+    "content": "## Release checklist\n- [x] Tag v0.1.0 when CI is green\n- [ ] Check the .desktop file\n* [X] Swap the icon\n+ [ ] Ask about releases\n\nRemember to tell Mikkel.",
+    "excerpt": "Remember to tell Mikkel.",
+    "name": "task list, headings and an excerpt",
+    "tasks": [
+      {
+        "text": "Tag v0.1.0 when CI is green",
+        "done": true
+      },
+      {
+        "text": "Check the .desktop file",
+        "done": false
+      },
+      {
+        "text": "Swap the icon",
+        "done": true
+      }
+    ],
+    "tasksDone": 2,
+    "tasksTotal": 4,
+    "title": "Release checklist"
+  },
+  {
+    "content": "\n\n  Words to remember\nHarper, Wails,\nWebKitGTK.",
+    "excerpt": "Harper, Wails, WebKitGTK.",
+    "name": "plain text skips blank lines",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "Words to remember"
+  },
+  {
+    "content": "",
+    "excerpt": "",
+    "name": "empty draft",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "Untitled"
+  },
+  {
+    "content": "  \n\t\n   ",
+    "excerpt": "",
+    "name": "only whitespace",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "Untitled"
+  },
+  {
+    "content": "# word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \nword word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word ",
+    "excerpt": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word…",
+    "name": "title and excerpt are clipped",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "word word word word word word word word word word word word word word word word…"
+  },
+  {
+    "content": "###### Deep heading\nbody",
+    "excerpt": "body",
+    "name": "heading levels are removed",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "Deep heading"
+  },
+  {
+    "content": "- first item\n- second item",
+    "excerpt": "- second item",
+    "name": "a list item as the title",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "first item"
+  },
+  {
+    "content": "- [ ] the only task",
+    "excerpt": "",
+    "name": "a task as the title",
+    "tasks": [
+      {
+        "text": "the only task",
+        "done": false
+      }
+    ],
+    "tasksDone": 0,
+    "tasksTotal": 1,
+    "title": "the only task"
+  },
+  {
+    "content": "#hashtag title\nmore",
+    "excerpt": "more",
+    "name": "a hash without a space is kept",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "#hashtag title"
+  },
+  {
+    "content": "# Title\r\n- [x] done\r\n- [ ] open\r\nBody text\r\n",
+    "excerpt": "Body text",
+    "name": "CRLF line endings",
+    "tasks": [
+      {
+        "text": "done",
+        "done": true
+      },
+      {
+        "text": "open",
+        "done": false
+      }
+    ],
+    "tasksDone": 1,
+    "tasksTotal": 2,
+    "title": "Title"
+  },
+  {
+    "content": "t\n- [ ] 1\n- [x] 2\n- [ ] 3\n- [x] 4\n- [ ] 5",
+    "excerpt": "",
+    "name": "only the first three tasks are listed",
+    "tasks": [
+      {
+        "text": "1",
+        "done": false
+      },
+      {
+        "text": "2",
+        "done": true
+      },
+      {
+        "text": "3",
+        "done": false
+      }
+    ],
+    "tasksDone": 2,
+    "tasksTotal": 5,
+    "title": "t"
+  },
+  {
+    "content": "t\nbefore\n- [ ] task\nafter",
+    "excerpt": "before after",
+    "name": "task lines stay out of the excerpt",
+    "tasks": [
+      {
+        "text": "task",
+        "done": false
+      }
+    ],
+    "tasksDone": 0,
+    "tasksTotal": 1,
+    "title": "t"
+  },
+  {
+    "content": "t\n- [ ]\n- [ ]   \n- [x] real",
+    "excerpt": "- [ ] - [ ]",
+    "name": "a task without text is not a task",
+    "tasks": [
+      {
+        "text": "real",
+        "done": true
+      }
+    ],
+    "tasksDone": 1,
+    "tasksTotal": 1,
+    "title": "t"
+  },
+  {
+    "content": "t\n  - [ ] indented\n\t* [X] tabbed\n+ [x] plus",
+    "excerpt": "",
+    "name": "indented and mixed markers",
+    "tasks": [
+      {
+        "text": "indented",
+        "done": false
+      },
+      {
+        "text": "tabbed",
+        "done": true
+      },
+      {
+        "text": "plus",
+        "done": true
+      }
+    ],
+    "tasksDone": 2,
+    "tasksTotal": 3,
+    "title": "t"
+  },
+  {
+    "content": "t\n-[ ] no space\n- [] empty box\n- [y] wrong mark\n1. [ ] numbered",
+    "excerpt": "-[ ] no space - [] empty box - [y] wrong mark 1. [ ] numbered",
+    "name": "not tasks",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "t"
+  },
+  {
+    "content": "t\n- [ ] xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "excerpt": "",
+    "name": "a long task is clipped",
+    "tasks": [
+      {
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+        "done": false
+      }
+    ],
+    "tasksDone": 0,
+    "tasksTotal": 1,
+    "title": "t"
+  },
+  {
+    "content": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+    "excerpt": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀…",
+    "name": "emoji count once",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀…"
+  },
+  {
+    "content": "Café déjà vu\nnaïve résumé",
+    "excerpt": "naïve résumé",
+    "name": "accented letters",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "Café déjà vu"
+  },
+  {
+    "content": "t\nA   lot   of\n\n   space\there",
+    "excerpt": "A lot of space here",
+    "name": "spaces collapse in the excerpt",
+    "tasks": [],
+    "tasksDone": 0,
+    "tasksTotal": 0,
+    "title": "t"
+  }
+]

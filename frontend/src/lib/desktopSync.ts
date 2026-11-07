@@ -17,6 +17,7 @@ export const SYNC_STORE_METHODS = [
 ];
 
 import type { Draft, SyncState } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
+import { withSummary } from "./summarize.ts";
 
 type Bindings = Pick<typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app"), "DraftService" | "SyncService">;
 
@@ -25,7 +26,7 @@ export function createDesktopSyncDrafts(bindings: () => Promise<Bindings>) {
   const sync = async () => (await bindings()).SyncService;
   return {
     get: async (id: string) => (await drafts()).GetDraft(id),
-    save: async (draft: Draft) => (await drafts()).SaveDraft(draft),
+    save: async (draft: Draft) => (await drafts()).SaveDraft(withSummary(draft)),
     allIds: async () => (await sync()).AllDraftIDs(),
     isChanged: async (id: string) => (await sync()).DraftChanged(id),
     changes: async () => (await sync()).DraftChanges(),
@@ -38,7 +39,7 @@ export function createDesktopSyncDrafts(bindings: () => Promise<Bindings>) {
         deleted: !!state.deleted,
         version: state.version,
       }),
-    applyRemote: async (draft: Draft, version: number) => (await sync()).ApplyRemote(draft, version),
+    applyRemote: async (draft: Draft, version: number) => (await sync()).ApplyRemote(withSummary(draft), version),
     applyRemoteDelete: async (id: string, version: number, updatedAt: number) => (await sync()).ApplyRemoteDelete(id, version, updatedAt),
   };
 }
