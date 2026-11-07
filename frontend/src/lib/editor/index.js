@@ -4,7 +4,7 @@ import { Compartment, EditorState } from "@codemirror/state";
 import { dropCursor, EditorView, keymap, placeholder } from "@codemirror/view";
 import { autoField, fixAllSafe, reportAutocorrect, undoFixes } from "./autocorrect.js";
 import { harperSource, relint } from "./lint.js";
-import { modeExtensions } from "./mode.js";
+import { loadMarkdownMode, markdownLoaded, modeExtensions } from "./mode.js";
 import { collectProblems, sameProblems } from "./problems.js";
 import { countDoc, cursorOf } from "./stats.js";
 import { theme } from "./theme.js";
@@ -107,11 +107,39 @@ export function createEditor(
     }),
   ];
   const view = new EditorView({ parent, state: EditorState.create({ doc, extensions }) });
-  editors.set(view, { extensions, ctx, mode });
+  editors.set(view, { extensions, ctx, mode, current: initialMode });
+  catchUpMode(view);
   reportStats(ctx, view.state.doc);
   onDoc?.(view.state.doc.toString());
   onCursor?.(cursorOf(view.state));
   return view;
+}
+
+// The markdown parser is loaded after the first paint (mode.js): a markdown document first shows as plain text, and once it has
+// arrived the mode is applied again, to whatever mode the editor is in by then. The document and its undo history are untouched.
+function catchUpMode(view) {
+  const entry = editors.get(view);
+  if (entry.current.format !== "markdown" || markdownLoaded()) return;
+  afterNextPaint()
+    .then(loadMarkdownMode)
+    .then(() => {
+      const now = editors.get(view);
+      if (now && view.dom.isConnected) view.dispatch({ effects: now.mode.reconfigure(modeExtensions(now.current)) });
+    })
+    .catch(() => {}); // stays plain text; the editor works without it
+}
+
+// One frame after the editor has been painted; the timer is the fallback for a hidden window, where no animation frames run.
+function afterNextPaint() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 300);
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        clearTimeout(timer);
+        resolve();
+      }),
+    );
+  });
 }
 
 function reportStats(ctx, doc) {
@@ -123,6 +151,8 @@ function reportStats(ctx, doc) {
 
 // Switch the format (markdown or text) and whether it is the Split source pane, without touching the document.
 export function setMode(view, mode) {
+  editors.get(view).current = mode;
+  catchUpMode(view);
   view.dispatch({ effects: editors.get(view).mode.reconfigure(modeExtensions(mode)) });
 }
 
@@ -134,6 +164,8 @@ export function loadDocument(view, text, onStats, mode = DEFAULT_MODE, onDoc, on
   const { extensions, ctx, mode: compartment } = editors.get(view);
   const { anchor, head } = view.state.selection.main;
   const hadFocus = view.hasFocus;
+  editors.get(view).current = mode;
+  catchUpMode(view);
   const withMode = extensions.map((e, i) => (i === 0 ? compartment.of(modeExtensions(mode)) : e));
   const selection = keepSelection ? { anchor: Math.min(anchor, text.length), head: Math.min(head, text.length) } : undefined;
   view.setState(EditorState.create({ doc: text, selection, extensions: withMode }));

@@ -1,10 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import AppHeader from "./components/AppHeader.vue";
-import DeletedElsewhereDialog from "./components/DeletedElsewhereDialog.vue";
-import DraftsDrawer from "./components/DraftsDrawer.vue";
 import Editor from "./components/Editor.vue";
-import Preview from "./components/Preview.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ToastBar from "./components/ToastBar.vue";
@@ -26,6 +23,12 @@ const props = defineProps({ start: { type: Object, required: true } });
 const UpdateButton = defineAsyncComponent(() =>
   import.meta.env.MODE === "web" ? import("./components/VersionButton.vue") : import("./components/UpdateButton.vue"),
 );
+
+// Not on screen at first paint, so out of the first bundle: Preview (with marked and the code highlighter), the drafts drawer and the
+// dialog load when they are first shown, which keeps the JavaScript the phone has to fetch and run before the editor appears smaller.
+const DeletedElsewhereDialog = defineAsyncComponent(() => import("./components/DeletedElsewhereDialog.vue"));
+const DraftsDrawer = defineAsyncComponent(() => import("./components/DraftsDrawer.vue"));
+const Preview = defineAsyncComponent(() => import("./components/Preview.vue"));
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
 const state = ref("loading");
