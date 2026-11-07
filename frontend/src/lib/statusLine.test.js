@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { statusLine } from "./statusLine.js";
+import { statusLine } from "./statusLine.ts";
 
 const saved = { state: "saved", text: "Saved", fileState: "none", fileName: "" };
 const on = (status, extra = {}) => ({ enrolled: true, status, newer: false, ...extra });

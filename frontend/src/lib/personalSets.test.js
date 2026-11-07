@@ -2,7 +2,7 @@
 // semantics: words and ignored hashes can be added, the ignore list can be cleared, a word cannot be removed.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyIgnored, exportList, hashesOf, removeIgnored, withoutWords } from "./personalSets.js";
+import { applyIgnored, exportList, hashesOf, removeIgnored, withoutWords } from "./personalSets.ts";
 
 function fakeLinter(words = [], hashes = []) {
   const l = {

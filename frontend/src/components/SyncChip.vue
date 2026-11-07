@@ -6,7 +6,7 @@ const props = defineProps({ sync: { type: Object, required: true } });
 
 const LABELS = {
   off: "Sync off",
-  // The chip is the connection only (what happened to the draft is the status line's job, see lib/statusLine.js).
+  // The chip is the connection only (what happened to the draft is the status line's job, see lib/statusLine.ts).
   synced: "Sync on",
   syncing: "Sync on",
   pending: "Sync on",

@@ -3,7 +3,7 @@ import * as backend from "./backend.ts";
 
 const { isWeb } = backend;
 import { createFileChange } from "./fileChange.js";
-import { saveLastOpened } from "./lastOpened.js";
+import { saveLastOpened } from "./lastOpened.ts";
 
 // Kept short: the flush on pagehide cannot finish writing to IndexedDB, so a reload before the save has started loses the text.
 const SAVE_DELAY_MS = 100;

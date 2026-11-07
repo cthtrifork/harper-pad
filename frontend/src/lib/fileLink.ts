@@ -4,7 +4,14 @@ export const UNLINK_FIRST = "Unlink first to save as another file";
 
 // `canUnlink` is false on the web, where a file is only a picker handle. `showDirty` is the dot: the draft has changes the file does not have
 // yet (`fileState` "stale"); never with a struck-through chip, without a link, or on the web.
-export function fileControls({ filePath, fileProblem, canUnlink, fileState }) {
+export interface FileLinkState {
+  filePath?: string;
+  fileProblem?: unknown;
+  canUnlink: boolean;
+  fileState?: string;
+}
+
+export function fileControls({ filePath, fileProblem, canUnlink, fileState }: FileLinkState) {
   const linked = !!filePath && canUnlink;
   return {
     showSaveAs: !linked,
@@ -14,9 +21,9 @@ export function fileControls({ filePath, fileProblem, canUnlink, fileState }) {
 }
 
 // The words for the dot, for its title and for screen readers.
-export const dirtyText = (name) => `Your draft has changes not yet in ${name}. Ctrl+S updates it.`;
+export const dirtyText = (name: string) => `Your draft has changes not yet in ${name}. Ctrl+S updates it.`;
 
 // What Ctrl+Shift+S (or the Save to disk button) does: "ask" for a file, or "hint" that the link must go first.
-export function saveAsAction(state) {
+export function saveAsAction(state: FileLinkState): "ask" | "hint" {
   return fileControls(state).showSaveAs ? "ask" : "hint";
 }

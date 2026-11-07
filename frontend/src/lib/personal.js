@@ -1,7 +1,7 @@
 import { loadSettings, saveSettings } from "./backend.ts";
-import { hashesOf } from "./personalSets.js";
+import { hashesOf } from "./personalSets.ts";
 
-export { applyIgnored, ignoredHashes, removeIgnored, withoutWord, withoutWords } from "./personalSets.js";
+export { applyIgnored, ignoredHashes, removeIgnored, withoutWord, withoutWords } from "./personalSets.ts";
 
 // What each ignored finding was, by hash. Harper's export holds only hashes of the finding in its context, so without this the list
 // could not say what was ignored. Hashes are kept as text: they are 64-bit and do not fit a JS number.
