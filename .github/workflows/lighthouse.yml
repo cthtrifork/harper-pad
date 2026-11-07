@@ -5,6 +5,7 @@ name: Lighthouse
 # one sticky comment (fork PRs get the job summary only). It has a paths filter, so do not mark it as a required check.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled] # labeled: only the lighthouse-trace label does anything, see the job condition
     paths:
       - frontend/**
       - main.go
@@ -18,7 +19,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: lighthouse-${{ github.event.pull_request.number || github.ref }}
+  # Any other label is its own group, so adding one (the labeler does) cannot cancel a run in progress.
+  group: lighthouse-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'lighthouse-trace' && '-ignored' || '' }}
   cancel-in-progress: true
 
 env:
@@ -27,7 +29,7 @@ env:
 jobs:
   lighthouse:
     name: lighthouse
-    if: github.actor != 'dependabot[bot]' && !startsWith(github.head_ref, 'renovate/') # Renovate runs as its own GitHub App, so match its branches
+    if: (github.event.action != 'labeled' || github.event.label.name == 'lighthouse-trace') && github.actor != 'dependabot[bot]' && !startsWith(github.head_ref, 'renovate/') # Renovate runs as its own GitHub App, so match its branches
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -57,6 +59,8 @@ jobs:
           CHROME_PATH: /usr/bin/google-chrome
           # renovate: datasource=npm depName=lighthouse
           LIGHTHOUSE_VERSION: 13.6.0
+          # Opt in: the label lighthouse-trace on the PR (or a manual run) also keeps the trace and network log of the median runs.
+          LIGHTHOUSE_SAVE_ASSETS: ${{ (github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'lighthouse-trace')) && '1' || '' }}
         run: |
           google-chrome --version
           scripts/lighthouse.sh

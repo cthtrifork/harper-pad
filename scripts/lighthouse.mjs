@@ -7,6 +7,7 @@ const out = process.argv[2] || "lighthouse";
 const url = process.env.LIGHTHOUSE_URL;
 const version = process.env.LIGHTHOUSE_VERSION;
 const runs = Number(process.env.LIGHTHOUSE_RUNS) || 3;
+const saveAssets = Boolean(process.env.LIGHTHOUSE_SAVE_ASSETS); // opt in: the trace and network log are about 3 MB per mode
 if (!url || !version) {
   console.error("LIGHTHOUSE_URL and LIGHTHOUSE_VERSION are required");
   process.exit(2);
@@ -48,10 +49,10 @@ for (const [mode, flags] of Object.entries(MODES)) {
       "--quiet",
       "--output=json",
       "--output=html",
-      "--save-assets", // <base>-0.trace.json and <base>-0.devtoolslog.json, kept for the median run (see below)
       `--output-path=${base}`,
       `--only-categories=${CATEGORIES.map(([id]) => id).join(",")}`,
       "--chrome-flags=--headless=new --no-sandbox --disable-gpu",
+      ...(saveAssets ? ["--save-assets"] : []), // <base>-0.trace.json and <base>-0.devtoolslog.json, kept for the median run (see below)
       ...flags,
     );
     all.push({ base, report: JSON.parse(readFileSync(`${base}.report.json`, "utf8")) });
@@ -63,7 +64,7 @@ for (const [mode, flags] of Object.entries(MODES)) {
   copyFileSync(`${median.base}.report.json`, join(out, `lighthouse-${mode}.json`));
   // The raw trace and network log of that run: with them the score can be recomputed offline (lighthouse --audit-mode, or the Lantern
   // models of @paulirish/trace_engine) to see why it moved, without another CI round trip.
-  for (const kind of ["trace", "devtoolslog"]) copyFileSync(`${median.base}-0.${kind}.json`, join(out, `lighthouse-${mode}.${kind}.json`));
+  if (saveAssets) for (const kind of ["trace", "devtoolslog"]) copyFileSync(`${median.base}-0.${kind}.json`, join(out, `lighthouse-${mode}.${kind}.json`));
   const med = (id) => {
     const s = all.map((x) => score(x.report, id)).sort((a, b) => a - b);
     return s[Math.floor(s.length / 2)];
