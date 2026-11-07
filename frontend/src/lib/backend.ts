@@ -6,7 +6,7 @@
 
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { createDesktopSyncDrafts } from "./desktopSync.ts";
-import { withLastOpened } from "./lastOpened.js";
+import { withLastOpened } from "./lastOpened.ts";
 import { createSettingsSyncStore } from "./settingsSync.ts";
 import { createDeviceStore } from "./syncDevice.ts";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
@@ -97,7 +97,7 @@ export const syncDrafts = web
 // Everything the page needs before it shows the editor, in one call: {demo, open, total, error}. `demo` is the banner text in a
 // desktop development build's demo mode (empty otherwise), `open` the draft to show (the last opened, else the most recent one) with its text (or null), `total` how many
 // drafts there are, and `error` why drafts are unavailable (empty when they are).
-// The draft that was open last on this device (lib/lastOpened.js) replaces the most recent one when it still exists.
+// The draft that was open last on this device (lib/lastOpened.ts) replaces the most recent one when it still exists.
 export async function startup() {
   const start = await (isWeb ? web.startup() : (await bindings()).PadService.Startup());
   return withLastOpened(start, getDraft);

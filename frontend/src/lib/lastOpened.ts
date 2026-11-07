@@ -5,18 +5,20 @@ import { scoped } from "./scope.ts";
 const key = () => scoped("harper-pad.last-opened");
 const ID = /^[0-9a-f]{32}$/;
 
-export function loadLastOpened(storage = globalThis.localStorage) {
+type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export function loadLastOpened(storage: Store = globalThis.localStorage): string {
   try {
     const id = storage?.getItem(key());
-    return ID.test(id ?? "") ? id : "";
+    return id && ID.test(id) ? id : "";
   } catch {
     return ""; // blocked storage: no memory
   }
 }
 
-export function saveLastOpened(id, storage = globalThis.localStorage) {
+export function saveLastOpened(id: string | null | undefined, storage: Store = globalThis.localStorage) {
   try {
-    if (ID.test(id ?? "")) storage?.setItem(key(), id);
+    if (id && ID.test(id)) storage?.setItem(key(), id);
     else storage?.removeItem(key());
   } catch {
     // the choice then only lasts until the window closes
@@ -25,7 +27,11 @@ export function saveLastOpened(id, storage = globalThis.localStorage) {
 
 // Wraps a startup answer ({open, ...}, `open` being the most recently changed draft): when the last opened draft is another one that still
 // exists, opens that instead. `getDraft` rejects for a missing draft, which keeps the fallback.
-export async function withLastOpened(start, getDraft, storage = globalThis.localStorage) {
+export async function withLastOpened<D extends { id: string }, S extends { open: D | null }>(
+  start: S,
+  getDraft: (id: string) => Promise<D | undefined>,
+  storage: Store = globalThis.localStorage,
+): Promise<S> {
   const id = loadLastOpened(storage);
   if (!id || !start.open || start.open.id === id) return start;
   try {
