@@ -10,7 +10,9 @@ const memoryStore = () => {
   const s = { saved: null, save: async (r) => (s.saved = r) };
   return s;
 };
-const reply = (status, body) => async () => ({ status, ok: status >= 200 && status < 300, json: async () => body });
+const reply = (status: number, body: unknown) => async () => ({ status, ok: status >= 200 && status < 300, json: async () => body });
+const fake = (fn: (u: string, init: RequestInit & { body?: string; headers: Record<string, string> }) => unknown) =>
+  fn as unknown as typeof fetch;
 
 test("the invite URL gives the server and the token", () => {
   assert.deepEqual(parseInviteUrl(`  ${url}\n`), { server: "https://sync.example.com", invite: INVITE });
@@ -29,11 +31,11 @@ for (const [name, text, code] of [
 
 test("enrolls: a proof without ath, the invite in the body only, and the record is saved", async () => {
   const store = memoryStore();
-  let call;
-  const fetchFn = async (u, init) => {
+  let call: { u: string; init: RequestInit & { body?: string; headers: Record<string, string> } } | undefined;
+  const fetchFn = fake(async (u, init) => {
     call = { u, init };
     return reply(200, { deviceToken: "tok", token_type: "DPoP" })();
-  };
+  });
   const out = await enrollDevice({ text: url, store, fetchFn });
   assert.deepEqual(out, { server: "https://sync.example.com" });
   assert.equal(call.u, "https://sync.example.com/enroll");
@@ -63,7 +65,10 @@ for (const [name, fetchFn, code] of [
 ]) {
   test(`${name} saves nothing`, async () => {
     const store = memoryStore();
-    await assert.rejects(enrollDevice({ text: url, store, fetchFn }), (err) => err instanceof SyncError && err.code === code);
+    await assert.rejects(
+      enrollDevice({ text: url, store, fetchFn: fetchFn as unknown as typeof fetch }),
+      (err) => err instanceof SyncError && err.code === code,
+    );
     assert.equal(store.saved, null);
   });
 }

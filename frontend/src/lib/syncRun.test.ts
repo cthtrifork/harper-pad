@@ -1,3 +1,5 @@
+// @ts-nocheck: these build an in-memory server, device and drafts store up per test; their calls into the real modules are
+// covered by the tests, not the compiler (see tsconfig.test.json).
 // Sync all against an in-memory copy of the server's three draft routes (compare-and-set, tombstones, paging) and two real web stores, as
 // devices A and B. The same table as docs/sync.md, "Conflicts", but through the real store and the real client calls.
 import assert from "node:assert/strict";

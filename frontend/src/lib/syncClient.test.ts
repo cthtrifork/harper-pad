@@ -9,19 +9,22 @@ const draft = { id: "a".repeat(32), format: "markdown", content: "hello", create
 async function device() {
   return { server: "https://sync.example.com", token: "tok", ...(await generateDeviceKey()) };
 }
-const answer = (status, body) => async () => ({ status, json: async () => body });
+const reply = (status: number, body: unknown) => ({ status, json: async () => body });
+const fake = (fn: (u: string, init: RequestInit & { body?: string; headers: Record<string, string> }) => unknown) =>
+  fn as unknown as typeof fetch;
+const answer = (status: number, body: unknown) => fake(async () => reply(status, body));
 
 test("a request carries the token, a proof for that method and URL, and no cookies", async () => {
-  let call;
+  let call: { u: string; init: RequestInit & { headers: Record<string, string> } } | undefined;
   const dev = await device();
   await signedRequest({
     device: dev,
     method: "GET",
     path: "/docs?after=x",
-    fetchFn: async (u, init) => {
+    fetchFn: fake(async (u, init) => {
       call = { u, init };
-      return answer(200, [])();
-    },
+      return reply(200, []);
+    }),
   });
   assert.equal(call.u, "https://sync.example.com/docs?after=x");
   assert.equal(call.init.headers.Authorization, "DPoP tok");
@@ -42,11 +45,11 @@ test("a 401 means sign in again, and a network failure means unreachable", async
 });
 
 test("a new draft is pushed against version 0 and the app's blob", async () => {
-  let sent;
-  const fetchFn = async (_u, init) => {
+  let sent: { base: unknown; createdAt: number; updatedAt: number; data: string } | undefined;
+  const fetchFn = fake(async (_u, init) => {
     sent = JSON.parse(init.body);
-    return answer(200, { version: 1 })();
-  };
+    return reply(200, { version: 1 });
+  });
   const out = await pushDraft({ device: await device(), draft, state: null, fetchFn });
   assert.deepEqual(out, { result: "ok", version: 1 });
   assert.deepEqual(sent.base, { version: 0, updatedAt: 0 });
@@ -56,12 +59,17 @@ test("a new draft is pushed against version 0 and the app's blob", async () => {
 });
 
 test("a draft that was synced before is pushed on top of the recorded state", async () => {
-  let sent;
-  const fetchFn = async (_u, init) => {
+  let sent: { base: unknown } | undefined;
+  const fetchFn = fake(async (_u, init) => {
     sent = JSON.parse(init.body);
-    return answer(200, { version: 4 })();
-  };
-  await pushDraft({ device: await device(), draft, state: { version: 3, updatedAt: 1500, hash: "h", deleted: false }, fetchFn });
+    return reply(200, { version: 4 });
+  });
+  await pushDraft({
+    device: await device(),
+    draft,
+    state: { version: 3, updatedAt: 1500, hash: "h", deleted: false } as { version: number; updatedAt: number },
+    fetchFn,
+  });
   assert.deepEqual(sent.base, { version: 3, updatedAt: 1500 });
 });
 

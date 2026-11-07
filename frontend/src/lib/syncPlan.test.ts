@@ -8,7 +8,7 @@ const gone = (updatedAt) => ({ updatedAt, deleted: true });
 const same = { changed: false };
 const edited = { changed: true };
 
-const rows = [
+const rows: [string, Parameters<typeof decide>[0], string][] = [
   ["unchanged here, unchanged there", { local: same, synced: live(1), server: live(1) }, "none"],
   ["unchanged here, newer there: plain update", { local: same, synced: live(1), server: live(2) }, "download"],
   ["changed here, unchanged there: plain update", { local: edited, synced: live(1), server: live(1) }, "upload"],

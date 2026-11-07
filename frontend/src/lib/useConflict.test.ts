@@ -55,7 +55,13 @@ function setup({
       log.push("clearServer");
     },
   };
-  return { c: useConflict({ drafts, sync }), log, drafts, sync, setServer: (v) => (currentServer = v) };
+  return {
+    c: useConflict({ drafts, sync } as unknown as Parameters<typeof useConflict>[0]),
+    log,
+    drafts,
+    sync,
+    setServer: (v) => (currentServer = v),
+  };
 }
 
 test("a conflict with the file alone is one dialog for the file, after the server was looked at too", async () => {

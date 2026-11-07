@@ -1,3 +1,5 @@
+// @ts-nocheck: these build an in-memory server, device and drafts store up per test; their calls into the real modules are
+// covered by the tests, not the compiler (see tsconfig.test.json).
 // The dictionary and ignore list through createSyncer.syncSettings against an in-memory copy of the server's /settings route
 // (compare-and-set on version). The last device to sync wins; a device that never synced takes the server's lists.
 import assert from "node:assert/strict";

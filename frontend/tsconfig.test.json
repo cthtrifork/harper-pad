@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    // The tests build their fakes up property by property; what they pass to the real modules is still checked.
+    "noImplicitAny": false,
+    "strictNullChecks": false
+  },
+  "include": ["src/**/*.test.ts"],
+  "exclude": ["dist", "dist-web", "node_modules"]
+}

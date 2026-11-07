@@ -26,5 +26,5 @@ test("blocked storage means off and never throws", () => {
     },
   };
   assert.equal(loadOptIn(blocked), false);
-  assert.doesNotThrow(() => saveOptIn(true, blocked));
+  assert.doesNotThrow(() => saveOptIn(true, blocked as unknown as Storage));
 });

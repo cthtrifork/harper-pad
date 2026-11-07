@@ -1,5 +1,5 @@
 // What the Harper worker can be asked to do, with plain arguments and results so they cross a message channel. Apart from the worker so
-// harperCore.test.js can run it against the real Harper in Node, which tells a harper.js update that changes behaviour from one that
+// harperCore.test.ts can run it against the real Harper in Node, which tells a harper.js update that changes behaviour from one that
 // does not.
 
 import { type LocalLinter, SuggestionKind } from "harper.js";

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { copiesFor, describeConflict, resolveConflict, staleNote, summaryRows } from "./conflict.ts";
 
+type Done = Extract<Awaited<ReturnType<typeof resolveConflict>>, { status: "done" }>;
+type Stale = Extract<Awaited<ReturnType<typeof resolveConflict>>, { status: "stale" }>;
+
 const side = (text, stamp = "1") => ({ text, stamp });
 
 // Fake operations that record what happened in order, and report the sides as they were drawn unless told otherwise.
@@ -28,7 +31,7 @@ function ops(m, extra = {}) {
 test("Overwrite writes the file first, then pushes, and makes no copy", async () => {
   const m = { yours: "mine", file: side("theirs"), server: side("srv") };
   const o = ops(m);
-  const r = await resolveConflict("overwrite", m, o);
+  const r = (await resolveConflict("overwrite", m, o)) as Done;
   assert.deepEqual(o.log, [["write"], ["push"]]);
   assert.deepEqual(r, { status: "done", copies: [], fileError: "", pushed: true });
 });
@@ -36,7 +39,7 @@ test("Overwrite writes the file first, then pushes, and makes no copy", async ()
 test("Keep with both sides different saves two copies first, then writes and pushes", async () => {
   const m = { yours: "mine", file: side("from file"), server: side("from server") };
   const o = ops(m);
-  const r = await resolveConflict("keep", m, o);
+  const r = (await resolveConflict("keep", m, o)) as Done;
   assert.deepEqual(o.log, [["copy", "from file", "file"], ["copy", "from server", "server"], ["write"], ["push"]]);
   assert.deepEqual(
     r.copies.map((c) => c.from),
@@ -47,7 +50,7 @@ test("Keep with both sides different saves two copies first, then writes and pus
 test("Keep with the same text on the file and the server saves one copy", async () => {
   const m = { yours: "mine", file: side("same"), server: side("same") };
   const o = ops(m);
-  const r = await resolveConflict("keep", m, o);
+  const r = (await resolveConflict("keep", m, o)) as Done;
   assert.deepEqual(
     o.log.filter((l) => l[0] === "copy"),
     [["copy", "same", "file and server"]],
@@ -64,7 +67,7 @@ test("a side that equals yours or has no conflict gets no copy", () => {
 test("an unedited draft: the file's text counts as yours, so Keep copies only the server's text and nothing is written to the file", async () => {
   const m = { yours: "file text", applyFile: true, file: side("file text"), server: side("server text") };
   const o = ops(m);
-  const r = await resolveConflict("keep", m, o);
+  const r = (await resolveConflict("keep", m, o)) as Done;
   assert.deepEqual(o.log, [["applyFile", "file text"], ["copy", "server text", "server"], ["push"]]);
   assert.equal(r.copies.length, 1);
   const overwrite = ops(m);
@@ -79,7 +82,7 @@ test("a failed file write is skipped, reported, and the server push goes on", as
       throw new Error("permission denied");
     },
   });
-  const r = await resolveConflict("overwrite", m, o);
+  const r = (await resolveConflict("overwrite", m, o)) as Done;
   assert.equal(r.fileError, "permission denied");
   assert.deepEqual(o.log, [["push"]]);
   assert.equal(r.status, "done");
@@ -88,17 +91,17 @@ test("a failed file write is skipped, reported, and the server push goes on", as
 test("a server that cannot be reached leaves the push pending, the file is still written", async () => {
   const m = { yours: "mine", file: side("theirs"), server: null };
   const o = ops(m, { push: async () => false });
-  const r = await resolveConflict("keep", m, o);
+  const r = (await resolveConflict("keep", m, o)) as Done;
   assert.equal(r.pushed, false);
   assert.deepEqual(o.log, [["copy", "theirs", "file"], ["write"]]);
   const off = ops(m, { push: null });
-  assert.equal((await resolveConflict("overwrite", m, off)).pushed, null);
+  assert.equal(((await resolveConflict("overwrite", m, off)) as Done).pushed, null);
 });
 
 test("a file-only conflict with sync off writes the file and has no push", async () => {
   const m = { yours: "mine", file: side("theirs"), server: null };
   const o = ops(m, { push: null });
-  const r = await resolveConflict("overwrite", m, o);
+  const r = (await resolveConflict("overwrite", m, o)) as Done;
   assert.deepEqual(o.log, [["write"]]);
   assert.equal(r.status, "done");
 });
@@ -111,7 +114,7 @@ test("when either side moved since the dialog was drawn nothing is written and t
     { file: { stamp: "1" }, server: null },
   ]) {
     const o = ops(m, { recheck: async () => moved });
-    const r = await resolveConflict("keep", m, o);
+    const r = (await resolveConflict("keep", m, o)) as Stale;
     assert.equal(r.status, "stale");
     assert.ok(r.changed.length >= 1);
     assert.deepEqual(o.log, []);
@@ -220,6 +223,7 @@ test("the notes: which side changed again, and nothing-changed only when it is t
   const m = { yours: "mine", file: { text: "theirs", stamp: "1" }, server: null };
   const base = {
     recheck: async () => ({ file: { stamp: "1" }, server: null }),
+    applyFile: async () => {},
     saveCopy: async () => "c1",
     writeFile: async () => {},
     push: async () => true,
@@ -231,7 +235,7 @@ test("the notes: which side changed again, and nothing-changed only when it is t
         throw new Error("disk full");
       },
     }),
-    (e) => e.untouched === false,
+    (e: Error & { untouched?: boolean }) => e.untouched === false,
   ); // the first copy was being made
   await assert.rejects(
     resolveConflict("overwrite", m, {
@@ -240,7 +244,7 @@ test("the notes: which side changed again, and nothing-changed only when it is t
         throw new Error("offline");
       },
     }),
-    (e) => e.untouched === undefined,
+    (e: Error & { untouched?: boolean }) => e.untouched === undefined,
   );
   await assert.rejects(
     resolveConflict("overwrite", m, {
@@ -249,6 +253,6 @@ test("the notes: which side changed again, and nothing-changed only when it is t
         throw new Error("boom");
       },
     }),
-    (e) => e.untouched === false,
+    (e: Error & { untouched?: boolean }) => e.untouched === false,
   );
 });
