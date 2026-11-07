@@ -1,12 +1,11 @@
-// Saving a draft to a file in the browser, the counterpart of DraftService.SaveDraftToFile. Chrome and Edge keep a handle to the
-// file, so later saves overwrite it. Elsewhere the page can only hand over a copy (share sheet or download) and the draft is never
-// linked to a file.
+// DraftService.SaveDraftToFile for the browser. Chrome and Edge keep a file handle, so later saves overwrite the file; elsewhere the
+// page can only hand over a copy (share sheet or download) and the draft is never linked.
 import type { Draft } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { summarize } from "./summarize.ts";
 import type { createWebDrafts } from "./webDrafts.ts";
 
 // The File System Access API (Chrome and Edge), which lib.dom.d.ts does not declare.
-export interface FileHandle {
+interface FileHandle {
   name: string;
   getFile(): Promise<File>;
   createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }>;
@@ -18,7 +17,7 @@ type PickerWindow = Window & {
 };
 const picker = () => window as PickerWindow;
 
-export interface KeptHandle {
+interface KeptHandle {
   handle: FileHandle;
   modified: number;
 }
@@ -28,9 +27,8 @@ const TYPES = [
   { description: "Text", accept: { "text/plain": [".txt"] } },
 ];
 
-// The file name offered for a draft, on the web and (passed to DraftService.SaveDraftToFile) on desktop. Cases: testdata/filename.json.
-// At most 60 characters before the extension: a longer title ends at the last word that fits (when that keeps at least half of it, else it
-// is cut), and no name ends in a space, dot or dash.
+// The name offered for a draft, on both builds. Cases: testdata/filename.json. A title over 60 characters ends at the last word that
+// fits when that keeps at least half of it, and no name ends in a space, dot or dash.
 const MAX_NAME = 60;
 export const fileName = (title: string, format: string) => {
   const cleaned = title.replace(/[^\p{L}\p{N}._ -]+/gu, "").replace(/^[ .-]+|[ .-]+$/g, "");
@@ -42,11 +40,11 @@ export const fileName = (title: string, format: string) => {
   return `${name}${format === "text" ? ".txt" : ".md"}`;
 };
 
-// True where Save hands the draft to the share sheet: no file picker, but the browser can share files.
+// No file picker, but the browser can share files.
 export const sharesFiles = () =>
   !picker().showSaveFilePicker && !!navigator.canShare?.({ files: [new File([""], "a.md", { type: "text/markdown" })] });
 
-// Offers the text to the system share sheet as a file. Returns "shared", "cancelled", or "unsupported" when the browser cannot share files.
+// Resolves to "shared", "cancelled" or "unsupported".
 async function share(name: string, content: string) {
   const file = new File([content], name, { type: name.endsWith(".md") ? "text/markdown" : "text/plain" });
   if (!navigator.canShare?.({ files: [file] })) return "unsupported";
@@ -69,9 +67,8 @@ function download(name: string, content: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
-// `web` is createWebDrafts' result, `getHandle` and `putHandle` read and write what is kept per draft id: {handle, modified}, the
-// FileSystemFileHandle and the file's lastModified after our last write. Returns {draft, cancelled, conflict} like the Go side:
-// when the file changed since we wrote it, nothing is written unless `overwrite` is set.
+// `getHandle` and `putHandle` keep the handle and the file's lastModified after our last write per draft id. Like the Go side, a file that
+// changed since then is not written unless `overwrite` is set.
 export async function saveWebFile(
   web: ReturnType<typeof createWebDrafts>,
   getHandle: (id: string) => Promise<KeptHandle | undefined>,

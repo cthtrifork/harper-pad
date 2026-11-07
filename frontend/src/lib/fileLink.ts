@@ -1,10 +1,10 @@
-// Which controls the header offers for a draft's file link (docs/sync.md, "Other paths on this device"). Desktop only: the web build never
-// unlinks, so it always offers Save to disk. A linked draft, struck through or not, has no Save to disk until it is unlinked.
+// Which header controls a draft's file link offers (docs/sync.md, "Other paths on this device"). A linked draft has no Save to disk until
+// it is unlinked.
 export const UNLINK_FIRST = "Unlink first to save as another file";
 
-// `canUnlink` is false on the web, where a file is only a picker handle. `showDirty` is the dot: the draft has changes the file does not have
-// yet (`fileState` "stale"); never with a struck-through chip, without a link, or on the web.
-export interface FileLinkState {
+// `canUnlink` is false on the web, where a file is only a picker handle. `showDirty` is the dot: the file is "stale", never with a
+// struck-through chip.
+interface FileLinkState {
   filePath?: string;
   fileProblem?: unknown;
   canUnlink: boolean;
@@ -20,10 +20,10 @@ export function fileControls({ filePath, fileProblem, canUnlink, fileState }: Fi
   };
 }
 
-// The words for the dot, for its title and for screen readers.
+// The dot's title and screen reader text.
 export const dirtyText = (name: string) => `Your draft has changes not yet in ${name}. Ctrl+S updates it.`;
 
-// What Ctrl+Shift+S (or the Save to disk button) does: "ask" for a file, or "hint" that the link must go first.
+// Ctrl+Shift+S and the Save to disk button: "hint" that the link must go first, else "ask".
 export function saveAsAction(state: FileLinkState): "ask" | "hint" {
   return fileControls(state).showSaveAs ? "ask" : "hint";
 }

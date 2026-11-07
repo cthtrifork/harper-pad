@@ -1,5 +1,4 @@
-// The draft that was open last, kept in browser storage of this device only (never synced), so a reload or relaunch shows the same draft.
-// Without one, or when it no longer exists, the start-up falls back to the most recently changed draft.
+// The draft open last, in this device's storage only (never synced), so a reload shows the same draft; else the most recently changed.
 import { scoped } from "./scope.ts";
 
 const key = () => scoped("harper-pad.last-opened");
@@ -25,8 +24,7 @@ export function saveLastOpened(id: string | null | undefined, storage: Store = g
   }
 }
 
-// Wraps a startup answer ({open, ...}, `open` being the most recently changed draft): when the last opened draft is another one that still
-// exists, opens that instead. `getDraft` rejects for a missing draft, which keeps the fallback.
+// `getDraft` rejects for a missing draft, which keeps the fallback.
 export async function withLastOpened<D extends { id: string }, S extends { open: D | null }>(
   start: S,
   getDraft: (id: string) => Promise<D | undefined>,

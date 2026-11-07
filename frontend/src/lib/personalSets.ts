@@ -1,33 +1,32 @@
-// The pure part of personal.js: reading and changing what Harper holds (its dictionary and its ignore list), with no storage in it, so
-// the sync wiring can be tested with a fake Harper. Harper's exported ignore list is {"context_hashes": [...]}.
+// The pure part of personal.js: changing Harper's dictionary and ignore list, so the sync wiring can be tested with a fake Harper.
 
-// The parts of a Harper linter used here (harper.js's Linter has more), so a fake can stand in for it in tests.
-export interface IgnoreList {
+// The parts of a Harper linter used here, so a fake can stand in.
+interface IgnoreList {
   exportIgnoredLints(): Promise<string>;
   clearIgnoredLints(): Promise<void>;
   importIgnoredLints(json: string): Promise<void>;
 }
-export interface WordList extends IgnoreList {
+interface WordList extends IgnoreList {
   exportWords(): Promise<string[]>;
   importWords(words: string[]): Promise<void>;
   dispose(): Promise<void>;
 }
 
-// The hashes in Harper's exported ignore list, as text. Read with a pattern, not JSON.parse, which would round them (they are 64-bit).
+// Harper exports {"context_hashes": [...]}. Read with a pattern: JSON.parse would round the 64-bit hashes.
 export function hashesOf(json?: string | null): string[] {
   const list = /"context_hashes"\s*:\s*\[([^\]]*)\]/.exec(json ?? "");
   return list?.[1].match(/\d+/g) ?? [];
 }
 
-// The same list as text, built by hand for the same reason.
+// Built by hand for the same reason.
 export const exportList = (hashes: string[]) => `{"context_hashes":[${hashes.join(",")}]}`;
 
 export async function ignoredHashes(harper: IgnoreList) {
   return hashesOf(await harper.exportIgnoredLints());
 }
 
-// Stop ignoring findings: Harper can only take the whole list back, so put the others back after clearing it.
-export async function removeIgnoredMany(harper: IgnoreList, hashes: string[]) {
+// Harper can only take the whole list back, so the others are put back after clearing it.
+async function removeIgnoredMany(harper: IgnoreList, hashes: string[]) {
   const gone = new Set(hashes);
   const rest = (await ignoredHashes(harper)).filter((h) => !gone.has(h));
   await harper.clearIgnoredLints();
@@ -36,14 +35,12 @@ export async function removeIgnoredMany(harper: IgnoreList, hashes: string[]) {
 
 export const removeIgnored = (harper: IgnoreList, hash: string) => removeIgnoredMany(harper, [hash]);
 
-// What syncing the ignore list decided: import the hashes another device ignored, clear the ones it stopped ignoring.
 export async function applyIgnored(harper: IgnoreList, { add, remove }: { add: string[]; remove: string[] }) {
   if (remove.length) await removeIgnoredMany(harper, remove);
   if (add.length) await harper.importIgnoredLints(exportList(add));
 }
 
-// Harper can add words to its dictionary but not take one out. To remove words, build a new linter with the words that stay (and the
-// same ignore list) and return it; the caller swaps it in and disposes the old one.
+// Harper cannot remove a word, so this builds a new linter with the words that stay; the caller swaps it in and disposes the old one.
 export async function withoutWords<L extends WordList>(
   harper: WordList & IgnoreList,
   remove: string[],

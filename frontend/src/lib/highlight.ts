@@ -1,11 +1,10 @@
 import type { Parser } from "@lezer/common";
 import { classHighlighter, highlightTree } from "@lezer/highlight";
 
-// Syntax colours for fenced code in the preview. Each language is its own lazy chunk, so the editor does not pay for them until a
-// draft has a code block in that language. The result is a list of { text, cls } runs, never HTML: Preview.vue turns them into
-// Vue elements, so text from a draft can only become text nodes (docs/security.md).
+// Colours for fenced code in the preview. Each language is a lazy chunk. The result is runs of text, never HTML, so draft text can only
+// become text nodes (docs/security.md).
 
-// Names people write after the ``` fence -> the loader of the parser for it.
+// By the name written after the ``` fence.
 const loaders: Record<string, () => Promise<Parser>> = {
   shell: () => import("@codemirror/legacy-modes/mode/shell").then((m) => streamParser(m.shell)),
   toml: () => import("@codemirror/legacy-modes/mode/toml").then((m) => streamParser(m.toml)),
@@ -28,7 +27,7 @@ async function streamParser(mode: Parameters<typeof import("@codemirror/language
   return StreamLanguage.define(mode).parser;
 }
 
-// The language named by a fence's info string ("sh", "bash title=x"), or null when it has no colours here.
+// From a fence's info string ("bash title=x"); null when there are no colours for it.
 export function languageFor(info?: string | null): string | null {
   const name = String(info ?? "")
     .trim()
@@ -40,12 +39,12 @@ export function languageFor(info?: string | null): string | null {
 
 const parsers = new Map<string, Promise<Parser>>(); // language -> promise of its parser
 
-export function loadParser(lang: string): Promise<Parser> {
+function loadParser(lang: string): Promise<Parser> {
   if (!parsers.has(lang)) parsers.set(lang, loaders[lang]());
   return parsers.get(lang) as Promise<Parser>;
 }
 
-// Cut `code` into runs with the class of the token each one is ("tok-string"; "" for plain text). The runs join back into `code`.
+// Runs join back into `code`; cls is "" for plain text.
 export async function highlight(code: string, lang: string) {
   const parser = await loadParser(lang);
   const runs: { text: string; cls: string }[] = [];

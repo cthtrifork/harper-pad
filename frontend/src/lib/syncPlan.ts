@@ -1,22 +1,16 @@
-// What to do with one draft when syncing: the decision table in docs/sync.md ("Conflicts"). No network, storage or Vue in here, so the
-// whole table is unit-tested. The sync module asks `decide` for every draft, then does what it answers.
-//
-// The three inputs, for one draft id:
-//   local   null when this device has no such draft; otherwise {changed}: true when its text differs from the last sync, or it was never synced.
-//   synced  the state recorded at the last sync, {updatedAt, deleted}, or null when it never was synced.
-//   server  the state the server holds now, {updatedAt, deleted}, or null when it has no copy and no tombstone.
-// A state is the pair (updatedAt, deleted). Only equality is tested, never order, so device clocks do not matter.
-//
-// The answers:
-//   "none"             nothing to do (the caller may still record the server's state).
-//   "upload"           PUT the local text. The base is the server's state, so this also revives a draft that was deleted elsewhere.
-//   "upload-tombstone" PUT a tombstone for a draft deleted here.
-//   "download"         GET the draft and save it without touching its timestamps (also drops a pending delete).
-//   "remove-local"     the server's copy is a tombstone and this device has no edits: remove it here, with undo.
-//   "resolve"          changed on both sides: GET the server's text, then `settle` says whether it is the same text or a conflict.
+// The decision table of docs/sync.md ("The decision for one draft"). Pure, so the whole table is unit-tested. Only equality of
+// (updatedAt, deleted) is tested, never order, so device clocks do not matter.
 
-export type Action = "none" | "upload" | "upload-tombstone" | "download" | "remove-local" | "resolve";
+type Action =
+  | "none" // the caller may still record the server's state
+  | "upload" // also revives a draft that was deleted elsewhere
+  | "upload-tombstone"
+  | "download" // saved without touching its timestamps; also drops a pending delete
+  | "remove-local" // the server has a tombstone and this device has no edits; with undo
+  | "resolve"; // changed on both sides: `settle` says whether the texts are the same
 
+// `local` is null without the draft here, else whether it changed since the last sync; `synced` is the state recorded then (null if never
+// synced), `server` the state it holds now (null with no copy and no tombstone).
 interface State {
   updatedAt: number;
   deleted: boolean;
@@ -54,6 +48,5 @@ export function decide({
   return server.deleted ? "none" : "download";
 }
 
-// For "resolve": the same format and text on both sides adopts the server's state, with no copy; otherwise it is a conflict.
-// Both arguments are contentHash values (lib/contentHash.ts), which cover the format as well as the text.
+// For "resolve", with contentHash values (format and text): the same on both sides adopts the server's state, with no copy.
 export const settle = (localHash: string, serverHash: string): "adopt" | "conflict" => (localHash === serverHash ? "adopt" : "conflict");

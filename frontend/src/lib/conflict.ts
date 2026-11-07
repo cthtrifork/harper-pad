@@ -1,52 +1,47 @@
-// Keep or Overwrite: the rules for a draft that disagrees with its file, the server, or both (what each choice does is in docs/sync.md, "The Keep
-// or Overwrite dialog"). No Vue, no network and no storage in here, so the rules are unit-tested; `useConflict.js` wires them to the page.
-//
-// The model: {id, name, yours, file, server, applyFile, sync}. `file` and `server` are null (that side has no conflict) or {text, stamp, at}.
-// `applyFile` is true when the draft has no edits of its own and only the file changed: the file's text is "yours" and the draft takes it first.
-// `sync` says whether sync is on.
+// The rules of the Keep or Overwrite dialog (docs/sync.md, "The Keep or Overwrite dialog"). Pure, so they are unit-tested;
+// `useConflict.js` wires them to the page.
 
-// The badge text for a Conflicted copy, by where its text came from (docs/sync.md).
+import { whenStamp } from "./when.ts";
+
 export const COPY_LABELS: Record<string, string> = {
   file: "Conflicted copy, from the file",
   server: "Conflicted copy, from the server",
   "file and server": "Conflicted copy, from the file and the server",
 };
 
-export interface Side {
+interface Side {
   text: string;
   stamp: string;
   at?: number;
 }
 
-export interface ConflictModel {
+interface ConflictModel {
   id?: string;
   name?: string;
   yours?: string;
   draftAt?: number;
+  /** null: that side has no conflict */
   file: Side | null;
   server: Side | null;
+  /** The draft has no edits of its own and only the file changed: the file's text is "yours" and the draft takes it first. */
   applyFile?: boolean;
   sync?: boolean;
 }
 
-export interface Row {
+interface Row {
   kind: "draft" | "file" | "server";
   label: string;
   when: string;
   tint: boolean;
 }
 
-export type Choice = "keep" | "overwrite";
-export type Origin = "file" | "server" | "file and server";
+type Choice = "keep" | "overwrite";
+type Origin = "file" | "server" | "file and server";
 
 const stampOf = (side: { stamp: string } | null | undefined) => (side ? side.stamp : null);
 
-import { whenStamp } from "./when.ts";
-
-// The versions involved, one row each, in the order draft, file, server (never more than three). Rows: {kind, label, when, tint}. `when` is the
-// version's timestamp from `whenStamp` ("6 Nov, 22:36", always with the date), or "–" when it is not known (`m.draftAt`, `m.file.at` and
-// `m.server.at` are times in ms). The draft's row is tinted; an unedited draft has no row of its own, and the file's row is tinted instead
-// because the file's text counts as yours.
+// One row per version, in the order draft, file, server. An unedited draft has no row of its own; the file's row is tinted instead,
+// because its text counts as yours. `when` is "–" when the time is not known.
 export function summaryRows(m: ConflictModel, now = new Date()): Row[] {
   const when = (ms?: number) => (ms !== undefined && Number.isFinite(ms) && ms > 0 ? whenStamp(ms, now) : "–");
   return [
@@ -58,8 +53,8 @@ export function summaryRows(m: ConflictModel, now = new Date()): Row[] {
 
 const sameText = (m: ConflictModel) => !!m.file && !!m.server && m.file.text === m.server.text;
 
-// The words of the dialog. The title, the two button labels and one footer line are what is seen; one short sentence per button is its tooltip
-// and what assistive technology reads (what each choice updates is in the labels and in docs/sync.md). `versions` is how many rows there are.
+// The words of the dialog: title, button labels and footer are what is seen; each button's sentence is its tooltip and what assistive
+// technology reads.
 export function describeConflict(m: ConflictModel) {
   const fileOther = !!m.file && !m.applyFile; // an unedited draft takes the file's text: the file is not an "other" version then
   const versions = summaryRows(m).length;
@@ -78,7 +73,7 @@ export function describeConflict(m: ConflictModel) {
     title,
     versions,
     keepLabel: versions === 3 ? "Keep all" : "Keep both",
-    // Names what is replaced: the file, the server, or both of them ("others"). With three versions the draft's own row is one of them.
+    // With three versions the draft's own row is one of the "others".
     overwriteLabel: versions === 3 ? "Overwrite others" : fileOther ? "Overwrite file" : "Overwrite server",
     keepTitle: others ? `Keeps ${other} as ${copies}.` : "Nothing else differs, so no copy is made.",
     overwriteTitle: others ? `Deletes ${other}. No undo.` : "Nothing else differs, so nothing is deleted.",
@@ -88,7 +83,7 @@ export function describeConflict(m: ConflictModel) {
   };
 }
 
-// The versions Keep saves as copies: [{text, from}] with from "file", "server" or "file and server". A side whose text equals yours has no copy.
+// What Keep saves as copies; a side whose text equals yours has none.
 export function copiesFor(m: ConflictModel): { text: string; from: Origin }[] {
   const file = m.file && !m.applyFile && m.file.text !== m.yours ? m.file : null;
   const server = m.server && m.server.text !== m.yours ? m.server : null;
@@ -99,21 +94,20 @@ export function copiesFor(m: ConflictModel): { text: string; from: Origin }[] {
   return copies;
 }
 
-// Carries out the choice. `ops`:
-//   recheck()            -> {file, server}: the current stamps of both sides ({stamp} or null), looked at now.
-//   applyFile(text)      the draft takes the file's text (only when model.applyFile).
-//   saveCopy(text, from) saves a new unlinked draft and returns its id.
-//   writeFile()          writes the draft to its file (rejects with the reason when it cannot; null when the draft has no file).
-//   push()               sends the draft to the server (null when sync is off); resolves to false when it did not go.
-// Resolves to {status: "stale", changed: ["file" and/or "server"]} when either side moved since the dialog was drawn (nothing was written: the caller redraws), or
-// {status: "done", copies: [{id, from}], fileError, pushed}.
-export interface ConflictOps {
+interface ConflictOps {
+  /** The current stamps of both sides, looked at now. */
   recheck(): Promise<{ file: { stamp: string } | null; server: { stamp: string } | null }>;
+  /** Only when `applyFile`. */
   applyFile(text: string): Promise<unknown>;
+  /** Saves a new unlinked draft and returns its id. */
   saveCopy(text: string, from: Origin): Promise<string>;
+  /** Rejects with the reason; absent when the draft has no file. */
   writeFile?: (() => Promise<unknown>) | null;
+  /** Absent when sync is off; false when it did not go. */
   push?: (() => Promise<boolean>) | null;
 }
+
+// Carries out the choice. Resolves to "stale" (nothing was written; the caller redraws) when either side moved since the dialog was drawn.
 
 export async function resolveConflict(choice: Choice, m: ConflictModel, ops: ConflictOps) {
   const now = await ops.recheck();
@@ -122,7 +116,7 @@ export async function resolveConflict(choice: Choice, m: ConflictModel, ops: Con
   );
   if (changed.length) return { status: "stale", changed };
 
-  // From the first step that changes anything, a failure is no longer "nothing was changed" (err.untouched says which it is).
+  // From the first step that changes anything, a failure is no longer "nothing was changed" (err.untouched).
   let acted = false;
   try {
     if (m.applyFile) {
@@ -157,7 +151,7 @@ export async function resolveConflict(choice: Choice, m: ConflictModel, ops: Con
   }
 }
 
-// What the dialog says when a side changed again since it was drawn: names the side, and asks to look again.
+// Names the side that changed again since the dialog was drawn.
 export function staleNote(m: ConflictModel, changed: ("file" | "server")[]) {
   const names = [changed.includes("file") && (m.name || "The file"), changed.includes("server") && "the server"].filter(
     (n): n is string => !!n,

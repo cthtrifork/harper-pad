@@ -1,11 +1,10 @@
-// What the drafts list shows for a draft: its title, an excerpt, and a preview of its markdown task lines. The page makes it for both
-// builds: the web store keeps it in IndexedDB, and on desktop it goes to Go with every write (`withSummary`), which stores it as it is
-// (within the list's bounds) so listing never reads the text. Cases: testdata/summarize.json.
+// What the drafts list shows: title, excerpt and a preview of the task lines. Made here for both builds (docs/architecture.md, "Go side").
+// Cases: testdata/summarize.json.
 
 const TASK = /^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$/;
 const HEAD = /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?)/;
 
-// At most n characters (not UTF-16 units, so an emoji counts once), with an ellipsis when something was cut off.
+// Counts characters, not UTF-16 units, so an emoji counts once.
 function clip(s: string, n: number): string {
   const chars = Array.from(s);
   return chars.length <= n
@@ -16,7 +15,7 @@ function clip(s: string, n: number): string {
         .trimEnd()}…`;
 }
 
-export interface TaskLine {
+interface TaskLine {
   text: string;
   done: boolean;
 }
@@ -51,5 +50,5 @@ export function summarize(content: string) {
   };
 }
 
-// The draft with its summary filled in, ready for Go's DraftService.SaveDraft, SaveDraftToFile and SyncService.ApplyRemote.
+// What the Go services take: DraftService.SaveDraft, SaveDraftToFile and SyncService.ApplyRemote.
 export const withSummary = <T extends { content: string }>(draft: T) => ({ ...draft, ...summarize(draft.content) });
