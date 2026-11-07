@@ -8,7 +8,7 @@ const TYPES = [
   { description: "Text", accept: { "text/plain": [".txt"] } },
 ];
 
-// The file name offered for a draft. The same as suggestName in internal/app/files.go; both run internal/app/testdata/filename.json.
+// The file name offered for a draft, on the web and (passed to DraftService.SaveDraftToFile) on desktop. Cases: testdata/filename.json.
 export const fileName = (title, format) => {
   const cleaned = title.replace(/[^\p{L}\p{N}._ -]+/gu, "").replace(/^[ .-]+|[ .-]+$/g, "");
   const name =

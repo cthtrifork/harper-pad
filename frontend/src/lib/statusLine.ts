@@ -5,7 +5,24 @@
 
 // `draft`: {state, text, fileState, fileName, recreated} from useDrafts. `sync`: {enrolled, status, newer, rejected} from useSync (`newer` is true while a
 // "Newer on the server" marker is up, `rejected` is {title, reason} while the server refuses the open draft). Returns {text, tone}: tone is "mute" (a neutral fact), "ok", "accent" or "bad".
-export function statusLine({ draft, sync }) {
+export type Tone = "mute" | "ok" | "accent" | "bad";
+
+export interface DraftStatus {
+  state: string;
+  text: string;
+  fileState?: string;
+  fileName?: string;
+  recreated?: boolean;
+}
+
+export interface SyncStatus {
+  enrolled: boolean;
+  status?: string;
+  newer?: boolean;
+  rejected?: { title: string; reason: string } | null;
+}
+
+export function statusLine({ draft, sync }: { draft: DraftStatus; sync?: SyncStatus | null }): { text: string; tone: Tone } {
   const { state, text, fileState, fileName, recreated } = draft;
   if (state === "error") return { text, tone: "bad" };
   if (state === "saving") return { text: "Saving...", tone: "mute" };

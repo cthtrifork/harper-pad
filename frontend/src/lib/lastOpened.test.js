@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadLastOpened, saveLastOpened, withLastOpened } from "./lastOpened.js";
+import { loadLastOpened, saveLastOpened, withLastOpened } from "./lastOpened.ts";
 
 const memory = () => {
   const m = new Map();

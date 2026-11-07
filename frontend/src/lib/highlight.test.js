@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { highlight, languageFor } from "./highlight.js";
+import { highlight, languageFor } from "./highlight.ts";
 
 test("fence names and their aliases", () => {
   for (const name of ["sh", "bash", "SHELL", "zsh", "bash title=x"]) assert.equal(languageFor(name), "shell", name);

@@ -6,10 +6,11 @@
 
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 import { createDesktopSyncDrafts } from "./desktopSync.ts";
-import { withLastOpened } from "./lastOpened.js";
+import { withLastOpened } from "./lastOpened.ts";
 import { createSettingsSyncStore } from "./settingsSync.ts";
 import { createDeviceStore } from "./syncDevice.ts";
-import { saveWebFile, sharesFiles } from "./webFiles.js";
+import { summarize } from "./summarize.ts";
+import { fileName, saveWebFile, sharesFiles } from "./webFiles.js";
 
 type Bindings = typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
 type Settings = import("../../bindings/github.com/cthtrifork/harper-pad/internal/app").Settings;
@@ -97,7 +98,7 @@ export const syncDrafts = web
 // Everything the page needs before it shows the editor, in one call: {demo, open, total, error}. `demo` is the banner text in a
 // desktop development build's demo mode (empty otherwise), `open` the draft to show (the last opened, else the most recent one) with its text (or null), `total` how many
 // drafts there are, and `error` why drafts are unavailable (empty when they are).
-// The draft that was open last on this device (lib/lastOpened.js) replaces the most recent one when it still exists.
+// The draft that was open last on this device (lib/lastOpened.ts) replaces the most recent one when it still exists.
 export async function startup() {
   const start = await (isWeb ? web.startup() : (await bindings()).PadService.Startup());
   return withLastOpened(start, getDraft);
@@ -132,7 +133,14 @@ export async function saveDraft(draft: Draft) {
 // Saves the draft's text to a file as well as to the database, and returns {draft, cancelled}. `conflict` is true when something
 // else changed the file since it was written, unless `overwrite` is set.
 export async function saveDraftToFile(draft: Draft, saveAs: boolean, overwrite = false) {
-  if (!isWeb) return (await bindings()).DraftService.SaveDraftToFile(draft, saveAs, overwrite);
+  // The name the save dialog offers is made here, from the title, as on the web; Go keeps only its base name.
+  if (!isWeb)
+    return (await bindings()).DraftService.SaveDraftToFile(
+      draft,
+      saveAs,
+      overwrite,
+      fileName(summarize(draft.content).title, draft.format),
+    );
   return saveWebFile(
     web,
     (id: string) => idbGet(`file:${id}`),

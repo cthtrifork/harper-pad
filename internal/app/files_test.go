@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -22,7 +21,7 @@ func TestSaveDraftToFile(t *testing.T) {
 	s.pickPath = func(name, _ string) (string, error) { picks++; suggested = name; return target, nil }
 
 	// First save: the dialog opens, the file is written, and the draft stays in the database with a link to the file.
-	r, err := s.SaveDraftToFile(store.Draft{Content: "# Plan: Q4!\nfirst"}, false, false)
+	r, err := s.SaveDraftToFile(store.Draft{Content: "# Plan: Q4!\nfirst"}, false, false, "../../Plan Q4.md") // only the base name is offered
 	if err != nil || r.Cancelled {
 		t.Fatalf("first save = %+v, %v", r, err)
 	}
@@ -39,7 +38,7 @@ func TestSaveDraftToFile(t *testing.T) {
 	// Second save: no dialog, the same file is overwritten.
 	d := r.Draft
 	d.Content = "second"
-	if _, err := s.SaveDraftToFile(d, false, false); err != nil || picks != 1 {
+	if _, err := s.SaveDraftToFile(d, false, false, ""); err != nil || picks != 1 {
 		t.Fatalf("second save: err %v, dialogs %d", err, picks)
 	}
 	if got, _ := os.ReadFile(target); string(got) != "second" {
@@ -49,7 +48,7 @@ func TestSaveDraftToFile(t *testing.T) {
 	// The page cannot point the draft at another file: the path it sends is ignored.
 	d.FilePath = filepath.Join(dir, "elsewhere.md")
 	d.Content = "third"
-	if _, err := s.SaveDraftToFile(d, false, false); err != nil {
+	if _, err := s.SaveDraftToFile(d, false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(d.FilePath); err == nil {
@@ -62,7 +61,7 @@ func TestSaveDraftToFile(t *testing.T) {
 	// Save as: the dialog opens again and the draft moves to the new file; the old file stays.
 	other := filepath.Join(dir, "copy.md")
 	s.pickPath = func(string, string) (string, error) { return other, nil }
-	r, err = s.SaveDraftToFile(d, true, false)
+	r, err = s.SaveDraftToFile(d, true, false, "")
 	if err != nil || r.Draft.FilePath != other {
 		t.Fatalf("save as = %+v, %v", r, err)
 	}
@@ -73,7 +72,7 @@ func TestSaveDraftToFile(t *testing.T) {
 	// Cancelling the dialog writes nothing and changes nothing.
 	s.pickPath = func(string, string) (string, error) { return "", nil }
 	d.Content = "fourth"
-	if r, err := s.SaveDraftToFile(d, true, false); err != nil || !r.Cancelled {
+	if r, err := s.SaveDraftToFile(d, true, false, ""); err != nil || !r.Cancelled {
 		t.Fatalf("cancel = %+v, %v", r, err)
 	}
 	if got, _ := os.ReadFile(other); string(got) != "third" {
@@ -85,7 +84,7 @@ func TestSaveDraftDoesNotChangeTheFile(t *testing.T) {
 	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "a.md")
 	s.pickPath = func(string, string) (string, error) { return target, nil }
-	r, err := s.SaveDraftToFile(store.Draft{Content: "x"}, false, false)
+	r, err := s.SaveDraftToFile(store.Draft{Content: "x"}, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,30 +98,8 @@ func TestSaveDraftDoesNotChangeTheFile(t *testing.T) {
 func TestSaveDraftToFileRejectsRelativePath(t *testing.T) {
 	s := newTestServices(t).Drafts
 	s.pickPath = func(string, string) (string, error) { return "notes.md", nil }
-	if _, err := s.SaveDraftToFile(store.Draft{Content: "x"}, false, false); err == nil {
+	if _, err := s.SaveDraftToFile(store.Draft{Content: "x"}, false, false, ""); err == nil {
 		t.Error("a relative path was accepted")
-	}
-}
-
-func TestSuggestName(t *testing.T) {
-	// The web build's fileName (frontend/src/lib/webFiles.js) runs the same cases.
-	raw, err := os.ReadFile("testdata/filename.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cases []struct{ Name, Title, Format, Want string }
-	if err := json.Unmarshal(raw, &cases); err != nil {
-		t.Fatal(err)
-	}
-	if len(cases) == 0 {
-		t.Fatal("no fixtures")
-	}
-	for _, c := range cases {
-		t.Run(c.Name, func(t *testing.T) {
-			if got := suggestName(c.Title, c.Format); got != c.Want {
-				t.Errorf("suggestName(%q, %q) = %q, want %q", c.Title, c.Format, got, c.Want)
-			}
-		})
 	}
 }
 
@@ -131,7 +108,7 @@ func TestSaveDraftToFileNoticesOutsideChanges(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "a.md")
 	var offered string
 	s.pickPath = func(name, _ string) (string, error) { offered = name; return target, nil }
-	r, err := s.SaveDraftToFile(store.Draft{Content: "mine"}, false, false)
+	r, err := s.SaveDraftToFile(store.Draft{Content: "mine"}, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +123,7 @@ func TestSaveDraftToFileNoticesOutsideChanges(t *testing.T) {
 	if err := os.Chtimes(target, later, later); err != nil {
 		t.Fatal(err)
 	}
-	r, err = s.SaveDraftToFile(d, false, false)
+	r, err = s.SaveDraftToFile(d, false, false, "")
 	if err != nil || !r.Conflict {
 		t.Fatalf("expected a conflict, got %+v, %v", r, err)
 	}
@@ -158,13 +135,13 @@ func TestSaveDraftToFileNoticesOutsideChanges(t *testing.T) {
 	}
 
 	// Saving again with overwrite replaces it, and the next plain save is fine.
-	if r, err = s.SaveDraftToFile(d, false, true); err != nil || r.Conflict {
+	if r, err = s.SaveDraftToFile(d, false, true, ""); err != nil || r.Conflict {
 		t.Fatalf("overwrite = %+v, %v", r, err)
 	}
 	if got, _ := os.ReadFile(target); string(got) != "mine, edited" {
 		t.Errorf("file = %q", got)
 	}
-	if r, err = s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err = s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("save after overwrite = %+v, %v", r, err)
 	}
 
@@ -172,12 +149,12 @@ func TestSaveDraftToFileNoticesOutsideChanges(t *testing.T) {
 	if err := os.Remove(target); err != nil {
 		t.Fatal(err)
 	}
-	if r, err = s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err = s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("save of a deleted file = %+v, %v", r, err)
 	}
 
 	// Save as offers the file's own name.
-	_, _ = s.SaveDraftToFile(d, true, false)
+	_, _ = s.SaveDraftToFile(d, true, false, "")
 	if offered != "a.md" {
 		t.Errorf("save as offered %q", offered)
 	}
@@ -212,7 +189,7 @@ func linked(t *testing.T, content string) (*DraftService, string, string) {
 	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "a.md")
 	s.pickPath = func(string, string) (string, error) { return target, nil }
-	r, err := s.SaveDraftToFile(store.Draft{Content: content}, false, false)
+	r, err := s.SaveDraftToFile(store.Draft{Content: content}, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,13 +321,13 @@ func TestSaveWithTouchedFileIsNoConflict(t *testing.T) {
 	outside(t, target, "one")
 	d, _ := s.GetDraft(id)
 	d.Content = "one edited"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("save = %+v, %v", r, err)
 	}
 	// The file already holds the text being saved: also fine.
 	outside(t, target, "one more")
 	d.Content = "one more"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("save = %+v, %v", r, err)
 	}
 }
@@ -368,7 +345,7 @@ func TestSaveRefusesToOverwriteWhatIsNotText(t *testing.T) {
 			d.Content = "one edited"
 			// Neither a plain save nor Overwrite replaces it; the draft itself is saved.
 			for _, overwrite := range []bool{false, true} {
-				if _, err := s.SaveDraftToFile(d, false, overwrite); err == nil || !strings.Contains(err.Error(), "not overwritten") {
+				if _, err := s.SaveDraftToFile(d, false, overwrite, ""); err == nil || !strings.Contains(err.Error(), "not overwritten") {
 					t.Fatalf("overwrite=%v: save = %v", overwrite, err)
 				}
 			}
@@ -383,7 +360,7 @@ func TestSaveRefusesToOverwriteWhatIsNotText(t *testing.T) {
 			if c := state(t, s, id); c.State != FileChanged {
 				t.Errorf("after restoring text = %+v", c)
 			}
-			if r, err := s.SaveDraftToFile(d, false, true); err != nil || r.Conflict {
+			if r, err := s.SaveDraftToFile(d, false, true, ""); err != nil || r.Conflict {
 				t.Errorf("overwrite of text = %+v, %v", r, err)
 			}
 		})
@@ -435,7 +412,7 @@ func TestUndoUnlinkRestoresTheSameLinkAndBaseline(t *testing.T) {
 	if _, err := s.UnlinkDraftFile(id); err != nil {
 		t.Fatal(err)
 	}
-	other, err := s.SaveDraftToFile(store.Draft{Content: "other"}, false, false) // another draft takes the path through Save to disk
+	other, err := s.SaveDraftToFile(store.Draft{Content: "other"}, false, false, "") // another draft takes the path through Save to disk
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,7 +485,7 @@ func TestReloadNormalizesAndOverwriteKeepsCRLF(t *testing.T) {
 	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "a.md")
 	s.pickPath = func(string, string) (string, error) { return target, nil }
-	r, err := s.SaveDraftToFile(store.Draft{Content: "mine"}, false, false)
+	r, err := s.SaveDraftToFile(store.Draft{Content: "mine"}, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +499,7 @@ func TestReloadNormalizesAndOverwriteKeepsCRLF(t *testing.T) {
 	}
 	// A save of edited text replaces a CRLF file with CRLF line endings.
 	d.Content = "one\nedited\n"
-	if _, err := s.SaveDraftToFile(d, false, true); err != nil {
+	if _, err := s.SaveDraftToFile(d, false, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(target); string(got) != "one\r\nedited\r\n" {
@@ -532,7 +509,7 @@ func TestReloadNormalizesAndOverwriteKeepsCRLF(t *testing.T) {
 	if err := os.WriteFile(target, []byte("a\nb\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SaveDraftToFile(d, false, true); err != nil {
+	if _, err := s.SaveDraftToFile(d, false, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(target); string(got) != "one\nedited\n" {
@@ -602,7 +579,7 @@ func TestUnreachableFileIsBrokenNotAConflict(t *testing.T) {
 	// A save does not raise a conflict for a file it cannot read: it writes (replacing the file by rename) and the file is readable again.
 	d, _ := s.GetDraft(id)
 	d.Content = "mine again"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("save = %+v, %v", r, err)
 	}
 	if c := state(t, s, id); c.State != FileSame {
@@ -623,7 +600,7 @@ func TestUndoneReloadIsMyVersionWinsWhileTheFileIsTheReloadedOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.Content = "old, edited\n"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("save after an undone reload = %+v, %v", r, err)
 	}
 	if got, _ := os.ReadFile(target); string(got) != "old, edited\n" {
@@ -652,7 +629,7 @@ func TestUndoneReloadThenFileChangedAgainIsAConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.Content = "old, edited\n"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || !r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || !r.Conflict {
 		t.Fatalf("later mtime = %+v, %v", r, err)
 	}
 	if err := os.WriteFile(target, []byte("THEIRS\n"), 0o644); err != nil { // same length as the reloaded text
@@ -661,7 +638,7 @@ func TestUndoneReloadThenFileChangedAgainIsAConflict(t *testing.T) {
 	if err := os.Chtimes(target, fi.ModTime(), fi.ModTime()); err != nil {
 		t.Fatal(err)
 	}
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || !r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || !r.Conflict {
 		t.Fatalf("same mtime and size = %+v, %v", r, err)
 	}
 	if got, _ := os.ReadFile(target); string(got) != "THEIRS\n" {
@@ -681,7 +658,7 @@ func TestChangedContentWithTheMtimeKeptIsNotOverwrittenSilently(t *testing.T) {
 		if err := os.Chtimes(target, fi.ModTime(), fi.ModTime()); err != nil { // rsync -t
 			t.Fatal(err)
 		}
-		if r, err := s.SaveDraftToFile(d, false, false); err != nil || !r.Conflict {
+		if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || !r.Conflict {
 			t.Fatalf("%s: save = %+v, %v", name, r, err)
 		}
 		if got, _ := os.ReadFile(target); string(got) != content {
@@ -689,12 +666,12 @@ func TestChangedContentWithTheMtimeKeptIsNotOverwrittenSilently(t *testing.T) {
 		}
 	}
 	// Overwrite is the explicit choice.
-	if r, err := s.SaveDraftToFile(d, false, true); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, true, ""); err != nil || r.Conflict {
 		t.Fatalf("overwrite = %+v, %v", r, err)
 	}
 	// Untouched file: an ordinary save writes.
 	d.Content = "one, edited again\n"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("plain save = %+v, %v", r, err)
 	}
 }
@@ -703,11 +680,11 @@ func TestSaveAsOntoAnotherDraftsFileMovesTheLink(t *testing.T) {
 	s := newTestServices(t).Drafts
 	target := filepath.Join(t.TempDir(), "shared.md")
 	s.pickPath = func(string, string) (string, error) { return target, nil }
-	first, err := s.SaveDraftToFile(store.Draft{Content: "# First\nbody"}, false, false)
+	first, err := s.SaveDraftToFile(store.Draft{Content: "# First\nbody"}, false, false, "")
 	if err != nil || len(first.UnlinkedFrom) != 0 {
 		t.Fatalf("first = %+v, %v", first, err)
 	}
-	second, err := s.SaveDraftToFile(store.Draft{Content: "# Second\nbody"}, false, false)
+	second, err := s.SaveDraftToFile(store.Draft{Content: "# Second\nbody"}, false, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -766,7 +743,7 @@ func TestAFullDraftWrittenWithCRLFIsReadWholeAndWrittenAgain(t *testing.T) {
 	if len(d.Content) > store.MaxContentBytes {
 		t.Fatal("the draft is over the limit")
 	}
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict {
 		t.Fatalf("save = %+v, %v", r, err)
 	}
 }
@@ -779,7 +756,7 @@ func TestALinkWithoutAHashComparesByText(t *testing.T) {
 	}
 	d, _ := s.GetDraft(id)
 	d.Content = "one edited\n"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || r.Conflict { // the file holds the draft as stored: unchanged
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || r.Conflict { // the file holds the draft as stored: unchanged
 		t.Fatalf("save = %+v, %v", r, err)
 	}
 	if err := st.SetFile(id, target, 1); err != nil {
@@ -787,7 +764,7 @@ func TestALinkWithoutAHashComparesByText(t *testing.T) {
 	}
 	outside(t, target, "something else\n")
 	d.Content = "two\n"
-	if r, err := s.SaveDraftToFile(d, false, false); err != nil || !r.Conflict { // any other text asks
+	if r, err := s.SaveDraftToFile(d, false, false, ""); err != nil || !r.Conflict { // any other text asks
 		t.Fatalf("save = %+v, %v", r, err)
 	}
 }
@@ -822,7 +799,7 @@ func TestOneSizeRuleForStatusAndWrite(t *testing.T) {
 	if c := state(t, s, id); c.State != FileBroken || !strings.Contains(c.Reason, "larger") {
 		t.Errorf("status of 1.5 MiB = %+v", c)
 	}
-	if _, err := s.SaveDraftToFile(d, false, false); err == nil || !strings.Contains(err.Error(), "not overwritten") {
+	if _, err := s.SaveDraftToFile(d, false, false, ""); err == nil || !strings.Contains(err.Error(), "not overwritten") {
 		t.Errorf("save over 1.5 MiB = %v", err)
 	}
 	if got, _ := os.ReadFile(target); len(got) != len(big) {
@@ -837,12 +814,12 @@ func TestOneSizeRuleForStatusAndWrite(t *testing.T) {
 	if c := state(t, s, id); c.State != FileChanged {
 		t.Errorf("status of the CRLF file = %+v", c)
 	}
-	if r, err := s.SaveDraftToFile(d, false, true); err != nil || r.Conflict {
+	if r, err := s.SaveDraftToFile(d, false, true, ""); err != nil || r.Conflict {
 		t.Fatalf("overwrite = %+v, %v", r, err)
 	}
 	// Written with CRLF again (the file used it) and read whole afterwards.
 	d.Content = full
-	if _, err := s.SaveDraftToFile(d, false, true); err != nil {
+	if _, err := s.SaveDraftToFile(d, false, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(target); len(got) <= store.MaxContentBytes || !strings.Contains(string(got), "\r\n") {

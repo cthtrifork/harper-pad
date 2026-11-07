@@ -12,10 +12,10 @@ import { record } from "./lib/diagnostics.ts";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.js";
-import { statusLine } from "./lib/statusLine.js";
+import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.js";
 import { COPY_LABELS } from "./lib/conflict.js";
-import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.js";
+import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
 import { useConflict } from "./lib/useConflict.js";
 import { useSync } from "./lib/useSync.js";
 
@@ -99,7 +99,7 @@ const drafts = useDrafts(editor, showDrawer, {
 const conflict = useConflict({ drafts, sync });
 const copyBadge = computed(() => COPY_LABELS[drafts.copies.value[drafts.current.value.id]] ?? "");
 
-// The status line: where the open draft's text is and who has it, joined from the draft and the sync (lib/statusLine.js).
+// The status line: where the open draft's text is and who has it, joined from the draft and the sync (lib/statusLine.ts).
 const statusLineNow = computed(() =>
   statusLine({
     draft: { state: drafts.state.value, text: drafts.status.value, fileState: drafts.fileState.value, fileName: drafts.fileName.value, recreated: drafts.recreated.value },

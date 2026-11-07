@@ -1,5 +1,5 @@
 <script setup>
-import { dirtyText, fileControls } from "../lib/fileLink.js";
+import { dirtyText, fileControls } from "../lib/fileLink.ts";
 import { computed, ref } from "vue";
 
 const VIEWS = [

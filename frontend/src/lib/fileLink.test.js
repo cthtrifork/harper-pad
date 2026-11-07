@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dirtyText, fileControls, saveAsAction, UNLINK_FIRST } from "./fileLink.js";
+import { dirtyText, fileControls, saveAsAction, UNLINK_FIRST } from "./fileLink.ts";
 
 const linked = { filePath: "/home/me/plan.md", fileProblem: "", canUnlink: true };
 

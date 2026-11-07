@@ -3,7 +3,7 @@
 // has loaded, so a block never waits and an unknown language (or a failed load) just stays plain. Runs are text nodes in spans,
 // never HTML (docs/security.md).
 import { ref, watchEffect } from "vue";
-import { highlight, languageFor } from "../lib/highlight.js";
+import { highlight, languageFor } from "../lib/highlight.ts";
 
 const props = defineProps({
   code: { type: String, default: "" },

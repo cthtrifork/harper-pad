@@ -40,14 +40,14 @@ and `pprof`, which `production` rejects.
 - `lib/editor/` is the CodeMirror 6 editor: the lint source (`lint.js`, debounced), theme, markdown or plain text mode,
   status bar statistics and the problems list.
 - `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
-  on disk, and the list the drawer shows. `lib/statusLine.js` joins that state with the sync state into the one status line in the status bar
+  on disk, and the list the drawer shows. `lib/statusLine.ts` joins that state with the sync state into the one status line in the status bar
   (the Sync button in the header only acts; the sync chip only shows the connection).
 - Sync (optional, both builds; the rules are in [sync](sync.md)): `lib/syncRun.js` (`createSyncer`) is the one place a draft is synced and
   decided. `lib/desktopSync.ts` and `lib/webDrafts.js` give it the same drafts store on both builds.
   `lib/useSync.js` is the state behind the status bar chip (`SyncChip.vue`), and `lib/csp.ts` builds the page's policy, which names the sync
   server when `SYNC_ORIGIN` is set.
 - `Preview.vue` renders markdown for the Split and Preview views (`marked` parses it); text from drafts or Harper never goes
-  through `v-html` or `innerHTML`. `CodeBlock.vue` colours fenced code (`sh`/`bash`, `json`, `yaml`, `toml`) with the lazy parsers in `lib/highlight.js`, as spans of text; other languages stay plain. To add one, add a loader and aliases there. `lib/editor/snippets.js` expands a trigger alone on a line (`<code>`, `<sh>`, `<json>`, `<yaml>`, `<toml>`, `<todo>`, `<table>`, `<link>`, `<img>`) when Enter is pressed; to add one, add a line to its `SNIPPETS` table; `SnippetsHelp.vue` (the drafts drawer's footer link "Snippets") draws the help page from the same table, and pressing a card there inserts that snippet at the cursor (`insertSnippet`).
+  through `v-html` or `innerHTML`. `CodeBlock.vue` colours fenced code (`sh`/`bash`, `json`, `yaml`, `toml`) with the lazy parsers in `lib/highlight.ts`, as spans of text; other languages stay plain. To add one, add a loader and aliases there. `lib/editor/snippets.js` expands a trigger alone on a line (`<code>`, `<sh>`, `<json>`, `<yaml>`, `<toml>`, `<todo>`, `<table>`, `<link>`, `<img>`) when Enter is pressed; to add one, add a line to its `SNIPPETS` table; `SnippetsHelp.vue` (the drafts drawer's footer link "Snippets") draws the help page from the same table, and pressing a card there inserts that snippet at the cursor (`insertSnippet`).
 - `ToastBar.vue` is the one toast (a message and one action: Undo), used for autocorrect's "Fixed N things" and for what sync says.
   `ConflictDialog.vue` is the one modal for a conflict ([sync](sync.md#the-keep-or-overwrite-dialog)), and `DeletedElsewhereDialog.vue` a
   forced Keep or Remove for a draft deleted on another device (`docs/design-cheatsheet.html` lists them as the exceptions to "no modals").
