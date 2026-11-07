@@ -44,7 +44,7 @@ and `pprof`, which `production` rejects.
 - `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
   on disk, and the list the drawer shows. `lib/statusLine.ts` joins that state with the sync state into the one status line in the status bar
   (the Sync button in the header only acts; the sync chip only shows the connection).
-- Sync (optional, both builds; the rules are in [sync](sync.md)): `lib/syncRun.js` (`createSyncer`) is the one place a draft is synced and
+- Sync (optional, both builds; the rules are in [sync](sync.md)): `lib/syncRun.ts` (`createSyncer`) is the one place a draft is synced and
   decided. `lib/desktopSync.ts` and `lib/webDrafts.ts` give it the same drafts store on both builds.
   `lib/useSync.js` is the state behind the status bar chip (`SyncChip.vue`), and `lib/csp.ts` builds the page's policy, which names the sync
   server when `SYNC_ORIGIN` is set.

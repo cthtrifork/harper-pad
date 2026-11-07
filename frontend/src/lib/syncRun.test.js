@@ -5,8 +5,8 @@ import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.ts";
-import { listDocs } from "./syncClient.js";
-import { createSyncer, summaryText } from "./syncRun.js";
+import { listDocs } from "./syncClient.ts";
+import { createSyncer, summaryText } from "./syncRun.ts";
 import { createWebDrafts, openDatabase } from "./webDrafts.ts";
 
 function fakeServer() {

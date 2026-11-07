@@ -3,7 +3,7 @@
 import type { PublicJwk } from "./dpop.ts";
 import { kvRecord, type Open } from "./kv.ts";
 
-interface DeviceRecord {
+export interface DeviceRecord {
   server: string;
   token: string;
   privateKey: CryptoKey;

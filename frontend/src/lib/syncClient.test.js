@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateDeviceKey } from "./dpop.ts";
-import { pushDraft, signedRequest } from "./syncClient.js";
+import { pushDraft, signedRequest } from "./syncClient.ts";
 
 const decode = (part) => JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
 const draft = { id: "a".repeat(32), format: "markdown", content: "hello", createdAt: 1000, updatedAt: 2000 };

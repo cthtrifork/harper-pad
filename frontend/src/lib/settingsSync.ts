@@ -3,7 +3,7 @@
 // the server's copy wins.
 import { kvRecord, type Open } from "./kv.ts";
 
-interface SettingsSyncRecord {
+export interface SettingsSyncRecord {
   version: number;
   words: string[];
   ignored: string[];

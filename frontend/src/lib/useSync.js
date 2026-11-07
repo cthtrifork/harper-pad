@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 import { summarize } from "./summarize.ts";
-import { createSyncer, summaryText } from "./syncRun.js";
-import { parseInviteUrl, enrollDevice, SyncError } from "./syncEnroll.js";
+import { createSyncer, summaryText } from "./syncRun.ts";
+import { parseInviteUrl, enrollDevice, SyncError } from "./syncEnroll.ts";
 
 // How long after a save the draft is pushed (docs/sync.md, "When sync happens"): long enough that typing is one push, not many.
 const PUSH_DELAY_MS = 2000;
