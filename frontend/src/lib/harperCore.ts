@@ -2,7 +2,7 @@
 // harperCore.test.js can run it against the real Harper in Node, which tells a harper.js update that changes behaviour from one that
 // does not.
 
-import type { LocalLinter } from "harper.js";
+import { type LocalLinter, SuggestionKind } from "harper.js";
 
 export interface Fix {
   /** Replace the problem range, remove it, or insert after it. */
@@ -22,7 +22,12 @@ export interface Finding {
   hash?: bigint;
 }
 
-const SUGGESTION_KIND: Record<number, Fix["kind"]> = { 0: "replace", 1: "remove", 2: "insert" };
+// Strings, not the enum, for the page: importing a value from harper.js there would pull it into the main bundle (+41 KB).
+const SUGGESTION_KIND: Record<SuggestionKind, Fix["kind"]> = {
+  [SuggestionKind.Replace]: "replace",
+  [SuggestionKind.Remove]: "remove",
+  [SuggestionKind.InsertAfter]: "insert",
+};
 
 export function harperMethods(linter: LocalLinter) {
   // Neither Vue nor CodeMirror holds wasm-backed Lint instances: they are freed here.
