@@ -119,7 +119,7 @@ jobs:
 
   # --- lint: independent jobs, aggregated by `lint` below ---------------------------------------------------------
 
-  # Biome lint, format check and knip (unused exports and dependencies, frontend/knip.json). Run `npm run format` to fix
+  # Biome lint, format check and knip (unused exports and dependencies, frontend/knip.json), then vue-tsc. Run `npm run format` to fix
   # formatting. Needs node_modules, not a bundle.
   lint-frontend:
     name: lint-frontend
@@ -144,6 +144,9 @@ jobs:
 
       - name: Lint and check formatting (frontend)
         run: make lint-frontend
+
+      - name: Type-check (frontend)
+        run: make typecheck
 
   # Go formatting, module hygiene and golangci-lint for the desktop app (the root module; `./...` does not cross into
   # backend/, which has its own module and its own job).
