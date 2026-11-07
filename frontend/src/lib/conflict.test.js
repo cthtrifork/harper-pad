@@ -192,34 +192,22 @@ test("the footer is one short line, the same in every case, except for an unedit
   );
 });
 
-test("the full sentences stay for the tooltips: what each choice updates and deletes", () => {
+test("the tooltips are one short sentence: what the other versions become", () => {
   const side = (text) => ({ text });
   const three = describeConflict({ name: "plan.md", yours: "a", file: side("b"), server: side("c"), sync: true });
-  assert.equal(
-    three.keepTitle,
-    "Keeps the text now in plan.md and the server's text as two Conflicted copies, then updates plan.md and the server with your draft.",
-  );
-  assert.equal(
-    three.overwriteTitle,
-    "Deletes the other versions (the text now in plan.md and the server's text). No undo. Updates plan.md and the server with your draft.",
-  );
+  assert.equal(three.keepTitle, "Keeps the other versions as two Conflicted copies.");
+  assert.equal(three.overwriteTitle, "Deletes the other versions. No undo.");
   const same = describeConflict({ name: "plan.md", yours: "a", file: side("s"), server: side("s") });
-  assert.match(same.keepTitle, /as a Conflicted copy, then/, "one copy when the file and the server hold the same text");
-  assert.match(same.overwriteTitle, /^Deletes the other version \(/);
-  const fileOnly = describeConflict({ name: "plan.md", yours: "a", file: side("b"), server: null, sync: false });
-  assert.equal(fileOnly.keepTitle, "Keeps the text now in plan.md as a Conflicted copy, then updates plan.md with your draft.");
+  assert.equal(same.keepTitle, "Keeps the other version as a Conflicted copy.", "one copy when the file and the server hold the same text");
+  assert.equal(same.overwriteTitle, "Deletes the other version. No undo.");
   const serverOnly = describeConflict({ name: "", yours: "a", file: null, server: side("c") });
-  assert.equal(serverOnly.overwriteTitle, "Deletes the other version (the server's text). No undo. Updates the server with your draft.");
+  assert.equal(serverOnly.overwriteTitle, "Deletes the other version. No undo.");
 });
 
 test("an unedited draft with nothing else differing is described without crashing", () => {
   const d = describeConflict({ name: "plan.md", yours: "b", applyFile: true, sync: true, file: { text: "b" }, server: null });
-  assert.equal(d.keepTitle, "Nothing else differs, so no copy is made. Updates the server with plan.md's text.");
-  assert.equal(d.overwriteTitle, "Nothing else differs, so nothing is deleted. Updates the server with plan.md's text.");
-  assert.match(
-    describeConflict({ name: "plan.md", yours: "b", applyFile: true, sync: false, file: { text: "b" }, server: null }).keepTitle,
-    /Updates where it belongs with/,
-  );
+  assert.equal(d.keepTitle, "Nothing else differs, so no copy is made.");
+  assert.equal(d.overwriteTitle, "Nothing else differs, so nothing is deleted.");
 });
 
 test("the notes: which side changed again, and nothing-changed only when it is true", async () => {
