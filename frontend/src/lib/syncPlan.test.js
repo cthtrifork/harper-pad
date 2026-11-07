@@ -1,7 +1,7 @@
 // One test per row of the decision table in docs/sync.md ("Conflicts"), plus the edges the table implies.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decide, settle } from "./syncPlan.js";
+import { decide, settle } from "./syncPlan.ts";
 
 const live = (updatedAt) => ({ updatedAt, deleted: false });
 const gone = (updatedAt) => ({ updatedAt, deleted: true });

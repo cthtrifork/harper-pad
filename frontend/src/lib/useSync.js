@@ -15,7 +15,7 @@ const PUSH_DELAY_MS = 2000;
 // backend.ts and `drafts` the web store (see createSyncer: all syncing, conflicts included, is done there, not here). For Sync all: `prepare` saves what is typed first,
 // `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and `autoSync`
 // runs it when the app starts and after enrolling. `settings` ({current(), store, apply(changes)}) syncs the personal dictionary and the ignored findings
-// (hashes), with Sync all and after `wordsChanged()`; `current()` gives {words, ignored} now, `store` is settingsSync.js's record and
+// (hashes), with Sync all and after `wordsChanged()`; `current()` gives {words, ignored} now, `store` is settingsSync.ts's record and
 // `apply` makes the local lists match the server's. `isOpen(id)` says whether a draft is the one in the editor (only that one raises the conflict dialog), and `onRemoved(draft)` is told when the person chose to remove a draft that was deleted on another device (it shows another note), and `onRestore(draft)` when they undo that.
 export function useSync({
   origin,

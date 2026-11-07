@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
-import { generateDeviceKey } from "./dpop.js";
+import { generateDeviceKey } from "./dpop.ts";
 import { listDocs } from "./syncClient.js";
 import { createSyncer, summaryText } from "./syncRun.js";
 import { createWebDrafts, openDatabase } from "./webDrafts.js";

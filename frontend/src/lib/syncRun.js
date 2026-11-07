@@ -1,14 +1,14 @@
 // The one place a draft is synced (docs/sync.md, "Conflicts"): `all()` for Sync all, `one(id)` for the push after a save and `open(id)` for
 // opening a note all decide with the same table, so a draft is uploaded, downloaded or removed by this code only.
-// `decide` and `settle` (syncPlan.js) are the pure table; nothing outside this file calls them or uploads a draft.
+// `decide` and `settle` (syncPlan.ts) are the pure table; nothing outside this file calls them or uploads a draft.
 //
 // No Vue and no network or storage of its own: `device` and `fetchFn` for the server, `drafts` for the local store (the web store's get, save,
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
 import { contentHash } from "./contentHash.ts";
-import { changesTo, cleanLists, readSettings, sameLists, unionLists } from "./settingsItems.js";
+import { changesTo, cleanLists, readSettings, sameLists, unionLists } from "./settingsItems.ts";
 import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.js";
-import { decide, settle } from "./syncPlan.js";
+import { decide, settle } from "./syncPlan.ts";
 import { SyncError } from "./syncEnroll.js";
 
 const emptySum = () => ({ uploaded: 0, downloaded: 0, removed: 0, failed: 0, skipped: 0 });
@@ -217,7 +217,7 @@ export function createSyncer({ device, drafts, fetchFn, onGone = () => {}, onRej
     },
 
     // The personal dictionary and the ignore list, docs/sync.md "Settings": `current()` gives {words, ignored} held now, `store` is the
-    // sync record (settingsSync.js), `apply(changes)` makes the local lists match what was decided. The last device to sync wins, both
+    // sync record (settingsSync.ts), `apply(changes)` makes the local lists match what was decided. The last device to sync wins, both
     // lists at a time, except that a device syncing for the first time deletes nothing:
     //   - the server has nothing: send this device's lists;
     //   - this device never synced them (just enrolled): the union of both is sent and applied, so no word on either side is lost;

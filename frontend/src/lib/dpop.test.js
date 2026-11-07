@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createProof, generateDeviceKey } from "./dpop.js";
+import { createProof, generateDeviceKey } from "./dpop.ts";
 
 const decode = (part) => JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
 const sha256 = async (text) => Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).toString("base64url");
