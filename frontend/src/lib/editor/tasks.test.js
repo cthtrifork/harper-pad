@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
-import { findTasks, parseTask, toggleChange } from "./tasks.js";
+import { findTasks, parseTask, toggleChange } from "./tasks.ts";
 
 const state = (doc) => EditorState.create({ doc, extensions: [markdown()] });
 

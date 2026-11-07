@@ -1,40 +1,39 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
-import { RangeSetBuilder } from "@codemirror/state";
-import { Decoration, EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
+import { type EditorState, RangeSetBuilder } from "@codemirror/state";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
+import type { SyntaxNode, Tree } from "@lezer/common";
 
 // A task list marker at the start of a line: a bullet (`-`, `*`, `+`) or a number (`1.`, `1)`), a space, then `[ ]` or `[x]`
 // that is followed by a space or the end of the line (so `[x]y` and `[link](url)` are not tasks).
 const TASK = /^(\s*(?:[-*+]|\d{1,9}[.)])[ \t]+)\[([ xX])\](?=[ \t]|$)/;
 
-// The task marker on one line of text, or null. `from` is the offset of the `[`, `to` the offset after the `]`, and `checked` says
-// whether it is ticked. Offsets are relative to the start of `text`.
-export function parseTask(text) {
+// Offsets are relative to the start of `text`: `from` is the `[`, `to` is after the `]`.
+export function parseTask(text: string) {
   const m = TASK.exec(text);
   if (!m) return null;
   const from = m[1].length;
   return { from, to: from + 3, checked: m[2] !== " " };
 }
 
-// The change that ticks or unticks the marker at `from` (as returned by parseTask, plus the line's start).
-export function toggleChange(from, checked) {
+export function toggleChange(from: number, checked: boolean) {
   return { from: from + 1, to: from + 2, insert: checked ? " " : "x" };
 }
 
 const IN_CODE = /FencedCode|CodeBlock|InlineCode|HTMLBlock/;
 
-function inCode(tree, pos) {
-  for (let node = tree.resolveInner(pos, 1); node; node = node.parent) {
+function inCode(tree: Tree, pos: number) {
+  for (let node: SyntaxNode | null = tree.resolveInner(pos, 1); node; node = node.parent) {
     if (IN_CODE.test(node.name)) return true;
   }
   return false;
 }
 
-// Every task marker in the given document ranges, outside code, as { from, to, checked } in document offsets.
-export function findTasks(state, ranges = [{ from: 0, to: state.doc.length }]) {
+// Outside code, in document offsets.
+export function findTasks(state: EditorState, ranges: readonly { from: number; to: number }[] = [{ from: 0, to: state.doc.length }]) {
   // Parse up to the end of what is asked for (a short, bounded wait), so a fence further down is known to be one.
   const end = ranges.reduce((m, r) => Math.max(m, r.to), 0);
   const tree = ensureSyntaxTree(state, end, 50) ?? syntaxTree(state);
-  const found = [];
+  const found: { from: number; to: number; checked: boolean }[] = [];
   let last = -1;
   for (const r of ranges) {
     for (let pos = r.from; pos <= r.to; ) {
@@ -51,16 +50,18 @@ export function findTasks(state, ranges = [{ from: 0, to: state.doc.length }]) {
 }
 
 class TaskWidget extends WidgetType {
-  constructor(checked) {
+  checked: boolean;
+
+  constructor(checked: boolean) {
     super();
     this.checked = checked;
   }
 
-  eq(other) {
+  eq(other: TaskWidget) {
     return other.checked === this.checked;
   }
 
-  toDOM(view) {
+  toDOM(view: EditorView) {
     const box = document.createElement("span");
     box.className = "cm-task";
     box.setAttribute("role", "checkbox");
@@ -84,12 +85,12 @@ class TaskWidget extends WidgetType {
   }
 
   // Reuse the element when only the state changed, so the CSS transition plays.
-  updateDOM(dom) {
+  updateDOM(dom: HTMLElement) {
     this.sync(dom);
     return true;
   }
 
-  sync(box) {
+  sync(box: HTMLElement) {
     box.setAttribute("aria-checked", String(this.checked));
     box.classList.toggle("cm-task-done", this.checked);
   }
@@ -99,7 +100,7 @@ class TaskWidget extends WidgetType {
   }
 }
 
-function toggleAt(view, box) {
+function toggleAt(view: EditorView, box: HTMLElement) {
   const pos = view.posAtDOM(box);
   const line = view.state.doc.lineAt(pos);
   const t = parseTask(line.text);
@@ -108,8 +109,8 @@ function toggleAt(view, box) {
   // The widget is reused, so keyboard focus stays on it.
 }
 
-function build(view) {
-  const b = new RangeSetBuilder();
+function build(view: EditorView) {
+  const b = new RangeSetBuilder<Decoration>();
   for (const t of findTasks(view.state, view.visibleRanges)) {
     b.add(t.from, t.to, Decoration.replace({ widget: new TaskWidget(t.checked) }));
   }
@@ -119,11 +120,13 @@ function build(view) {
 // Markdown mode: draw `[ ]` / `[x]` as a checkbox that ticks the source text when clicked (or Space/Enter when focused).
 export const taskBoxes = ViewPlugin.fromClass(
   class {
-    constructor(view) {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
       this.decorations = build(view);
     }
 
-    update(u) {
+    update(u: ViewUpdate) {
       if (u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) this.decorations = build(u.view);
     }
   },

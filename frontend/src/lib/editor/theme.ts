@@ -1,6 +1,6 @@
 import { EditorView } from "@codemirror/view";
 
-const underline = (color) => ({
+const underline = (color: string) => ({
   backgroundImage: "none",
   textDecoration: `underline wavy ${color}`,
   textDecorationThickness: "1.5px",

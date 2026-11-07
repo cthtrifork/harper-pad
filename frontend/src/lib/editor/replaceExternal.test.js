@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EditorState } from "@codemirror/state";
-import { autoField, replaceExternal } from "./autocorrect.js";
+import { autoField, replaceExternal } from "./autocorrect.ts";
 
 // A stand-in for the editor view: just a state and a dispatch.
 function fake(doc, anchor) {

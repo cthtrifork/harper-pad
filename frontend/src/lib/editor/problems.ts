@@ -1,9 +1,22 @@
-import { forEachDiagnostic } from "@codemirror/lint";
+import { type Diagnostic, forEachDiagnostic } from "@codemirror/lint";
+import type { EditorView } from "@codemirror/view";
+
+export interface Problem {
+  kind: string | undefined;
+  severity: Diagnostic["severity"];
+  message: string;
+  problem: string;
+  from: number;
+  to: number;
+  /** The names of the fix actions, without the quiet personal ones. */
+  fixes: string[];
+  safe: boolean;
+}
 
 // Every current finding with its position mapped through later edits, as plain objects for the Problems panel.
-export function collectProblems(view) {
-  const out = [];
-  forEachDiagnostic(view.state, (d, from, to) => {
+export function collectProblems(view: EditorView): Problem[] {
+  const out: Problem[] = [];
+  forEachDiagnostic(view.state, (d: Diagnostic & { safe?: boolean }, from, to) => {
     out.push({
       kind: d.source,
       severity: d.severity,
@@ -19,7 +32,7 @@ export function collectProblems(view) {
 }
 
 // Whether two lists from collectProblems say the same, so the panel is only told about a real change.
-export function sameProblems(a, b) {
+export function sameProblems(a: Problem[], b: Problem[]) {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     const x = a[i];
