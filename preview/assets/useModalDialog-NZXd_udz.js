@@ -1,0 +1,1 @@
+import{b as e,y as t}from"./runtime-core.esm-bundler-IGOjUryN.js";function n(n){let r=null;e(()=>{r=document.activeElement,n.value?.showModal()}),t(()=>{n.value?.close(),r?.isConnected&&r.focus()})}export{n as t};
