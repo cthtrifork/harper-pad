@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; script-src &#39;self&#39; &#39;wasm-unsafe-eval&#39;; style-src &#39;self&#39; &#39;unsafe-inline&#39;; img-src &#39;self&#39; data:; font-src &#39;self&#39;; connect-src &#39;self&#39;; worker-src &#39;self&#39; blob:; object-src &#39;none&#39;; base-uri &#39;none&#39;; form-action &#39;none&#39;; manifest-src &#39;self&#39;">
+
+    <style>:root {
+  --bg: #f6f7f9;
+  --panel: #eceff3;
+  --raised: #ffffff;
+  --selected: #dde4ec;
+  --sunken: #eef1f5;
+  --well: #e3e7ed; /* the Problems panel: a step darker than --panel, so it reads as a list of findings, not as the drafts cards */
+  --line: #d3d9e0;
+  --text: #1a2028;
+  --mute: #566170;
+  --accent: #b36b00;
+  --on-accent: #ffffff;
+  --accent-tint: #f6e7cf;
+  --ok: #166534;
+  --bad: #b91c1c;
+  --c-spelling: #d63a32;
+  --c-grammar: #7a4fd6;
+  --c-style: #1f6fd1;
+  --tok-string: #1a7f4b; /* fenced code (preview.css) */
+  --scrim: rgb(0 0 0 / 0.5);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.08);
+  --shadow-thumb: 0 1px 2px rgb(0 0 0 / 0.12);
+  --shadow-menu: 0 8px 24px rgb(0 0 0 / 0.18);
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.35);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --font-ui: system-ui, sans-serif;
+  --font-doc: "Literata Variable", Georgia, serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161b;
+    --panel: #181d23;
+    --raised: #1f252d;
+    --selected: #2c3745;
+    --sunken: #151a20;
+    --well: #11151a;
+    --line: #2b333d;
+    --text: #e8ebef;
+    --mute: #9aa5b1;
+    --accent: #f5a524;
+    --on-accent: #1a1203;
+    --accent-tint: #3a2a0e;
+    --ok: #4cc38a;
+    --bad: #ff7b72;
+    --c-spelling: #ff7b72;
+    --c-grammar: #c4a1ff;
+    --c-style: #79b8ff;
+    --tok-string: #7ee2a8;
+  }
+}
+</style>
+
+    <meta charset="utf-8" />
+    <title>Harper Pad</title>
+    <meta name="description" content="Grammar-checked editor with a scratch pad drawer." />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <link rel="icon" type="image/svg+xml" href="/pr-200/favicon.svg" />
+    <!-- Painted before any script has arrived: the page colours (styles/tokens.css, inlined by vite.config.js) and a title (on a phone only: the same query as App.vue's `narrow`), so a cold start is not a blank
+         screen while the scripts download and the first draft is read. Vue replaces the contents of #app when it mounts. -->
+    <style>body{background:var(--bg);color:var(--text);margin:0;font:14px/1.5 system-ui,sans-serif}#app>.splash{flex-direction:column;justify-content:center;align-items:center;gap:12px;min-height:100dvh;font-size:20px;font-weight:600;display:none}@media (width<=720px),(pointer:coarse) and (height<=500px){#app>.splash{display:flex}}#app>.splash span{opacity:.6}</style>
+    <script type="module" crossorigin src="/pr-200/assets/index-DY1jBUCM.js"></script>
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/runtime-core.esm-bundler-IGOjUryN.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/runtime-dom.esm-bundler-CeRjFMrV.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/dist-7YmoKjNO.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/dist-BZ4_GMk8.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/snippets-D5bAADCY.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/preload-helper-BctPL3wu.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/conflict-DQgNG8i0.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/useModalDialog-NZXd_udz.js">
+    <link rel="modulepreload" crossorigin href="/pr-200/assets/diagnostics-CZUfD_dv.js">
+    <link rel="stylesheet" crossorigin href="/pr-200/assets/index-BxX8xNiF.css">
+    <meta name="theme-color" content="#eceff3" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#181d23" media="(prefers-color-scheme: dark)">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Harper Pad">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="/pr-200/apple-touch-icon.png">
+    <link rel="manifest" href="/pr-200/manifest.webmanifest">
+  </head>
+  <body>
+    <div id="app"><div class="splash"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="72" height="72" aria-hidden="true"><rect x="4" y="4" width="56" height="56" rx="14" fill="#f59e0b"/><path d="M20 16v26M44 16v26M20 29h24" fill="none" stroke="#1f2937" stroke-width="6" stroke-linecap="round"/><path d="M14 50q4-5 8 0t8 0 8 0 8 0 4-2" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Harper Pad</span></div></div>
+  </body>
+</html>
