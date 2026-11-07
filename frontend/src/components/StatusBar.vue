@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import SyncChip from "./SyncChip.vue";
 
 const props = defineProps({
-  state: { type: String, required: true }, // loading | ready | failed
+  state: { type: String, required: true }, // loading | ready | failed | off (opt-in on a phone)
   problemCount: { type: Number, default: 0 },
   counts: { type: Object, required: true },
   cursor: { type: Object, required: true },

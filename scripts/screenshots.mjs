@@ -219,8 +219,15 @@ const phoneShot = async (name) => {
   console.log(`  ${name}.png`);
 };
 await phone.goto(url);
-await phone.waitForSelector(".state.ready", { timeout: 60000 });
+// Harper is opt-in on a phone: the Problems button shows a ? and nothing is loaded until it is pressed.
+await phone.waitForSelector(".status .state.off");
+expect((await phone.locator(".toggle .count").innerText()) === "?", "the Problems count should be a ? until Harper is turned on");
 expect((await phone.locator(".panel").count()) === 0, "Problems should start closed on a phone");
+await phone.click(".toggle");
+await phone.waitForSelector(".state.ready", { timeout: 60000 });
+await phone.waitForSelector(".panel");
+await phone.click(".toggle");
+await phone.waitForSelector(".panel", { state: "detached" });
 expect(!(await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth)), "the phone layout should not scroll sideways");
 
 await phone.click(".drawer-btn");
