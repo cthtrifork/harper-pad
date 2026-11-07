@@ -81,7 +81,7 @@
     {
       // harper.js is the app's core: its findings are the product, and a release can change them (dictionary, rules) with no API
       // change. Every update, patch included, is its own PR that a person reads; CI runs the real Harper on it
-      // (frontend/src/lib/harperCore.test.js) but cannot judge a change in what it reports.
+      // (frontend/src/lib/harperCore.test.ts) but cannot judge a change in what it reports.
       matchPackageNames: ["harper.js"],
       automerge: false,
       groupName: null,

@@ -29,7 +29,7 @@ test("other errors are not retried", async () => {
       opens++;
       throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
     },
-  };
+  } as unknown as IDBFactory;
   await assert.rejects(openDatabase(), { name: "QuotaExceededError" });
   assert.equal(opens, 1);
 });

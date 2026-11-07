@@ -1,3 +1,5 @@
+// @ts-nocheck: these build an in-memory server, device and drafts store up per test; their calls into the real modules are
+// covered by the tests, not the compiler (see tsconfig.test.json).
 import assert from "node:assert/strict";
 import test from "node:test";
 import { contentHash } from "./contentHash.ts";
@@ -147,7 +149,7 @@ const empty = reply(200, []);
 
 test("Sync all with nothing to do ends synced, says so, and saves what is typed first", async () => {
   let prepared = 0;
-  let skipped;
+  let skipped: Set<string> | undefined;
   const { sync, ready } = setup({
     fetchFn: empty,
     prepare: async () => {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createFileChange, shortReason } from "./fileChange.ts";
 
+type Status = Awaited<ReturnType<Parameters<typeof createFileChange>[0]>>;
+
 const draft = { id: "a".repeat(32), filePath: "/home/me/notes/plan.md" };
 const changed = { state: "changed", stamp: "1" };
 const clean = { ...changed, clean: true };
@@ -17,7 +19,7 @@ test("a changed file with an edited draft is a conflict, with the file's name, a
 });
 
 test("a file that is gone or cannot be used (binary and too large included) is only a chip problem, never a conflict, and it clears when usable", async () => {
-  let s = { state: "missing" };
+  let s: Status = { state: "missing" };
   const fc = createFileChange(async () => s);
   await fc.check(draft);
   assert.equal(fc.conflict.value, null);
@@ -63,7 +65,7 @@ test("unchanged, unlinked and failing checks raise nothing", async () => {
 });
 
 test("opening another draft clears the dialog, and a late answer for the old one is ignored", async () => {
-  let release;
+  let release: () => void = () => {};
   const fc = createFileChange((id) =>
     id === draft.id ? new Promise((r) => (release = () => r(changed))) : Promise.resolve({ state: "none" }),
   );
@@ -75,7 +77,7 @@ test("opening another draft clears the dialog, and a late answer for the old one
 });
 
 test("the conflict stays until it is answered: a look at the same version keeps it, a changed file replaces it, a settled file clears it", async () => {
-  let s = changed;
+  let s: Status = changed;
   const fc = createFileChange(async () => s);
   await fc.check(draft);
   const first = fc.conflict.value.tick;

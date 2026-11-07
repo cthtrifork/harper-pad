@@ -51,8 +51,8 @@ test("blocked storage falls back to the default", () => {
 });
 
 test("applySize sets the property on the page", () => {
-  const set = [];
-  applySize("preview", 26, { style: { setProperty: (k, v) => set.push([k, v]) } });
+  const set: [string, string][] = [];
+  applySize("preview", 26, { style: { setProperty: (k: string, v: string) => set.push([k, v]) } } as unknown as HTMLElement);
   assert.deepEqual(set, [
     ["--preview-size", "26px"],
     ["--preview-scale", String(26 / 19)],

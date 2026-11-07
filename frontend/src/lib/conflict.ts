@@ -28,6 +28,17 @@ export interface ConflictModel {
   sync?: boolean;
 }
 
+// What the words and the rows need of a model: no stamps.
+interface View {
+  name?: string;
+  yours?: string;
+  draftAt?: number;
+  file?: Pick<Side, "text" | "at"> | null;
+  server?: Pick<Side, "text" | "at"> | null;
+  applyFile?: boolean;
+  sync?: boolean;
+}
+
 interface Row {
   kind: "draft" | "file" | "server";
   label: string;
@@ -42,7 +53,7 @@ const stampOf = (side: { stamp: string } | null | undefined) => (side ? side.sta
 
 // One row per version, in the order draft, file, server. An unedited draft has no row of its own; the file's row is tinted instead,
 // because its text counts as yours. `when` is "–" when the time is not known.
-export function summaryRows(m: ConflictModel, now = new Date()): Row[] {
+export function summaryRows(m: View, now = new Date()): Row[] {
   const when = (ms?: number) => (ms !== undefined && Number.isFinite(ms) && ms > 0 ? whenStamp(ms, now) : "–");
   return [
     !m.applyFile && { kind: "draft", label: "Your draft", when: when(m.draftAt), tint: true },
@@ -51,11 +62,11 @@ export function summaryRows(m: ConflictModel, now = new Date()): Row[] {
   ].filter((row): row is Row => !!row);
 }
 
-const sameText = (m: ConflictModel) => !!m.file && !!m.server && m.file.text === m.server.text;
+const sameText = (m: View) => !!m.file && !!m.server && m.file.text === m.server.text;
 
 // The words of the dialog: title, button labels and footer are what is seen; each button's sentence is its tooltip and what assistive
 // technology reads.
-export function describeConflict(m: ConflictModel) {
+export function describeConflict(m: View) {
   const fileOther = !!m.file && !m.applyFile; // an unedited draft takes the file's text: the file is not an "other" version then
   const versions = summaryRows(m).length;
   const title = m.applyFile
@@ -84,7 +95,7 @@ export function describeConflict(m: ConflictModel) {
 }
 
 // What Keep saves as copies; a side whose text equals yours has none.
-export function copiesFor(m: ConflictModel): { text: string; from: Origin }[] {
+export function copiesFor(m: View): { text: string; from: Origin }[] {
   const file = m.file && !m.applyFile && m.file.text !== m.yours ? m.file : null;
   const server = m.server && m.server.text !== m.yours ? m.server : null;
   if (file && server && file.text === server.text) return [{ text: file.text, from: "file and server" }];
@@ -156,7 +167,7 @@ export async function resolveConflict(choice: Choice, m: ConflictModel, ops: Con
 }
 
 // Names the side that changed again since the dialog was drawn.
-export function staleNote(m: ConflictModel, changed: ("file" | "server")[]) {
+export function staleNote(m: View, changed: ("file" | "server")[]) {
   const names = [changed.includes("file") && (m.name || "The file"), changed.includes("server") && "the server"].filter(
     (n): n is string => !!n,
   );

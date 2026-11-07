@@ -7,7 +7,7 @@ import { harperMethods } from "./harperCore.ts";
 // The real Harper, not a stand-in: these fail when a harper.js update changes what the worker relies on (the method names, the shape
 // of a finding, what a hash is), so a Renovate bump cannot merge unseen. The inlined binary is the one that loads in Node.
 const TEXT = "This is a sentance with teh typo.";
-let harper;
+let harper: ReturnType<typeof harperMethods>;
 
 before(async () => {
   harper = harperMethods(new LocalLinter({ binary: slimBinaryInlined }));

@@ -16,5 +16,5 @@
     "verbatimModuleSyntax": true
   },
   "include": ["src/**/*", "bindings/**/*"],
-  "exclude": ["dist", "dist-web", "node_modules"]
+  "exclude": ["dist", "dist-web", "node_modules", "src/**/*.test.ts"]
 }
