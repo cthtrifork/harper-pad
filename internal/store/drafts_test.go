@@ -221,14 +221,6 @@ func TestSummaries(t *testing.T) {
 	if e := by[empty.ID]; e.Title != "Untitled" || e.Excerpt != "" || e.Tasks == nil {
 		t.Errorf("empty draft = %+v", e)
 	}
-	long := strings.Repeat("word ", 100)
-	title, excerpt, _, _, _ := summarize("# " + long + "\n" + long)
-	if n := len([]rune(title)); n != 80 || !strings.HasSuffix(title, "…") {
-		t.Errorf("title is %d characters: %q", n, title)
-	}
-	if n := len([]rune(excerpt)); n != 160 {
-		t.Errorf("excerpt is %d characters", n)
-	}
 }
 
 func TestSurvivesReopenAndHasNoSideFiles(t *testing.T) {

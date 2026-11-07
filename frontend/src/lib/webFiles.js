@@ -1,7 +1,6 @@
 // Saving a draft to a file in the browser, the counterpart of DraftService.SaveDraftToFile. Chrome and Edge keep a handle to the
 // file, so later saves overwrite it. Elsewhere the page can only hand over a copy (share sheet or download) and the draft is never
 // linked to a file.
-import { summarize } from "./summarize.ts";
 
 const TYPES = [
   { description: "Markdown", accept: { "text/markdown": [".md"] } },
@@ -54,7 +53,7 @@ export async function saveWebFile(web, getHandle, putHandle, input, saveAs, over
   const kept = saveAs ? null : await getHandle(draft.id);
   let handle = kept?.handle;
   if (!handle) {
-    const name = fileName(summarize(draft.content).title, draft.format);
+    const name = fileName(draft.title, draft.format);
     if (!window.showSaveFilePicker) {
       if ((await share(name, draft.content)) === "unsupported") download(name, draft.content);
       return { draft, cancelled: false, conflict: false };

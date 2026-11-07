@@ -563,7 +563,7 @@ test("a draft the server rejects is reported with its title and reason, stays pe
       ok: false,
       json: async () => ({ title: "Request Entity Too Large", detail: "the draft is over the limit." }),
     }),
-    draftOverrides: { get: async () => ({ ...D, content: "# A big plan\nbody" }) },
+    draftOverrides: { get: async () => ({ ...D, title: "A big plan" }) }, // the draft carries the title the list shows
   });
   await ready();
   await sync.saveRequested(D.id);

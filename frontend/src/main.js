@@ -2,6 +2,7 @@ import "@fontsource-variable/literata";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { isWeb, startup } from "./lib/backend.ts";
+import { warmCore } from "./lib/core.js";
 import { noteOpen, record } from "./lib/diagnostics.ts";
 import "./styles/index.css";
 
@@ -23,4 +24,7 @@ createApp(App, { start }).mount("#app");
 // The web build works offline after the first load (public/sw.js). The desktop build has no service worker.
 if (isWeb && "serviceWorker" in navigator) {
   navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
+  // Saving needs the Go module (lib/core.js), a separate asset otherwise fetched by the first save. Fetching it once the service worker is
+  // ready caches it, so a save works offline even before the first one.
+  navigator.serviceWorker.ready.then(warmCore);
 }

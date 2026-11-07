@@ -80,6 +80,18 @@ const webApp = () => {
   };
 };
 
+// The desktop build has no wasm (src/lib/core.js is the web build's Go logic; on desktop Go answers directly), so there it imports a stub and
+// the bundle carries no wasm file. Only imports from src/ are swapped, never a package's own core.js.
+const desktopCore = () => ({
+  name: "desktop-core",
+  enforce: "pre",
+  resolveId(source, importer) {
+    if (importer && !importer.includes("node_modules") && /(^|\/)core\.js$/.test(source)) {
+      return fileURLToPath(new URL("./src/lib/core.desktop.js", import.meta.url));
+    }
+  },
+});
+
 export default defineConfig(({ mode }) => {
   const web = mode === "web";
   return {
@@ -104,6 +116,6 @@ export default defineConfig(({ mode }) => {
     // The web build has no Go side: no Wails plugin, and no dist/ placeholder to keep.
     plugins: web
       ? [vue(), inlineTokens(), contentSecurityPolicy(WEB_POLICY), webApp()]
-      : [vue(), wails("./bindings"), inlineTokens(), contentSecurityPolicy(POLICY), keepPlaceholder()],
+      : [vue(), wails("./bindings"), inlineTokens(), contentSecurityPolicy(POLICY), keepPlaceholder(), desktopCore()],
   };
 });

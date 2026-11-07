@@ -3,7 +3,7 @@
 // never the text, as the desktop database does. IDs, limits and messages match internal/store.
 import { openDB } from "idb";
 import { contentHash } from "./contentHash.ts";
-import { summarize } from "./summarize.ts";
+import { summarize } from "./core.js";
 
 export const DB_NAME = "harper-pad";
 export const DB_VERSION = 3; // 1 had only the key/value store used for settings, 2 added the drafts, 3 the sync state
@@ -60,20 +60,22 @@ export function createWebDrafts(open) {
     }
   }
 
-  const summaryOf = (d) => ({
+  // The row of the summaries store for a draft. `sum` is the Go summary of its text (lib/core.js); it is worked out before the transaction
+  // opens, because waiting for the wasm inside one would let it commit.
+  const summaryOf = (d, sum) => ({
     id: d.id,
     format: d.format,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
     filePath: d.filePath ?? "",
-    ...summarize(d.content),
+    ...sum,
   });
 
   async function get(id) {
     return withDb(async (db) => {
       const d = await db.get("drafts", id);
       if (!d) throw new Error("draft not found");
-      return d;
+      return { ...d, title: (await db.get("summaries", id))?.title ?? "" }; // the title the list shows, as the Go side's draft has
     });
   }
 
@@ -87,6 +89,7 @@ export function createWebDrafts(open) {
     let id = input.id;
     if (!id) id = newId(now);
     else if (!ID.test(id)) throw new Error(`"${id}" is not a draft id`);
+    const sum = await summarize(content);
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
       const drafts = tx.objectStore("drafts");
@@ -95,8 +98,8 @@ export function createWebDrafts(open) {
       const createdAt = existing?.createdAt ?? (input.id && input.createdAt > 0 ? input.createdAt : now);
       // The file link is only ever set by setFilePath, as on the Go side, so saving the text keeps it.
       const d = { id, format, content, createdAt, updatedAt: now, filePath: existing?.filePath ?? "" };
-      await Promise.all([drafts.put(d), tx.objectStore("summaries").put(summaryOf(d)), tx.done]);
-      return d;
+      await Promise.all([drafts.put(d), tx.objectStore("summaries").put(summaryOf(d, sum)), tx.done]);
+      return { ...d, title: sum.title };
     });
   }
 
@@ -108,7 +111,10 @@ export function createWebDrafts(open) {
       const d = await drafts.get(id);
       if (!d) throw new Error("draft not found");
       d.filePath = filePath;
-      await Promise.all([drafts.put(d), tx.objectStore("summaries").put(summaryOf(d)), tx.done]);
+      // The text did not change, so the stored summary only needs the new path (save and applyRemote always write the pair together).
+      const summaries = tx.objectStore("summaries");
+      const row = await summaries.get(id);
+      await Promise.all([drafts.put(d), row ? summaries.put({ ...row, filePath }) : Promise.resolve(), tx.done]);
       return d;
     });
   }
@@ -232,6 +238,7 @@ export function createWebDrafts(open) {
     if (!ID.test(input.id ?? "")) throw new Error(`"${input.id}" is not a draft id`);
     if (!(input.createdAt > 0 && input.updatedAt > 0)) throw new Error("a synced draft needs its created and updated times");
     const hash = await contentHash(format, content); // before the transaction: it would not wait for this
+    const sum = await summarize(content);
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries", "sync"], "readwrite");
       const drafts = tx.objectStore("drafts");
@@ -246,7 +253,7 @@ export function createWebDrafts(open) {
       };
       await Promise.all([
         drafts.put(d),
-        tx.objectStore("summaries").put(summaryOf(d)),
+        tx.objectStore("summaries").put(summaryOf(d, sum)),
         tx.objectStore("sync").put({ id: d.id, hash, updatedAt: d.updatedAt, deleted: false, version }),
         tx.done,
       ]);

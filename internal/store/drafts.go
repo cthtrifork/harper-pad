@@ -11,7 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
+
+	"github.com/cthtrifork/harper-pad/internal/core"
 )
 
 // Drafts are notes, task lists and half-written text that live inside the app and are not files until the user saves
@@ -33,9 +34,7 @@ var (
 	// ErrNotFound is returned by Get for an id that is not stored.
 	ErrNotFound = errors.New("draft not found")
 
-	idPattern   = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	taskPattern = regexp.MustCompile(`^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$`)
-	headPattern = regexp.MustCompile(`^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?)`)
+	idPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 )
 
 // Draft is one stored draft. Timestamps are Unix milliseconds.
@@ -45,6 +44,8 @@ type Draft struct {
 	Content   string `json:"content"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
+	// Title is the draft's title as the drafts list shows it. Set by Get (and so by Save); ignored on the way in.
+	Title string `json:"title"`
 	// FilePath is the file the draft was saved to ("" when it never was). The draft stays here too; Save ignores this field
 	// and only SetFile changes it, so the path always comes from the save dialog and never from the page.
 	FilePath string `json:"filePath"`
@@ -138,8 +139,8 @@ func (s *Store) Save(d Draft) (Draft, error) {
 func (s *Store) Get(id string) (Draft, error) {
 	var d Draft
 	var data string
-	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data, file_path, file_mtime, file_hash FROM drafts WHERE id = ?`, id).
-		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data, &d.FilePath, &d.FileMTime, &d.FileHash)
+	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data, title, file_path, file_mtime, file_hash FROM drafts WHERE id = ?`, id).
+		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data, &d.Title, &d.FilePath, &d.FileMTime, &d.FileHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Draft{}, ErrNotFound
 	}
@@ -316,12 +317,12 @@ type summaryColumns struct {
 }
 
 func summarizeColumns(format, content string) summaryColumns {
-	title, excerpt, tasks, total, done := summarize(content)
-	js, err := json.Marshal(tasks)
+	sum := core.Summarize(content)
+	js, err := json.Marshal(sum.Tasks)
 	if err != nil {
 		js = []byte("[]")
 	}
-	return summaryColumns{format: format, title: title, excerpt: excerpt, tasks: string(js), total: total, done: done}
+	return summaryColumns{format: format, title: sum.Title, excerpt: sum.Excerpt, tasks: string(js), total: sum.TasksTotal, done: sum.TasksDone}
 }
 
 // decode reads a stored blob. Older or missing fields get their defaults, so rows written by an earlier version still load.
@@ -338,48 +339,5 @@ func decode(data string) (blob, error) {
 
 // Title is the draft's title as the drawer shows it: its first line without the markdown marks, or "Untitled".
 func Title(content string) string {
-	title, _, _, _, _ := summarize(content)
-	return title
-}
-
-// summarize works out what the drawer shows for a draft.
-func summarize(content string) (title, excerpt string, tasks []Task, total, done int) {
-	tasks = []Task{}
-	var rest []string
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimRight(line, "\r")
-		m := taskPattern.FindStringSubmatch(line)
-		if m != nil {
-			total++
-			isDone := m[1] != " "
-			if isDone {
-				done++
-			}
-			if len(tasks) < 3 {
-				tasks = append(tasks, Task{Text: clip(m[2], 120), Done: isDone})
-			}
-		}
-		if title == "" {
-			if strings.TrimSpace(line) != "" {
-				title = clip(strings.TrimSpace(headPattern.ReplaceAllString(line, "")), 80)
-			}
-			continue
-		}
-		if m == nil { // task lines are shown as tasks, so they stay out of the excerpt
-			rest = append(rest, line)
-		}
-	}
-	if title == "" {
-		title = "Untitled"
-	}
-	return title, clip(strings.Join(strings.Fields(strings.Join(rest, " ")), " "), 160), tasks, total, done
-}
-
-// clip shortens s to at most n characters, with an ellipsis when it cut something off.
-func clip(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	r := []rune(s)
-	return strings.TrimRight(string(r[:n-1]), " ") + "…"
+	return core.Summarize(content).Title
 }

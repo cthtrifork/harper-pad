@@ -1,10 +1,7 @@
 package store
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -41,47 +38,13 @@ func TestSummaryFollowsTheText(t *testing.T) {
 	d, _ := s.Save(Draft{Content: "First title\n- [ ] a"})
 	d.Content = "# Second title\n- [x] a\n- [x] b\nSome more words"
 	d.Format = FormatText
-	if _, err := s.Save(d); err != nil {
-		t.Fatal(err)
+	saved, err := s.Save(d)
+	if err != nil || saved.Title != "Second title" { // the draft carries the title the list shows
+		t.Fatalf("Save = %+v, %v", saved, err)
 	}
 	l, _ := s.List(10, 0)
 	got := l.Drafts[0]
 	if got.Title != "Second title" || got.Format != FormatText || got.TasksTotal != 2 || got.TasksDone != 2 || got.Excerpt != "Some more words" {
 		t.Errorf("summary after the second save: %+v", got)
-	}
-}
-
-// summarizeFixtures is the list of cases in testdata/summarize.json. The frontend runs the same file through its own
-// `summarize` (frontend/src/lib/summarize.test.js), so the two implementations cannot drift apart.
-type summarizeFixture struct {
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Title      string `json:"title"`
-	Excerpt    string `json:"excerpt"`
-	Tasks      []Task `json:"tasks"`
-	TasksTotal int    `json:"tasksTotal"`
-	TasksDone  int    `json:"tasksDone"`
-}
-
-func TestSummarizeFixtures(t *testing.T) {
-	raw, err := os.ReadFile("testdata/summarize.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fixtures []summarizeFixture
-	if err := json.Unmarshal(raw, &fixtures); err != nil {
-		t.Fatal(err)
-	}
-	if len(fixtures) == 0 {
-		t.Fatal("no fixtures")
-	}
-	for _, f := range fixtures {
-		t.Run(f.Name, func(t *testing.T) {
-			title, excerpt, tasks, total, done := summarize(f.Content)
-			if title != f.Title || excerpt != f.Excerpt || total != f.TasksTotal || done != f.TasksDone || !reflect.DeepEqual(tasks, f.Tasks) {
-				t.Errorf("summarize = %q, %q, %v, %d, %d\nwant       %q, %q, %v, %d, %d",
-					title, excerpt, tasks, total, done, f.Title, f.Excerpt, f.Tasks, f.TasksTotal, f.TasksDone)
-			}
-		})
 	}
 }
