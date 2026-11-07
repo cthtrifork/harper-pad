@@ -26,6 +26,8 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
   `frontend/bindings` (TypeScript, `wails3 generate bindings -ts`: the generator cleans the directory and writes `.ts`,
   so no `.js` is left); never hand-edit it. `frontend/dist` is untracked build output except `.gitkeep`.
 - Run `make format-frontend lint-frontend typecheck` before pushing frontend changes; CI's `lint` job fails on unformatted code.
+- `make typecheck` checks `.ts` files and `.js` files that start with `// @ts-check` (`checkJs` is off globally); `src/lib/backend.js` and
+  `desktopSync.js` have it, so their calls into the generated bindings are type-checked. Add it to a file once it is typed with JSDoc.
 - **SQL only in Go.** All SQL lives in `internal/store`; the frontend calls specific service methods through the generated bindings and never sends SQL. See `docs/storage.md`.
 - Security model, the page's Content-Security-Policy and the OWASP mapping are in `docs/security.md`. Do not loosen the policy in `frontend/vite.config.js`; never use `v-html` or `innerHTML` with text from drafts, Harper or the network.
 - **Always open a PR** from a new branch off `main`; do not push to `main`.
