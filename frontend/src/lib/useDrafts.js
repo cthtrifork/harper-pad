@@ -442,6 +442,8 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
       error.value = `Not saved to a file: ${message(err)}`;
       state.value = "error"; // the text stays dirty, so the next edit or flush tries again
       dirty = true;
+      // The draft itself was stored before the file failed or was refused, so Ctrl+S still asks sync to look at the server.
+      if (push && !saveAs && current.value.id) onSaved?.(current.value.id, { explicit: true });
       return message(err);
     }
   }

@@ -24,7 +24,7 @@ const stampOf = (side) => (side ? side.stamp : null);
 import { whenStamp } from "./when.js";
 
 // The versions involved, one row each, in the order draft, file, server (never more than three). Rows: {kind, label, when, tint}. `when` is the
-// version's timestamp from `whenStamp` ("22:36" today, "6 Nov, 22:36" otherwise), or "–" when it is not known (`m.draftAt`, `m.file.at` and
+// version's timestamp from `whenStamp` ("6 Nov, 22:36", always with the date), or "–" when it is not known (`m.draftAt`, `m.file.at` and
 // `m.server.at` are times in ms). The draft's row is tinted; an unedited draft has no row of its own, and the file's row is tinted instead
 // because the file's text counts as yours.
 export function summaryRows(m, now = new Date()) {

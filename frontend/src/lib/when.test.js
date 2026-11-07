@@ -20,9 +20,9 @@ test("older dates show the year only when it is not this year", () => {
   assert.match(whenLabel(at(2025, 8, 5), now), /2025/);
 });
 
-test("a dialog timestamp is the time today and a short date with the time otherwise", () => {
+test("a dialog timestamp is always a short date with the time", () => {
   const today = new Date(2026, 10, 5, 22, 36).getTime();
-  assert.match(whenStamp(today, now), /^22:36$/);
+  assert.match(whenStamp(today, now), /^5 Nov, 22:36$/);
   assert.match(whenStamp(new Date(2026, 10, 4, 9, 5).getTime(), now), /^4 Nov, 09:05$/);
   assert.doesNotMatch(whenStamp(new Date(2026, 9, 29, 9, 5).getTime(), now), /2026/);
   assert.match(whenStamp(new Date(2025, 8, 5, 9, 5).getTime(), now), /^5 Sep(t)? 2025, 09:05$/);

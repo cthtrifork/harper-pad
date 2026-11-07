@@ -127,8 +127,8 @@ test("the rows are the versions that exist, in the order draft, file, server, ea
     NOW,
   );
   assert.deepEqual(rows, [
-    { kind: "draft", label: "Your draft", when: "14:07", tint: true },
-    { kind: "file", label: "plan.md", when: "14:05", tint: false },
+    { kind: "draft", label: "Your draft", when: "6 Nov, 14:07", tint: true },
+    { kind: "file", label: "plan.md", when: "6 Nov, 14:05", tint: false },
     { kind: "server", label: "The server", when: "5 Nov, 13:58", tint: false },
   ]);
   assert.deepEqual(Object.keys(rows[0]).sort(), ["kind", "label", "tint", "when"], "no line counts");

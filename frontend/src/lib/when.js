@@ -15,12 +15,11 @@ export function whenLabel(ms, now = new Date()) {
   return d.toLocaleDateString(LOCALE, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
 }
 
-// The timestamp of a version in the Keep or Overwrite dialog: the time of day for today ("22:36"), a short date with the time otherwise
-// ("6 Nov, 22:36", with the year when it is not this year).
+// The timestamp of a version in the Keep or Overwrite dialog: always a short date and the time ("6 Nov, 22:36"), with the year when it is not
+// this year, so two versions are never compared by the time alone.
 export function whenStamp(ms, now = new Date()) {
   const d = new Date(ms);
   const time = d.toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
-  if (d.toDateString() === now.toDateString()) return time;
   const sameYear = d.getFullYear() === now.getFullYear();
   return `${d.toLocaleDateString(LOCALE, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" })}, ${time}`;
 }

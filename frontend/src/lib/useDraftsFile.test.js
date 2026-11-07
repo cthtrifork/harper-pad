@@ -259,3 +259,20 @@ test("typing that starts while the file is being read: nothing is applied, nothi
     [],
   );
 });
+
+test("Ctrl+S still asks the server when the file update is refused", async () => {
+  const { drafts, saved } = setup({
+    status: { state: "missing" },
+    extraApi: {
+      saveDraftToFile: async () => {
+        throw new Error("not text (binary or not UTF-8)");
+      },
+    },
+  });
+  drafts.init({ open, total: 1 });
+  await settle();
+  saved.length = 0;
+  await drafts.saveFile();
+  assert.deepEqual(saved, [[ID, { explicit: true }]], "the draft goes to the server although the file was refused");
+  assert.match(drafts.fileProblem.value || "", /not text/);
+});
