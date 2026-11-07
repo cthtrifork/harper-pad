@@ -1,5 +1,7 @@
 # PR #166: screenshots
 
+The header itself (icons, Save to disk, phone layout) is #188: [screenshots](../pr-188/README.md).
+
 ## Keep or Overwrite dialog
 - [File differs](dialog-new-file-desktop.png)
 - [Server differs](dialog-new-server-desktop.png) · [phone](dialog-new-server-phone.png)
