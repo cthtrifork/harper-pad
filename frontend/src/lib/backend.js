@@ -11,7 +11,7 @@ import { createSettingsSyncStore } from "./settingsSync.js";
 import { createDeviceStore } from "./syncDevice.js";
 import { saveWebFile, sharesFiles } from "./webFiles.js";
 
-export const isWeb = import.meta.env.MODE === "web";
+export const isWeb = import.meta.env?.MODE === "web";
 
 // The web build on a browser without a file picker (iPhone, iPad): Save opens the share sheet.
 export const sharing = isWeb && sharesFiles();
@@ -133,6 +133,37 @@ export async function saveDraftToFile(draft, saveAs, overwrite = false) {
     saveAs,
     overwrite,
   );
+}
+
+// Desktop only: how the file the draft is linked to compares with the draft: {state, reason, stamp, clean} with state "none" | "same" | "changed" | "missing" | "broken". Go reads the stored path. The web build has no path to
+// look at, so it always answers "none".
+export async function linkedFileStatus(id) {
+  if (isWeb) return { state: "none" };
+  return (await bindings()).DraftService.LinkedFileStatus(id);
+}
+
+// Desktop only: the text and version stamp of the draft's file, read from the stored path ({text, stamp}); rejects when it is not text.
+export async function linkedFileText(id) {
+  if (isWeb) throw new Error("there is no file to read in the web build");
+  return (await bindings()).DraftService.LinkedFileText(id);
+}
+
+// Desktop only: makes the file's text (as `linkedFileText` returned it, with its stamp) the baseline of the draft's link, once the draft has it.
+export async function recordLinkedFile(id, stamp) {
+  if (isWeb) throw new Error("there is no file to read in the web build");
+  return (await bindings()).DraftService.RecordLinkedFile(id, stamp);
+}
+
+// Desktop only: stops linking the draft to its file; both stay as they are. Returns the draft as stored.
+export async function unlinkDraftFile(id) {
+  if (isWeb) throw new Error("the web build cannot unlink a file");
+  return (await bindings()).DraftService.UnlinkDraftFile(id);
+}
+
+// Desktop only: puts back the link the last unlink removed for this draft (the same file and baseline, kept in Go; the page names no path).
+export async function undoUnlinkDraftFile(id) {
+  if (isWeb) throw new Error("the web build cannot unlink a file");
+  return (await bindings()).DraftService.UndoUnlinkDraftFile(id);
 }
 
 export async function deleteDraft(id) {

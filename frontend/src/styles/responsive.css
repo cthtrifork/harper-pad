@@ -33,6 +33,39 @@
     display: none;
   }
 
+  /* The file chip stays on a phone, because its x is the only way to unlink. It has a row of its own under the buttons, so nothing is squeezed
+     or overlapped at 390 or 320 px: the name is cut short with an ellipsis, and the dirty dot and the buttons always show (36 px tap targets). A
+     struck chip keeps its warning triangle. The folder stays hidden. */
+  .bar .badge.on-disk {
+    display: flex;
+    align-items: center;
+    order: 6;
+    flex: 1 0 100%;
+    max-width: none;
+    min-height: 40px;
+    padding-right: 4px;
+  }
+
+  .bar .badge.on-disk .file-name {
+    display: block;
+    flex: 0 1 auto;
+  }
+
+  .bar .badge.on-disk .broken-icon,
+  .bar .badge.on-disk .dirty-dot {
+    flex: none;
+  }
+
+  .bar .badge.on-disk .chip-btn {
+    width: 36px;
+    height: 36px;
+    margin: 0 0 0 auto;
+  }
+
+  .bar .badge.on-disk .chip-split + .chip-btn {
+    margin-left: 0;
+  }
+
   .bar .save-icon {
     display: block;
   }

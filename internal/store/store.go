@@ -112,7 +112,21 @@ func (s *Store) prepare() error {
 			return err
 		}
 	}
+	if err := s.ensureFileHash(); err != nil {
+		return err
+	}
 	return s.ensureSyncState()
+}
+
+// ensureFileHash adds file_hash to a drafts table that lacks it: the hash of the text the draft had when it last matched its file, to tell a
+// draft with no edits of its own since then. Additive like sync_state, so the compatibility level is unchanged and an older build ignores it.
+func (s *Store) ensureFileHash() error {
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('drafts') WHERE name = 'file_hash'`).Scan(&n); err != nil || n > 0 {
+		return err
+	}
+	_, err := s.db.Exec(`ALTER TABLE drafts ADD COLUMN file_hash TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 // ensureSyncState adds the sync_state table to a database that does not have it yet. It is an additive change, so it does not
@@ -157,7 +171,8 @@ const draftColumns = `
 	tasks_total INTEGER NOT NULL DEFAULT 0,
 	tasks_done  INTEGER NOT NULL DEFAULT 0,
 		file_path   TEXT    NOT NULL DEFAULT '',
-		file_mtime  INTEGER NOT NULL DEFAULT 0`
+		file_mtime  INTEGER NOT NULL DEFAULT 0,
+		file_hash   TEXT    NOT NULL DEFAULT ''`
 
 // create makes the schema in a new database.
 func (s *Store) create() error {

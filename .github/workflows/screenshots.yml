@@ -140,52 +140,62 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload 06-dictionary-list
+      - name: Upload 06-keep-or-overwrite
         if: github.event_name == 'pull_request'
-        id: shot-06-dictionary-list
+        id: shot-06-keep-or-overwrite
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: docs/screenshots/06-dictionary-list.png
+          path: docs/screenshots/06-keep-or-overwrite.png
           archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload 07-markdown-split
+      - name: Upload 07-dictionary-list
         if: github.event_name == 'pull_request'
-        id: shot-07-markdown-split
+        id: shot-07-dictionary-list
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: docs/screenshots/07-markdown-split.png
+          path: docs/screenshots/07-dictionary-list.png
           archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload 08-mobile-drafts-drawer
+      - name: Upload 08-markdown-split
         if: github.event_name == 'pull_request'
-        id: shot-08-mobile-drafts-drawer
+        id: shot-08-markdown-split
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: docs/screenshots/08-mobile-drafts-drawer.png
+          path: docs/screenshots/08-markdown-split.png
           archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload 09-mobile-problems
+      - name: Upload 09-mobile-drafts-drawer
         if: github.event_name == 'pull_request'
-        id: shot-09-mobile-problems
+        id: shot-09-mobile-drafts-drawer
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: docs/screenshots/09-mobile-problems.png
+          path: docs/screenshots/09-mobile-drafts-drawer.png
           archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload 10-mobile-markdown-preview
+      - name: Upload 10-mobile-problems
         if: github.event_name == 'pull_request'
-        id: shot-10-mobile-markdown-preview
+        id: shot-10-mobile-problems
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: docs/screenshots/10-mobile-markdown-preview.png
+          path: docs/screenshots/10-mobile-problems.png
+          archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload 11-mobile-markdown-preview
+        if: github.event_name == 'pull_request'
+        id: shot-11-mobile-markdown-preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: docs/screenshots/11-mobile-markdown-preview.png
           archive: false # one file per artifact, so it can be embedded; the file name is the artifact name
           if-no-files-found: error
           retention-days: 14

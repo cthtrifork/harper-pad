@@ -6,7 +6,7 @@ import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.js";
 import { listDocs } from "./syncClient.js";
-import { conflictedCopy, createSyncer, summaryText } from "./syncRun.js";
+import { createSyncer, summaryText } from "./syncRun.js";
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 
 function fakeServer() {
@@ -67,23 +67,23 @@ function device(server) {
     return openDatabase();
   };
   const drafts = createWebDrafts(open);
-  const copies = []; // the conflicted copies the engine reported
   const gone = []; // the ids Sync all left alone because they were deleted elsewhere
-  const syncer = () =>
-    createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn, onCopy: (c) => copies.push(c), onGone: (id) => gone.push(id) });
+  const syncer = () => createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn, onGone: (id) => gone.push(id) });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
   return {
     drafts,
-    copies,
     gone,
     keep: (id) => syncer().keep(id),
     removeLocal: (id) => syncer().removeLocal(id),
     sync: (skip) => syncer().all({ skip }),
     one: (id) => syncer().one(id),
     open: (id, o) => syncer().open(id, o),
+    inspect: (id) => syncer().inspect(id),
+    probe: (id) => syncer().probe(id),
+    force: (id) => syncer().force(id),
   };
 }
-const none = { uploaded: 0, downloaded: 0, removed: 0, conflicted: 0, failed: 0, skipped: 0 };
+const none = { uploaded: 0, downloaded: 0, removed: 0, failed: 0, skipped: 0 };
 const sum = (o) => ({ ...none, ...o });
 const texts = async (d) => (await Promise.all((await d.drafts.allIds()).map((id) => d.drafts.get(id)))).map((x) => x.content).sort();
 // Lets a save get a later updatedAt than the previous one.
@@ -116,7 +116,7 @@ test("another device downloads it, and an edit travels as a plain update with no
   assert.deepEqual(await texts(b), ["two"]);
 });
 
-test("changed on both sides with different text: a conflicted copy, and nothing is lost", async () => {
+test("changed on both sides with different text: Sync all leaves it exactly as it is, counts nothing, and the person settles it when it is open", async () => {
   const server = fakeServer();
   const a = device(server);
   const b = device(server);
@@ -129,17 +129,22 @@ test("changed on both sides with different text: a conflicted copy, and nothing 
   await b.drafts.save({ id: d.id, content: "from B" });
   await a.sync();
 
-  assert.deepEqual(await b.sync(), sum({ conflicted: 1 }));
-  const mine = await texts(b);
-  assert.equal(mine.length, 2);
-  assert.ok(mine.includes("from B"));
-  assert.ok(mine.some((t) => /^Conflicted copy \d{4}-\d\d-\d\d \d\d:\d\d: from A$/.test(t)));
-  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from B"); // this device's text is on top
-  assert.equal(server.rows.size, 2); // and the copy is an ordinary draft on the server
+  assert.deepEqual(await b.sync(), none, "no count, no copy, no upload, no download");
+  assert.deepEqual(await texts(b), ["from B"]);
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from A");
+  assert.equal(server.rows.size, 1);
+  assert.deepEqual(await b.sync(), none); // and it stays so, run after run
 
+  // Opened: the server's text is there for the dialog, and the choice sends this device's text on top.
+  assert.equal(await b.open(d.id), "conflict");
+  const got = await b.inspect(d.id);
+  assert.equal(got.text, "from A");
+  assert.match(got.stamp, /^\d+:\d+$/);
+  assert.equal(await b.force(d.id), true);
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from B");
   assert.deepEqual(await b.sync(), none);
-  assert.deepEqual(await a.sync(), sum({ downloaded: 2 })); // the other device gets the text and the copy
-  assert.deepEqual(await texts(a), mine);
+  assert.deepEqual(await a.sync(), sum({ downloaded: 1 }));
+  assert.deepEqual(await texts(a), ["from B"]);
 });
 
 test("changed on both sides with the same text: adopted, no copy", async () => {
@@ -241,12 +246,8 @@ test("the list follows its pages", async () => {
 });
 
 test("the summary names only what happened", () => {
-  assert.equal(
-    summaryText(sum({ uploaded: 3, downloaded: 2, conflicted: 1, removed: 1 })),
-    "3 uploaded, 2 downloaded, 1 conflicted copy, 1 removed",
-  );
-  assert.equal(summaryText(sum({ conflicted: 2, failed: 1 })), "2 conflicted copies, 1 failed");
-  assert.match(conflictedCopy("text", new Date(2026, 10, 5, 9, 7)), /^Conflicted copy 2026-11-05 09:07: text$/);
+  assert.equal(summaryText(sum({ uploaded: 3, downloaded: 2, removed: 1 })), "3 uploaded, 2 downloaded, 1 removed");
+  assert.equal(summaryText(sum({ failed: 1, skipped: 2 })), "1 failed, 2 left open");
 });
 
 // The push after a save goes through the same engine as Sync all, so it settles conflicts by the same rules.
@@ -264,7 +265,7 @@ test("a save is pushed with one request, and nothing is listed", async () => {
   assert.equal(JSON.parse(server.rows.get(d.id).data).content, "two");
 });
 
-test("a save that finds the server changed makes the same conflicted copy as Sync all", async () => {
+test("a save that finds the server changed answers conflict and changes nothing, here or on the server", async () => {
   const server = fakeServer();
   const a = device(server);
   const b = device(server);
@@ -276,14 +277,10 @@ test("a save that finds the server changed makes the same conflicted copy as Syn
   assert.equal(await a.one(d.id), "uploaded");
   await tick();
   await b.drafts.save({ id: d.id, content: "from B" });
-  assert.equal(await b.one(d.id), "conflicted"); // the PUT is refused, the real state is read, and the rules of Sync all apply
-  const mine = await texts(b);
-  assert.equal(mine.length, 2);
-  assert.ok(mine.includes("from B"));
-  assert.ok(mine.some((t) => /^Conflicted copy .*: from A$/.test(t)));
-  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from B");
-  assert.equal(server.rows.size, 2);
-  assert.deepEqual(await b.sync(), none);
+  assert.equal(await b.one(d.id), "conflict"); // the PUT is refused, the real state is read, and the person decides
+  assert.deepEqual(await texts(b), ["from B"]);
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from A");
+  assert.equal(server.rows.size, 1);
 });
 
 test("a save that finds the same text on the server adopts it, and one that finds the server empty uploads", async () => {
@@ -338,7 +335,7 @@ test("opening a note that is newer on the server swaps it in when nothing was ty
   assert.equal(await b.open(d.id), "none");
 });
 
-test("opening a note that was changed here and there only marks it", async () => {
+test("opening a note that was changed here and there reports a conflict and changes nothing", async () => {
   const server = fakeServer();
   const a = device(server);
   const b = device(server);
@@ -350,7 +347,7 @@ test("opening a note that was changed here and there only marks it", async () =>
   await a.one(d.id);
   await tick();
   await b.drafts.save({ id: d.id, content: "from B" }); // not pushed
-  assert.equal(await b.open(d.id), "newer");
+  assert.equal(await b.open(d.id), "conflict");
   assert.deepEqual(await texts(b), ["from B"]);
   assert.equal(JSON.parse(server.rows.get(d.id).data).content, "from A"); // nothing was sent
 });
@@ -372,6 +369,21 @@ test("a missing draft changes nothing, and a tombstone for an unchanged draft is
   assert.ok((await texts(b)).includes("never synced"));
 });
 
+test("before an automatic refresh from a file the server is asked once: unchanged, or ahead with its text", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "start" });
+  await a.sync();
+  await b.sync();
+  assert.deepEqual(await b.probe(d.id), { ahead: false });
+  await tick();
+  await a.drafts.save({ id: d.id, content: "newer" });
+  await a.one(d.id);
+  assert.deepEqual(await b.probe(d.id), { ahead: true, text: "newer" });
+  assert.deepEqual(await texts(b), ["start"], "looking changes nothing");
+});
+
 test("a draft the server rejects fails alone with its reason, and the others in the run still go", async () => {
   const server = fakeServer();
   const a = device(server);
@@ -388,27 +400,6 @@ test("a draft the server rejects fails alone with its reason, and the others in 
   assert.ok(server.rows.has(fine.id));
   assert.equal(server.rows.has(big.id), false);
   assert.equal((await a.drafts.get(big.id)).content, "too big", "the text stays here");
-});
-
-test("a conflict reports the copy it kept, from Sync all and from a save alike", async () => {
-  for (const how of ["all", "one"]) {
-    const server = fakeServer();
-    const a = device(server);
-    const b = device(server);
-    const d = await a.drafts.save({ content: "start" });
-    await a.sync();
-    await b.sync();
-    await tick();
-    await a.drafts.save({ id: d.id, content: "from A" });
-    await a.one(d.id);
-    await tick();
-    await b.drafts.save({ id: d.id, content: "from B" });
-    if (how === "all") await b.sync();
-    else await b.one(d.id);
-    assert.equal(b.copies.length, 1, how);
-    assert.match(b.copies[0].content, /^Conflicted copy .*: from A$/);
-    assert.ok((await b.drafts.allIds()).includes(b.copies[0].id));
-  }
 });
 
 // Deleted on another device while it is open here.
