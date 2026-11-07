@@ -1,6 +1,5 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { clock } from "../lib/when.ts";
 
 // The sync chip in the status bar and its pop-up (docs/sync.md). `sync` is useSync's result. A bottom sheet on a phone (styles/sync-chip.css).
 const props = defineProps({ sync: { type: Object, required: true } });
@@ -56,7 +55,7 @@ async function add() {
 
 const lastSyncText = computed(() => {
   const at = props.sync.lastSync.value;
-  return at ? clock(new Date(at)) : "";
+  return at ? new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
 });
 const syncing = computed(() => status.value === "syncing");
 
