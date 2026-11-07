@@ -17,15 +17,16 @@ import { loadOptIn, saveOptIn } from "./lib/harperOptIn.ts";
 import type { changesTo } from "./lib/settingsItems.ts";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.ts";
 import { statusLine } from "./lib/statusLine.ts";
-import { useDrafts } from "./lib/useDrafts.js";
+import { useDrafts } from "./lib/useDrafts.ts";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
 import { useConflict } from "./lib/useConflict.ts";
+import type { Start } from "./lib/useDrafts.ts";
 import { useSync } from "./lib/useSync.ts";
 
 // What main.ts asked the backend before mounting (see backend.ts startup): the demo banner and the most recent draft.
 const props = defineProps({
-  start: { type: Object as PropType<{ demo?: string; open?: { content?: string } | null; total?: number; error?: string }>, required: true },
+  start: { type: Object as PropType<Start & { demo?: string }>, required: true },
 });
 
 // The header's last button, loaded after the first paint. The desktop build has the in-app updater, with its version; the web build loads
@@ -250,7 +251,7 @@ function insertSnippet(trigger: string) {
 // A new draft always leaves the drawer (you are about to write in it). Opening another draft leaves it on a phone only, where the
 // drafts are a full-width sheet over the editor and would hide the text (and the keyboard that comes with focusing it); on a wide
 // screen the drawer stays open beside the editor.
-async function pickDraft(action: (id?: string) => unknown, id?: string, { always = false } = {}) {
+async function pickDraft(action: (id: string) => unknown, id = "", { always = false } = {}) {
   await action(id);
   if ((always || narrow.matches) && showDrawer.value) {
     toggleDrawer();

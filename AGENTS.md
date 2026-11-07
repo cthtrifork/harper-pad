@@ -26,10 +26,10 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
   `frontend/bindings` (TypeScript, `wails3 generate bindings -ts`: the generator cleans the directory and writes `.ts`,
   so no `.js` is left); never hand-edit it. `frontend/dist` is untracked build output except `.gitkeep`.
 - Run `make format-frontend lint-frontend typecheck` before pushing frontend changes; CI's `lint` job fails on unformatted code.
-- `make typecheck` checks `.ts` files and `.js` files that start with `// @ts-check` (`checkJs` is off globally), so calls into the generated
-  bindings are checked; import `.ts` files with the extension. The tests are `*.test.ts` (Node strips the types) and are checked by
-  `tsconfig.test.json`, which relaxes `noImplicitAny` and `strictNullChecks` for their fakes; `syncRun`, `useSync` and `syncSettings` tests opt
-  out with `// @ts-nocheck`. Convert a `.js` file when you touch it, and keep the web bundle unchanged (compare `vite build` output with `main`).
+- The frontend is TypeScript (`.ts` and `<script setup lang="ts">`; import `.ts` files with the extension). `make typecheck` checks the app strictly,
+  the Vite config with `tsconfig.node.json`, and the tests (`*.test.ts`, which Node runs by stripping the types) with `tsconfig.test.json`, which relaxes
+  `noImplicitAny` and `strictNullChecks` for their fakes; the `syncRun`, `useSync` and `syncSettings` tests opt out with `// @ts-nocheck`. Keep the
+  web bundle unchanged by a refactor (compare `vite build` output with `main`).
 - **SQL only in Go.** All SQL lives in `internal/store`; the frontend calls specific service methods through the generated bindings and never sends SQL. See `docs/storage.md`.
 - Security model, the page's Content-Security-Policy and the OWASP mapping are in `docs/security.md`. Do not loosen the policy in `frontend/vite.config.ts`; never use `v-html` or `innerHTML` with text from drafts, Harper or the network.
 - **Always open a PR** from a new branch off `main`; do not push to `main`.

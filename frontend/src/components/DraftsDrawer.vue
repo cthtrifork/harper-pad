@@ -11,7 +11,7 @@ const props = defineProps({
   total: { type: Number, default: 0 },
   currentId: { type: String, default: "" },
   query: { type: String, default: "" },
-  toast: { type: Object as PropType<{ message: string; undo?: boolean } | null>, default: null },
+  toast: { type: Object as PropType<{ message: string; undo: (() => unknown) | null } | null>, default: null },
   // Draft id -> where a Conflicted copy came from, in memory only (useDrafts): the row says so until the copy is edited, deleted or dismissed.
   copies: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
 });

@@ -41,7 +41,7 @@ and `pprof`, which `production` rejects.
   and compiled the 20 MB wasm a second time on the page and was most of Lighthouse's blocking time (TBT).
 - `lib/editor/` is the CodeMirror 6 editor: the lint source (`lint.ts`, debounced), theme, markdown or plain text mode,
   status bar statistics and the problems list.
-- `lib/useDrafts.js` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
+- `lib/useDrafts.ts` is the draft state: autosave shortly after typing and on blur or hide, the link from a draft to a file
   on disk, and the list the drawer shows. `lib/statusLine.ts` joins that state with the sync state into the one status line in the status bar
   (the Sync button in the header only acts; the sync chip only shows the connection).
 - Sync (optional, both builds; the rules are in [sync](sync.md)): `lib/syncRun.ts` (`createSyncer`) is the one place a draft is synced and

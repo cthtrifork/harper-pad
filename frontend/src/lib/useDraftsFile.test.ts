@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ref } from "vue";
-import { useDrafts } from "./useDrafts.js";
+import { useDrafts } from "./useDrafts.ts";
 
 const ID = "a".repeat(32);
 const open = { id: ID, format: "markdown", content: "old text\n", createdAt: 1, updatedAt: 2, filePath: "/home/me/plan.md" };
@@ -23,11 +23,14 @@ function setup({ status, probe = null, extraApi = {} }) {
     load() {},
     composing: (): boolean => false,
     undo() {},
+    focus() {},
   });
   const api = {
     linkedFileStatus: async () => status,
     linkedFileText: async () => ({ text: FROM_FILE.content, stamp: "7" }),
-    recordLinkedFile: async (id, stamp) => calls.push(["record", id, stamp]),
+    recordLinkedFile: async (id, stamp) => {
+      calls.push(["record", id, stamp]);
+    },
     saveDraft: async (d) => {
       calls.push(["saveDraft", d.content]);
       return {

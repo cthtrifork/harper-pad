@@ -1,22 +1,9 @@
-import { type Ref, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
+import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
-// The parts of useDrafts the dialog uses.
-interface DraftsApi {
-  current: Ref<{ id: string; filePath?: string }>;
-  fileConflict: Ref<{ id: string; name: string; clean?: boolean } | null>;
-  dialog: {
-    fileText(): Promise<{ text: string; stamp: string }>;
-    fileStamp(): Promise<string | null | undefined>;
-    current(): { text: string; updatedAt: number };
-    applyFile(): Promise<unknown>;
-    saveCopy(text: string, from: Origin): Promise<string>;
-    writeFile(): Promise<unknown>;
-  };
-  recheckFile(): Promise<unknown>;
-  clearFileConflict(): void;
-}
+type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict">;
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
