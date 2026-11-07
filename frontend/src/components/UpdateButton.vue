@@ -16,6 +16,8 @@ const open = ref(false);
 const root = ref(null);
 
 const busy = () => state.value === "checking" || state.value === "downloading";
+// One spinner at a time: the chip spins only while the pop-up (whose status row spins) is closed.
+const chipBusy = () => busy() && !open.value;
 
 async function run(next, work) {
   state.value = next;
@@ -113,7 +115,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 <template>
   <div ref="root" class="wrap">
     <button type="button" class="btn" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="onClick">
-      <span class="ind" :class="{ on: busy() || state === 'available' || state === 'ready' }" aria-hidden="true">
+      <span class="ind" :class="{ on: chipBusy() || state === 'available' || state === 'ready' }" aria-hidden="true">
         <span v-if="state === 'available' || state === 'ready'" class="dot"></span>
         <span v-else class="spin"></span>
       </span>
@@ -189,8 +191,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
           {{ action.label }}
         </button>
         <button v-if="info.enabled && (state === 'current' || state === 'idle' || state === 'checking')" type="button" class="row" :disabled="state === 'checking'" @click="check">
-          <span v-if="state === 'checking'" class="spin" aria-hidden="true"></span>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
           {{ state === "checking" ? "Checking…" : "Check for updates" }}
         </button>
         <button type="button" class="row" @click="whatsNew">

@@ -183,7 +183,3 @@
   background: var(--accent);
   filter: brightness(1.08);
 }
-
-.wrap .row .spin {
-  margin: 1px; /* 16px in all, like the icons, so the label does not shift when the spinner leaves */
-}
