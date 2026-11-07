@@ -31,10 +31,9 @@ export function summaryRows(m, now = new Date()) {
 
 const sameText = (m) => !!m.file && !!m.server && m.file.text === m.server.text;
 
-// The words of the dialog. The title, the two button labels and one footer line are what is seen; the two sentences for the buttons are
-// their tooltips and what assistive technology reads. `versions` is how many rows there are (2 or 3).
+// The words of the dialog. The title, the two button labels and one footer line are what is seen; one short sentence per button is its tooltip
+// and what assistive technology reads (what each choice updates is in the labels and in docs/sync.md). `versions` is how many rows there are.
 export function describeConflict(m) {
-  const fileName = m.name || "the file";
   const fileOther = !!m.file && !m.applyFile; // an unedited draft takes the file's text: the file is not an "other" version then
   const versions = summaryRows(m).length;
   const title = m.applyFile
@@ -44,25 +43,18 @@ export function describeConflict(m) {
       : fileOther
         ? `${m.name || "The file"} changed on disk`
         : "This draft changed on another device";
-
   const others = fileOther && m.server ? (sameText(m) ? 1 : 2) : fileOther || m.server ? 1 : 0;
-  const otherNames = [fileOther && `the text now in ${fileName}`, m.server && "the server's text"].filter(Boolean);
-  const targets = [fileOther && fileName, (m.server || m.sync) && "the server"].filter(Boolean).join(" and ") || "where it belongs";
-  const yours = m.applyFile ? `${fileName}'s text` : "your draft";
-  const copies = !others ? "" : fileOther && m.server && !sameText(m) ? "as two Conflicted copies" : "as a Conflicted copy";
-  const losing = others === 0 ? "" : others === 1 ? "the other version" : "the other versions";
+  const copies = others === 2 ? "two Conflicted copies" : "a Conflicted copy";
+  const other = others === 1 ? "the other version" : "the other versions";
 
   return {
     title,
     versions,
     keepLabel: versions === 3 ? "Keep all" : "Keep both",
-    overwriteLabel: versions === 3 ? "Overwrite others" : "Overwrite",
-    keepTitle: others
-      ? `Keeps ${otherNames.join(" and ")} ${copies}, then updates ${targets} with ${yours}.`
-      : `Nothing else differs, so no copy is made. Updates ${targets} with ${yours}.`,
-    overwriteTitle: others
-      ? `Deletes ${losing} (${otherNames.join(" and ")}). No undo. Updates ${targets} with ${yours}.`
-      : `Nothing else differs, so nothing is deleted. Updates ${targets} with ${yours}.`,
+    // Names what is replaced: the file, the server, or both of them ("others"). With three versions the draft's own row is one of them.
+    overwriteLabel: versions === 3 ? "Overwrite others" : fileOther ? "Overwrite file" : "Overwrite server",
+    keepTitle: others ? `Keeps ${other} as ${copies}.` : "Nothing else differs, so no copy is made.",
+    overwriteTitle: others ? `Deletes ${other}. No undo.` : "Nothing else differs, so nothing is deleted.",
     footer: m.applyFile
       ? `${m.name || "The file"} counts as yours: your draft has no edits. Overwrite cannot be undone.`
       : "Overwrite cannot be undone.",
