@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PREVIEW, scoped } from "./scope.js";
+import { PREVIEW, scoped } from "./scope.ts";
 
 // Under `node --test` there is no import.meta.env, so the base is "/": production names, unchanged.
 test("production keeps the plain storage names", () => {

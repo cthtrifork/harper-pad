@@ -8,7 +8,7 @@ import ConflictDialog from "./components/ConflictDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
 import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.ts";
-import { record } from "./lib/diagnostics.js";
+import { record } from "./lib/diagnostics.ts";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.js";
@@ -23,7 +23,7 @@ import { useSync } from "./lib/useSync.js";
 const props = defineProps({ start: { type: Object, required: true } });
 
 // The header's last button, loaded after the first paint. The desktop build has the in-app updater, with its version; the web build loads
-// the latest deploy, so its button only shows the version. Both have "Copy diagnostics" (lib/diagnostics.js).
+// the latest deploy, so its button only shows the version. Both have "Copy diagnostics" (lib/diagnostics.ts).
 const UpdateButton = defineAsyncComponent(() =>
   import.meta.env.MODE === "web" ? import("./components/VersionButton.vue") : import("./components/UpdateButton.vue"),
 );

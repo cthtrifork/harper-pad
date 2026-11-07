@@ -3,10 +3,10 @@ const LOCALE = "en-GB";
 
 // A short, human date for the drafts list: "Today, 09:12", "Yesterday", the weekday for the last week, then "29 Oct"
 // (with the year when it is not this year). `now` is a parameter so the function is easy to reason about.
-export function whenLabel(ms, now = new Date()) {
+export function whenLabel(ms: number, now = new Date()): string {
   const d = new Date(ms);
-  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
-  const days = Math.round((day(now) - day(d)) / 86400000);
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+  const days = Math.round((day(now).getTime() - day(d).getTime()) / 86400000);
   const time = d.toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
   if (days <= 0) return `Today, ${time}`;
   if (days === 1) return "Yesterday";
@@ -17,10 +17,11 @@ export function whenLabel(ms, now = new Date()) {
 
 // The timestamp of a version in the Keep or Overwrite dialog: always a short date and the time ("6 Nov, 22:36"), with the year when it is not
 // this year, so two versions are never compared by the time alone.
-const stampFormat = (year) => new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", year, hour: "2-digit", minute: "2-digit" });
+const stampFormat = (year: "numeric" | undefined) =>
+  new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", year, hour: "2-digit", minute: "2-digit" });
 const withYear = stampFormat("numeric");
 const withoutYear = stampFormat(undefined);
-export function whenStamp(ms, now = new Date()) {
+export function whenStamp(ms: number, now = new Date()): string {
   const d = new Date(ms);
   return (d.getFullYear() === now.getFullYear() ? withoutYear : withYear).format(d);
 }

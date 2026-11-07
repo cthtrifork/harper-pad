@@ -2,17 +2,56 @@
 // numbers (milliseconds, bytes, epoch milliseconds), to be read by whoever gets it. Nothing here is sent anywhere, and it holds no draft text.
 // The start-up timings are recorded by main.js and App.vue.
 
-const recorded = {};
+// The browser APIs below that lib.dom.d.ts does not declare.
+interface Connection {
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+}
+type NavigatorExtras = Navigator & { connection?: Connection; standalone?: boolean };
+
+interface Opens {
+  count: number;
+  first: number;
+  previous: number;
+}
+
+interface Recorded {
+  opens?: Opens;
+  openMs?: number;
+  dataMs?: number;
+  setupMs?: number;
+}
+
+export interface Report {
+  version: string;
+  at: number;
+  agent: string;
+  standalone: boolean;
+  worker?: boolean;
+  net?: { type?: string; mbit?: number; rtt?: number };
+  storage?: { usage?: number; quota?: number; persisted?: boolean };
+  opens?: Opens;
+  openMs?: number;
+  dataMs?: number;
+  setupMs?: number;
+  responseEnd?: number;
+  load?: number;
+  firstPaint?: number;
+  resources?: { name: string; duration: number; size: number }[];
+}
+
+const recorded: Recorded = {};
 
 // Remember a number for the report (for example `record("openMs", 794)`).
-export const record = (key, value) => {
+export const record = (key: "openMs" | "dataMs" | "setupMs", value: number) => {
   recorded[key] = value;
 };
 
 // Counts the opens in this browser storage, so a report says whether it comes from the first open (the cold one). localStorage is cleared
 // together with the rest when iOS drops a home-screen app's storage, so the count starts again then, which is the point.
 const OPENS = "harper-pad-opens";
-export function noteOpen(now = Date.now(), store = globalThis.localStorage) {
+export function noteOpen(now = Date.now(), store: Pick<Storage, "getItem" | "setItem"> = globalThis.localStorage) {
   let seen = { count: 0, first: now, last: 0 };
   try {
     seen = { ...seen, ...JSON.parse(store.getItem(OPENS) ?? "{}") };
@@ -27,13 +66,13 @@ export function noteOpen(now = Date.now(), store = globalThis.localStorage) {
   recorded.opens = { count: seen.count + 1, first: seen.first, previous: seen.last };
 }
 
-const seconds = (ms) => (typeof ms === "number" ? Math.round(ms) / 1000 : undefined);
-const bit = (v) => (v === undefined ? undefined : v ? 1 : 0);
+const seconds = (ms?: number) => (typeof ms === "number" ? Math.round(ms) / 1000 : undefined);
+const bit = (v?: boolean) => (v === undefined ? undefined : v ? 1 : 0);
 
 // The report as one line of JSON, from what collect() returns. The names follow Prometheus conventions (snake_case, base units in the name,
 // booleans as 0 or 1, timestamps in seconds), so the same fields can become metrics if they are ever collected. Values the browser cannot
 // give drop out. `service_worker_controlling` 0 with a registration is normal on the very first open.
-export const formatDiagnostics = (info) =>
+export const formatDiagnostics = (info: Report) =>
   JSON.stringify({
     version: info.version || undefined,
     user_agent: info.agent,
@@ -58,16 +97,16 @@ export const formatDiagnostics = (info) =>
   });
 
 // The facts of this page load, read from the browser. Each read is guarded: a browser without one of these APIs leaves it out.
-export async function collect(version) {
-  const nav = performance.getEntriesByType?.("navigation")?.[0];
+export async function collect(version?: string): Promise<Report> {
+  const nav = performance.getEntriesByType?.("navigation")?.[0] as PerformanceNavigationTiming | undefined;
   // Safari reports only first-contentful-paint, which is the same moment here (the page has text from the start).
   const paint = performance.getEntriesByName?.("first-paint")?.[0] ?? performance.getEntriesByName?.("first-contentful-paint")?.[0];
-  const resources = (performance.getEntriesByType?.("resource") ?? [])
+  const resources = ((performance.getEntriesByType?.("resource") ?? []) as PerformanceResourceTiming[])
     .map((r) => ({ name: new URL(r.name, location.href).pathname.split("/").pop() || "/", duration: r.duration, size: r.transferSize }))
     .sort((a, b) => b.duration - a.duration)
     .slice(0, 3);
   const registration = await navigator.serviceWorker?.getRegistration?.().catch(() => undefined);
-  const net = navigator.connection;
+  const net = (navigator as NavigatorExtras).connection;
   const storage = navigator.storage;
   const [persisted, estimate] = await Promise.all([
     storage?.persisted?.().catch(() => undefined),
@@ -77,7 +116,7 @@ export async function collect(version) {
     version: version || (import.meta.env?.APP_VERSION ?? ""),
     at: Date.now(),
     agent: navigator.userAgent,
-    standalone: !!navigator.standalone || !!matchMedia("(display-mode: standalone)").matches,
+    standalone: !!(navigator as NavigatorExtras).standalone || !!matchMedia("(display-mode: standalone)").matches,
     worker: registration ? !!navigator.serviceWorker.controller : undefined, // true: the service worker controls this page
     net: net ? { type: net.effectiveType, mbit: net.downlink, rtt: net.rtt } : undefined,
     storage: estimate ? { usage: estimate.usage, quota: estimate.quota, persisted } : undefined,
@@ -93,7 +132,7 @@ export async function collect(version) {
 }
 
 // Copy the report; true when it reached the clipboard.
-export async function copyDiagnostics(version) {
+export async function copyDiagnostics(version?: string) {
   try {
     await navigator.clipboard.writeText(formatDiagnostics(await collect(version)));
     return true;

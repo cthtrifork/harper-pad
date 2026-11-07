@@ -88,7 +88,7 @@ export function nonOverlapping(items) {
   return out;
 }
 
-import { scoped } from "./scope.js";
+import { scoped } from "./scope.ts";
 
 const KEY = scoped("harper-pad.autocorrect");
 

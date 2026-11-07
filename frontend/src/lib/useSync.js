@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { summarize } from "./summarize.js";
+import { summarize } from "./summarize.ts";
 import { createSyncer, summaryText } from "./syncRun.js";
 import { parseInviteUrl, enrollDevice, SyncError } from "./syncEnroll.js";
 

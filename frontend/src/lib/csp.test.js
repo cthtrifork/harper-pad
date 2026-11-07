@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPolicy, syncOriginOf } from "./csp.js";
+import { buildPolicy, syncOriginOf } from "./csp.ts";
 
 // What the policy was before sync existed. Without a sync origin it must stay exactly this (docs/security.md).
 const BEFORE = [

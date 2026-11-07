@@ -1,7 +1,7 @@
 <script setup>
 import { onBeforeUnmount, ref, watch } from "vue";
-import { copyDiagnostics } from "../lib/diagnostics.js";
-import { whenLabel } from "../lib/when.js";
+import { copyDiagnostics } from "../lib/diagnostics.ts";
+import { whenLabel } from "../lib/when.ts";
 import { COPY_LABELS } from "../lib/conflict.js";
 import SnippetsHelp from "./SnippetsHelp.vue";
 
@@ -78,7 +78,7 @@ function open(id) {
 // The release the web build was made from. Only the web build shows it here, and only on a phone (CSS); the desktop app and a wide
 // window show it in the header. A preview or local web build has none, and shows "dev" so the button is still there.
 const version = import.meta.env?.MODE === "web" ? import.meta.env?.APP_VERSION || "dev" : "";
-// Pressing the version copies a diagnostics report (lib/diagnostics.js); the button says what happened for two seconds.
+// Pressing the version copies a diagnostics report (lib/diagnostics.ts); the button says what happened for two seconds.
 const copied = ref("");
 let copiedTimer = 0;
 async function copyReport() {

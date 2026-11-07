@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import wails from "@wailsio/runtime/plugins/vite";
 import { defineConfig } from "vite";
-import { buildPolicy, syncOriginOf } from "./src/lib/csp.js";
+import { buildPolicy, syncOriginOf } from "./src/lib/csp.ts";
 
 // Vite empties dist/ on every build. The Go side embeds it, so `go vet` and `go test` need the
 // directory to exist even when nobody has built the frontend; keep the committed placeholder.
@@ -15,7 +15,7 @@ const keepPlaceholder = () => ({
   },
 });
 
-// The Content-Security-Policy of the production page is built in src/lib/csp.js (see docs/security.md). SYNC_ORIGIN, the sync server's
+// The Content-Security-Policy of the production page is built in src/lib/csp.ts (see docs/security.md). SYNC_ORIGIN, the sync server's
 // https origin, is added to connect-src when it is set (docs/sync.md) and the policy is unchanged when it is not. A <meta> tag is the one
 // form every webview applies. Production only, so the dev server's hot reload keeps working. The web build (GitHub Pages) adds manifest-src.
 const POLICY = buildPolicy({ syncOrigin: process.env.SYNC_ORIGIN });

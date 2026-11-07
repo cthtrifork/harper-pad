@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contentHash } from "./contentHash.js";
+import { contentHash } from "./contentHash.ts";
 import { generateDeviceKey } from "./dpop.js";
 import { useSync } from "./useSync.js";
 

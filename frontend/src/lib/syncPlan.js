@@ -40,5 +40,5 @@ export function decide({ local, synced, server }) {
 }
 
 // For "resolve": the same format and text on both sides adopts the server's state, with no copy; otherwise it is a conflict.
-// Both arguments are contentHash values (lib/contentHash.js), which cover the format as well as the text.
+// Both arguments are contentHash values (lib/contentHash.ts), which cover the format as well as the text.
 export const settle = (localHash, serverHash) => (localHash === serverHash ? "adopt" : "conflict");

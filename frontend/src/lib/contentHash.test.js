@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { contentHash } from "./contentHash.js";
+import { contentHash } from "./contentHash.ts";
 
 const fixtures = JSON.parse(readFileSync(new URL("../../../internal/store/testdata/contenthash.json", import.meta.url), "utf8"));
 

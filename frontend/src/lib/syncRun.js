@@ -5,7 +5,7 @@
 // No Vue and no network or storage of its own: `device` and `fetchFn` for the server, `drafts` for the local store (the web store's get, save,
 // allIds, isChanged, changes, syncState, markSynced, applyRemote, applyRemoteDelete). Every decision is recomputed from stored state, so a
 // run that stops halfway (offline, a phone suspended) is just a partial one and the next run carries on.
-import { contentHash } from "./contentHash.js";
+import { contentHash } from "./contentHash.ts";
 import { changesTo, cleanLists, readSettings, sameLists, unionLists } from "./settingsItems.js";
 import { getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.js";
 import { decide, settle } from "./syncPlan.js";

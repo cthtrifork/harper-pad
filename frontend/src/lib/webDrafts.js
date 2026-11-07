@@ -2,8 +2,8 @@
 // IndexedDB. A draft's text and its summary are two records in one transaction, so listing reads only the small summaries and
 // never the text, as the desktop database does. IDs, limits and messages match internal/store.
 import { openDB } from "idb";
-import { contentHash } from "./contentHash.js";
-import { summarize } from "./summarize.js";
+import { contentHash } from "./contentHash.ts";
+import { summarize } from "./summarize.ts";
 
 export const DB_NAME = "harper-pad";
 export const DB_VERSION = 3; // 1 had only the key/value store used for settings, 2 added the drafts, 3 the sync state
