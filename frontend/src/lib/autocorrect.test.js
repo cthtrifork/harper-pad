@@ -38,6 +38,14 @@ test("a category the user switched off is not safe", () => {
   assert.equal(isSafe(finding("Typo", ["the"]), prefs), true);
 });
 
+test("with the text, spaces that mean something in Markdown are not safe", () => {
+  const text = "a  b\n  - item";
+  const spaces = (from, to) => ({ ...finding("Formatting", [" "]), from, to });
+  assert.equal(isSafe(spaces(1, 3), DEFAULT_PREFS, text), true); // between words
+  assert.equal(isSafe(spaces(5, 7), DEFAULT_PREFS, text), false); // indentation
+  assert.equal(isSafe(spaces(5, 7), DEFAULT_PREFS), true); // no text: not checked
+});
+
 test("a finding is finished only after the space or punctuation that ends it has been typed", () => {
   const text = "I saw teh cat";
   assert.equal(isFinished(text, 9, 10), true); // "teh" then a typed space, caret after it
