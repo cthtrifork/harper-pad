@@ -17,11 +17,14 @@ const CATEGORIES = [
   ["performance", "Performance"],
   ["accessibility", "Accessibility"],
   ["best-practices", "Best Practices"],
-  ["seo", "SEO"],
 ];
-// Minimum median score (0-100) per category. Performance sits at 90, below today's 99-100 but above the 73-75 it had when Harper's
-// 20 MB wasm was requested before the first paint (#23), so putting it back in front of the first paint fails this check.
-const THRESHOLDS = { performance: 90, accessibility: 95, "best-practices": 95, seo: 95 };
+// Minimum median score (0-100) per category. Performance sits at 90 on desktop, below today's 100, and at 85 on mobile, where the
+// simulated throttling makes the score swing by several points between CI runs of the same build (it is 88-93 on main). Both are above
+// the 73-75 it had when Harper's 20 MB wasm was requested before the first paint (#23), so putting it back in front of the first paint
+// fails this check. There is no SEO category: this is an app, not a page to be found.
+const THRESHOLDS = { performance: 90, accessibility: 95, "best-practices": 95 };
+const MOBILE_PERFORMANCE = 85;
+const minimum = (mode, id) => (mode === "mobile" && id === "performance" ? MOBILE_PERFORMANCE : THRESHOLDS[id]);
 const METRICS = [
   ["first-contentful-paint", "FCP"],
   ["largest-contentful-paint", "LCP"],
@@ -78,7 +81,7 @@ lines.push(`| | ${CATEGORIES.map(([, name]) => name).join(" | ")} |`);
 lines.push(`|---|${CATEGORIES.map(() => ":-:").join("|")}|`);
 for (const [mode, { scores }] of Object.entries(results)) {
   const cells = CATEGORIES.map(([id]) => {
-    if (scores[id] < THRESHOLDS[id]) failures.push(`${mode} ${id}: ${scores[id]} < ${THRESHOLDS[id]}`);
+    if (scores[id] < minimum(mode, id)) failures.push(`${mode} ${id}: ${scores[id]} < ${minimum(mode, id)}`);
     return `${emoji(scores[id])} ${scores[id]}`;
   });
   lines.push(`| ${mode[0].toUpperCase()}${mode.slice(1)} | ${cells.join(" | ")} |`);
@@ -91,7 +94,7 @@ for (const [mode, { median }] of Object.entries(results)) {
 lines.push("", "</details>", "");
 lines.push(
   `Median of ${runs} runs on \`${version}\` against the headless build. Minimum scores: ` +
-    CATEGORIES.map(([id, name]) => `${name} ${THRESHOLDS[id]}`).join(", ") +
+    CATEGORIES.map(([id, name]) => `${name} ${id === "performance" ? `${MOBILE_PERFORMANCE} (mobile) or ${THRESHOLDS[id]} (desktop)` : THRESHOLDS[id]}`).join(", ") +
     ". The full HTML reports are in the run's artifacts.",
 );
 if (failures.length) lines.push("", `**Below threshold:** ${failures.join("; ")}`);
