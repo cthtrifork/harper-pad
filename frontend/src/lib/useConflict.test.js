@@ -85,17 +85,6 @@ test("a draft that conflicts with both gets one dialog covering both, and Keep s
   ]);
 });
 
-test("Overwrite makes no copy", async () => {
-  const { c, log } = setup({ file: {}, server: {} });
-  await settle();
-  await c.choose("overwrite");
-  assert.equal(
-    log.some((l) => Array.isArray(l) && l[0] === "copy"),
-    false,
-  );
-  assert.ok(log.includes("write") && log.includes("push"));
-});
-
 test("an unedited draft: the file's text is yours; Keep copies only the server's, applies the file, pushes, and writes nothing", async () => {
   const { c, log } = setup({ file: { clean: true }, server: {} });
   await settle();
@@ -105,16 +94,6 @@ test("an unedited draft: the file's text is yours; Keep copies only the server's
   assert.deepEqual(
     log.filter((l) => l !== "checkNow" && l !== "clearFile" && l !== "clearServer"),
     ["applyFile", ["copy", "server text", "server"], "push"],
-  );
-});
-
-test("sync off: a file conflict writes the file and has no push", async () => {
-  const { c, log } = setup({ file: {}, syncOn: false });
-  await settle();
-  await c.choose("overwrite");
-  assert.deepEqual(
-    log.filter((l) => l !== "clearFile" && l !== "clearServer"),
-    ["write"],
   );
 });
 

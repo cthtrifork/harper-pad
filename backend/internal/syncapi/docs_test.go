@@ -330,7 +330,7 @@ func TestDocRoutesNeedADevice(t *testing.T) {
 	}
 }
 
-// failingDocs is the real store for devices whose draft calls fail.
+// failingDocs is the real store for devices whose draft and setting calls fail.
 type failingDocs struct{ *store.Sync }
 
 func (failingDocs) ListDocs(context.Context, int64, string, int) ([]store.DocState, error) {
@@ -345,7 +345,15 @@ func (failingDocs) PutDoc(context.Context, int64, string, store.DocBase, store.D
 	return store.Doc{}, http.ErrAbortHandler
 }
 
-func TestDocRoutesHideStoreErrors(t *testing.T) {
+func (failingDocs) GetSetting(context.Context, int64) (store.Setting, error) {
+	return store.Setting{}, http.ErrAbortHandler
+}
+
+func (failingDocs) PutSetting(context.Context, int64, int64, store.Setting) (store.Setting, error) {
+	return store.Setting{}, http.ErrAbortHandler
+}
+
+func TestRoutesHideStoreErrors(t *testing.T) {
 	admin, db := newDB(t)
 	h, _ := setup(t, failingDocs{db})
 	a := enrollDevice(t, h, makeInvite(t, admin, "A"))
@@ -353,6 +361,8 @@ func TestDocRoutesHideStoreErrors(t *testing.T) {
 		a.call("GET", "/docs", nil),
 		a.call("GET", "/docs/"+id1, nil),
 		a.call("PUT", "/docs/"+id1, putBody{Base: base(0, 0), UpdatedAt: 1, Data: blob("x")}),
+		a.call("GET", "/settings", nil),
+		a.call("PUT", "/settings", sb(0, []string{})),
 	} {
 		if rec.Code != 500 || strings.Contains(rec.Body.String(), "abort") {
 			t.Errorf("store failure = %d %s", rec.Code, rec.Body)

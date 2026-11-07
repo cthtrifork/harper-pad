@@ -1,10 +1,7 @@
 package syncapi
 
 import (
-	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -107,30 +104,6 @@ func TestSettingsNeedADevice(t *testing.T) {
 	for _, m := range []string{"GET", "PUT"} {
 		if rec := do(h, m, "/settings", "", nil); rec.Code != 401 {
 			t.Errorf("%s without credentials = %d", m, rec.Code)
-		}
-	}
-}
-
-type failingSettings struct{ *store.Sync }
-
-func (failingSettings) GetSetting(context.Context, int64) (store.Setting, error) {
-	return store.Setting{}, http.ErrAbortHandler
-}
-
-func (failingSettings) PutSetting(context.Context, int64, int64, store.Setting) (store.Setting, error) {
-	return store.Setting{}, http.ErrAbortHandler
-}
-
-func TestSettingRoutesHideStoreErrors(t *testing.T) {
-	admin, db := newDB(t)
-	h, _ := setup(t, failingSettings{db})
-	a := enrollDevice(t, h, makeInvite(t, admin, "A"))
-	for _, rec := range []*httptest.ResponseRecorder{
-		a.call("GET", "/settings", nil),
-		a.call("PUT", "/settings", sb(0, []string{})),
-	} {
-		if rec.Code != 500 || strings.Contains(rec.Body.String(), "abort") {
-			t.Errorf("store failure = %d %s", rec.Code, rec.Body)
 		}
 	}
 }
