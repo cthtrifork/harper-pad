@@ -142,7 +142,7 @@ flowchart TD
     J -->|yes| R["Re-reads the file<br>compares its text"]:::file
     R --> T{"File state?"}
     T -->|gone| C["Creates the file<br>status line says Recreated<br>then updates the server"]:::file
-    T -->|"not text"| N["Refuses to update the file<br>the file name is struck out<br>autosave updates the server"]:::file
+    T -->|"not text"| N["Refuses to update the file<br>the file name is struck out<br>updates the server"]:::file
     T -->|readable| H{"File text changed since<br>you last saw it?"}
     H -->|yes| M["Asks Keep or Overwrite<br>the file is not updated yet<br>updates the server"]:::ask
     H -->|no| W["Updates the file<br>then updates the server at once"]:::file
