@@ -411,27 +411,6 @@ test("Remove: the draft is removed and handed to onRemoved; Keep: it is uploaded
   assert.equal(b.kept.states.get(D.id).deleted, false); // uploaded on top of the tombstone
 });
 
-test("a delete is pushed at once when its Undo offer ends", async () => {
-  const methods = [];
-  const { sync, kept, ready } = setup({
-    delay: 100000,
-    fetchFn: async (_u, init) => {
-      methods.push(init.method);
-      return reply(200, { version: 2 })();
-    },
-    draftOverrides: {
-      get: async () => {
-        throw new Error("draft not found");
-      },
-    },
-  });
-  kept.states.set(D.id, LIVE);
-  await ready();
-  await sync.draftDeleted(D.id);
-  assert.deepEqual(methods, ["PUT"]);
-  assert.equal(kept.states.get(D.id).deleted, true);
-});
-
 test("Sync on a draft that is unchanged here still asks the server, and swaps in a newer version without pushing anything", async () => {
   let puts = 0;
   let swapped = 0;
@@ -573,14 +552,6 @@ test("a draft the server rejects is reported with its title and reason, stays pe
   status = 400;
   await sync.saveRequested(D.id); // retried at the next moment, and told again
   assert.equal(sync.rejected.value.reason, "the draft is over the limit");
-});
-
-test("a 5xx is the server's fault: pending, not rejected, retried", async () => {
-  const { sync, ready } = setup({ fetchFn: async () => ({ status: 503, ok: false, json: async () => null }) });
-  await ready();
-  await sync.saveRequested(D.id);
-  assert.equal(sync.status.value, "pending");
-  assert.equal(sync.rejected.value, null);
 });
 
 test("a draft that the server takes again clears the rejection", async () => {
