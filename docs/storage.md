@@ -29,5 +29,5 @@ Everything the app remembers is in **one SQLite file**, `harper-pad.db`, in the 
 - A database written by a newer app is refused and left untouched, so an older build never damages newer data.
 - A file that is not a database, or fails SQLite's quick integrity check, is moved aside as `harper-pad.db.bad-<time>` and an empty database is
   created, so the app still starts. The drafts in the damaged file are in the `.bad` copy.
-- A draft saved to a file stays a draft. Autosave never writes the file (Ctrl+S does), and deleting a draft does not touch its file. See
-  [sync](sync.md) for a file that differs from the draft.
+- A draft saved to a file stays a draft. Autosave never Updates the file, the file is never renamed, and writing to an existing file keeps its
+  CRLF or LF. Deleting a draft does not touch its file. The rules for a file that differs from your draft are in [sync](sync.md#other-paths-on-this-device).

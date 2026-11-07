@@ -12,6 +12,10 @@ import { addRange, isFinished, isSpacing, nonOverlapping, touches } from "../aut
 // Marks a transaction autocorrect made. Its value is the list of fixes, with their positions in the new text.
 const autoFix = Annotation.define();
 
+// Marks a change that came from outside the person's typing (a file's text taken into the draft): it is not "touched", so autocorrect never
+// rewrites text that was only applied.
+const external = Annotation.define();
+
 let nextId = 1;
 
 const NOT_CODE = /Code|URL|Link|Image|HTML/;
@@ -34,7 +38,7 @@ export const autoField = StateField.define({
       fixes = fixes
         .filter((f) => mine || !tr.changes.touchesRange(f.from, f.to))
         .map((f) => ({ ...f, from: tr.changes.mapPos(f.from, 1), to: tr.changes.mapPos(f.to, -1) }));
-      if (!mine) {
+      if (!mine && !tr.annotation(external)) {
         tr.changes.iterChangedRanges((_fromA, _toA, from, to) => {
           touched = addRange(touched, from, to);
         });
@@ -47,6 +51,23 @@ export const autoField = StateField.define({
     return { touched, fixes, batch };
   },
 });
+
+// Replace the document with `text` as one undoable edit that changes only what differs (the common start and end stay), so the caret and the
+// scroll position stay where they were as far as the new text allows. Autocorrect does not treat it as typed.
+export function replaceExternal(view, text) {
+  const old = view.state.doc.toString();
+  let from = 0;
+  const max = Math.min(old.length, text.length);
+  while (from < max && old.charCodeAt(from) === text.charCodeAt(from)) from++;
+  let end = 0;
+  while (end < max - from && old.charCodeAt(old.length - 1 - end) === text.charCodeAt(text.length - 1 - end)) end++;
+  if (from === old.length && from === text.length) return;
+  view.dispatch({
+    changes: { from, to: old.length - end, insert: text.slice(from, text.length - end) },
+    userEvent: "input.reload",
+    annotations: [external.of(true), isolateHistory.of("full")],
+  });
+}
 
 // Apply findings as one transaction that is its own step in the undo history, so Ctrl+Z takes back exactly these fixes. Each item is
 // {from, to, fix: {kind, text}, problem, kind, hash}; the ones that overlap an earlier item are skipped. Returns how many were applied.

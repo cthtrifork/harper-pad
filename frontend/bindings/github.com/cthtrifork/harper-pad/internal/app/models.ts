@@ -10,6 +10,55 @@ import { Create as $Create } from "@wailsio/runtime";
 import * as store$0 from "../store/models.js";
 
 /**
+ * FileCheck is the answer to LinkedFileStatus.
+ */
+export class FileCheck {
+    "state": string;
+
+    /**
+     * Reason is a plain sentence fragment for FileBroken ("permission denied", "now a folder", ...).
+     */
+    "reason": string;
+
+    /**
+     * Stamp is the file's mtime as text (it does not fit a JavaScript number); the page uses it to remember "keep mine" for this version.
+     */
+    "stamp": string;
+
+    /**
+     * Clean is true for FileChanged when the draft has no edits of its own since it last matched the file (its text still has the hash kept
+     * then), so the file's text can replace it without losing anything. False when that is unknown (a link without a hash).
+     */
+    "clean": boolean;
+
+    /** Creates a new FileCheck instance. */
+    constructor($$source: Partial<FileCheck> = {}) {
+        if (!("state" in $$source)) {
+            this["state"] = "";
+        }
+        if (!("reason" in $$source)) {
+            this["reason"] = "";
+        }
+        if (!("stamp" in $$source)) {
+            this["stamp"] = "";
+        }
+        if (!("clean" in $$source)) {
+            this["clean"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileCheck instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FileCheck {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FileCheck($$parsedSource as Partial<FileCheck>);
+    }
+}
+
+/**
  * FileSave is the answer to SaveDraftToFile.
  */
 export class FileSave {
@@ -29,6 +78,12 @@ export class FileSave {
      */
     "conflict": boolean;
 
+    /**
+     * UnlinkedFrom holds the titles of other drafts that were linked to this file and are not any more: a file has one holder, the draft saved
+     * to it last.
+     */
+    "unlinkedFrom": string[];
+
     /** Creates a new FileSave instance. */
     constructor($$source: Partial<FileSave> = {}) {
         if (!("draft" in $$source)) {
@@ -40,6 +95,9 @@ export class FileSave {
         if (!("conflict" in $$source)) {
             this["conflict"] = false;
         }
+        if (!("unlinkedFrom" in $$source)) {
+            this["unlinkedFrom"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -49,11 +107,43 @@ export class FileSave {
      */
     static createFrom($$source: any = {}): FileSave {
         const $$createField0_0 = $$createType0;
+        const $$createField3_0 = $$createType1;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("draft" in $$parsedSource) {
             $$parsedSource["draft"] = $$createField0_0($$parsedSource["draft"]);
         }
+        if ("unlinkedFrom" in $$parsedSource) {
+            $$parsedSource["unlinkedFrom"] = $$createField3_0($$parsedSource["unlinkedFrom"]);
+        }
         return new FileSave($$parsedSource as Partial<FileSave>);
+    }
+}
+
+/**
+ * FileText is the answer to LinkedFileText.
+ */
+export class FileText {
+    "text": string;
+    "stamp": string;
+
+    /** Creates a new FileText instance. */
+    constructor($$source: Partial<FileText> = {}) {
+        if (!("text" in $$source)) {
+            this["text"] = "";
+        }
+        if (!("stamp" in $$source)) {
+            this["stamp"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileText instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FileText {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FileText($$parsedSource as Partial<FileText>);
     }
 }
 

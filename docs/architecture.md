@@ -48,7 +48,9 @@ and `pprof`, which `production` rejects.
   server when `SYNC_ORIGIN` is set.
 - `Preview.vue` renders markdown for the Split and Preview views (`marked` parses it); text from drafts or Harper never goes
   through `v-html` or `innerHTML`. `CodeBlock.vue` colours fenced code (`sh`/`bash`, `json`, `yaml`, `toml`) with the lazy parsers in `lib/highlight.js`, as spans of text; other languages stay plain. To add one, add a loader and aliases there. `lib/editor/snippets.js` expands a trigger alone on a line (`<code>`, `<sh>`, `<json>`, `<yaml>`, `<toml>`, `<todo>`, `<table>`, `<link>`, `<img>`) when Enter is pressed; to add one, add a line to its `SNIPPETS` table; `SnippetsHelp.vue` (the drafts drawer's footer link "Snippets") draws the help page from the same table, and pressing a card there inserts that snippet at the cursor (`insertSnippet`).
-- `ToastBar.vue` is the one toast (a message and one action: Undo, Open copy), used for autocorrect's "Fixed N things" and for what sync says. `DeletedElsewhereDialog.vue` is the one modal, a forced Keep or Remove for a note deleted on another device (`docs/design-cheatsheet.html` lists it as the exception to "no modals").
+- `ToastBar.vue` is the one toast (a message and one action: Undo), used for autocorrect's "Fixed N things" and for what sync says.
+  `ConflictDialog.vue` is the one modal for a conflict ([sync](sync.md#the-keep-or-overwrite-dialog)), and `DeletedElsewhereDialog.vue` a
+  forced Keep or Remove for a draft deleted on another device (`docs/design-cheatsheet.html` lists them as the exceptions to "no modals").
 - Styles are plain CSS, one file per component, in `frontend/src/styles`.
 
 ## Data flow
@@ -58,4 +60,4 @@ and `pprof`, which `production` rejects.
 3. The same edit schedules a draft save through `backend.js`: `DraftService.SaveDraft` on desktop, IndexedDB on the web.
 4. "Save to disk" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
    on the web) and keeps the path on the draft.
-5. With sync on (either build), `useSync` asks `createSyncer` to sync the draft and, at other moments, every draft; [sync](sync.md#when-sync-happens) says when.
+5. With sync on (either build), `useSync` asks `createSyncer` to sync the draft and, at other moments, every draft; [sync](sync.md#sync-moments) says when.
