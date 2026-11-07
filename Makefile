@@ -50,6 +50,9 @@ tools: ## Install goimports and golangci-lint into GOBIN (for editors)
 lint-frontend: ## Biome lint and format check for the Vue app (needs `make frontend` once for node_modules)
 	cd frontend && npm run lint && npm run format:check
 
+typecheck: ## Type-check the Vue app with vue-tsc (strict, JS files are not checked yet; needs node_modules)
+	cd frontend && npm run typecheck
+
 format-frontend: ## Reformat the Vue app with Biome
 	cd frontend && npm run format
 
@@ -69,7 +72,7 @@ wails3-install: ## Install the wails3 CLI at the go.mod version into GOBIN (defa
 	CGO_ENABLED=0 go install -tags server github.com/wailsapp/wails/v3/cmd/wails3@$$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v3)
 
 bindings: ## Regenerate frontend/bindings from the Go services (needs the wails3 CLI)
-	CGO_ENABLED=0 wails3 generate bindings -silent
+	CGO_ENABLED=0 wails3 generate bindings -ts -silent
 
 dev: ## Hot reload via `wails3 dev` in server mode: Vite HMR + rebuild-on-save Go (http://localhost:8080)
 	scripts/dev.sh
