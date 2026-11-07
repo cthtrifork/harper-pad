@@ -7,7 +7,7 @@ import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.ts";
 import { listDocs } from "./syncClient.js";
 import { createSyncer, summaryText } from "./syncRun.js";
-import { createWebDrafts, openDatabase } from "./webDrafts.js";
+import { createWebDrafts, openDatabase } from "./webDrafts.ts";
 
 function fakeServer() {
   const rows = new Map();

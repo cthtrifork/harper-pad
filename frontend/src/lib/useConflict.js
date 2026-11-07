@@ -1,8 +1,8 @@
 import { ref, watch } from "vue";
-import { resolveConflict, staleNote } from "./conflict.js";
+import { resolveConflict, staleNote } from "./conflict.ts";
 
 // The Keep or Overwrite dialog for the open draft (ConflictDialog.vue): what disagrees with it (its file, the server, or both), the model for
-// lib/conflict.js, and the choice. `drafts` is useDrafts and `sync` is useSync. Only the open draft ever gets a dialog; any other draft in
+// lib/conflict.ts, and the choice. `drafts` is useDrafts and `sync` is useSync. Only the open draft ever gets a dialog; any other draft in
 // conflict is left exactly as it is until it is opened.
 export function useConflict({ drafts, sync }) {
   const model = ref(null); // {id, name, yours, file, server, applyFile} while the dialog shows

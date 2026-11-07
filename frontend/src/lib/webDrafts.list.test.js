@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
-import { createWebDrafts, openDatabase } from "./webDrafts.js";
+import { createWebDrafts, openDatabase } from "./webDrafts.ts";
 
 async function withDrafts(...texts) {
   globalThis.indexedDB = new IDBFactory();

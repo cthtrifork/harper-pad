@@ -1,7 +1,27 @@
 // Saving a draft to a file in the browser, the counterpart of DraftService.SaveDraftToFile. Chrome and Edge keep a handle to the
 // file, so later saves overwrite it. Elsewhere the page can only hand over a copy (share sheet or download) and the draft is never
 // linked to a file.
+import type { Draft } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { summarize } from "./summarize.ts";
+import type { createWebDrafts } from "./webDrafts.ts";
+
+// The File System Access API (Chrome and Edge), which lib.dom.d.ts does not declare.
+export interface FileHandle {
+  name: string;
+  getFile(): Promise<File>;
+  createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }>;
+  queryPermission(options: { mode: "readwrite" }): Promise<string>;
+  requestPermission(options: { mode: "readwrite" }): Promise<string>;
+}
+type PickerWindow = Window & {
+  showSaveFilePicker?: (options: { suggestedName: string; types: typeof TYPES }) => Promise<FileHandle>;
+};
+const picker = () => window as PickerWindow;
+
+export interface KeptHandle {
+  handle: FileHandle;
+  modified: number;
+}
 
 const TYPES = [
   { description: "Markdown", accept: { "text/markdown": [".md"] } },
@@ -12,7 +32,7 @@ const TYPES = [
 // At most 60 characters before the extension: a longer title ends at the last word that fits (when that keeps at least half of it, else it
 // is cut), and no name ends in a space, dot or dash.
 const MAX_NAME = 60;
-export const fileName = (title, format) => {
+export const fileName = (title: string, format: string) => {
   const cleaned = title.replace(/[^\p{L}\p{N}._ -]+/gu, "").replace(/^[ .-]+|[ .-]+$/g, "");
   const chars = Array.from(cleaned || "Untitled");
   let kept = chars.slice(0, MAX_NAME);
@@ -24,23 +44,23 @@ export const fileName = (title, format) => {
 
 // True where Save hands the draft to the share sheet: no file picker, but the browser can share files.
 export const sharesFiles = () =>
-  !window.showSaveFilePicker && !!navigator.canShare?.({ files: [new File([""], "a.md", { type: "text/markdown" })] });
+  !picker().showSaveFilePicker && !!navigator.canShare?.({ files: [new File([""], "a.md", { type: "text/markdown" })] });
 
 // Offers the text to the system share sheet as a file. Returns "shared", "cancelled", or "unsupported" when the browser cannot share files.
-async function share(name, content) {
+async function share(name: string, content: string) {
   const file = new File([content], name, { type: name.endsWith(".md") ? "text/markdown" : "text/plain" });
   if (!navigator.canShare?.({ files: [file] })) return "unsupported";
   try {
     await navigator.share({ files: [file], title: name });
     return "shared";
   } catch (err) {
-    if (err?.name === "AbortError") return "cancelled";
-    if (err?.name === "NotAllowedError") return "unsupported"; // the tap is too old to open the sheet: download instead
+    if ((err as Error)?.name === "AbortError") return "cancelled";
+    if ((err as Error)?.name === "NotAllowedError") return "unsupported"; // the tap is too old to open the sheet: download instead
     throw err;
   }
 }
 
-function download(name, content) {
+function download(name: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
@@ -52,20 +72,28 @@ function download(name, content) {
 // `web` is createWebDrafts' result, `getHandle` and `putHandle` read and write what is kept per draft id: {handle, modified}, the
 // FileSystemFileHandle and the file's lastModified after our last write. Returns {draft, cancelled, conflict} like the Go side:
 // when the file changed since we wrote it, nothing is written unless `overwrite` is set.
-export async function saveWebFile(web, getHandle, putHandle, input, saveAs, overwrite = false) {
+export async function saveWebFile(
+  web: ReturnType<typeof createWebDrafts>,
+  getHandle: (id: string) => Promise<KeptHandle | undefined>,
+  putHandle: (id: string, kept: KeptHandle) => Promise<unknown>,
+  input: Partial<Draft>,
+  saveAs: boolean,
+  overwrite = false,
+) {
   const draft = await web.save(input); // the draft first, so a failed file write leaves the text safe
   const kept = saveAs ? null : await getHandle(draft.id);
-  let handle = kept?.handle;
+  let handle: FileHandle | undefined = kept?.handle;
   if (!handle) {
     const name = fileName(summarize(draft.content).title, draft.format);
-    if (!window.showSaveFilePicker) {
+    const w = picker();
+    if (!w.showSaveFilePicker) {
       if ((await share(name, draft.content)) === "unsupported") download(name, draft.content);
       return { draft, cancelled: false, conflict: false };
     }
     try {
-      handle = await window.showSaveFilePicker({ suggestedName: name, types: TYPES });
+      handle = await w.showSaveFilePicker({ suggestedName: name, types: TYPES });
     } catch (err) {
-      if (err?.name === "AbortError") return { draft: input, cancelled: true, conflict: false };
+      if ((err as Error)?.name === "AbortError") return { draft: input, cancelled: true, conflict: false };
       throw err;
     }
   } else if ((await handle.queryPermission({ mode: "readwrite" })) !== "granted") {
