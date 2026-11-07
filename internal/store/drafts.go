@@ -336,12 +336,6 @@ func decode(data string) (blob, error) {
 	return b, nil
 }
 
-// Title is the draft's title as the drawer shows it: its first line without the markdown marks, or "Untitled".
-func Title(content string) string {
-	title, _, _, _, _ := summarize(content)
-	return title
-}
-
 // summarize works out what the drawer shows for a draft.
 func summarize(content string) (title, excerpt string, tasks []Task, total, done int) {
 	tasks = []Task{}
