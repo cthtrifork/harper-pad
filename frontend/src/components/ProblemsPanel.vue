@@ -1,9 +1,9 @@
 <script setup>
 import { computed, ref } from "vue";
-import { CATEGORIES } from "../lib/autocorrect.js";
+import { CATEGORIES } from "../lib/autocorrect.ts";
 
 const props = defineProps({
-  // Autocorrect: the switch and which kinds of finding may be fixed (see lib/autocorrect.js).
+  // Autocorrect: the switch and which kinds of finding may be fixed (see lib/autocorrect.ts).
   autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) },
   problems: { type: Array, required: true },
   active: { type: Number, default: -1 },

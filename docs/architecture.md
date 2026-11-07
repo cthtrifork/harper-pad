@@ -35,7 +35,7 @@ and `pprof`, which `production` rejects.
 - `App.vue` composes the header, the editor, the Problems panel, the status bar and the drafts drawer.
 - `internal/app/assets.go` is the Wails `AssetOptions.Middleware` (Wails has no built-in compression or cache headers): gzip for text assets (headless server builds only; the native window gets plain bytes) and `Cache-Control` (immutable for the content-hashed `/assets/*`, `no-cache` for `index.html`).
 - On a phone (narrow screen) Harper is opt-in: nothing is fetched until the "?" on the Problems button is pressed; the choice is kept (`lib/harperOptIn.js`) and later starts load it after the first paint.
-- `lib/harper.js` starts Harper in its own Web Worker (`lib/harperWorker.js`, WebAssembly) after the first paint; the page
+- `lib/harper.ts` starts Harper in its own Web Worker (`lib/harperWorker.ts`, WebAssembly) after the first paint; the page
   talks to it with plain messages. The worker turns its lints into plain objects, so no wasm-backed value is held by Vue or
   CodeMirror. It does not use harper.js's `WorkerLinter`: that also builds a serializer on the main thread, which fetched
   and compiled the 20 MB wasm a second time on the page and was most of Lighthouse's blocking time (TBT).
