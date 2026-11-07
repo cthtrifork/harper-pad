@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -129,6 +129,18 @@ if (filesDir) {
 expect((await page.locator("#drafts-drawer .item .file").allTextContents()).map((t) => t.trim()).join() === "Saved to file: Meeting notes.md", "only the saved draft should name its file in the list");
 await shot("05-draft-saved-to-file");
 
+// The file changes behind the app's back while the draft holds edits of its own: the Keep or Overwrite dialog opens when the window
+// takes focus again (nothing watches the file). Overwrite writes the draft's text back, so the draft is "Saved" again for what follows.
+if (filesDir) {
+  writeFileSync(path.join(filesDir, "Meeting notes.md"), "Meeting notes\n\nThe release moved to Monday.");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await page.waitForSelector("dialog.conflict-dialog[open]", { timeout: 15000 });
+  expect((await page.locator(".conflict-dialog .actions button").allTextContents()).map((t) => t.trim()).join() === "Overwrite,Keep both", "the dialog should offer Overwrite and Keep both");
+  await shot("06-keep-or-overwrite");
+  await page.getByRole("button", { name: "Overwrite", exact: true }).click();
+  await page.waitForSelector("dialog.conflict-dialog", { state: "detached", timeout: 15000 });
+}
+
 // The dictionary and the ignored findings. Close the drawer and bring the Problems panel back, write a line with a name Harper does not
 // know and a typo, add the name to the dictionary and ignore the typo (the same actions as in the underline's popover), then open the
 // dictionary list from the panel's footer. Part of the text is selected so the status bar shows its selection count.
@@ -158,7 +170,7 @@ expect((await page.textContent("#selection")) === "Selection: 12 characters", "t
 await page.getByRole("button", { name: /^Dictionary:/ }).click();
 await page.waitForSelector(".entries");
 expect((await page.locator(".entries li").allTextContents()).join().includes("Mikkel"), "the dictionary list should hold the added word");
-await shot("06-dictionary-list");
+await shot("07-dictionary-list");
 await page.getByRole("button", { name: "Back to problems" }).click(); // show the problems again for the next picture
 
 // A markdown draft in the Split view: the source on the left, the rendered preview on the right. The text is inserted in one go,
@@ -187,7 +199,7 @@ expect((await page.textContent(".md h1")) === "Release checklist", "the preview 
 expect((await page.locator(".md input[type=checkbox]").count()) === 4, "the preview should show four task boxes");
 expect((await page.locator(".md input[type=checkbox]:checked").count()) === 2, "two of the tasks should be ticked");
 expect((await page.locator(".md strong").textContent()) === "Mikkel", "the preview should show the bold name");
-await shot("07-markdown-split");
+await shot("08-markdown-split");
 
 // The same app on a phone (390 x 844, touch): below 720 px the scratch pad is a sheet over the page, Problems is a bottom sheet and
 // Split stacks. A second context shares the server, so the drafts made above are in the list.
@@ -214,7 +226,7 @@ expect(!(await phone.evaluate(() => document.documentElement.scrollWidth > inner
 await phone.click(".drawer-btn");
 await phone.waitForSelector("#drafts-drawer .item");
 expect((await phone.locator(".views").count()) === 0, "the view switcher should be hidden while the scratch pad is open");
-await phoneShot("08-mobile-drafts-drawer");
+await phoneShot("09-mobile-drafts-drawer");
 
 // A new draft with a few mistakes, then Problems as a bottom sheet under the text.
 await phone.getByRole("button", { name: "New draft" }).click();
@@ -225,7 +237,7 @@ await phone.keyboard.insertText("This are a example of a sentense with with a fe
 await phone.waitForSelector(".cm-lintRange", { timeout: 30000 });
 await phone.click(".toggle");
 await phone.waitForSelector(".panel li");
-await phoneShot("09-mobile-problems");
+await phoneShot("10-mobile-problems");
 
 // A phone's header is one row of icons, and Split is not offered there (it would stack two panes): Edit and Preview only.
 await phone.click(".toggle");
@@ -234,7 +246,7 @@ expect((await phone.locator("header.bar").boundingBox()).height < 80, "the phone
 expect((await phone.getByRole("button", { name: "Split" }).count()) === 0 || !(await phone.getByRole("button", { name: "Split" }).isVisible()), "Split should not be offered on a phone");
 await phone.getByRole("button", { name: "Preview" }).click();
 await phone.waitForSelector(".md");
-await phoneShot("10-mobile-markdown-preview");
+await phoneShot("11-mobile-markdown-preview");
 
 await browser.close();
 if (problems.length) {
