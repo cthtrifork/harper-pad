@@ -45,7 +45,15 @@ const stateOf = (doc) => (doc ? { version: doc.version, updatedAt: doc.updatedAt
 // A server that cannot be reached, or that refuses this device, stops everything with a SyncError; any other failure fails one draft.
 // `onCopy(copy)` is called with the new draft when a conflict keeps the server's version as a conflicted copy, and `onGone(id)` when Sync all
 // leaves a draft alone that was deleted on another device (it is the open one), so the person can be told.
-export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), onCopy = () => {}, onGone = () => {} }) {
+export function createSyncer({
+  device,
+  drafts,
+  fetchFn,
+  now = () => new Date(),
+  onCopy = () => {},
+  onGone = () => {},
+  onRejected = () => {},
+}) {
   // Uploads a draft on top of `state` (the server's state, or null when it has none) and records the answer. True when it was taken.
   async function upload(draft, state) {
     const out = await pushDraft({ device, draft, state, fetchFn });
@@ -131,6 +139,7 @@ export function createSyncer({ device, drafts, fetchFn, now = () => new Date(), 
           if (key) sum[key]++;
         } catch (err) {
           if (err?.code === "unreachable" || err?.code === "signin") throw err;
+          if (err?.code === "rejected") onRejected(id, err.message); // the server refused this draft: it stays here and is tried again next time
           sum.failed++;
         }
       }

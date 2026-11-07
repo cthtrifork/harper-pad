@@ -372,6 +372,24 @@ test("a missing draft changes nothing, and a tombstone for an unchanged draft is
   assert.ok((await texts(b)).includes("never synced"));
 });
 
+test("a draft the server rejects fails alone with its reason, and the others in the run still go", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const big = await a.drafts.save({ content: "too big" });
+  const fine = await a.drafts.save({ content: "fine" });
+  const refused = [];
+  const fetchFn = async (url, init) =>
+    init?.method === "PUT" && url.includes(big.id)
+      ? { status: 413, ok: false, json: async () => ({ title: "Too Large" }) }
+      : server.fetchFn(url, init);
+  const engine = createSyncer({ device: DEVICE, drafts: a.drafts, fetchFn, onRejected: (id, why) => refused.push([id, why]) });
+  assert.deepEqual(await engine.all(), sum({ uploaded: 1, failed: 1 }));
+  assert.deepEqual(refused, [[big.id, "it is too large"]]);
+  assert.ok(server.rows.has(fine.id));
+  assert.equal(server.rows.has(big.id), false);
+  assert.equal((await a.drafts.get(big.id)).content, "too big", "the text stays here");
+});
+
 test("a conflict reports the copy it kept, from Sync all and from a save alike", async () => {
   for (const how of ["all", "one"]) {
     const server = fakeServer();

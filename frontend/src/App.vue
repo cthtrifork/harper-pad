@@ -95,7 +95,9 @@ const drafts = useDrafts(editor, showDrawer, {
 const statusLineNow = computed(() =>
   statusLine({
     draft: { state: drafts.state.value, text: drafts.status.value, fileState: drafts.fileState.value, fileName: drafts.fileName.value },
-    sync: { enrolled: sync.enrolled.value, status: sync.status.value, newer: sync.notice.value?.kind === "newer" },
+    sync: { enrolled: sync.enrolled.value, status: sync.status.value, newer: sync.notice.value?.kind === "newer",
+      rejected: sync.rejected.value?.id === drafts.current.value.id ? sync.rejected.value : null,
+    },
   }),
 );
 // The button only acts: Sync when sync is on, Save when it is off (disabled while there is nothing to save).
@@ -505,7 +507,7 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' ? statusLineNow.text : ''"
+      :draft-status="typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' || sync.rejected.value?.id === drafts.current.value.id ? statusLineNow.text : ''"
       :draft-tone="statusLineNow.tone"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"

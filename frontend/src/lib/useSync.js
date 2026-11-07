@@ -1,4 +1,5 @@
 import { computed, ref } from "vue";
+import { summarize } from "./summarize.js";
 import { createSyncer, summaryText } from "./syncRun.js";
 import { parseInviteUrl, enrollDevice, SyncError } from "./syncEnroll.js";
 
@@ -39,13 +40,21 @@ export function useSync({
   const lastSync = ref(0); // when it finished, ms
   const gone = ref(null); // {id}: the open draft was deleted on another device and the person has not chosen yet
   const setsFailed = ref(false); // the dictionary and ignore list did not sync last time (not a draft's failure)
+  const rejected = ref(null); // {id, title, reason}: the server refused this draft (too large, malformed); it stays here and is tried again
   const notice = ref(null); // {id, kind: "updated" | "newer", text} about the open draft, or null
   const enrolled = computed(() => info.value !== null);
 
   let device = null;
 
   // One syncer for every path, so a conflict is announced the same way wherever it was found.
-  const syncer = () => createSyncer({ device, drafts, fetchFn, onCopy: showCopy, onGone: (id) => (gone.value = { id }) });
+  const syncer = () =>
+    createSyncer({ device, drafts, fetchFn, onCopy: showCopy, onGone: (id) => (gone.value = { id }), onRejected: noteRejected });
+
+  // The server refused a draft: the chip says which and why, with no dialog. The text stays local and goes again on the next push.
+  async function noteRejected(id, reason) {
+    const d = await drafts.get(id).catch(() => null);
+    rejected.value = { id, title: d ? summarize(d.content).title : "the draft", reason };
+  }
 
   // A conflict kept the server's version as a new draft: say so, with a way to open it. The toast (App.vue) shows it for a while.
   function showCopy(copy) {
@@ -90,6 +99,7 @@ export function useSync({
     setsFailed.value = false;
     notice.value = null;
     gone.value = null;
+    rejected.value = null;
     await deviceStore.clear();
     await settings?.store.clear(); // enrolling again starts from the server's lists
     device = null;
@@ -107,9 +117,11 @@ export function useSync({
     status.value = "syncing";
     for (const id of ids) {
       try {
+        if (rejected.value?.id === id) rejected.value = null; // tried again now
         if ((await engine.one(id)) === "failed") failed = true;
       } catch (err) {
         if (stopped(err)) return;
+        if (err instanceof SyncError && err.code === "rejected") await noteRejected(id, err.message);
         failed = true;
       }
     }
@@ -320,6 +332,7 @@ export function useSync({
     lastSync,
     notice,
     gone,
+    rejected,
     init,
     enroll,
     turnOff,
