@@ -182,7 +182,10 @@ export function createSyncer({
     // server's newer text was stored (nothing was typed, per `canSwap()`), so show it. "newer": it was not applied because the draft was
     // changed here or is being typed in. "deleted": a tombstone, nothing removed (`removeLocal` and `keep` carry out the choice).
     // "none": nothing to do, or a tombstone for a draft changed here, which survives.
-    async open(id: string, { canSwap = () => true } = {}): Promise<"updated" | "newer" | "deleted" | "conflict" | "none"> {
+    async open(
+      id: string,
+      { canSwap = () => true }: { canSwap?: () => boolean } = {},
+    ): Promise<"updated" | "newer" | "deleted" | "conflict" | "none"> {
       const [st, mine] = await Promise.all([drafts.syncState(id), drafts.get(id).catch(() => null)]);
       if (!mine) return "none";
       const local = { changed: await drafts.isChanged(id) };

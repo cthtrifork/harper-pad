@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { contentHash } from "./contentHash.ts";
 import { generateDeviceKey } from "./dpop.ts";
-import { useSync } from "./useSync.js";
+import { useSync } from "./useSync.ts";
 
 const ORIGIN = "https://sync.example.com";
 const INVITE = `${ORIGIN}/join#${"A".repeat(43)}`;

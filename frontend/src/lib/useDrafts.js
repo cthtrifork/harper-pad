@@ -244,7 +244,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     return chain;
   }
 
-  // The operations the Keep or Overwrite dialog needs (useConflict.js).
+  // The operations the Keep or Overwrite dialog needs (useConflict.ts).
   const dialog = {
     // The file's text and version stamp.
     fileText: () => be.linkedFileText(current.value.id),

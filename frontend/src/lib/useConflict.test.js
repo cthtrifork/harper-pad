@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ref } from "vue";
-import { useConflict } from "./useConflict.js";
+import { useConflict } from "./useConflict.ts";
 
 const ID = "a".repeat(32);
 const settle = () => new Promise((r) => setTimeout(r, 15));

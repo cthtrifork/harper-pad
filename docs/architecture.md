@@ -34,7 +34,7 @@ and `pprof`, which `production` rejects.
 
 - `App.vue` composes the header, the editor, the Problems panel, the status bar and the drafts drawer.
 - `internal/app/assets.go` is the Wails `AssetOptions.Middleware` (Wails has no built-in compression or cache headers): gzip for text assets (headless server builds only; the native window gets plain bytes) and `Cache-Control` (immutable for the content-hashed `/assets/*`, `no-cache` for `index.html`).
-- On a phone (narrow screen) Harper is opt-in: nothing is fetched until the "?" on the Problems button is pressed; the choice is kept (`lib/harperOptIn.js`) and later starts load it after the first paint.
+- On a phone (narrow screen) Harper is opt-in: nothing is fetched until the "?" on the Problems button is pressed; the choice is kept (`lib/harperOptIn.ts`) and later starts load it after the first paint.
 - `lib/harper.ts` starts Harper in its own Web Worker (`lib/harperWorker.ts`, WebAssembly) after the first paint; the page
   talks to it with plain messages. The worker turns its lints into plain objects, so no wasm-backed value is held by Vue or
   CodeMirror. It does not use harper.js's `WorkerLinter`: that also builds a serializer on the main thread, which fetched
@@ -46,7 +46,7 @@ and `pprof`, which `production` rejects.
   (the Sync button in the header only acts; the sync chip only shows the connection).
 - Sync (optional, both builds; the rules are in [sync](sync.md)): `lib/syncRun.ts` (`createSyncer`) is the one place a draft is synced and
   decided. `lib/desktopSync.ts` and `lib/webDrafts.ts` give it the same drafts store on both builds.
-  `lib/useSync.js` is the state behind the status bar chip (`SyncChip.vue`), and `lib/csp.ts` builds the page's policy, which names the sync
+  `lib/useSync.ts` is the state behind the status bar chip (`SyncChip.vue`), and `lib/csp.ts` builds the page's policy, which names the sync
   server when `SYNC_ORIGIN` is set.
 - `Preview.vue` renders markdown for the Split and Preview views (`marked` parses it); text from drafts or Harper never goes
   through `v-html` or `innerHTML`. `CodeBlock.vue` colours fenced code (`sh`/`bash`, `json`, `yaml`, `toml`) with the lazy parsers in `lib/highlight.ts`, as spans of text; other languages stay plain. To add one, add a loader and aliases there. `lib/editor/snippets.ts` expands a trigger alone on a line (`<code>`, `<sh>`, `<json>`, `<yaml>`, `<toml>`, `<todo>`, `<table>`, `<link>`, `<img>`) when Enter is pressed; to add one, add a line to its `SNIPPETS` table; `SnippetsHelp.vue` (the drafts drawer's footer link "Snippets") draws the help page from the same table, and pressing a card there inserts that snippet at the cursor (`insertSnippet`).

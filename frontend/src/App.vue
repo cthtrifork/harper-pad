@@ -11,14 +11,14 @@ import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "
 import { record } from "./lib/diagnostics.ts";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.ts";
 import { createLinter } from "./lib/harper.ts";
-import { loadOptIn, saveOptIn } from "./lib/harperOptIn.js";
+import { loadOptIn, saveOptIn } from "./lib/harperOptIn.ts";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.ts";
 import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.js";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
-import { useConflict } from "./lib/useConflict.js";
-import { useSync } from "./lib/useSync.js";
+import { useConflict } from "./lib/useConflict.ts";
+import { useSync } from "./lib/useSync.ts";
 
 // What main.ts asked the backend before mounting (see backend.ts startup): the demo banner and the most recent draft.
 const props = defineProps({ start: { type: Object, required: true } });

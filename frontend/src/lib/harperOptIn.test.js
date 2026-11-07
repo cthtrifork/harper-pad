@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadOptIn, saveOptIn } from "./harperOptIn.js";
+import { loadOptIn, saveOptIn } from "./harperOptIn.ts";
 
 const memory = () => {
   const m = new Map();

@@ -1,7 +1,7 @@
 import { ref } from "vue";
 
 // What the page does when the file a draft is linked to no longer matches it (docs/sync.md, "Other paths on this device").
-// `conflict` becomes the Keep or Overwrite dialog (conflict.ts, useConflict.js); `problem` (file gone or unusable) only strikes through
+// `conflict` becomes the Keep or Overwrite dialog (conflict.ts, useConflict.ts); `problem` (file gone or unusable) only strikes through
 // the header's chip. `auto` is the quiet refresh of a clean draft: only `check` (open, focus) tries it, never a save, and only when
 // `can()` says nothing is being typed or saved.
 interface FileStatus {
