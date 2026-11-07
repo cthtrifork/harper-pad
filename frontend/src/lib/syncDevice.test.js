@@ -4,7 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.ts";
 import { createDeviceStore } from "./syncDevice.ts";
-import { createWebDrafts, openDatabase } from "./webDrafts.js";
+import { createWebDrafts, openDatabase } from "./webDrafts.ts";
 
 const fresh = () => {
   globalThis.indexedDB = new IDBFactory();

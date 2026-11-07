@@ -15,7 +15,7 @@ import { loadOptIn, saveOptIn } from "./lib/harperOptIn.js";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.js";
 import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.js";
-import { COPY_LABELS } from "./lib/conflict.js";
+import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
 import { useConflict } from "./lib/useConflict.js";
 import { useSync } from "./lib/useSync.js";

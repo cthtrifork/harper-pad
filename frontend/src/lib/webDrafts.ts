@@ -1,7 +1,8 @@
-// The drafts in the browser (the web build, which has no Go side): the same operations as DraftService's methods, kept in
-// IndexedDB. A draft's text and its summary are two records in one transaction, so listing reads only the small summaries and
-// never the text, as the desktop database does. IDs, limits and messages match internal/store.
-import { openDB } from "idb";
+// DraftService's operations over IndexedDB, for the web build. A draft's text and its summary are two records in one transaction, so
+// listing never reads the text. IDs, limits and messages match internal/store.
+import { type IDBPDatabase, openDB } from "idb";
+import type { Draft, List, Summary, SyncState } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
+import { withDb as sharedWithDb } from "./kv.ts";
 import { contentHash } from "./contentHash.ts";
 import { summarize } from "./summarize.ts";
 
@@ -13,10 +14,8 @@ const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 1000;
 const ID = /^[0-9a-f]{32}$/;
 
-// Called by backend.ts when it opens the database: adds what the newer versions need and leaves everything else as it is. Every change
-// so far only adds an object store, so a build that is one version behind opens the database as it is (see openDatabase) and nothing is
-// lost; keep it that way, and put sync state in its own store, never in the draft records, which an older build rewrites whole.
-export function upgrade(db) {
+// Migrations must only add object stores, and sync state stays out of the draft records: docs/pages.md, "Changing the schema".
+function upgrade(db: IDBPDatabase) {
   if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
   if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts", { keyPath: "id" });
   if (!db.objectStoreNames.contains("summaries")) {
@@ -25,20 +24,19 @@ export function upgrade(db) {
   if (!db.objectStoreNames.contains("sync")) db.createObjectStore("sync", { keyPath: "id" });
 }
 
-// Opens the database at DB_VERSION, creating or upgrading it. When the stored database is already newer (another build on the same
-// origin migrated it, for instance a preview of a branch), the browser refuses with a VersionError; this build then opens it as it
-// is, which works as long as the newer migrations only added things (the usual case).
-export async function openDatabase() {
+// A database that is already newer (another build on the same origin migrated it) is opened as it is instead of failing with a
+// VersionError.
+export async function openDatabase(): Promise<IDBPDatabase> {
   try {
     return await openDB(DB_NAME, DB_VERSION, { upgrade });
   } catch (err) {
-    if (err?.name !== "VersionError") throw err;
+    if ((err as Error)?.name !== "VersionError") throw err;
     return openDB(DB_NAME);
   }
 }
 
-// 32 hex characters that sort by creation: 6 bytes of the time in milliseconds, then 10 random bytes.
-function newId(now) {
+// 32 hex characters that sort by creation: 6 bytes of time, then 10 random.
+function newId(now: number) {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);
   let t = now;
@@ -49,18 +47,17 @@ function newId(now) {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-// `open` is backend.ts's openDb: it resolves to an open database, which the caller closes.
-export function createWebDrafts(open) {
-  async function withDb(work) {
-    const db = await open();
-    try {
-      return await work(db);
-    } finally {
-      db.close();
-    }
-  }
+// What the "drafts" store keeps; the summary fields are in "summaries".
+type StoredDraft = Pick<Draft, "id" | "format" | "content" | "createdAt" | "updatedAt" | "filePath">;
 
-  const summaryOf = (d) => ({
+interface SyncRecord extends SyncState {
+  id: string;
+}
+
+export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
+  const withDb = <T>(work: (db: IDBPDatabase) => Promise<T>) => sharedWithDb(open, work);
+
+  const summaryOf = (d: Omit<StoredDraft, "filePath"> & { filePath?: string }) => ({
     id: d.id,
     format: d.format,
     createdAt: d.createdAt,
@@ -69,7 +66,7 @@ export function createWebDrafts(open) {
     ...summarize(d.content),
   });
 
-  async function get(id) {
+  async function get(id: string): Promise<StoredDraft> {
     return withDb(async (db) => {
       const d = await db.get("drafts", id);
       if (!d) throw new Error("draft not found");
@@ -77,31 +74,31 @@ export function createWebDrafts(open) {
     });
   }
 
-  async function save(input) {
+  async function save(input: Partial<Draft>): Promise<StoredDraft> {
     const format = input.format || "markdown";
     if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
     const content = input.content ?? "";
     const bytes = new TextEncoder().encode(content).length;
     if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
     const now = Date.now();
-    let id = input.id;
+    let id = input.id as string;
     if (!id) id = newId(now);
     else if (!ID.test(id)) throw new Error(`"${id}" is not a draft id`);
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
       const drafts = tx.objectStore("drafts");
       const existing = await drafts.get(id);
-      // Saving an id that is no longer stored restores it (undoing a delete), keeping its creation time when one is given.
-      const createdAt = existing?.createdAt ?? (input.id && input.createdAt > 0 ? input.createdAt : now);
-      // The file link is only ever set by setFilePath, as on the Go side, so saving the text keeps it.
+      // An id that is no longer stored is restored (undoing a delete), keeping the creation time when given.
+      const createdAt = existing?.createdAt ?? (input.id && (input.createdAt ?? 0) > 0 ? (input.createdAt as number) : now);
+      // Only setFilePath sets the file link, as on the Go side.
       const d = { id, format, content, createdAt, updatedAt: now, filePath: existing?.filePath ?? "" };
       await Promise.all([drafts.put(d), tx.objectStore("summaries").put(summaryOf(d)), tx.done]);
       return d;
     });
   }
 
-  // The name of the file a draft was saved to ("" clears it); the browser only knows the name, the handle is kept by backend.ts.
-  async function setFilePath(id, filePath) {
+  // The browser only knows the file name; backend.ts keeps the handle. "" clears it.
+  async function setFilePath(id: string, filePath: string): Promise<StoredDraft> {
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
       const drafts = tx.objectStore("drafts");
@@ -113,20 +110,20 @@ export function createWebDrafts(open) {
     });
   }
 
-  async function remove(id) {
+  async function remove(id: string) {
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries"], "readwrite");
       await Promise.all([tx.objectStore("drafts").delete(id), tx.objectStore("summaries").delete(id), tx.done]);
     });
   }
 
-  // Newest first. `matches`, when given, is the set of ids that match a search.
-  async function page(db, matches, limit, offset) {
-    limit = Math.min(limit > 0 ? limit : DEFAULT_LIMIT, MAX_LIMIT);
+  // Newest first; `matches` limits it to a search result.
+  async function page(db: IDBPDatabase, matches: Set<string> | null, limit?: number, offset?: number): Promise<List> {
+    limit = Math.min(limit && limit > 0 ? limit : DEFAULT_LIMIT, MAX_LIMIT);
     offset = Math.max(offset || 0, 0);
     const store = db.transaction("summaries").store;
     const total = matches ? matches.size : await store.count();
-    const drafts = [];
+    const drafts: Summary[] = [];
     let skipped = 0;
     for (let cur = await store.index("byUpdated").openCursor(null, "prev"); cur && drafts.length < limit; cur = await cur.continue()) {
       if (matches && !matches.has(cur.value.id)) continue;
@@ -136,16 +133,16 @@ export function createWebDrafts(open) {
     return { drafts, total };
   }
 
-  async function list(limit, offset) {
+  async function list(limit?: number, offset?: number) {
     return withDb((db) => page(db, null, limit, offset));
   }
 
-  // Drafts whose text contains the query, ignoring case. The text is only read here, one draft at a time.
-  async function search(query, limit) {
+  // Case-insensitive; the only place the text is read, one draft at a time.
+  async function search(query: string, limit?: number) {
     const q = query.trim().toLowerCase();
     if (!q) return list(limit, 0);
     return withDb(async (db) => {
-      const matches = new Set();
+      const matches = new Set<string>();
       for await (const cur of db.transaction("drafts").store) {
         if (cur.value.content.toLowerCase().includes(q)) matches.add(cur.value.id);
       }
@@ -153,27 +150,26 @@ export function createWebDrafts(open) {
     });
   }
 
-  // Every draft id, for Sync all (the list reads summaries and is paged; this reads only the keys).
+  // Only the keys, for Sync all.
   async function allIds() {
-    return withDb((db) => db.getAllKeys("drafts"));
+    return withDb((db) => db.getAllKeys("drafts") as Promise<string[]>);
   }
 
-  // What the page needs to start: the most recent draft and how many there are (see PadService.Startup).
+  // As PadService.Startup.
   async function startup() {
     const { drafts, total } = await list(1, 0);
     return { demo: "", open: drafts.length ? await get(drafts[0].id) : null, total, error: "" };
   }
 
-  // --- Sync (docs/sync.md). The state of a draft is a record in the "sync" store: {id, hash, updatedAt, deleted, version}, what the
-  // server held at the last sync. A change is found by comparing hashes, and a delete is a record with no draft (deleted false), so a
-  // draft saved or deleted by an older build, which knows nothing of the store, is seen too. Same rules as internal/store/sync.go.
+  // --- Sync (docs/sync.md). A draft's state is a record in the "sync" store: what the server held at the last sync. Changes are found
+  // by comparing hashes and a delete is a record with no draft, so edits by an older build are seen too. Same rules as internal/store/sync.go.
 
-  async function syncState(id) {
-    return withDb(async (db) => (await db.get("sync", id)) ?? null);
+  async function syncState(id: string): Promise<SyncRecord | null> {
+    return withDb(async (db) => ((await db.get("sync", id)) as SyncRecord | undefined) ?? null);
   }
 
-  // Records what the server now holds for a draft: {hash, updatedAt, deleted, version}. Pass the hash of the text that was sent.
-  async function markSynced(id, state) {
+  // `state.hash` is the hash of the text that was sent.
+  async function markSynced(id: string, state: Partial<SyncState> & Pick<SyncState, "updatedAt" | "version">) {
     if (!ID.test(id)) throw new Error(`"${id}" is not a draft id`);
     return withDb(async (db) => {
       const tx = db.transaction("sync", "readwrite");
@@ -190,26 +186,25 @@ export function createWebDrafts(open) {
     });
   }
 
-  // A draft is changed when the server has never had it, or its text and format hash differently from what the server last held. The one
-  // definition of the word: changes() and isChanged() both use it (docs/sync.md, "Changes to local storage").
-  async function differsFromSynced(d, state) {
+  // The one definition of "changed", used by changes() and isChanged() (docs/sync.md, "Changes to local storage").
+  async function differsFromSynced(d: StoredDraft, state?: SyncRecord | null) {
     return !state?.hash || (await contentHash(d.format, d.content)) !== state.hash;
   }
 
-  // Whether one draft is changed, for the push after a save. A draft that is not stored is not changed.
-  async function isChanged(id) {
+  // For the push after a save; a draft that is not stored is not changed.
+  async function isChanged(id: string) {
     const { d, state } = await withDb(async (db) => ({ d: await db.get("drafts", id), state: await db.get("sync", id) }));
     return !!d && differsFromSynced(d, state);
   }
 
-  // What to push: {changed, deleted}, ids. It reads each draft's text to hash it, one at a time, so it is for Sync all.
+  // Hashes each draft one at a time, so it is for Sync all.
   async function changes() {
     const { ids, states } = await withDb(async (db) => {
       const tx = db.transaction(["drafts", "sync"]);
       const [ids, records] = await Promise.all([tx.objectStore("drafts").getAllKeys(), tx.objectStore("sync").getAll()]);
-      return { ids: ids.sort(), states: new Map(records.map((r) => [r.id, r])) };
+      return { ids: (ids as string[]).sort(), states: new Map<string, SyncRecord>(records.map((r: SyncRecord) => [r.id, r])) };
     });
-    const changed = [];
+    const changed: string[] = [];
     for (const id of ids) {
       const d = await withDb((db) => db.get("drafts", id));
       if (d && (await differsFromSynced(d, states.get(id)))) changed.push(id);
@@ -222,26 +217,26 @@ export function createWebDrafts(open) {
     return { changed, deleted };
   }
 
-  // Stores a draft as the server has it, with the server's times (save sets the update time to now), and records it as synced.
-  async function applyRemote(input, version) {
+  // Keeps the server's times (save would set the update time to now) and records the draft as synced.
+  async function applyRemote(input: Partial<Draft>, version: number): Promise<StoredDraft> {
     const format = input.format || "markdown";
     if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
     const content = input.content ?? "";
     const bytes = new TextEncoder().encode(content).length;
     if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
     if (!ID.test(input.id ?? "")) throw new Error(`"${input.id}" is not a draft id`);
-    if (!(input.createdAt > 0 && input.updatedAt > 0)) throw new Error("a synced draft needs its created and updated times");
+    if (!((input.createdAt ?? 0) > 0 && (input.updatedAt ?? 0) > 0)) throw new Error("a synced draft needs its created and updated times");
     const hash = await contentHash(format, content); // before the transaction: it would not wait for this
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries", "sync"], "readwrite");
       const drafts = tx.objectStore("drafts");
-      const existing = await drafts.get(input.id);
+      const existing = await drafts.get(input.id as string);
       const d = {
-        id: input.id,
+        id: input.id as string,
         format,
         content,
-        createdAt: input.createdAt,
-        updatedAt: input.updatedAt,
+        createdAt: input.createdAt as number,
+        updatedAt: input.updatedAt as number,
         filePath: existing?.filePath ?? "",
       };
       await Promise.all([
@@ -254,8 +249,8 @@ export function createWebDrafts(open) {
     });
   }
 
-  // Removes a draft because the server's copy is a tombstone, and records that, so it is not a pending delete.
-  async function applyRemoteDelete(id, version, updatedAt) {
+  // The server's copy is a tombstone; recording it keeps this from being a pending delete.
+  async function applyRemoteDelete(id: string, version: number, updatedAt: number) {
     if (!ID.test(id)) throw new Error(`"${id}" is not a draft id`);
     return withDb(async (db) => {
       const tx = db.transaction(["drafts", "summaries", "sync"], "readwrite");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { copiesFor, describeConflict, resolveConflict, staleNote, summaryRows } from "./conflict.js";
+import { copiesFor, describeConflict, resolveConflict, staleNote, summaryRows } from "./conflict.ts";
 
 const side = (text, stamp = "1") => ({ text, stamp });
 

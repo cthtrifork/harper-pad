@@ -1,6 +1,5 @@
-// A diagnostics report to paste into a bug report or a performance question: pressing the version copies it. One line of JSON with raw
-// numbers (milliseconds, bytes, epoch milliseconds), to be read by whoever gets it. Nothing here is sent anywhere, and it holds no draft text.
-// The start-up timings are recorded by main.js and App.vue.
+// The report pressing the version copies, to paste into a bug report: one line of JSON. Nothing is sent anywhere and it holds no draft
+// text. main.js and App.vue record the start-up timings.
 
 // The browser APIs below that lib.dom.d.ts does not declare.
 interface Connection {
@@ -23,7 +22,7 @@ interface Recorded {
   setupMs?: number;
 }
 
-export interface Report {
+interface Report {
   version: string;
   at: number;
   agent: string;
@@ -43,13 +42,12 @@ export interface Report {
 
 const recorded: Recorded = {};
 
-// Remember a number for the report (for example `record("openMs", 794)`).
 export const record = (key: "openMs" | "dataMs" | "setupMs", value: number) => {
   recorded[key] = value;
 };
 
-// Counts the opens in this browser storage, so a report says whether it comes from the first open (the cold one). localStorage is cleared
-// together with the rest when iOS drops a home-screen app's storage, so the count starts again then, which is the point.
+// Counts the opens in this storage, so a report says whether it is the first (cold) one. iOS clearing a home-screen app's storage
+// restarts the count, which is the point.
 const OPENS = "harper-pad-opens";
 export function noteOpen(now = Date.now(), store: Pick<Storage, "getItem" | "setItem"> = globalThis.localStorage) {
   let seen = { count: 0, first: now, last: 0 };
@@ -69,9 +67,8 @@ export function noteOpen(now = Date.now(), store: Pick<Storage, "getItem" | "set
 const seconds = (ms?: number) => (typeof ms === "number" ? Math.round(ms) / 1000 : undefined);
 const bit = (v?: boolean) => (v === undefined ? undefined : v ? 1 : 0);
 
-// The report as one line of JSON, from what collect() returns. The names follow Prometheus conventions (snake_case, base units in the name,
-// booleans as 0 or 1, timestamps in seconds), so the same fields can become metrics if they are ever collected. Values the browser cannot
-// give drop out. `service_worker_controlling` 0 with a registration is normal on the very first open.
+// Names follow Prometheus conventions (snake_case, base units, booleans as 0 or 1, timestamps in seconds), so the fields could become
+// metrics. Values the browser cannot give drop out. `service_worker_controlling` 0 is normal on the very first open.
 export const formatDiagnostics = (info: Report) =>
   JSON.stringify({
     version: info.version || undefined,
@@ -96,8 +93,8 @@ export const formatDiagnostics = (info: Report) =>
     slow_requests: info.resources?.map((r) => ({ name: r.name, duration_seconds: seconds(r.duration), transfer_bytes: r.size })), // transfer_bytes 0: from cache
   });
 
-// The facts of this page load, read from the browser. Each read is guarded: a browser without one of these APIs leaves it out.
-export async function collect(version?: string): Promise<Report> {
+// Each read is guarded: a browser without one of these APIs leaves it out.
+async function collect(version?: string): Promise<Report> {
   const nav = performance.getEntriesByType?.("navigation")?.[0] as PerformanceNavigationTiming | undefined;
   // Safari reports only first-contentful-paint, which is the same moment here (the page has text from the start).
   const paint = performance.getEntriesByName?.("first-paint")?.[0] ?? performance.getEntriesByName?.("first-contentful-paint")?.[0];
@@ -131,7 +128,7 @@ export async function collect(version?: string): Promise<Report> {
   };
 }
 
-// Copy the report; true when it reached the clipboard.
+// True when the report reached the clipboard.
 export async function copyDiagnostics(version?: string) {
   try {
     await navigator.clipboard.writeText(formatDiagnostics(await collect(version)));

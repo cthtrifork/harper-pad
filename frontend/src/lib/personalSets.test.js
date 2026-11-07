@@ -56,3 +56,8 @@ test("withoutWords disposes the new linter if filling it fails", async () => {
   );
   assert.equal(next.disposed, true);
 });
+
+test("words sort alphabetically, ignoring case", async () => {
+  const { byWord } = await import("./personal.js");
+  assert.deepEqual(["Banana", "apple", "cherry", "Apple"].sort(byWord), ["Apple", "apple", "Banana", "cherry"]);
+});

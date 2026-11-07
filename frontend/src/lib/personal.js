@@ -7,9 +7,16 @@ export { applyIgnored, ignoredHashes, removeIgnored, withoutWord, withoutWords }
 // could not say what was ignored. Hashes are kept as text: they are 64-bit and do not fit a JS number.
 let labels = {};
 
+// Alphabetical, ignoring case ("apple" before "Banana"), by code unit: localeCompare would load the browser's collation data.
+export const byWord = (a, b) => {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  return x < y ? -1 : x > y ? 1 : a < b ? -1 : a > b ? 1 : 0;
+};
+
 // What the Problems panel shows: the dictionary, and the ignored findings.
 async function snapshot(harper) {
-  const words = [...(await harper.exportWords())].sort((a, b) => a.localeCompare(b));
+  const words = [...(await harper.exportWords())].sort(byWord);
   const ignored = hashesOf(await harper.exportIgnoredLints()).map((hash) => ({ hash, label: labels[hash] || "A finding in its context" }));
   return { words, ignored };
 }

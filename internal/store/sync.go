@@ -50,7 +50,7 @@ func ContentHash(format, content string) string {
 }
 
 // differsFromSynced is the one definition of a changed draft: the server has never had it (no recorded hash), or its hash differs from the
-// recorded one. Changes and IsChanged both use it, as the web store's differsFromSynced does (frontend/src/lib/webDrafts.js).
+// recorded one. Changes and IsChanged both use it, as the web store's differsFromSynced does (frontend/src/lib/webDrafts.ts).
 func differsFromSynced(format, content, synced string) bool {
 	return synced == "" || ContentHash(format, content) != synced
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createFileChange, shortReason } from "./fileChange.js";
+import { createFileChange, shortReason } from "./fileChange.ts";
 
 const draft = { id: "a".repeat(32), filePath: "/home/me/notes/plan.md" };
 const changed = { state: "changed", stamp: "1" };

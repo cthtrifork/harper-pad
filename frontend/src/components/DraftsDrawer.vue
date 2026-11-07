@@ -2,7 +2,7 @@
 import { onBeforeUnmount, ref, watch } from "vue";
 import { copyDiagnostics } from "../lib/diagnostics.ts";
 import { whenLabel } from "../lib/when.ts";
-import { COPY_LABELS } from "../lib/conflict.js";
+import { COPY_LABELS } from "../lib/conflict.ts";
 import SnippetsHelp from "./SnippetsHelp.vue";
 
 const props = defineProps({

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import "fake-indexeddb/auto";
 import { createDesktopSyncDrafts, SYNC_STORE_METHODS } from "./desktopSync.ts";
-import { createWebDrafts, openDatabase } from "./webDrafts.js";
+import { createWebDrafts, openDatabase } from "./webDrafts.ts";
 
 // A stand-in for the generated bindings that records every call. A service must not answer `then`, or await would wait on it as a promise.
 function fakeBindings() {

@@ -5,7 +5,7 @@
  * SyncService is the Wails binding for what the sync client needs from the database: which drafts exist and which are changed, the state
  * recorded at the last sync, and the two ways of storing what the server holds. The sync client itself (frontend/src/lib/syncRun.js) runs in
  * the page, and the device's token and key stay in the webview's IndexedDB, so nothing here touches the network or a secret; these are the
- * same operations the web build does against IndexedDB (frontend/src/lib/webDrafts.js), and the same rules, checked by the same fixtures.
+ * same operations the web build does against IndexedDB (frontend/src/lib/webDrafts.ts), and the same rules, checked by the same fixtures.
  * @module
  */
 
