@@ -7,7 +7,7 @@ import StatusBar from "./components/StatusBar.vue";
 import ConflictDialog from "./components/ConflictDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, savePrefs } from "./lib/autocorrect.js";
-import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.js";
+import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.ts";
 import { record } from "./lib/diagnostics.js";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.js";
 import { createLinter } from "./lib/harper.js";
@@ -19,7 +19,7 @@ import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.js";
 import { useConflict } from "./lib/useConflict.js";
 import { useSync } from "./lib/useSync.js";
 
-// What main.js asked the backend before mounting (see backend.js startup): the demo banner and the most recent draft.
+// What main.js asked the backend before mounting (see backend.ts startup): the demo banner and the most recent draft.
 const props = defineProps({ start: { type: Object, required: true } });
 
 // The header's last button, loaded after the first paint. The desktop build has the in-app updater, with its version; the web build loads

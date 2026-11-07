@@ -12,7 +12,7 @@ const PUSH_DELAY_MS = 2000;
 //   status: off | synced | syncing | pending | offline | signin
 //
 // `origin` is the sync server this build was made for (SYNC_ORIGIN, "" when none: then nothing shows). `deviceStore` is syncDevice from
-// backend.js and `drafts` the web store (see createSyncer: all syncing, conflicts included, is done there, not here). For Sync all: `prepare` saves what is typed first,
+// backend.ts and `drafts` the web store (see createSyncer: all syncing, conflicts included, is done there, not here). For Sync all: `prepare` saves what is typed first,
 // `skip` returns the ids to leave alone (the open draft), `onChanged` is called when a run changed the local drafts, and `autoSync`
 // runs it when the app starts and after enrolling. `settings` ({current(), store, apply(changes)}) syncs the personal dictionary and the ignored findings
 // (hashes), with Sync all and after `wordsChanged()`; `current()` gives {words, ignored} now, `store` is settingsSync.js's record and

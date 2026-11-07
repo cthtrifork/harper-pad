@@ -9,6 +9,7 @@
     "checkJs": false,
     "strict": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "useDefineForClassFields": false,
     "isolatedModules": true,
