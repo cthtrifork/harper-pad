@@ -1,4 +1,4 @@
-/* The task checkbox the markdown editor draws for `- [ ]` / `- [x]` (lib/editor/tasks.js). Motion is cut by prefers-reduced-motion in base.css. */
+/* The task checkbox the markdown editor draws for `- [ ]` / `- [x]` (lib/editor/tasks.ts). Motion is cut by prefers-reduced-motion in base.css. */
 .editor .cm-task {
   display: inline-block;
   position: relative;

@@ -1,10 +1,12 @@
 // Counts for the status bar. Both work on the CodeMirror document directly, so no keystroke builds the whole text as a string.
 
+import type { EditorState, Text } from "@codemirror/state";
+
 const PAIR = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
 
 // Words (runs of non-space characters) and characters (UTF-16 code points, so an emoji counts once, and every line break counts
 // one) in a document. A word never spans lines, so counting line by line gives the same answer as counting the joined text.
-export function countDoc(doc) {
+export function countDoc(doc: Text) {
   let words = 0;
   let pairs = 0;
   for (const line of doc.iterLines()) {
@@ -21,7 +23,7 @@ export function countDoc(doc) {
 }
 
 // The same set of characters as \s.
-function isSpace(c) {
+function isSpace(c: number) {
   return (
     c === 32 ||
     (c >= 9 && c <= 13) ||
@@ -37,8 +39,8 @@ function isSpace(c) {
   );
 }
 
-// Where the caret is, for the status bar: 1-based line and column (in characters), and how many characters are selected.
-export function cursorOf(state) {
+// 1-based line and column, in characters.
+export function cursorOf(state: EditorState) {
   const { head, from, to } = state.selection.main;
   const line = state.doc.lineAt(head);
   return {
@@ -48,6 +50,6 @@ export function cursorOf(state) {
   };
 }
 
-function codePoints(text) {
+function codePoints(text: string) {
   return text.length - (text.match(PAIR)?.length ?? 0);
 }

@@ -1,29 +1,29 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { forEachDiagnostic } from "@codemirror/lint";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, type Text } from "@codemirror/state";
 import { dropCursor, EditorView, keymap, placeholder } from "@codemirror/view";
-import { autoField, fixAllSafe, replaceExternal, reportAutocorrect, undoFixes } from "./autocorrect.js";
-import { harperSource, relint } from "./lint.js";
-import { loadMarkdownMode, markdownLoaded, modeExtensions } from "./mode.js";
-import { collectProblems, sameProblems } from "./problems.js";
-import { countDoc, cursorOf } from "./stats.js";
-import { theme } from "./theme.js";
+import type { Prefs } from "../autocorrect.ts";
+import type { HarperLinter } from "../harper.ts";
+import { autoField, fixAllSafe, replaceExternal, reportAutocorrect, undoFixes } from "./autocorrect.ts";
+import { harperSource, type PersistNote, relint } from "./lint.ts";
+import { loadMarkdownMode, markdownLoaded, type Mode, modeExtensions } from "./mode.ts";
+import { collectProblems, type Problem, sameProblems } from "./problems.ts";
+import { countDoc, cursorOf } from "./stats.ts";
+import { theme } from "./theme.ts";
 
 export { fixAllSafe, relint, replaceExternal };
 
 // Take autocorrect's fixes back (the toast's Undo all, a row's Undo): the text returns and Harper ignores the finding from now on.
-export function revertFixes(view, ids) {
-  return undoFixes(view, ids, editors.get(view).ctx.ignore);
+export function revertFixes(view: EditorView, ids: number[]) {
+  return undoFixes(view, ids, (editors.get(view) as Entry).ctx.ignore);
 }
 
-// Select the range of a finding and bring it into view.
-export function jumpTo(view, from, to) {
+export function jumpTo(view: EditorView, from: number, to: number) {
   view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
   view.focus();
 }
 
-// Apply the i-th fix of the finding currently at from..to.
-export function applyFix(view, from, to, i) {
+export function applyFix(view: EditorView, from: number, to: number, i: number) {
   forEachDiagnostic(view.state, (d, f, t) => {
     if (f === from && t === to) d.actions?.[i]?.apply(view, f, t);
   });
@@ -32,14 +32,47 @@ export function applyFix(view, from, to, i) {
 // What each editor was created with, so loadDocument can build a fresh state with the same behaviour and report only changes.
 // The format ("markdown" or "text") lives in its own compartment, which is the first extension, so it can be switched without
 // losing the text or the undo history.
-const editors = new WeakMap();
-const DEFAULT_MODE = { format: "markdown", source: false };
+interface Ctx {
+  onStats?: (stats: Stats) => void;
+  onCursor?: (cursor: ReturnType<typeof cursorOf>) => void;
+  stats: Stats | null;
+  problems: Problem[];
+  settling: Promise<void> | null;
+  ignore: (entries: { hash: bigint | undefined; original: string; kind: string | undefined }[]) => void;
+}
 
-// Create the editor in `parent`. `getHarper` returns the WorkerLinter, or null while it is still loading. The `on*` callbacks are all
-// optional and report what the editor shows (results, problems, stats, cursor, the text for the preview, edits, autocorrect fixes);
-// `persist` saves the dictionary and ignore list after a change, `getAutocorrect` returns the user's choices.
+interface Entry {
+  extensions: Extension[];
+  ctx: Ctx;
+  mode: Compartment;
+  current: Mode;
+}
+
+type Stats = ReturnType<typeof countDoc>;
+
+const editors = new WeakMap<EditorView, Entry>();
+const DEFAULT_MODE: Mode = { format: "markdown", source: false };
+
+// `getHarper` returns null while Harper is still loading.
+export interface EditorOptions {
+  doc: string;
+  mode?: Mode;
+  getHarper: () => HarperLinter | null;
+  onResult?: (r: { count: number; ms: number }) => void;
+  onProblems?: (list: Problem[]) => void;
+  onStats?: (stats: Stats) => void;
+  onCursor?: (cursor: ReturnType<typeof cursorOf>) => void;
+  onDoc?: (text: string) => void;
+  onEdit?: () => void;
+  persist?: (note?: PersistNote) => unknown;
+  getAutocorrect?: () => Prefs | undefined;
+  onFixes?: (list: { id: number; original: string; replacement: string }[]) => void;
+  onFixed?: (ids: number[]) => void;
+  onUserEdit?: () => void;
+}
+
 export function createEditor(
-  parent,
+  parent: HTMLElement,
   {
     doc,
     mode: initialMode = DEFAULT_MODE,
@@ -55,9 +88,9 @@ export function createEditor(
     onFixes,
     onFixed,
     onUserEdit,
-  },
+  }: EditorOptions,
 ) {
-  const ctx = { onStats, onCursor, stats: null, problems: [], settling: null };
+  const ctx = { onStats, onCursor, stats: null, problems: [], settling: null } as unknown as Ctx;
   // Ctrl+Z took fixes back: tell Harper to ignore those findings so they are not fixed again. The next lint waits for this.
   ctx.ignore = (entries) => {
     ctx.settling = (async () => {
@@ -115,10 +148,10 @@ export function createEditor(
   return view;
 }
 
-// The markdown parser is loaded after the first paint (mode.js): a markdown document first shows as plain text, and once it has
+// The markdown parser is loaded after the first paint (mode.ts): a markdown document first shows as plain text, and once it has
 // arrived the mode is applied again, to whatever mode the editor is in by then. The document and its undo history are untouched.
-function catchUpMode(view) {
-  const entry = editors.get(view);
+function catchUpMode(view: EditorView) {
+  const entry = editors.get(view) as Entry;
   if (entry.current.format !== "markdown" || markdownLoaded()) return;
   afterNextPaint()
     .then(loadMarkdownMode)
@@ -131,7 +164,7 @@ function catchUpMode(view) {
 
 // One frame after the editor has been painted; the timer is the fallback for a hidden window, where no animation frames run.
 function afterNextPaint() {
-  return new Promise((resolve) => {
+  return new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 300);
     requestAnimationFrame(() =>
       setTimeout(() => {
@@ -142,29 +175,38 @@ function afterNextPaint() {
   });
 }
 
-function reportStats(ctx, doc) {
+function reportStats(ctx: Ctx, doc: Text) {
   const next = countDoc(doc);
   if (ctx.stats && ctx.stats.words === next.words && ctx.stats.chars === next.chars) return;
   ctx.stats = next;
   ctx.onStats?.(next);
 }
 
-// Switch the format (markdown or text) and whether it is the Split source pane, without touching the document.
-export function setMode(view, mode) {
-  editors.get(view).current = mode;
+export function setMode(view: EditorView, mode: Mode) {
+  const entry = editors.get(view) as Entry;
+  entry.current = mode;
   catchUpMode(view);
-  view.dispatch({ effects: editors.get(view).mode.reconfigure(modeExtensions(mode)) });
+  view.dispatch({ effects: entry.mode.reconfigure(modeExtensions(mode)) });
 }
 
 // Replace the whole document, as when another draft is opened. It starts a fresh state, so undo cannot cross into the previous
 // document, and it does not count as an edit. The stats and the caret are reported again, because no update is reported for it.
 // `keepSelection` is for showing a newer copy of the draft that is already open (a background sync): the selection stays where it was
 // (cut to the new length) instead of falling back to the start, or the next key would act on the wrong text.
-export function loadDocument(view, text, onStats, mode = DEFAULT_MODE, onDoc, onCursor, keepSelection = false) {
-  const { extensions, ctx, mode: compartment } = editors.get(view);
+export function loadDocument(
+  view: EditorView,
+  text: string,
+  onStats?: (stats: Stats) => void,
+  mode: Mode = DEFAULT_MODE,
+  onDoc?: (text: string) => void,
+  onCursor?: (cursor: ReturnType<typeof cursorOf>) => void,
+  keepSelection = false,
+) {
+  const entry = editors.get(view) as Entry;
+  const { extensions, ctx, mode: compartment } = entry;
   const { anchor, head } = view.state.selection.main;
   const hadFocus = view.hasFocus;
-  editors.get(view).current = mode;
+  entry.current = mode;
   catchUpMode(view);
   const withMode = extensions.map((e, i) => (i === 0 ? compartment.of(modeExtensions(mode)) : e));
   const selection = keepSelection ? { anchor: Math.min(anchor, text.length), head: Math.min(head, text.length) } : undefined;

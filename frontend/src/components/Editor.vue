@@ -2,8 +2,8 @@
 import { EditorView } from "@codemirror/view";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { undo } from "@codemirror/commands";
-import { insertSnippet } from "../lib/editor/snippets.js";
-import { applyFix, createEditor, fixAllSafe, jumpTo, loadDocument, relint, replaceExternal, revertFixes, setMode } from "../lib/editor/index.js";
+import { insertSnippet } from "../lib/editor/snippets.ts";
+import { applyFix, createEditor, fixAllSafe, jumpTo, loadDocument, relint, replaceExternal, revertFixes, setMode } from "../lib/editor/index.ts";
 
 const props = defineProps({
   harper: { type: Object, default: null },
@@ -11,7 +11,7 @@ const props = defineProps({
   format: { type: String, default: "markdown" }, // "markdown" or "text"
   source: { type: Boolean, default: false }, // the Split view's source pane: monospace, line numbers
   persist: { type: Function, default: async () => {} },
-  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) }, // see lib/autocorrect.js
+  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) }, // see lib/autocorrect.ts
 });
 const emit = defineEmits(["result", "problems", "stats", "cursor", "edited", "doc", "fixes", "fixed", "user-edit"]);
 const host = ref(null);

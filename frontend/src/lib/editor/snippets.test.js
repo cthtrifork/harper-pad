@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
-import { expandSnippet, insertSnippet, SNIPPET_LIST } from "./snippets.js";
+import { expandSnippet, insertSnippet, SNIPPET_LIST } from "./snippets.ts";
 
 // A state with the caret at `at` (default: the end) in `doc`; returns the document and the selected text after expanding.
 function expand(doc, at = doc.length) {

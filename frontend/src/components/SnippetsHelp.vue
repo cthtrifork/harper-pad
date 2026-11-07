@@ -3,7 +3,7 @@
 // it cannot drift from what Enter does. Each card shows the result as a small mockup, the selected part highlighted; pressing a card
 // puts that result in the editor where the cursor is. The drawer stays open, so several can be inserted in a row.
 import { ref } from "vue";
-import { SNIPPET_LIST } from "../lib/editor/snippets.js";
+import { SNIPPET_LIST } from "../lib/editor/snippets.ts";
 
 const emit = defineEmits(["back", "insert"]);
 
