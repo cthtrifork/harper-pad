@@ -8,7 +8,7 @@ import (
 	"github.com/cthtrifork/harper-pad/internal/store"
 )
 
-// The page reads these as JSON, with the field names the web store uses (frontend/src/lib/webDrafts.js); renaming one breaks sync on desktop.
+// The page reads these as JSON, with the field names the web store uses (frontend/src/lib/webDrafts.ts); renaming one breaks sync on desktop.
 func TestSyncTypesAreJSONTheWebStoreWouldSend(t *testing.T) {
 	st, _ := json.Marshal(store.SyncState{Hash: "h", UpdatedAt: 2, Deleted: true, Version: 3})
 	if string(st) != `{"hash":"h","updatedAt":2,"deleted":true,"version":3}` {

@@ -4,13 +4,13 @@
 // Everything else goes through this file, so nothing else needs to know the build. The bindings are imported on demand, so the web
 // bundle carries no Wails code.
 
-import { createWebDrafts, openDatabase } from "./webDrafts.js";
+import { createWebDrafts, openDatabase } from "./webDrafts.ts";
 import { createDesktopSyncDrafts } from "./desktopSync.ts";
 import { withLastOpened } from "./lastOpened.ts";
 import { createSettingsSyncStore } from "./settingsSync.ts";
 import { createDeviceStore } from "./syncDevice.ts";
 import { withSummary } from "./summarize.ts";
-import { fileName, saveWebFile, sharesFiles } from "./webFiles.js";
+import { fileName, saveWebFile, sharesFiles } from "./webFiles.ts";
 
 type Bindings = typeof import("../../bindings/github.com/cthtrifork/harper-pad/internal/app");
 type Settings = import("../../bindings/github.com/cthtrifork/harper-pad/internal/app").Settings;
@@ -75,7 +75,7 @@ export const syncDevice = createDeviceStore(openDb);
 export const settingsSync = createSettingsSyncStore(openDb);
 
 // --- Drafts ------------------------------------------------------------------------------------------------------------------
-// The same operations on both builds: DraftService's methods on desktop (SQLite), IndexedDB in the browser (webDrafts.js).
+// The same operations on both builds: DraftService's methods on desktop (SQLite), IndexedDB in the browser (webDrafts.ts).
 
 // Only used when isWeb (the guards below); typed as present so the call sites need no checks.
 const web = (isWeb ? createWebDrafts(openDb) : undefined) as unknown as ReturnType<typeof createWebDrafts>;

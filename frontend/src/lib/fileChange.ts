@@ -4,20 +4,46 @@ import { ref } from "vue";
 // device"). `checkStatus(id)` is the Go side's LinkedFileStatus, which reads the stored path; the web build has no path and answers "none".
 //
 //   conflict  null or {id, name, stamp, clean, serverText}: the file differs and the draft has edits of its own, or (`clean`) it has none and
-//             the server also holds other text. It becomes the Keep or Overwrite dialog (conflict.js, useConflict.js).
+//             the server also holds other text. It becomes the Keep or Overwrite dialog (conflict.ts, useConflict.js).
 //   problem   {id, reason} when the file is gone or cannot be used: the header's chip is struck through. No dialog.
 //
 // `auto` ({can(), run(draft, name)}) is the quiet refresh of a clean draft. Only `check` (open, focus) tries it, never a save, and only when
 // `can()` says nothing is being typed or saved; otherwise the next check tries again.
-export function createFileChange(checkStatus, auto = null) {
-  const conflict = ref(null);
-  const problem = ref(null);
+export interface FileStatus {
+  state?: string;
+  reason?: string;
+  stamp?: string;
+  clean?: boolean;
+}
+
+export interface LinkedDraft {
+  id: string;
+  filePath: string;
+}
+
+export interface Conflict {
+  id: string;
+  name: string;
+  stamp: string;
+  clean: boolean;
+  tick: number;
+  serverText?: string;
+}
+
+export interface Auto {
+  can(): boolean;
+  run(draft: LinkedDraft, name: string): Promise<unknown>;
+}
+
+export function createFileChange(checkStatus: (id: string) => Promise<FileStatus | undefined>, auto: Auto | null = null) {
+  const conflict = ref<Conflict | null>(null);
+  const problem = ref<{ id: string; reason: string } | null>(null);
   let seq = 0; // a late answer for a draft that was left meanwhile must not raise anything
   let tick = 0;
 
-  const baseName = (p) => p.split(/[\\/]/).pop();
+  const baseName = (p: string) => p.split(/[\\/]/).pop() ?? "";
 
-  function show(draft, s, extra = {}) {
+  function show(draft: LinkedDraft, s: FileStatus, extra: Partial<Conflict> = {}) {
     conflict.value = {
       id: draft.id,
       name: baseName(draft.filePath),
@@ -29,7 +55,7 @@ export function createFileChange(checkStatus, auto = null) {
   }
 
   // What the status says about the chip: a gone or unusable file is a problem, anything else is not.
-  function setProblem(draft, s) {
+  function setProblem(draft: LinkedDraft, s?: FileStatus) {
     problem.value =
       s?.state === "missing"
         ? { id: draft.id, reason: "file not found" }
@@ -40,7 +66,7 @@ export function createFileChange(checkStatus, auto = null) {
 
   // Looks at the file of `draft` ({id, filePath}); raises the conflict if there is one, or takes the file's text when the draft has no edits of
   // its own (`auto`).
-  async function check(draft, { force = false } = {}) {
+  async function check(draft: LinkedDraft | null | undefined, { force = false } = {}) {
     const mine = ++seq;
     if (conflict.value?.id !== draft?.id) conflict.value = null; // another draft: its dialog goes at once
     if (problem.value?.id !== draft?.id) problem.value = null;
@@ -70,10 +96,10 @@ export function createFileChange(checkStatus, auto = null) {
   }
 
   // A save was refused because the file changed. The details are looked up; if they cannot be (the web build), a plain conflict is shown.
-  async function raise(draft) {
+  async function raise(draft: LinkedDraft | null | undefined) {
     const mine = ++seq;
     if (!draft?.id || !draft.filePath) return;
-    let s = { state: "changed" };
+    let s: FileStatus = { state: "changed" };
     try {
       const got = await checkStatus(draft.id);
       if (got?.state === "changed" || got?.state === "missing" || got?.state === "broken") s = got;
@@ -86,13 +112,13 @@ export function createFileChange(checkStatus, auto = null) {
   }
 
   // The draft has no edits of its own, the file changed, and the server also holds other text: the dialog, with the file's text as "yours".
-  function raiseClean(draft, { stamp, serverText }) {
+  function raiseClean(draft: LinkedDraft, { stamp, serverText }: { stamp: string; serverText: string }) {
     seq++;
     show(draft, { stamp }, { clean: true, serverText });
   }
 
   // Writing the file failed (or it is not there to look at): the chip says why. The link stays, so the next Ctrl+S or look tries again.
-  function failed(draft, message) {
+  function failed(draft: LinkedDraft | null | undefined, message: unknown) {
     seq++;
     conflict.value = null;
     if (draft?.id && draft.filePath) problem.value = { id: draft.id, reason: shortReason(message) };
@@ -115,15 +141,11 @@ export function createFileChange(checkStatus, auto = null) {
 }
 
 // A short reason for the chip from an error or a reason: "could not write /a/b.md: permission denied" becomes "permission denied".
-export function shortReason(text) {
+export function shortReason(text: unknown): string {
   const t = String(text ?? "")
     .trim()
     .replace(/^Not saved to a file: /, "");
-  const last = t
-    .split(": ")
-    .pop()
-    .replace(/^it is /, "")
-    .replace(/^open .*?: /, "");
+  const last = (t.split(": ").pop() ?? "").replace(/^it is /, "").replace(/^open .*?: /, "");
   const out = last.replace(/\.$/, "");
   return out ? out[0].toLowerCase() + out.slice(1) : "file not usable";
 }

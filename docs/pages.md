@@ -64,7 +64,7 @@ request, deletes the folder. Without the label nothing is published.
 
 - **Same origin as the real site.** (This holds for `/preview/` too, which is scoped like a `pr-<n>` preview: its keys end in `.preview` and its cache is `harper-pad-preview-v1`.) IndexedDB, localStorage and Cache Storage are shared by every path of an origin. The IndexedDB database
   (`harper-pad`, the dictionary and drafts) is deliberately shared, so a preview opens with the real data. That means a preview that
-  changes the schema (`DB_VERSION` in `webDrafts.js`) upgrades the real database for the released site too. Older builds still open
+  changes the schema (`DB_VERSION` in `webDrafts.ts`) upgrades the real database for the released site too. Older builds still open
   it, as long as the migration is backwards compatible: see [Changing the schema](#changing-the-schema). The presentation settings and the cache are scoped, so a preview cannot
   change the real site's look or cached files: the frontend derives a scope from the base path (`src/lib/scope.ts`; `web/sw.js` does the
   same for its cache), and on `/pr-<n>/` localStorage keys end in `.pr-<n>` and the cache is `harper-pad-pr-<n>-v1`. Production names do
@@ -112,7 +112,7 @@ There is no export or import yet. The dictionary is small, but if it matters, ad
 
 ### Changing the schema
 
-The web database has a version (`DB_VERSION` in `frontend/src/lib/webDrafts.js`) and `upgrade()` creates what is missing. A build that finds
+The web database has a version (`DB_VERSION` in `frontend/src/lib/webDrafts.ts`) and `upgrade()` creates what is missing. A build that finds
 the database at a **newer** version than its own (an older tab, an installed app that has not updated yet, or another build on the same
 origin) opens it as it is, instead of failing: the browser would otherwise refuse with a `VersionError`. That is only safe if migrations
 stay backwards compatible, so add stores, indexes and fields; do not rename, remove or change the meaning of existing ones. A change

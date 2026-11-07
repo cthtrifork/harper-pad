@@ -3,7 +3,7 @@ import test from "node:test";
 import { openDB } from "idb";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
-import { DB_NAME, DB_VERSION, openDatabase } from "./webDrafts.js";
+import { DB_NAME, DB_VERSION, openDatabase } from "./webDrafts.ts";
 
 test.beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();

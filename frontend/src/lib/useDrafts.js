@@ -2,7 +2,7 @@ import { computed, ref, watch } from "vue";
 import * as backend from "./backend.ts";
 
 const { isWeb } = backend;
-import { createFileChange } from "./fileChange.js";
+import { createFileChange } from "./fileChange.ts";
 import { saveLastOpened } from "./lastOpened.ts";
 
 // Kept short: the flush on pagehide cannot finish writing to IndexedDB, so a reload before the save has started loses the text.

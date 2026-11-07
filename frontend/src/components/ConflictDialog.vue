@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
-import { describeConflict, summaryRows } from "../lib/conflict.js";
+import { describeConflict, summaryRows } from "../lib/conflict.ts";
 import { useModalDialog } from "../lib/useModalDialog.js";
 
 // Keep or Overwrite for the open draft (docs/sync.md, "The Keep or Overwrite dialog"). A modal with no way out except a choice: no close
