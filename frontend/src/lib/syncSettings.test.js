@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateDeviceKey } from "./dpop.ts";
-import { createSyncer } from "./syncRun.js";
+import { createSyncer } from "./syncRun.ts";
 
 function fakeServer() {
   const s = { row: null, puts: 0, beforePut: null };

@@ -1,20 +1,24 @@
-// Enrolling this device (docs/sync.md, "Enrollment"): read the invite URL the user pasted, make the device key, call POST /enroll with a
-// proof signed by that key, and keep what comes back. Nothing here touches the UI; the caller shows `SyncError.message`.
+// Enrolling this device (docs/sync.md, "Enrollment"). Nothing here touches the UI; the caller shows `SyncError.message`.
 import { createProof, generateDeviceKey } from "./dpop.ts";
+import type { DeviceRecord } from "./syncDevice.ts";
 
-// What went wrong, as a code the UI can switch on and a message it can show.
+export type SyncErrorCode = "bad-url" | "not-https" | "other-server" | "rejected" | "server" | "signin" | "unreachable";
+
+// A code the UI can switch on and a message it can show.
 export class SyncError extends Error {
-  constructor(code, message) {
+  code: SyncErrorCode;
+
+  constructor(code: SyncErrorCode, message: string) {
     super(message);
     this.name = "SyncError";
     this.code = code;
   }
 }
 
-// "https://sync.example.com/join#<token>" -> {server: "https://sync.example.com", invite: "<token>"}. The token is in the fragment so it is
-// never sent in a request line or written to an access log. The server address comes from the URL alone, so there is no separate field.
-export function parseInviteUrl(text) {
-  let url;
+// "https://sync.example.com/join#<token>" -> the server and the invite. The token is in the fragment, so it is never sent in a request
+// line or written to an access log.
+export function parseInviteUrl(text: string) {
+  let url: URL;
   try {
     url = new URL(String(text).trim());
   } catch {
@@ -28,16 +32,22 @@ export function parseInviteUrl(text) {
   return { server: url.origin, invite };
 }
 
-// The device's name is the one typed in the admin UI when the invite was made, so it is not asked for here.
-// Spends the invite and saves the device record through `store` (syncDevice from backend.ts). `fetchFn` is a parameter for tests.
-// A failed attempt saves nothing, and the invite is spent only when the server accepted it.
-export async function enrollDevice({ text, store, fetchFn = fetch.bind(globalThis) }) {
+// A failed attempt saves nothing, and the invite is spent only when the server accepted it. `fetchFn` is a parameter for tests.
+export async function enrollDevice({
+  text,
+  store,
+  fetchFn = fetch.bind(globalThis),
+}: {
+  text: string;
+  store: { save(record: DeviceRecord): Promise<unknown> };
+  fetchFn?: typeof fetch;
+}) {
   const { server, invite } = parseInviteUrl(text);
   const key = await generateDeviceKey();
   const url = `${server}/enroll`;
   const proof = await createProof({ ...key, method: "POST", url });
 
-  let res;
+  let res: Response;
   try {
     res = await fetchFn(url, {
       method: "POST",

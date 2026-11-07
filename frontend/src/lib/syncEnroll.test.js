@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { enrollDevice, parseInviteUrl, SyncError } from "./syncEnroll.js";
+import { enrollDevice, parseInviteUrl, SyncError } from "./syncEnroll.ts";
 
 const INVITE = "A".repeat(43);
 const url = `https://sync.example.com/join#${INVITE}`;

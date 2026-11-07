@@ -1,4 +1,4 @@
-// The web store's sync operations (webDrafts.ts) over the Go services, so syncRun.js is the same code on both builds. `bindings` imports
+// The web store's sync operations (webDrafts.ts) over the Go services, so syncRun.ts is the same code on both builds. `bindings` imports
 // the Wails bindings on demand, so no Wails code reaches the web bundle. desktopSync.test.js checks the two stores have the same operations.
 export const SYNC_STORE_METHODS = [
   "get",
