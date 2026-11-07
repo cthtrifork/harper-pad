@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { describeConflict, summaryRows } from "../lib/conflict.js";
+import { useModalDialog } from "../lib/useModalDialog.js";
 
 // Keep or Overwrite: the one question when the open draft disagrees with its file, the server, or both. A modal dialog with no way out except a
 // choice: no close button, Escape is stopped (the cancel event), and a click on the backdrop does nothing. The page behind is inert, so the
@@ -17,20 +18,11 @@ const dialog = ref(null);
 const text = computed(() => describeConflict(props.model));
 const rows = computed(() => summaryRows(props.model));
 
-// Focus goes back where it was (the editor) when the dialog goes away; the page removes it with v-if, which does not close() it.
-let before = null;
-onMounted(() => {
-  before = document.activeElement;
-  dialog.value?.showModal();
-});
-onBeforeUnmount(() => {
-  dialog.value?.close();
-  if (before?.isConnected) before.focus();
-});
+useModalDialog(dialog);
 </script>
 
 <template>
-  <dialog ref="dialog" class="conflict-dialog" role="alertdialog" aria-labelledby="conflict-title" aria-describedby="conflict-summary conflict-footer" :aria-busy="busy" @cancel.prevent>
+  <dialog ref="dialog" class="choice-dialog conflict-dialog" role="alertdialog" aria-labelledby="conflict-title" aria-describedby="conflict-summary conflict-footer" :aria-busy="busy" @cancel.prevent>
     <h2 id="conflict-title">{{ text.title }}</h2>
     <table id="conflict-summary" class="summary" aria-label="The versions">
       <tbody>
