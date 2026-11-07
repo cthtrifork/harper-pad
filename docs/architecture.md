@@ -12,7 +12,7 @@ The same Vue 3 + Vite frontend runs in two builds:
 | Desktop (`vite build`) | A Wails v3 window (GTK4 + WebKitGTK on Linux, WebView2 on Windows) | SQLite, through the Go service |
 | Web (`vite build --mode web`) | The browser, published to GitHub Pages | IndexedDB |
 
-`frontend/src/lib/backend.js` is the only file that knows which build it is in. Everything else calls it for drafts,
+`frontend/src/lib/backend.ts` is the only file that knows which build it is in. Everything else calls it for drafts,
 settings, saving files and the version; the desktop bindings are imported on demand, so the web bundle has no Wails code.
 `make build-server` produces a headless build that serves the same frontend over HTTP, used by CI, the screenshots and
 Lighthouse.
@@ -43,7 +43,7 @@ and `pprof`, which `production` rejects.
   on disk, and the list the drawer shows. `lib/statusLine.js` joins that state with the sync state into the one status line in the status bar
   (the Sync button in the header only acts; the sync chip only shows the connection).
 - Sync (optional, both builds; the rules are in [sync](sync.md)): `lib/syncRun.js` (`createSyncer`) is the one place a draft is synced and
-  decided (`syncOneEngine.test.js` keeps it so). `lib/desktopSync.js` and `lib/webDrafts.js` give it the same drafts store on both builds.
+  decided (`syncOneEngine.test.js` keeps it so). `lib/desktopSync.ts` and `lib/webDrafts.js` give it the same drafts store on both builds.
   `lib/useSync.js` is the state behind the status bar chip (`SyncChip.vue`), and `lib/csp.js` builds the page's policy, which names the sync
   server when `SYNC_ORIGIN` is set.
 - `Preview.vue` renders markdown for the Split and Preview views (`marked` parses it); text from drafts or Harper never goes
@@ -57,7 +57,7 @@ and `pprof`, which `production` rejects.
 
 1. Typing updates the CodeMirror document; the lint source debounces and asks the Harper worker for lints.
 2. Lints become diagnostics in the editor and rows in the Problems panel. Applying a fix is a normal edit.
-3. The same edit schedules a draft save through `backend.js`: `DraftService.SaveDraft` on desktop, IndexedDB on the web.
+3. The same edit schedules a draft save through `backend.ts`: `DraftService.SaveDraft` on desktop, IndexedDB on the web.
 4. "Save to disk" writes the draft's text to disk (the Go service with a native dialog on desktop, the browser's file picker
    on the web) and keeps the path on the draft.
 5. With sync on (either build), `useSync` asks `createSyncer` to sync the draft and, at other moments, every draft; [sync](sync.md#sync-moments) says when.

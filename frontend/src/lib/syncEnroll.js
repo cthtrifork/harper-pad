@@ -29,7 +29,7 @@ export function parseInviteUrl(text) {
 }
 
 // The device's name is the one typed in the admin UI when the invite was made, so it is not asked for here.
-// Spends the invite and saves the device record through `store` (syncDevice from backend.js). `fetchFn` is a parameter for tests.
+// Spends the invite and saves the device record through `store` (syncDevice from backend.ts). `fetchFn` is a parameter for tests.
 // A failed attempt saves nothing, and the invite is spent only when the server accepted it.
 export async function enrollDevice({ text, store, fetchFn = fetch.bind(globalThis) }) {
   const { server, invite } = parseInviteUrl(text);

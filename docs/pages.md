@@ -12,14 +12,14 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
 
 ## How the two builds are kept apart
 
-- `frontend/src/lib/backend.js` is the only place the frontend asks its host for anything (settings, version, demo banner).
+- `frontend/src/lib/backend.ts` is the only place the frontend asks its host for anything (settings, version, demo banner).
   On desktop it calls the Wails bindings, imported on demand; on the web it uses IndexedDB. Add new host calls there, with both
   implementations.
 - The web build does not contain the Wails runtime, the generated bindings or the update button (checked in the bundle).
 - `frontend/web/` (manifest, service worker, icons) is copied to the site root by the `web-app` plugin in `vite.config.js`, which also adds the matching `<head>` tags; the desktop build gets none of it. `vite.config.js` sets the base path (`/harper-pad/`, or `BASE_PATH`), the output folder, and the Content-Security-Policy. The
   web policy is the desktop policy plus `manifest-src 'self'`, so the page may load its own manifest. Nothing else is loosened.
-- Every host call needs a web implementation in `backend.js` too, or it will not work on Pages. Sync follows this: `backend.js` exports
-  `syncDrafts`, IndexedDB on the web and the Go `SyncService` on desktop (`desktopSync.js`), and `syncDevice`, the device's record, which is in
+- Every host call needs a web implementation in `backend.ts` too, or it will not work on Pages. Sync follows this: `backend.ts` exports
+  `syncDrafts`, IndexedDB on the web and the Go `SyncService` on desktop (`desktopSync.ts`), and `syncDevice`, the device's record, which is in
   IndexedDB on both.
 - **Sync origin.** The build setting `SYNC_ORIGIN` (an https origin, no path) adds the sync server to the page's `connect-src` and turns the
   chip on; `pages.yml` reads it from the repository variable of that name, and with it unset nothing changes. Previews do not set it. The
