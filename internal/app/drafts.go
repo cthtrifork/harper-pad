@@ -1,6 +1,8 @@
 package app
 
 import (
+	"sync"
+
 	"github.com/cthtrifork/harper-pad/internal/store"
 )
 
@@ -9,6 +11,9 @@ import (
 type DraftService struct {
 	db       *database
 	pickPath func(suggested, dir string) (string, error) // the save dialog; nil means the real one (replaced in tests)
+
+	mu       sync.Mutex
+	unlinked map[string]store.Draft // the link each draft had when it was last unlinked, for UndoUnlinkDraftFile; in memory only
 }
 
 // ServiceShutdown closes the database when the app quits. Wails calls it.

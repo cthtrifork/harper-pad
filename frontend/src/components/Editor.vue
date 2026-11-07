@@ -1,8 +1,9 @@
 <script setup>
 import { EditorView } from "@codemirror/view";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { undo } from "@codemirror/commands";
 import { insertSnippet } from "../lib/editor/snippets.js";
-import { applyFix, createEditor, fixAllSafe, jumpTo, loadDocument, relint, revertFixes, setMode } from "../lib/editor/index.js";
+import { applyFix, createEditor, fixAllSafe, jumpTo, loadDocument, relint, replaceExternal, revertFixes, setMode } from "../lib/editor/index.js";
 
 const props = defineProps({
   harper: { type: Object, default: null },
@@ -106,6 +107,12 @@ defineExpose({
       (c) => emit("cursor", c),
       keepSelection,
     ),
+  // Takes `text` as one edit that Ctrl+Z takes back, changing only what differs: the caret and the scroll position stay as far as the new text
+  // allows, and autocorrect does not rewrite it (unlike load, which starts a new document and history).
+  replaceText: (text) => view && replaceExternal(view, text),
+  // True while an IME composition is in progress: replacing the text then would break it.
+  composing: () => !!view && (view.composing || view.compositionStarted),
+  undo: () => view && undo(view),
   jump: (p) => view && jumpTo(view, p.from, p.to),
   fix: (p, i) => view && applyFix(view, p.from, p.to, i),
   insertSnippet: (trigger, focus = true) => {

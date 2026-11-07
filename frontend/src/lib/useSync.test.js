@@ -305,12 +305,58 @@ test("Save with nothing to save still settles the marker: the newer version is s
   assert.equal(sync.notice.value.kind, "updated");
 });
 
-test("'Open copy' opens the conflicted copy", async () => {
-  const opened = [];
-  const { sync, ready } = setup({ openDraft: (id) => opened.push(id) });
+// A draft changed here and on the server with different text is for the person to settle (the Keep or Overwrite dialog), only while it is open.
+test("opening a draft that conflicts with the server raises the conflict with the server's text, and changes nothing", async () => {
+  let applied = 0;
+  const { sync, kept, ready } = setup({
+    fetchFn: reply(200, NEWER),
+    draftOverrides: { isChanged: async () => true, applyRemote: async () => applied++ },
+  });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
   await ready();
-  sync.openCopy("c".repeat(32));
-  assert.deepEqual(opened, ["c".repeat(32)]);
+  await sync.noteOpened(D.id);
+  assert.equal(sync.serverConflict.value.id, D.id);
+  assert.equal(sync.serverConflict.value.text, "newer");
+  assert.equal(sync.serverConflict.value.stamp, "2:5");
+  assert.equal(applied, 0);
+  sync.clearConflict();
+  assert.equal(sync.serverConflict.value, null);
+});
+
+test("a conflict on a draft that is not open raises nothing", async () => {
+  const { sync, kept, ready } = setup({
+    fetchFn: reply(200, NEWER),
+    isOpen: () => false,
+    draftOverrides: { isChanged: async () => true },
+  });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await ready();
+  await sync.noteOpened(D.id);
+  assert.equal(sync.serverConflict.value, null);
+});
+
+test("the person's choice sends this device's text on top of the server's, and an unreachable server leaves it pending", async () => {
+  const puts = [];
+  const { sync, kept, ready } = setup({
+    fetchFn: async (_u, init) => {
+      if (init.method !== "PUT") return reply(200, NEWER)();
+      puts.push(JSON.parse(init.body));
+      return reply(200, { version: 3 })();
+    },
+  });
+  kept.states.set(D.id, { updatedAt: 1, version: 1, deleted: false, hash: "h" });
+  await ready();
+  assert.equal(await sync.forcePush(D.id), true);
+  assert.deepEqual(puts[0].base, { version: 2, updatedAt: 5 }, "on top of what the server holds now");
+  assert.equal(sync.status.value, "synced");
+  const off = setup({
+    fetchFn: async () => {
+      throw new TypeError("offline");
+    },
+  });
+  await off.ready();
+  assert.equal(await off.sync.forcePush(D.id), false);
+  assert.equal(off.sync.status.value, "offline");
 });
 
 // Deleted on another device.
@@ -506,4 +552,47 @@ test("turning sync off forgets what was synced, so enrolling again takes the ser
   await ready();
   await sync.turnOff();
   assert.equal(await store.load(), null);
+});
+
+// The server refuses a draft itself: the chip says which and why, no dialog, the text stays and goes again; a 5xx is a server fault.
+test("a draft the server rejects is reported with its title and reason, stays pending, and is tried again", async () => {
+  let status = 413;
+  const { sync, ready } = setup({
+    fetchFn: async () => ({
+      status,
+      ok: false,
+      json: async () => ({ title: "Request Entity Too Large", detail: "the draft is over the limit." }),
+    }),
+    draftOverrides: { get: async () => ({ ...D, content: "# A big plan\nbody" }) },
+  });
+  await ready();
+  await sync.saveRequested(D.id);
+  assert.equal(sync.status.value, "pending");
+  assert.deepEqual(sync.rejected.value, { id: D.id, title: "A big plan", reason: "it is too large" });
+  assert.equal(sync.serverConflict.value, null, "no dialog");
+  status = 400;
+  await sync.saveRequested(D.id); // retried at the next moment, and told again
+  assert.equal(sync.rejected.value.reason, "the draft is over the limit");
+});
+
+test("a 5xx is the server's fault: pending, not rejected, retried", async () => {
+  const { sync, ready } = setup({ fetchFn: async () => ({ status: 503, ok: false, json: async () => null }) });
+  await ready();
+  await sync.saveRequested(D.id);
+  assert.equal(sync.status.value, "pending");
+  assert.equal(sync.rejected.value, null);
+});
+
+test("a draft that the server takes again clears the rejection", async () => {
+  let status = 413;
+  const { sync, ready } = setup({
+    fetchFn: async () => ({ status, ok: status < 300, json: async () => (status < 300 ? { version: 1 } : { detail: "too big" }) }),
+  });
+  await ready();
+  await sync.saveRequested(D.id);
+  assert.ok(sync.rejected.value);
+  status = 200;
+  await sync.saveRequested(D.id);
+  assert.equal(sync.rejected.value, null);
+  assert.equal(sync.status.value, "synced");
 });

@@ -2,14 +2,14 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { forEachDiagnostic } from "@codemirror/lint";
 import { Compartment, EditorState } from "@codemirror/state";
 import { dropCursor, EditorView, keymap, placeholder } from "@codemirror/view";
-import { autoField, fixAllSafe, reportAutocorrect, undoFixes } from "./autocorrect.js";
+import { autoField, fixAllSafe, replaceExternal, reportAutocorrect, undoFixes } from "./autocorrect.js";
 import { harperSource, relint } from "./lint.js";
 import { modeExtensions } from "./mode.js";
 import { collectProblems, sameProblems } from "./problems.js";
 import { countDoc, cursorOf } from "./stats.js";
 import { theme } from "./theme.js";
 
-export { fixAllSafe, relint };
+export { fixAllSafe, relint, replaceExternal };
 
 // Take autocorrect's fixes back (the toast's Undo all, a row's Undo): the text returns and Harper ignores the finding from now on.
 export function revertFixes(view, ids) {

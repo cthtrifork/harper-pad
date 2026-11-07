@@ -13,7 +13,7 @@ Settings, health checks and tests are in the [backend README](../../README.md).
 | `GET /docs/<id>` | One draft with its text; `ETag` and `If-None-Match` |
 | `PUT /docs/<id>` | Write if the stored state matches `base`, otherwise `409` with the server's current copy; a delete is a tombstone |
 | `GET /settings` | The synced dictionary and ignore list (two lists) with its `version`; 404 until stored |
-| `PUT /settings` | Write if the stored `version` equals `baseVersion` (0 for none), otherwise `409` with the current copy. The server checks the shape and never merges: the last device to write wins ([`docs/sync.md`](../../../docs/sync.md#settings-the-dictionary-and-the-ignore-list)) |
+| `PUT /settings` | Write if the stored `version` equals `baseVersion` (0 for none), otherwise `409` with the current copy. The server checks the shape and never merges: the last device to write wins ([`docs/sync.md`](../../../docs/sync.md#dictionary-and-ignore-list)) |
 | `:9102/healthz`, `:9102/readyz`, `:9102/metrics` | Probes and Prometheus metrics, on a port that is not routed publicly |
 
 The routes are described in [`docs/openapi.yaml`](../../../docs/openapi.yaml), generated from the Go types.
@@ -50,7 +50,7 @@ sequenceDiagram
     D->>D: Record the synced state (the draft is unchanged again)
   else somebody else changed it
     S-->>D: 409 with the server's current copy
-    D->>D: Apply the conflict rules (same text adopts, different text makes a Conflicted copy)
+    D->>D: Apply the conflict rules (same text changes nothing, different text is the person's choice: Keep or Overwrite)
     D->>S: PUT the local text on top of the server's version
     D->>S: PUT the Conflicted copy as a new draft
   else offline or an error
@@ -59,4 +59,4 @@ sequenceDiagram
 ```
 
 Tombstones keep no text and are kept forever. Conflicts are settled on the device
-([`docs/sync.md`](../../../docs/sync.md#conflicts)).
+([`docs/sync.md`](../../../docs/sync.md#the-keep-or-overwrite-dialog)).

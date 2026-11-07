@@ -51,6 +51,9 @@ type Draft struct {
 	// FileMTime is the file's modification time (Unix nanoseconds) right after it was last written here, to notice when something
 	// else changes it. Not sent to the page.
 	FileMTime int64 `json:"-"`
+	// FileHash is FileContentHash of the draft's text when it last matched its file (written to it, reloaded from it, or found equal), or
+	// "" when unknown. A draft whose text still has this hash has no edits of its own since the file was in step. Not sent to the page.
+	FileHash string `json:"-"`
 }
 
 // Task is one markdown task line, as shown in a draft's preview.
@@ -135,8 +138,8 @@ func (s *Store) Save(d Draft) (Draft, error) {
 func (s *Store) Get(id string) (Draft, error) {
 	var d Draft
 	var data string
-	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data, file_path, file_mtime FROM drafts WHERE id = ?`, id).
-		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data, &d.FilePath, &d.FileMTime)
+	err := s.db.QueryRow(`SELECT id, created_at, updated_at, data, file_path, file_mtime, file_hash FROM drafts WHERE id = ?`, id).
+		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt, &data, &d.FilePath, &d.FileMTime, &d.FileHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Draft{}, ErrNotFound
 	}
@@ -151,10 +154,84 @@ func (s *Store) Get(id string) (Draft, error) {
 	return d, nil
 }
 
-// SetFile records the file a draft was saved to and its modification time after the write, or clears both with "" and 0.
+// FileContentHash is the hash kept as Draft.FileHash: of the text with CRLF and CR turned into LF, so a file's line endings do not matter.
+func FileContentHash(text string) string {
+	return ContentHash("", strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n"))
+}
+
+// SetFileHash records that `text` is what the draft's file holds (see Draft.FileHash).
+func (s *Store) SetFileHash(id, text string) error {
+	_, err := s.db.Exec(`UPDATE drafts SET file_hash = ? WHERE id = ?`, FileContentHash(text), id)
+	return err
+}
+
+// LinkFile links the draft to a file in one transaction: the path, the file's mtime and size after the write, and the hash of the text it
+// holds (see Draft.FileHash). Any other draft linked to the same path is unlinked in the same transaction, so a file has one holder; their
+// titles are returned. ErrNotFound when there is no such draft.
+func (s *Store) LinkFile(id, path string, mtime int64, text string) ([]string, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var titles []string
+	rows, err := tx.Query(`SELECT title FROM drafts WHERE file_path = ? AND id <> ?`, path, id)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if t == "" {
+			t = "Untitled"
+		}
+		titles = append(titles, t)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(`UPDATE drafts SET file_path = '', file_mtime = 0, file_hash = '' WHERE file_path = ? AND id <> ?`, path, id); err != nil {
+		return nil, err
+	}
+	res, err := tx.Exec(`UPDATE drafts SET file_path = ?, file_mtime = ?, file_hash = ? WHERE id = ?`, path, mtime, FileContentHash(text), id)
+	if err != nil {
+		return nil, err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return nil, ErrNotFound
+	}
+	return titles, tx.Commit()
+}
+
+// RestoreFile sets a draft's link exactly as it was (path, mtime, hash), for undoing an unlink. Any other draft linked to the path is
+// unlinked in the same transaction, so a file keeps one holder. ErrNotFound when there is no such draft.
+func (s *Store) RestoreFile(id, path string, mtime int64, hash string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`UPDATE drafts SET file_path = '', file_mtime = 0, file_hash = '' WHERE file_path = ? AND id <> ?`, path, id); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE drafts SET file_path = ?, file_mtime = ?, file_hash = ? WHERE id = ?`, path, mtime, hash, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit()
+}
+
+// SetFile records the file a draft was saved to and its modification time after the write, or clears both with "" and 0. It also forgets
+// the file hash: call SetFileHash after it when the text is known to match.
 // ErrNotFound when there is no such draft.
 func (s *Store) SetFile(id, path string, mtime int64) error {
-	res, err := s.db.Exec(`UPDATE drafts SET file_path = ?, file_mtime = ? WHERE id = ?`, path, mtime, id)
+	res, err := s.db.Exec(`UPDATE drafts SET file_path = ?, file_mtime = ?, file_hash = '' WHERE id = ?`, path, mtime, id)
 	if err != nil {
 		return err
 	}
