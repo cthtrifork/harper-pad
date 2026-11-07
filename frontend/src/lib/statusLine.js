@@ -3,8 +3,8 @@
 //
 // Without sync set up the draft's own text is used as it is (`draftText`), so nothing changes for a build or a person that does not sync.
 
-// `draft`: {state, text, fileState, fileName} from useDrafts. `sync`: {enrolled, status, newer} from useSync (`newer` is true while a
-// "Newer on the server" marker is up). Returns {text, tone}: tone is "mute" (a neutral fact), "ok", "accent" or "bad".
+// `draft`: {state, text, fileState, fileName} from useDrafts. `sync`: {enrolled, status, newer, rejected} from useSync (`newer` is true while a
+// "Newer on the server" marker is up, `rejected` is {title, reason} while the server refuses the open draft). Returns {text, tone}: tone is "mute" (a neutral fact), "ok", "accent" or "bad".
 export function statusLine({ draft, sync }) {
   const { state, text, fileState, fileName } = draft;
   if (state === "error") return { text, tone: "bad" };
@@ -14,6 +14,7 @@ export function statusLine({ draft, sync }) {
 
   if (!sync?.enrolled) return { text, tone: "mute" };
 
+  if (sync.rejected) return { text: `Could not sync ${sync.rejected.title}: ${sync.rejected.reason}`, tone: "bad" };
   if (sync.newer) return { text: "Newer on the server", tone: "accent" };
   const file = fileName ? { synced: fileState === "synced", stale: fileState === "stale" } : { synced: false, stale: false };
   switch (sync.status) {

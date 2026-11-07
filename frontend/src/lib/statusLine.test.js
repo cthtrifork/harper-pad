@@ -38,3 +38,8 @@ test("a linked file adds its hint once the draft is synced", () => {
   assert.equal(statusLine({ draft: linked("stale"), sync: on("synced") }).text, "Synced, notes.md not updated");
   assert.equal(statusLine({ draft: linked("unknown"), sync: on("synced") }).text, "Saved and synced");
 });
+
+test("a draft the server refuses says which and why", () => {
+  const refused = statusLine({ draft: saved, sync: on("pending", { rejected: { title: "Plan", reason: "it is too large" } }) });
+  assert.deepEqual(refused, { text: "Could not sync Plan: it is too large", tone: "bad" });
+});
