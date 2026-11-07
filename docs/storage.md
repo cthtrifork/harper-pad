@@ -7,7 +7,7 @@ Everything the app remembers is in **one SQLite file**, `harper-pad.db`, in the 
 | `harper-pad.db` | `~/.local/share/harper-pad/` (`$XDG_DATA_HOME`) | `%LOCALAPPDATA%\harper-pad\` |
 
 The folder comes from Wails (`application.Path(PathDataHome)`), so it follows the platform's rules. The file and its folder are private to
-the user. Nothing is written for a draft until you type in it, and nothing becomes a normal file until you choose "Save as file" (Ctrl+Shift+S).
+the user. Nothing is written for a draft until you type in it, and nothing becomes a normal file until you choose "Save to disk" (Ctrl+Shift+S).
 
 It holds two things:
 

@@ -72,20 +72,16 @@
   background: var(--raised);
 }
 
-/* A phone: the dialog is a sheet at the bottom, with fields and buttons big enough to tap. */
+/* A phone: still centered like the Keep or Overwrite dialog, with text and buttons big enough to tap. */
 @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .gone-dialog {
-    width: 100%;
-    max-width: none;
-    margin: auto 0 0;
-    padding: 20px 20px max(24px, env(safe-area-inset-bottom));
-    border-width: 1px 0 0;
-    border-radius: 16px 16px 0 0;
-    font-size: 16px;
+    padding: 16px;
+    font-size: 15px;
   }
 
   .gone-dialog .actions {
     flex-direction: column-reverse;
+    gap: 10px;
   }
 
   .gone-dialog .actions button {

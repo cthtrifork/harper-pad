@@ -12,7 +12,7 @@ onMounted(() => dialog.value?.showModal());
 <template>
   <dialog ref="dialog" class="gone-dialog" aria-labelledby="gone-title" aria-describedby="gone-text" @cancel.prevent>
     <h2 id="gone-title">Deleted on another device</h2>
-    <p id="gone-text">Keep this note, or remove it here too? Removing can be undone for a few seconds.</p>
+    <p id="gone-text">Keep this draft, or remove it here too? Removing can be undone for a few seconds.</p>
     <div class="actions">
       <button type="button" class="danger" @click="emit('remove')">Remove</button>
       <button type="button" class="primary" autofocus @click="emit('keep')">Keep</button>
