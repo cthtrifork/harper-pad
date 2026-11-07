@@ -4,3 +4,4 @@ export const summarize = async () => {
   throw new Error("the desktop build has no wasm core");
 };
 export const warmCore = async () => {};
+export const suggestName = summarize;

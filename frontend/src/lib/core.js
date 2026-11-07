@@ -51,7 +51,10 @@ async function connect(instantiate) {
     ex.core_free(ptr);
     return JSON.parse(json);
   };
-  return { summarize: (content) => call("summarize", content) };
+  return {
+    summarize: (content) => call("summarize", content),
+    suggestName: (title, format) => call("suggest_name", `${format}\n${title}`),
+  };
 }
 
 let loading = null;
@@ -83,3 +86,5 @@ export const warmCore = () =>
 
 // What the drafts list shows for a draft's text: {title, excerpt, tasks, tasksTotal, tasksDone}. The same code as the desktop app's.
 export const summarize = async (content) => (await load()).summarize(content);
+
+export const suggestName = async (title, format) => (await load()).suggestName(title, format);

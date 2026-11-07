@@ -11,6 +11,7 @@ package main
 
 import (
 	"encoding/json"
+	"strings"
 	"unsafe"
 
 	"github.com/cthtrifork/harper-pad/internal/core"
@@ -53,6 +54,12 @@ func input(p, n uint32) string {
 
 //go:wasmexport summarize
 func summarize(p, n uint32) uint64 { return result(core.Summarize(input(p, n))) }
+
+//go:wasmexport suggest_name
+func suggestName(p, n uint32) uint64 { // the input is the format, a newline, then the title
+	format, title, _ := strings.Cut(input(p, n), "\n")
+	return result(core.SuggestName(title, format))
+}
 
 // main is required by the compiler and never runs in a reactor.
 func main() {}
