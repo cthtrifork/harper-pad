@@ -59,6 +59,11 @@ export class Draft {
     "updatedAt": number;
 
     /**
+     * Title is the draft's title as the drafts list shows it. Set by Get (and so by Save); ignored on the way in.
+     */
+    "title": string;
+
+    /**
      * FilePath is the file the draft was saved to ("" when it never was). The draft stays here too; Save ignores this field
      * and only SetFile changes it, so the path always comes from the save dialog and never from the page.
      */
@@ -80,6 +85,9 @@ export class Draft {
         }
         if (!("updatedAt" in $$source)) {
             this["updatedAt"] = 0;
+        }
+        if (!("title" in $$source)) {
+            this["title"] = "";
         }
         if (!("filePath" in $$source)) {
             this["filePath"] = "";

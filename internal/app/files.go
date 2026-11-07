@@ -7,12 +7,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 	"unicode/utf8"
 
+	"github.com/cthtrifork/harper-pad/internal/core"
 	"github.com/cthtrifork/harper-pad/internal/store"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -29,23 +29,6 @@ type FileSave struct {
 	// UnlinkedFrom holds the titles of other drafts that were linked to this file and are not any more: a file has one holder, the draft saved
 	// to it last.
 	UnlinkedFrom []string `json:"unlinkedFrom"`
-}
-
-var unsafeName = regexp.MustCompile(`[^\p{L}\p{N}._ -]+`)
-
-// suggestName is the file name offered in the save dialog: the draft's title, with the extension of its format.
-func suggestName(title, format string) string {
-	name := strings.Trim(unsafeName.ReplaceAllString(title, ""), " .-")
-	if name == "" {
-		name = "Untitled"
-	}
-	if r := []rune(name); len(r) > 60 {
-		name = strings.TrimSpace(string(r[:60]))
-	}
-	if format == store.FormatText {
-		return name + ".txt"
-	}
-	return name + ".md"
 }
 
 // pickSavePath asks the user where to save. It returns "" when they cancel. It is a field of the service so tests can replace it.
@@ -96,7 +79,7 @@ func (s *DraftService) SaveDraftToFile(d store.Draft, saveAs, overwrite bool) (F
 		if pick == nil {
 			pick = pickSavePath
 		}
-		dir, name := "", suggestName(store.Title(d.Content), d.Format)
+		dir, name := "", core.SuggestName(store.Title(d.Content), d.Format)
 		if path != "" { // offer the file's own name and folder, not one made from the title
 			dir, name = filepath.Dir(path), filepath.Base(path)
 		}

@@ -101,3 +101,6 @@ desktop.ini
 
 # Rendered by `make screenshots` and in CI; never committed (docs/ci.md, Screenshots)
 docs/screenshots/
+
+# Built by `make wasm` from internal/core (docs/wasm-core.md)
+frontend/src/wasm/*.wasm

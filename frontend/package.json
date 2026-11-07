@@ -4,14 +4,17 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "wasm": "node ../scripts/build-wasm.mjs",
     "dev": "vite",
     "build": "vite build",
+    "prebuild:web": "npm run wasm",
     "build:web": "vite build --mode web",
+    "pretest": "npm run wasm",
     "preview": "vite preview",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "test": "node --test \"src/**/*.test.js\"",
+    "test": "node --import ./src/testSetup.js --test \"src/**/*.test.js\"",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

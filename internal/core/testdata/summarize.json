@@ -237,5 +237,95 @@
   "tasksDone": 0,
   "tasksTotal": 0,
   "title": "t"
+ },
+ {
+  "content": "####### Seven\nrest",
+  "excerpt": "rest",
+  "name": "seven hashes are not a heading",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "####### Seven"
+ },
+ {
+  "content": "### \nReal title",
+  "excerpt": "",
+  "name": "a heading mark with nothing after it gives way to the next line",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "Real title"
+ },
+ {
+  "content": "- [ ] not a task\nrest",
+  "excerpt": "rest",
+  "name": "a non-breaking space is not white space after a bullet",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "- [ ] not a task"
+ },
+ {
+  "content": "- [ ]\u000btext\nrest",
+  "excerpt": "rest",
+  "name": "a vertical tab is not white space after a box",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "[ ]\u000btext"
+ },
+ {
+  "content": "# T\n- [x]text\n- [ ]\n- [y] text",
+  "excerpt": "- [x]text - [ ] - [y] text",
+  "name": "a box needs text after it",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "T"
+ },
+ {
+  "content": "# T\n\t- [x]   spaced   out   \n  \t* [ ] tabbed",
+  "excerpt": "",
+  "name": "tab indentation and extra spaces",
+  "tasks": [
+   {
+    "text": "spaced   out",
+    "done": true
+   },
+   {
+    "text": "tabbed",
+    "done": false
+   }
+  ],
+  "tasksDone": 1,
+  "tasksTotal": 2,
+  "title": "T"
+ },
+ {
+  "content": "# T\nfoo bar baz\rqux",
+  "excerpt": "foo bar baz qux",
+  "name": "unicode spaces split the excerpt",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "T"
+ },
+ {
+  "content": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nabcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghij",
+  "excerpt": "abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghij",
+  "name": "a title of 80 and an excerpt of 160 characters are not clipped",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "content": "T\n- one\n* two\n+ three",
+  "excerpt": "- one * two + three",
+  "name": "a bullet that is not a task stays in the excerpt",
+  "tasks": [],
+  "tasksDone": 0,
+  "tasksTotal": 0,
+  "title": "T"
  }
 ]

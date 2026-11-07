@@ -151,5 +151,15 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+(?:ARG\\s+)?\\S+\\s*(?::=|=|:)\\s*['\"]?(?<currentValue>[^\\s'\"]+)",
       ],
     },
+    {
+      // The TinyGo image the web build's wasm is compiled in (scripts/build-wasm.mjs, docs/wasm-core.md): the tag and its digest are updated together.
+      customType: "regex",
+      managerFilePatterns: ["/^scripts/build-wasm\\.mjs$/"],
+      matchStrings: [
+        "// renovate-tinygo\\s+const TINYGO_IMAGE = \"(?<depName>docker\\.io/tinygo/tinygo):(?<currentValue>[^@\"]+)@(?<currentDigest>sha256:[a-f0-9]{64})\"",
+      ],
+      datasourceTemplate: "docker",
+      autoReplaceStringTemplate: "// renovate-tinygo\nconst TINYGO_IMAGE = \"{{{depName}}}:{{{newValue}}}@{{{newDigest}}}\"",
+    },
   ],
 }

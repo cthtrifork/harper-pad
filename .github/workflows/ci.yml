@@ -63,7 +63,9 @@ jobs:
               - .github/actions/**
             frontend:
               - frontend/**
-              - internal/store/testdata/** # the frontend tests run the same fixtures as the Go tests
+              - internal/core/** # the frontend tests run the same fixtures as the Go tests, against this package compiled to wasm
+              - cmd/core-wasm/**
+              - scripts/build-wasm.mjs
               - internal/app/testdata/**
               - backend/internal/admin/web/static/tokens.css # a test keeps its colours equal to frontend/src/styles/tokens.css
               - docs/design-cheatsheet.html # same, for its copy of the palette
@@ -378,7 +380,8 @@ jobs:
       - name: Test
         run: make test
 
-  # The frontend's unit tests use Node's own runner, so no `npm ci` is needed.
+  # The frontend's unit tests use Node's own runner. They load internal/core compiled to wasm, which `npm test` first builds (npm run wasm,
+  # in TinyGo's container image), so the job needs podman and not Go.
   test-frontend:
     name: test-frontend
     needs: changes

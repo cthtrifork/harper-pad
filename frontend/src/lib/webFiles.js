@@ -1,23 +1,12 @@
 // Saving a draft to a file in the browser, the counterpart of DraftService.SaveDraftToFile. Chrome and Edge keep a handle to the
 // file, so later saves overwrite it. Elsewhere the page can only hand over a copy (share sheet or download) and the draft is never
 // linked to a file.
-import { summarize } from "./summarize.ts";
+import { suggestName } from "./core.js";
 
 const TYPES = [
   { description: "Markdown", accept: { "text/markdown": [".md"] } },
   { description: "Text", accept: { "text/plain": [".txt"] } },
 ];
-
-// The file name offered for a draft. The same as suggestName in internal/app/files.go; both run internal/app/testdata/filename.json.
-export const fileName = (title, format) => {
-  const cleaned = title.replace(/[^\p{L}\p{N}._ -]+/gu, "").replace(/^[ .-]+|[ .-]+$/g, "");
-  const name =
-    Array.from(cleaned || "Untitled")
-      .slice(0, 60)
-      .join("")
-      .trim() || "Untitled";
-  return `${name}${format === "text" ? ".txt" : ".md"}`;
-};
 
 // True where Save hands the draft to the share sheet: no file picker, but the browser can share files.
 export const sharesFiles = () =>
@@ -54,7 +43,7 @@ export async function saveWebFile(web, getHandle, putHandle, input, saveAs, over
   const kept = saveAs ? null : await getHandle(draft.id);
   let handle = kept?.handle;
   if (!handle) {
-    const name = fileName(summarize(draft.content).title, draft.format);
+    const name = await suggestName(draft.title, draft.format);
     if (!window.showSaveFilePicker) {
       if ((await share(name, draft.content)) === "unsupported") download(name, draft.content);
       return { draft, cancelled: false, conflict: false };

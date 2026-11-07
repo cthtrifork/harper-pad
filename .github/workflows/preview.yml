@@ -35,6 +35,7 @@ jobs:
         with:
           persist-credentials: false
 
+      # `npm run build:web` first compiles the Go module the page embeds (npm run wasm, docs/wasm-core.md), in TinyGo's container image.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .tool-versions

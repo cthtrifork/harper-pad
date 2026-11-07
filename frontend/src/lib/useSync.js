@@ -1,5 +1,4 @@
 import { computed, ref } from "vue";
-import { summarize } from "./summarize.ts";
 import { createSyncer, summaryText } from "./syncRun.js";
 import { parseInviteUrl, enrollDevice, SyncError } from "./syncEnroll.js";
 
@@ -53,7 +52,7 @@ export function useSync({
   // The server refused a draft: the chip says which and why, with no dialog. The text stays local and goes again on the next push.
   async function noteRejected(id, reason) {
     const d = await drafts.get(id).catch(() => null);
-    rejected.value = { id, title: d ? summarize(d.content).title : "the draft", reason };
+    rejected.value = { id, title: d ? d.title || "Untitled" : "the draft", reason };
   }
 
   // The open draft and the server hold different text: ask the server for its text so the dialog can show and copy it. Any other draft in
