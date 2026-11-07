@@ -114,8 +114,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
   <div ref="root" class="wrap">
     <button type="button" class="btn" :class="{ open }" :aria-expanded="open" aria-haspopup="dialog" @click="onClick">
       <span class="ind" :class="{ on: busy() || state === 'available' || state === 'ready' }" aria-hidden="true">
-        <span v-if="busy()" class="spin"></span>
-        <span v-else class="dot"></span>
+        <span v-if="state === 'available' || state === 'ready'" class="dot"></span>
+        <span v-else class="spin"></span>
       </span>
       {{ info.version || "..." }}
     </button>
