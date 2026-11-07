@@ -48,6 +48,7 @@ for (const [mode, flags] of Object.entries(MODES)) {
       "--quiet",
       "--output=json",
       "--output=html",
+      "--save-assets", // <base>-0.trace.json and <base>-0.devtoolslog.json, kept for the median run (see below)
       `--output-path=${base}`,
       `--only-categories=${CATEGORIES.map(([id]) => id).join(",")}`,
       "--chrome-flags=--headless=new --no-sandbox --disable-gpu",
@@ -60,6 +61,9 @@ for (const [mode, flags] of Object.entries(MODES)) {
   const median = all[Math.floor(all.length / 2)];
   copyFileSync(`${median.base}.report.html`, join(out, `lighthouse-${mode}.html`));
   copyFileSync(`${median.base}.report.json`, join(out, `lighthouse-${mode}.json`));
+  // The raw trace and network log of that run: with them the score can be recomputed offline (lighthouse --audit-mode, or the Lantern
+  // models of @paulirish/trace_engine) to see why it moved, without another CI round trip.
+  for (const kind of ["trace", "devtoolslog"]) copyFileSync(`${median.base}-0.${kind}.json`, join(out, `lighthouse-${mode}.${kind}.json`));
   const med = (id) => {
     const s = all.map((x) => score(x.report, id)).sort((a, b) => a - b);
     return s[Math.floor(s.length / 2)];
