@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
 import { useModalDialog } from "../lib/useModalDialog.ts";
 
@@ -6,7 +6,7 @@ import { useModalDialog } from "../lib/useModalDialog.ts";
 // it is inert, and Escape does not close it (the cancel event is stopped). It is the one place the app asks for a choice before it lets the
 // person write (docs/design-cheatsheet.html). Keep is the focused, primary choice: it loses nothing.
 const emit = defineEmits(["keep", "remove"]);
-const dialog = ref(null);
+const dialog = ref<HTMLDialogElement | null>(null);
 useModalDialog(dialog);
 </script>
 

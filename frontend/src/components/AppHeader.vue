@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { dirtyText, fileControls } from "../lib/fileLink.ts";
 import { computed, ref } from "vue";
 

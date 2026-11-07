@@ -1,25 +1,29 @@
-<script setup>
+<script setup lang="ts">
 import { EditorView } from "@codemirror/view";
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
 import { undo } from "@codemirror/commands";
+import type { Prefs } from "../lib/autocorrect.ts";
+import type { HarperLinter } from "../lib/harper.ts";
 import { insertSnippet } from "../lib/editor/snippets.ts";
+import type { PersistNote } from "../lib/editor/lint.ts";
 import { applyFix, createEditor, fixAllSafe, jumpTo, loadDocument, relint, replaceExternal, revertFixes, setMode } from "../lib/editor/index.ts";
 
 const props = defineProps({
-  harper: { type: Object, default: null },
+  harper: { type: Object as PropType<HarperLinter | null>, default: null },
   doc: { type: String, default: "" },
-  format: { type: String, default: "markdown" }, // "markdown" or "text"
+  format: { type: String as PropType<"markdown" | "text">, default: "markdown" },
   source: { type: Boolean, default: false }, // the Split view's source pane: monospace, line numbers
-  persist: { type: Function, default: async () => {} },
-  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) }, // see lib/autocorrect.ts
+  persist: { type: Function as PropType<(note?: PersistNote) => unknown>, default: async () => {} },
+  autocorrect: { type: Object as PropType<Prefs>, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) }, // see lib/autocorrect.ts
 });
 const emit = defineEmits(["result", "problems", "stats", "cursor", "edited", "doc", "fixes", "fixed", "user-edit"]);
-const host = ref(null);
-let view = null;
+const host = ref<HTMLElement | null>(null);
+let view: EditorView | null = null;
 
 onMounted(() => {
-  host.value.addEventListener("click", keepFocus);
-  view = createEditor(host.value, {
+  const el = host.value as HTMLElement;
+  el.addEventListener("click", keepFocus);
+  view = createEditor(el, {
     doc: props.doc,
     mode: { format: props.format, source: props.source },
     getHarper: () => props.harper,
@@ -51,7 +55,7 @@ watch(
   () => view && relint(view),
 );
 watch(
-  () => [props.format, props.source],
+  () => [props.format, props.source] as const,
   ([format, source]) => view && setMode(view, { format, source }),
 );
 onBeforeUnmount(() => view?.destroy());
@@ -75,14 +79,14 @@ function keepFocus() {
 
 // Edit and Split lay the text out differently (font, line height, width, gutter), so the same pixel scroll offset lands on other
 // text. The page remembers which position is at the top of its scroll area before a switch and scrolls it back there after.
-function topPosition(scroller) {
+function topPosition(scroller: HTMLElement | null | undefined) {
   if (!view || !scroller || scroller.scrollTop <= 0) return null;
   const { top } = scroller.getBoundingClientRect();
   const { left } = view.contentDOM.getBoundingClientRect();
   return view.posAtCoords({ x: left + 1, y: top + 1 }, false);
 }
 
-function scrollToTop(pos) {
+function scrollToTop(pos: number | null | undefined) {
   if (!view) return;
   if (pos == null) return;
   view.dispatch({ effects: EditorView.scrollIntoView(Math.min(pos, view.state.doc.length), { y: "start", yMargin: 0 }) });
@@ -96,7 +100,7 @@ defineExpose({
   remeasure: () => view?.requestMeasure(),
   relint: () => view && relint(view),
   getText: () => view?.state.doc.toString() ?? "",
-  load: (text, format = props.format, keepSelection = false) =>
+  load: (text: string, format = props.format, keepSelection = false) =>
     view &&
     loadDocument(
       view,
@@ -109,20 +113,21 @@ defineExpose({
     ),
   // Takes `text` as one edit that Ctrl+Z takes back, changing only what differs: the caret and the scroll position stay as far as the new text
   // allows, and autocorrect does not rewrite it (unlike load, which starts a new document and history).
-  replaceText: (text) => view && replaceExternal(view, text),
+  replaceText: (text: string) => view && replaceExternal(view, text),
   // True while an IME composition is in progress: replacing the text then would break it.
   composing: () => !!view && (view.composing || view.compositionStarted),
   undo: () => view && undo(view),
-  jump: (p) => view && jumpTo(view, p.from, p.to),
-  fix: (p, i) => view && applyFix(view, p.from, p.to, i),
-  insertSnippet: (trigger, focus = true) => {
-    const spec = view && insertSnippet(view.state, trigger);
-    if (!spec) return;
-    view.dispatch(spec);
-    if (focus) view.focus();
+  jump: (p: { from: number; to: number }) => view && jumpTo(view, p.from, p.to),
+  fix: (p: { from: number; to: number }, i: number) => view && applyFix(view, p.from, p.to, i),
+  insertSnippet: (trigger: string, focus = true) => {
+    const v = view;
+    const spec = v && insertSnippet(v.state, trigger);
+    if (!v || !spec) return;
+    v.dispatch(spec);
+    if (focus) v.focus();
   },
   fixAll: () => (view ? fixAllSafe(view) : 0),
-  revert: (ids) => (view ? revertFixes(view, ids) : 0),
+  revert: (ids: number[]) => (view ? revertFixes(view, ids) : 0),
 });
 </script>
 

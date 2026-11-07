@@ -1,21 +1,22 @@
-<script setup>
-import { computed, ref } from "vue";
-import { CATEGORIES } from "../lib/autocorrect.ts";
+<script setup lang="ts">
+import { computed, type PropType, ref } from "vue";
+import { CATEGORIES, type Prefs } from "../lib/autocorrect.ts";
+import type { Problem } from "../lib/editor/problems.ts";
 
 const props = defineProps({
   // Autocorrect: the switch and which kinds of finding may be fixed (see lib/autocorrect.ts).
-  autocorrect: { type: Object, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) },
-  problems: { type: Array, required: true },
+  autocorrect: { type: Object as PropType<Prefs>, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) },
+  problems: { type: Array as PropType<Problem[]>, required: true },
   active: { type: Number, default: -1 },
-  words: { type: Array, default: () => [] }, // the personal dictionary
-  ignored: { type: Array, default: () => [] }, // ignored findings: {hash, label}
-  fixed: { type: Array, default: () => [] }, // what autocorrect changed and can still take back: {id, original, replacement}
+  words: { type: Array as PropType<string[]>, default: () => [] }, // the personal dictionary
+  ignored: { type: Array as PropType<{ hash: string; label: string }[]>, default: () => [] }, // ignored findings
+  fixed: { type: Array as PropType<{ id: number; original: string; replacement: string }[]>, default: () => [] }, // what autocorrect changed and can still take back
 });
 const emit = defineEmits(["jump", "fix", "remove-word", "remove-ignored", "fix-all", "revert", "autocorrect"]);
-const setAuto = (change) => emit("autocorrect", { ...props.autocorrect, ...change });
+const setAuto = (change: Partial<Prefs>) => emit("autocorrect", { ...props.autocorrect, ...change });
 const choices = ref(false); // the list of what autocorrect may fix is open
 
-const tone = { error: "spelling", warning: "grammar", info: "style" };
+const tone: Record<string, string> = { error: "spelling", warning: "grammar", info: "style" };
 // The chips follow the design: the two kinds people meet most, then everything else.
 const chips = [
   { id: "all", label: "All" },
@@ -23,11 +24,11 @@ const chips = [
   { id: "Repetition", label: "Repetition" },
   { id: "other", label: "Other" },
 ];
-const chipOf = (p) => (p.kind === "Spelling" || p.kind === "Repetition" ? p.kind : "other");
+const chipOf = (p: Problem) => (p.kind === "Spelling" || p.kind === "Repetition" ? p.kind : "other");
 const filter = ref("all");
 const manage = ref(""); // "", "words" or "ignored": the list of dictionary words or ignored findings shown instead of the problems
 const counts = computed(() => {
-  const c = { all: props.problems.length, Spelling: 0, Repetition: 0, other: 0 };
+  const c: Record<string, number> = { all: props.problems.length, Spelling: 0, Repetition: 0, other: 0 };
   for (const p of props.problems) c[chipOf(p)]++;
   return c;
 });
@@ -75,7 +76,7 @@ const shown = computed(() => (filter.value === "all" ? props.problems : props.pr
         <legend class="sr-only">What autocorrect may fix</legend>
         <p class="mute">Fixes obvious mistakes as you type, once the word is finished.</p>
         <label v-for="c in CATEGORIES" :key="c.id">
-          <input type="checkbox" :checked="autocorrect[c.id]" @change="setAuto({ [c.id]: $event.target.checked })" />
+          <input type="checkbox" :checked="autocorrect[c.id]" @change="setAuto({ [c.id]: ($event.target as HTMLInputElement).checked })" />
           <span>{{ c.label }}</span>
           <span class="example">{{ c.example }}</span>
         </label>

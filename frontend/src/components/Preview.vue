@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 // The rendered markdown, read-only. marked only parses (to tokens); the tokens are turned into Vue elements here, so no HTML string
 // is ever built or inserted (no v-html, see docs/security.md): text from a draft can only ever become text nodes. Raw HTML in the
 // markdown is shown as plain text, images as their alt text, and links as links that do not navigate (a click would take the
 // whole window away from the editor).
-import { marked } from "marked";
-import { computed, h, nextTick, ref, watch } from "vue";
+import { marked, type Token, type Tokens } from "marked";
+import { computed, h, nextTick, ref, type VNodeChild, watch } from "vue";
 import CodeBlock from "./CodeBlock.vue";
 
 const props = defineProps({
@@ -14,13 +14,13 @@ const props = defineProps({
   follow: { type: Boolean, default: false },
 });
 
-const root = ref(null); // the scrolling element
+const root = ref<HTMLElement | null>(null); // the scrolling element
 const tokens = computed(() => marked.lexer(props.source, { gfm: true }));
 
 // A link is only shown as one for these schemes; anything else (javascript:, data:, relative paths) is plain text.
 const SAFE_LINK = /^(https?:|mailto:)/i;
 
-function inline(list = []) {
+function inline(list: Token[] = []): VNodeChild[] {
   return list.map((t, i) => {
     const key = i;
     switch (t.type) {
@@ -42,18 +42,18 @@ function inline(list = []) {
         return h("span", { key, class: "md-image" }, t.text ? `[image: ${t.text}]` : "[image]");
       case "escape":
       case "text":
-        return t.tokens?.length ? inline(t.tokens) : t.text;
+        return (t as Tokens.Text).tokens?.length ? inline((t as Tokens.Text).tokens) : t.text;
       default: // html and anything else: the source text
         return t.raw ?? "";
     }
   });
 }
 
-function cell(c, tag, i) {
+function cell(c: Tokens.TableCell, tag: string, i: number) {
   return h(tag, { key: i, style: c.align ? { textAlign: c.align } : undefined }, inline(c.tokens));
 }
 
-function blocks(list = []) {
+function blocks(list: Token[] = []): VNodeChild[] {
   return list.flatMap((t, i) => {
     const key = i;
     switch (t.type) {
@@ -77,8 +77,8 @@ function blocks(list = []) {
         return [
           h(
             t.ordered ? "ol" : "ul",
-            { key, start: t.ordered && t.start !== 1 ? t.start : undefined, class: t.items.some((it) => it.task) ? "tasks" : undefined },
-            t.items.map((it, j) =>
+            { key, start: t.ordered && t.start !== 1 ? t.start : undefined, class: t.items.some((it: Tokens.ListItem) => it.task) ? "tasks" : undefined },
+            t.items.map((it: Tokens.ListItem, j: number) =>
               h("li", { key: j, class: it.task ? "task" : undefined }, [
                 it.task ? h("input", { type: "checkbox", checked: !!it.checked, disabled: true, "aria-label": it.checked ? "Done" : "Not done" }) : null,
                 h("div", blocks(it.tokens)),
@@ -89,8 +89,8 @@ function blocks(list = []) {
       case "table":
         return [
           h("table", { key }, [
-            h("thead", h("tr", t.header.map((c, j) => cell(c, "th", j)))),
-            h("tbody", t.rows.map((r, j) => h("tr", { key: j }, r.map((c, k) => cell(c, "td", k))))),
+            h("thead", h("tr", t.header.map((c: Tokens.TableCell, j: number) => cell(c, "th", j)))),
+            h("tbody", t.rows.map((r: Tokens.TableCell[], j: number) => h("tr", { key: j }, r.map((c, k) => cell(c, "td", k))))),
           ]),
         ];
       default: // html: shown as text

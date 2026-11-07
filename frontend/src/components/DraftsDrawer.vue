@@ -1,18 +1,19 @@
-<script setup>
-import { onBeforeUnmount, ref, watch } from "vue";
+<script setup lang="ts">
+import { onBeforeUnmount, type PropType, ref, watch } from "vue";
+import type { Summary } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { copyDiagnostics } from "../lib/diagnostics.ts";
 import { whenLabel } from "../lib/when.ts";
 import { COPY_LABELS } from "../lib/conflict.ts";
 import SnippetsHelp from "./SnippetsHelp.vue";
 
 const props = defineProps({
-  drafts: { type: Array, required: true },
+  drafts: { type: Array as PropType<Summary[]>, required: true },
   total: { type: Number, default: 0 },
   currentId: { type: String, default: "" },
   query: { type: String, default: "" },
-  toast: { type: Object, default: null },
+  toast: { type: Object as PropType<{ message: string; undo?: boolean } | null>, default: null },
   // Draft id -> where a Conflicted copy came from, in memory only (useDrafts): the row says so until the copy is edited, deleted or dismissed.
-  copies: { type: Object, default: () => ({}) },
+  copies: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
 });
 const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet", "dismiss-copy"]);
 
@@ -30,16 +31,16 @@ const SWIPE_DELETE = 96; // px of travel that deletes on release
 const dragId = ref("");
 const dragX = ref(0);
 const settling = ref(false); // after release: the card glides to its end position
-let start = null;
+let start: { id: string; x: number; y: number; locked: boolean } | null = null;
 let swiped = false; // the click that follows a swipe is not a tap
 
-function swipeDown(e, id) {
+function swipeDown(e: PointerEvent, id: string) {
   if (e.pointerType !== "touch") return;
   start = { id, x: e.clientX, y: e.clientY, locked: false };
   swiped = false;
 }
 
-function swipeMove(e) {
+function swipeMove(e: PointerEvent) {
   if (!start) return;
   const dx = e.clientX - start.x;
   if (!start.locked) {
@@ -48,12 +49,12 @@ function swipeMove(e) {
     start.locked = true;
     settling.value = false;
     dragId.value = start.id;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   }
   dragX.value = Math.min(0, dx);
 }
 
-function swipeEnd(e) {
+function swipeEnd(e: PointerEvent) {
   if (!start) return;
   const { id, locked } = start;
   start = null;
@@ -61,7 +62,7 @@ function swipeEnd(e) {
   swiped = true;
   settling.value = true;
   const deleting = e.type !== "pointercancel" && dragX.value <= -SWIPE_DELETE;
-  dragX.value = deleting ? -e.currentTarget.offsetWidth : 0; // out of the way, or back where it was
+  dragX.value = deleting ? -(e.currentTarget as HTMLElement).offsetWidth : 0; // out of the way, or back where it was
   setTimeout(() => {
     if (deleting) emit("remove", id);
     dragId.value = "";
@@ -70,7 +71,7 @@ function swipeEnd(e) {
   }, 150);
 }
 
-function open(id) {
+function open(id: string) {
   if (!swiped) emit("open", id);
   swiped = false;
 }
@@ -80,15 +81,15 @@ function open(id) {
 const version = import.meta.env?.MODE === "web" ? import.meta.env?.APP_VERSION || "dev" : "";
 // Pressing the version copies a diagnostics report (lib/diagnostics.ts); the button says what happened for two seconds.
 const copied = ref("");
-let copiedTimer = 0;
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 async function copyReport() {
   copied.value = (await copyDiagnostics(version)) ? "Diagnostics copied" : "Could not copy";
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => (copied.value = ""), 2000);
 }
 onBeforeUnmount(() => clearTimeout(copiedTimer));
-const iso = (ms) => new Date(ms).toISOString();
-const baseName = (path) => path.split(/[\\/]/).pop();
+const iso = (ms: number) => new Date(ms).toISOString();
+const baseName = (path: string) => path.split(/[\\/]/).pop();
 </script>
 
 <template>
