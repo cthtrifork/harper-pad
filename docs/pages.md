@@ -16,7 +16,7 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
   On desktop it calls the Wails bindings, imported on demand; on the web it uses IndexedDB. Add new host calls there, with both
   implementations.
 - The web build does not contain the Wails runtime, the generated bindings or the update button (checked in the bundle).
-- `frontend/web/` (manifest, service worker, icons) is copied to the site root by the `web-app` plugin in `vite.config.js`, which also adds the matching `<head>` tags; the desktop build gets none of it. `vite.config.js` sets the base path (`/harper-pad/`, or `BASE_PATH`), the output folder, and the Content-Security-Policy. The
+- `frontend/web/` (manifest, service worker, icons) is copied to the site root by the `web-app` plugin in `vite.config.ts`, which also adds the matching `<head>` tags; the desktop build gets none of it. `vite.config.ts` sets the base path (`/harper-pad/`, or `BASE_PATH`), the output folder, and the Content-Security-Policy. The
   web policy is the desktop policy plus `manifest-src 'self'`, so the page may load its own manifest. Nothing else is loosened.
 - Every host call needs a web implementation in `backend.ts` too, or it will not work on Pages. Sync follows this: `backend.ts` exports
   `syncDrafts`, IndexedDB on the web and the Go `SyncService` on desktop (`desktopSync.ts`), and `syncDevice`, the device's record, which is in

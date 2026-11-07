@@ -25,7 +25,7 @@ specific service methods.
 - **We do not HTML-escape text before saving it**, which Wails' security guide suggests for web-style comments. Escaping on save would
   corrupt drafts (`<` stored as `&lt;`) and still not be the right place to defend. The defence is at the point of rendering, where the
   framework escapes.
-- As a second layer, the production page carries a `Content-Security-Policy` (a `<meta>` tag that `frontend/vite.config.js` adds to
+- As a second layer, the production page carries a `Content-Security-Policy` (a `<meta>` tag that `frontend/vite.config.ts` adds to
   `vite build`, not to the dev server):
 
   | Directive | Value | Why |

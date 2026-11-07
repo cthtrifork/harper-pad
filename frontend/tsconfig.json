@@ -15,6 +15,6 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*", "bindings/**/*", "vite.config.js"],
+  "include": ["src/**/*", "bindings/**/*"],
   "exclude": ["dist", "dist-web", "node_modules"]
 }
