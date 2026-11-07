@@ -5,6 +5,7 @@ import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.ts";
 import { createDeviceStore } from "./syncDevice.ts";
 import { createWebDrafts, openDatabase } from "./webDrafts.ts";
+import type { DeviceRecord } from "./syncDevice.ts";
 
 const fresh = () => {
   globalThis.indexedDB = new IDBFactory();
@@ -30,7 +31,7 @@ test("clear forgets the device and leaves the drafts alone", async () => {
   const store = fresh();
   const drafts = createWebDrafts(openDatabase);
   const saved = await drafts.save({ content: "keep me" });
-  await store.save({ server: "https://sync.example.com", token: "tok" });
+  await store.save({ server: "https://sync.example.com", token: "tok" } as unknown as DeviceRecord);
   await store.clear();
   assert.equal(await store.load(), null);
   assert.equal((await drafts.get(saved.id)).content, "keep me");

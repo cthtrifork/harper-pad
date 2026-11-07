@@ -21,7 +21,7 @@ function setup({ status, probe = null, extraApi = {} }) {
       drafts.edited(); // the real editor reports an edit for every change
     },
     load() {},
-    composing: () => false,
+    composing: (): boolean => false,
     undo() {},
   });
   const api = {
@@ -162,7 +162,7 @@ test("the file's text and the file's version for the dialog come from the stored
 });
 
 test("opening a draft: the file is looked at before sync is told, so a pull cannot change a clean draft first", async () => {
-  let release;
+  let release: () => void = () => {};
   const other = { ...open, id: "d".repeat(32), filePath: "/home/me/other.md" };
   const { drafts, calls } = setup({
     status: { state: "same" },
@@ -243,7 +243,7 @@ test("unlinking a struck chip clears the problem, and a failed Undo says so with
 });
 
 test("typing that starts while the file is being read: nothing is applied, nothing is recorded, and the next look tries again", async () => {
-  let release;
+  let release: () => void = () => {};
   const { drafts, editor, calls } = setup({
     status: CLEAN,
     extraApi: { linkedFileText: () => new Promise((r) => (release = () => r({ text: FROM_FILE.content, stamp: "7" }))) },

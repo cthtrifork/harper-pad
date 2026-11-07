@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EditorState } from "@codemirror/state";
 import { autoField, replaceExternal } from "./autocorrect.ts";
+import type { EditorView } from "@codemirror/view";
 
 // A stand-in for the editor view: just a state and a dispatch.
 function fake(doc, anchor) {
@@ -11,7 +12,7 @@ function fake(doc, anchor) {
       this.state = this.state.update(spec).state;
     },
   };
-  return view;
+  return view as unknown as EditorView;
 }
 
 test("text applied from a file changes only what differs, keeps the caret, and is not treated as typed", () => {

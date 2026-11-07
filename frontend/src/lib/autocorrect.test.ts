@@ -12,8 +12,16 @@ import {
   savePrefs,
   touches,
 } from "./autocorrect.ts";
+import type { Finding } from "./harperCore.ts";
 
-const finding = (kind, fixes) => ({ kind, fixes: fixes.map((text) => ({ kind: "replace", text })) });
+const finding = (kind: string, fixes: string[]): Finding => ({
+  kind,
+  message: "",
+  problem: "",
+  from: 0,
+  to: 0,
+  fixes: fixes.map((text) => ({ kind: "replace" as const, text })),
+});
 
 test("only a finding with exactly one suggestion is safe", () => {
   assert.equal(categoryOf(finding("Typo", ["the"])), "typos");
@@ -28,8 +36,8 @@ test("only a finding with exactly one suggestion is safe", () => {
 test("grammar, style and insert-only fixes are never auto-fixed", () => {
   assert.equal(categoryOf(finding("Grammar", ["an"])), null);
   assert.equal(categoryOf(finding("Miscellaneous", ["an"])), null);
-  assert.equal(categoryOf({ kind: "Spelling", fixes: [{ kind: "insert", text: "s" }] }), null);
-  assert.equal(categoryOf({ kind: "Spelling", fixes: [] }), null);
+  assert.equal(categoryOf({ ...finding("Spelling", []), fixes: [{ kind: "insert", text: "s" }] }), null);
+  assert.equal(categoryOf(finding("Spelling", [])), null);
 });
 
 test("a category the user switched off is not safe", () => {
@@ -40,7 +48,7 @@ test("a category the user switched off is not safe", () => {
 
 test("with the text, spaces that mean something in Markdown are not safe", () => {
   const text = "a  b\n  - item";
-  const spaces = (from, to) => ({ ...finding("Formatting", [" "]), from, to });
+  const spaces = (from: number, to: number) => ({ ...finding("Formatting", [" "]), from, to });
   assert.equal(isSafe(spaces(1, 3), DEFAULT_PREFS, text), true); // between words
   assert.equal(isSafe(spaces(5, 7), DEFAULT_PREFS, text), false); // indentation
   assert.equal(isSafe(spaces(5, 7), DEFAULT_PREFS), true); // no text: not checked

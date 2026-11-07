@@ -35,7 +35,7 @@ test("blocked storage gives no memory and does not throw", () => {
 test("start-up opens the last opened draft instead of the newest", async () => {
   const s = memory();
   saveLastOpened(B, s);
-  const start = { open: { id: A }, total: 2 };
+  const start = { open: { id: A, content: "" }, total: 2 };
   const out = await withLastOpened(start, async (id) => ({ id, content: "x" }), s);
   assert.equal(out.open.id, B);
   assert.equal(out.total, 2);
@@ -44,16 +44,19 @@ test("start-up opens the last opened draft instead of the newest", async () => {
 test("a missing last opened draft falls back to the newest", async () => {
   const s = memory();
   saveLastOpened(B, s);
-  const start = { open: { id: A } };
-  assert.equal(await withLastOpened(start, async () => Promise.reject(new Error("draft not found")), s), start);
+  const start = { open: { id: A, content: "" } };
+  assert.equal(
+    await withLastOpened(start, async () => Promise.reject<{ id: string; content: string }>(new Error("draft not found")), s),
+    start,
+  );
 });
 
 test("no drafts, no memory, or the same draft leave the answer alone", async () => {
   const s = memory();
-  const fail = async () => assert.fail("must not read");
+  const fail = async (): Promise<{ id: string; content: string }> => assert.fail("must not read");
   const none = { open: null };
   assert.equal(await withLastOpened(none, fail, s), none);
-  const start = { open: { id: A } };
+  const start = { open: { id: A, content: "" } };
   assert.equal(await withLastOpened(start, fail, s), start);
   saveLastOpened(A, s);
   assert.equal(await withLastOpened(start, fail, s), start);
