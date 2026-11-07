@@ -10,6 +10,7 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "useDefineForClassFields": false,
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
