@@ -54,8 +54,8 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
   });
   // The "Conflicted copy" labels: draft id -> "file" | "server" | "file and server", only in memory. Nothing is saved or synced: not the text, not
   // the database. A label goes when its draft is edited or deleted, from its x, or when the app restarts.
-  const copies = ref({});
-  const linkMoved = ref(null); // {text, tick}: Save as took a file from another draft
+  const copies = /** @type {import("vue").Ref<Record<string, string>>} */ (ref({}));
+  const linkMoved = /** @type {import("vue").Ref<{ text: string; tick: number } | null>} */ (ref(null)); // Save as took a file from another draft
   const fileNameOf = (p) => String(p).split(/[\\/]/).pop();
   const recreated = ref(false); // the last write recreated a file that was gone
   const dropCopy = (id) => {
@@ -65,7 +65,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
     }
   };
   let checkDone = Promise.resolve(); // the look at the file of the draft just opened: sync waits for it, so the two never race
-  const refreshed = ref(null); // {name, tick} while the "Updated from <file>" toast shows
+  const refreshed = /** @type {import("vue").Ref<{ name: string; tick: number } | null>} */ (ref(null)); // while the "Updated from <file>" toast shows
   let dirty = false;
   let quietSave = false; // set while the draft takes the file's text: the caller says to sync (or not), so the save does not
   let stored = null; // {text, format} the saved draft holds, so a save that would change nothing is skipped and the timestamp stays
@@ -323,7 +323,7 @@ export function useDrafts(editor, drawerOpen, { onSaved, onOpened, onDeleted, pr
   }
 
   // "Unlink" (the unlink button on the file chip): the draft stays, the file stays, the link goes. A toast offers Undo, which puts the link back as it was.
-  const unlinkedToast = ref(null); // {id, name, tick}
+  const unlinkedToast = /** @type {import("vue").Ref<{ id: string; name: string; tick: number } | null>} */ (ref(null));
   function unlinkFile() {
     const id = current.value.id;
     const name = fileName.value;

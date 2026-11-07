@@ -1,17 +1,20 @@
-<script setup>
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+<script setup lang="ts">
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
 import AppHeader from "./components/AppHeader.vue";
 import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ConflictDialog from "./components/ConflictDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
-import { loadPrefs, savePrefs } from "./lib/autocorrect.ts";
+import { loadPrefs, type Prefs, savePrefs } from "./lib/autocorrect.ts";
 import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.ts";
 import { record } from "./lib/diagnostics.ts";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.ts";
-import { createLinter } from "./lib/harper.ts";
+import type { PersistNote } from "./lib/editor/lint.ts";
+import type { Problem } from "./lib/editor/problems.ts";
+import { createLinter, type HarperLinter } from "./lib/harper.ts";
 import { loadOptIn, saveOptIn } from "./lib/harperOptIn.ts";
+import type { changesTo } from "./lib/settingsItems.ts";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.ts";
 import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.js";
@@ -21,7 +24,9 @@ import { useConflict } from "./lib/useConflict.ts";
 import { useSync } from "./lib/useSync.ts";
 
 // What main.ts asked the backend before mounting (see backend.ts startup): the demo banner and the most recent draft.
-const props = defineProps({ start: { type: Object, required: true } });
+const props = defineProps({
+  start: { type: Object as PropType<{ demo?: string; open?: { content?: string } | null; total?: number; error?: string }>, required: true },
+});
 
 // The header's last button, loaded after the first paint. The desktop build has the in-app updater, with its version; the web build loads
 // the latest deploy, so its button only shows the version. Both have "Copy diagnostics" (lib/diagnostics.ts).
@@ -36,26 +41,26 @@ const DraftsDrawer = defineAsyncComponent(() => import("./components/DraftsDrawe
 const Preview = defineAsyncComponent(() => import("./components/Preview.vue"));
 
 const sample = "This are a example of a sentense with with a few mistakes. Harper shuld find them.";
-const state = ref("loading"); // loading | ready | failed | off (a phone, until the person turns Harper on)
+const state = ref<"loading" | "ready" | "failed" | "off">("loading"); // loading | ready | failed | off (a phone, until the person turns Harper on)
 const error = ref("");
 const setupMs = ref(0);
 const lintMs = ref(0);
-const problems = ref([]);
+const problems = ref<Problem[]>([]);
 // On a phone the problems are a sheet over the text, so they start closed.
 const narrow = window.matchMedia("(max-width: 720px), (pointer: coarse) and (max-height: 500px)");
 const isNarrow = ref(narrow.matches); // reactive copy: Split is not offered on a phone (see below)
-const onNarrowChange = (e) => (isNarrow.value = e.matches);
+const onNarrowChange = (e: MediaQueryListEvent) => (isNarrow.value = e.matches);
 narrow.addEventListener("change", onNarrowChange);
 const showProblems = ref(!narrow.matches);
 const demo = ref(props.start.demo ?? ""); // banner text in demo mode (development builds only); the timings are then fixed
 const counts = ref({ words: 0, chars: 0 });
-const harper = ref(null);
+const harper = ref<HarperLinter | null>(null);
 // On a phone Harper's wasm is opt-in: it is not fetched until the "?" on the Problems button is pressed (state "off" until then). Elsewhere
 // it always loads, after the first paint.
 const harperOptIn = ref(!narrow.matches || loadOptIn());
 // Syncing the dictionary and ignore list needs Harper, which loads after the first paint: they wait for it (or for its failure).
-let harperLoaded;
-const harperReady = new Promise((resolve) => {
+let harperLoaded: () => void = () => {};
+const harperReady = new Promise<void>((resolve) => {
   harperLoaded = resolve;
 });
 const linter = async () => {
@@ -63,10 +68,10 @@ const linter = async () => {
   if (!harper.value) throw new Error("Harper did not load");
   return harper.value;
 };
-const personal = ref({ words: [], ignored: [] });
+const personal = ref<{ words: string[]; ignored: { hash: string; label: string }[] }>({ words: [], ignored: [] });
 const cursor = ref({ line: 1, col: 1, selected: 0 });
 const saveError = ref("");
-const editor = ref(null);
+const editor = ref<InstanceType<typeof Editor> | null>(null);
 const showDrawer = ref(false);
 // Sync all saves what is typed first, leaves the draft that is open alone (a download must not change text being typed), and refreshes the
 // list when it changed local drafts. `drafts` is created next; these run later, so it exists by then.
@@ -86,19 +91,19 @@ const sync = useSync({
       return { words: await h.exportWords(), ignored: await ignoredHashes(h) };
     },
     store: settingsSync,
-    apply: (changes) => applySettings(changes),
+    apply: (changes: Changes) => applySettings(changes),
   },
   isOpen: (id) => drafts.current.value.id === id,
 });
 // A draft that was opened is checked against the server in the background (a newer version is swapped in when nothing was typed).
 const openHooks = { canSwap: () => drafts.canReplace(), onSwapped: () => drafts.reloadCurrent() };
-const checkOpened = (id) => sync.noteOpened(id, openHooks);
+const checkOpened = (id: string) => sync.noteOpened(id, openHooks);
 // An autosave pushes after a short wait; Save (or Ctrl+S, also to a file) pushes at once and settles the open draft.
 const drafts = useDrafts(editor, showDrawer, {
-  onSaved: (id, how) => (how?.explicit ? sync.syncRequested(id, openHooks) : sync.draftSaved(id)),
+  onSaved: (id: string, how?: { explicit?: boolean }) => (how?.explicit ? sync.syncRequested(id, openHooks) : sync.draftSaved(id)),
   onOpened: checkOpened,
   onDeleted: sync.draftDeleted,
-  probeServer: (id) => sync.probeServer(id),
+  probeServer: (id: string) => sync.probeServer(id),
 });
 // Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
 const conflict = useConflict({ drafts, sync });
@@ -122,7 +127,7 @@ const syncBusy = computed(() => sync.status.value === "syncing");
 const syncAsked = ref(false);
 // A linked draft cannot be saved as another file until it is unlinked (the unlink button on the file chip); Ctrl+Shift+S only says so in the status line.
 const saveAsHint = ref("");
-let saveAsHintTimer = 0;
+let saveAsHintTimer: ReturnType<typeof setTimeout> | undefined;
 watch(
   () => drafts.current.value.filePath,
   () => (saveAsHint.value = ""), // the link changed (unlinked, or another draft): the hint is stale
@@ -156,13 +161,13 @@ function syncToastAction() {
 // Autocorrect: the user's choices (kept between runs), what it changed and can still take back, and the toast that says so. The toast
 // goes away on its own, and at once when the user edits the text themselves.
 const autocorrect = ref(loadPrefs());
-const fixed = ref([]);
-const toast = ref(null); // {ids, tick}: the fixes it is about; a new tick restarts its timer
-function setAutocorrect(prefs) {
+const fixed = ref<{ id: number; original: string; replacement: string }[]>([]);
+const toast = ref<{ ids: number[]; tick: number } | null>(null); // the fixes it is about; a new tick restarts its timer
+function setAutocorrect(prefs: Prefs) {
   autocorrect.value = prefs;
   savePrefs(prefs);
 }
-function onFixed(ids) {
+function onFixed(ids: number[]) {
   toast.value = { ids: [...(toast.value?.ids ?? []), ...ids], tick: (toast.value?.tick ?? 0) + 1 };
 }
 function undoToast() {
@@ -174,10 +179,11 @@ const initialDoc = drafts.init(props.start, demo.value ? sample : "");
 
 // What the document looks like: Edit (the source only), Split (source and preview side by side) or Preview. Only markdown has a
 // preview, and only while the scratch pad is closed: with the drawer open the editor is the only view (the other two are disabled).
-const view = ref("edit");
+type View = "edit" | "split" | "preview";
+const view = ref<View>("edit");
 const source = ref(props.start.open?.content ?? (demo.value ? sample : ""));
 const paneScroll = ref(0); // how far the source is scrolled, 0 to 1, for the preview to follow
-const pane = ref(null);
+const pane = ref<HTMLElement | null>(null);
 
 // "Harper ready" and the start-up and check timings are for the first moments, to show Harper has loaded and how long it took. They go
 // once the first edit has been saved, and stay away. Where nothing is saved (the database is unavailable) the first edit is the signal.
@@ -196,7 +202,7 @@ watch(
     if (s === "saved" && typed) startup.value = false;
   },
 );
-const format = computed(() => drafts.current.value.format);
+const format = computed(() => drafts.current.value.format as "markdown" | "text");
 const isMarkdown = computed(() => format.value === "markdown");
 // Split needs two panes side by side, so a phone shows Edit instead (the header does not offer Split there either); the choice comes
 // back when the window is wide again.
@@ -205,7 +211,7 @@ const mode = computed(() => {
   return view.value === "split" && isNarrow.value ? "edit" : view.value;
 });
 
-function setView(id) {
+function setView(id: View) {
   if (showDrawer.value && id !== "edit") return;
   // Keep the text that is at the top of the page at the top across Edit <-> Split, which lay it out differently.
   const top = view.value !== "preview" && id !== "preview" ? editor.value?.topPosition(pane.value) : null;
@@ -218,7 +224,7 @@ function setView(id) {
   }
 }
 
-const chooseFormat = (f) => drafts.setFormat(f);
+const chooseFormat = (f: "markdown" | "text") => drafts.setFormat(f);
 
 function onPaneScroll() {
   const el = pane.value;
@@ -237,14 +243,14 @@ function toggleDrawer() {
 
 // The help page's shortcut: the snippet goes in at the cursor and the drawer stays open, so several can be inserted in a row. On a
 // phone the editor is not focused either: that would open the keyboard over the list.
-function insertSnippet(trigger) {
+function insertSnippet(trigger: string) {
   editor.value?.insertSnippet(trigger, !narrow.matches);
 }
 
 // A new draft always leaves the drawer (you are about to write in it). Opening another draft leaves it on a phone only, where the
 // drafts are a full-width sheet over the editor and would hide the text (and the keyboard that comes with focusing it); on a wide
 // screen the drawer stays open beside the editor.
-async function pickDraft(action, id, { always = false } = {}) {
+async function pickDraft(action: (id?: string) => unknown, id?: string, { always = false } = {}) {
   await action(id);
   if ((always || narrow.matches) && showDrawer.value) {
     toggleDrawer();
@@ -270,7 +276,7 @@ function toggleProblems() {
 const textSize = { editor: ref(loadSize("editor")), preview: ref(loadSize("preview")) };
 applySize("editor", textSize.editor.value);
 applySize("preview", textSize.preview.value);
-function resizeText(dir) {
+function resizeText(dir: -1 | 0 | 1) {
   const which = mode.value === "preview" ? "preview" : "editor";
   const next = stepSize(textSize[which].value, dir);
   if (next === textSize[which].value) return;
@@ -282,7 +288,7 @@ function resizeText(dir) {
 
 // Ctrl+J (Cmd+J on a Mac) shows or hides the drafts. Ctrl+S is Sync (Save when sync is off): it saves the draft, writes its file if it
 // has one and the draft changed, and asks the server about it; Ctrl+Shift+S always asks for a file.
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const key = e.key.toLowerCase();
   if (key === "j" && !e.shiftKey) {
@@ -302,7 +308,7 @@ function onKeydown(e) {
 // first frame (Lighthouse counts every request in flight before the largest contentful paint against it). The wait is one frame;
 // the timer is a fallback for a window that is hidden at start, where the browser does not run animation frames.
 const afterNextPaint = () =>
-  new Promise((resolve) => {
+  new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 300);
     requestAnimationFrame(() =>
       setTimeout(() => {
@@ -319,61 +325,63 @@ async function loadHarper() {
   try {
     personal.value = await loadPersonal(linter);
   } catch (err) {
-    saveError.value = `Could not load settings: ${err?.message || err}`;
+    saveError.value = `Could not load settings: ${(err as Error)?.message || err}`;
   }
   return linter;
 }
 
-function onResult({ ms }) {
+function onResult({ ms }: { ms: number }) {
   lintMs.value = ms;
 }
 
 // The editor only reports when the findings really changed, so the panel does not re-render per keystroke.
-function onProblems(list) {
+function onProblems(list: Problem[]) {
   problems.value = list;
 }
 
 // Save the dictionary and ignore list after a change. A failure is shown in the status bar; the change still holds for this run.
-async function persist(note) {
+async function persist(note?: PersistNote) {
   try {
     if (note?.ignoredHash !== undefined) noteIgnored(note.ignoredHash, note.label);
-    personal.value = await savePersonal(harper.value);
+    personal.value = await savePersonal(harper.value as HarperLinter);
     saveError.value = "";
     sync.wordsChanged();
   } catch (err) {
-    saveError.value = `Could not save settings: ${err?.message || err}`;
+    saveError.value = `Could not save settings: ${(err as Error)?.message || err}`;
   }
 }
 
 // Run a change to Harper's dictionary or ignore list, save it, and check the text again.
-async function changePersonal(work) {
+async function changePersonal(work: () => Promise<unknown>) {
   try {
     await work();
     await persist();
     editor.value?.relint();
   } catch (err) {
-    saveError.value = `Could not change settings: ${err?.message || err}`;
+    saveError.value = `Could not change settings: ${(err as Error)?.message || err}`;
   }
 }
 
 // What syncing the dictionary and ignore list decided (docs/sync.md, "Settings"): they become the server's. Words the server lacks are
 // removed with a new linter (Harper cannot drop one), the others imported; hashes likewise.
-const applySettings = ({ words, ignored }) =>
+type Changes = ReturnType<typeof changesTo>;
+const applySettings = ({ words, ignored }: Changes) =>
   changePersonal(async () => {
     if (words.remove.length) {
-      const old = harper.value;
+      const old = harper.value as HarperLinter;
       harper.value = await withoutWords(old, words.remove, createLinter);
       old.dispose().catch(() => {});
     }
-    if (words.add.length) await harper.value.importWords(words.add);
-    await applyIgnored(harper.value, ignored);
+    const h = harper.value as HarperLinter;
+    if (words.add.length) await h.importWords(words.add);
+    await applyIgnored(h, ignored);
   });
 
-const stopIgnoring = (hash) => changePersonal(() => removeIgnored(harper.value, hash));
+const stopIgnoring = (hash: string) => changePersonal(() => removeIgnored(harper.value as HarperLinter, hash));
 // Harper cannot drop a word, so this swaps in a new linter without it; the editor checks again with it when it arrives.
-const removeWord = (word) =>
+const removeWord = (word: string) =>
   changePersonal(async () => {
-    const old = harper.value;
+    const old = harper.value as HarperLinter;
     harper.value = await withoutWord(old, word, createLinter);
     old.dispose().catch(() => {});
   });
@@ -383,17 +391,17 @@ const removeWord = (word) =>
 // selection, not a tap: only a press that began on the blank page too counts, or the selection collapses and the caret jumps to the end.
 // Only a plain press counts: a right or middle button, or a held Ctrl, Shift, Alt or Meta, means something else (a menu, a paste, an
 // extended selection) and must not move the caret.
-const isPlainPress = (e) => e.button === 0 && !(e.ctrlKey || e.shiftKey || e.altKey || e.metaKey);
+const isPlainPress = (e: MouseEvent) => e.button === 0 && !(e.ctrlKey || e.shiftKey || e.altKey || e.metaKey);
 let pressedOnBlank = false;
-const notePress = (e) => {
+const notePress = (e: MouseEvent) => {
   pressedOnBlank = e.target === pane.value && isPlainPress(e);
 };
-const focusFromClick = (e) => {
+const focusFromClick = (e: MouseEvent) => {
   const tap = pressedOnBlank && e.target === pane.value;
   pressedOnBlank = false;
   if (tap) editor.value?.focusEnd();
 };
-const focusFromPress = (e) => {
+const focusFromPress = (e: MouseEvent) => {
   if (isPlainPress(e)) editor.value?.focusEnd();
 };
 
@@ -406,7 +414,7 @@ async function startHarper() {
     state.value = "ready";
   } catch (err) {
     state.value = "failed";
-    error.value = String(err?.stack || err);
+    error.value = String((err as Error)?.stack || err);
   } finally {
     harperLoaded();
   }

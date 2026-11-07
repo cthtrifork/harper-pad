@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 // The snippets help page, shown inside the drafts drawer (opened from its footer). Drawn from the same table the editor uses, so
 // it cannot drift from what Enter does. Each card shows the result as a small mockup, the selected part highlighted; pressing a card
 // puts that result in the editor where the cursor is. The drawer stays open, so several can be inserted in a row.
@@ -9,8 +9,8 @@ const emit = defineEmits(["back", "insert"]);
 
 // The snippet just inserted shows "Inserted" for a moment, since the editor may be out of sight (a phone).
 const done = ref("");
-let timer = 0;
-function insert(trigger) {
+let timer: ReturnType<typeof setTimeout> | undefined;
+function insert(trigger: string) {
   emit("insert", trigger);
   done.value = trigger;
   clearTimeout(timer);
