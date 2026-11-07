@@ -16,7 +16,7 @@ A small desktop writing app for Linux and Windows, also available as a [web app]
    and later ones under 50 ms (measured in a release build on Fedora).
 2. **A place for quick text that is not a file yet.** The scratch pad is a drawer of drafts. Notes, to-do lists and
    half-written paragraphs are kept by the app and saved as you type, so there is no file name to invent and no folder
-   to pick. A draft becomes a file only when you choose "Save as file".
+   to pick. A draft becomes a file only when you choose "Save to disk".
 
 Markdown can be shown side by side with a rendered preview, and the app updates itself from GitHub releases.
 

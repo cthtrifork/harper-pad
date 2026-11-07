@@ -12,12 +12,14 @@
     flex-direction: column;
   }
 
-  /* Header: one row of icon buttons, 44 px each (touch.css): scratch pad, the views (Edit and Preview: Split would stack two panes in
-     a phone's height), save, problems. The labels, brand, shortcut hints and file name are hidden; the buttons keep their accessible
-     names (aria-label), and the count shows as a badge on the Problems icon. The row wraps only if the update button is also shown. */
+  /* Header: one row of icon buttons, 40 px square (touch.css asks 44 px high; 40 is what makes the row fit with Save to disk beside Sync at
+     390 px): scratch pad, the views (Edit and Preview: Split would stack two panes in a phone's height), sync, save as file, problems. The
+     labels, brand, shortcut hints and file name are hidden; the buttons keep their accessible names (aria-label), and the count shows as a
+     badge on the Problems icon. The switcher keeps its natural width; when even that does not fit (320 px), the last items wrap to a
+     second row rather than squeeze it. */
   .bar {
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
     padding: 8px 12px;
   }
 
@@ -41,14 +43,25 @@
 
   .bar .views {
     order: 2;
-    flex: 999 1 0;
-    min-width: 0;
+    flex: 999 1 136px;
+    min-width: 136px; /* two 64 px segments, the padding and the border: never narrower */
     grid-template-columns: repeat(2, 1fr);
+    height: 40px; /* a 40 px tap target: the segments fill the whole height, and the outline is drawn inside instead of as a border */
+    padding: 0;
+    border: 0;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+
+  .bar .view {
+    height: 40px;
   }
 
   .bar .spacer {
-    order: 2;
-    flex: 1 1 0;
+    display: none; /* the switcher grows instead, and a hidden spacer costs no gap */
+  }
+
+  .bar .actions {
+    gap: 6px;
   }
 
   .bar .actions {
@@ -72,7 +85,9 @@
   .bar .drawer-btn,
   .bar .toggle,
   .bar .actions .tool {
-    width: 44px;
+    width: 40px;
+    min-height: 40px;
+    height: 40px;
     padding: 0;
     justify-content: center;
   }
@@ -82,16 +97,12 @@
   }
 
   .bar .thumb {
-    width: calc((100% - 4px) / 2);
+    width: calc(50% - 2px); /* the switcher has no padding on a phone, so the thumb keeps a 2 px margin on each side by itself */
   }
 
   /* With Split gone, Preview is the second segment (the desktop rule counts three). */
   .bar .views[data-mode="preview"] .thumb {
     transform: translateX(100%);
-  }
-
-  .bar .view {
-    min-height: 36px;
   }
 
   .bar .toggle {
@@ -238,5 +249,35 @@
 
   .status > .spacer {
     display: block;
+  }
+}
+
+/* The narrowest phones (320 px): tighter gaps and a smaller switcher, so Edit and Preview never run under a button. */
+@media (max-width: 360px) {
+  .bar {
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .bar .actions {
+    gap: 4px;
+  }
+
+  .bar .view {
+    padding: 0 6px;
+    font-size: 12.5px;
+  }
+
+  .bar .views {
+    flex-basis: 120px;
+    min-width: 120px; /* two 56 px segments: Edit and Preview still fit, and the row holds five buttons at 320 px */
+  }
+}
+
+/* A phone: the version button (the desktop app's update button) leaves the header. A desktop window is never this narrow (its minimum is
+   600 px), and the web build already shows its version in the drafts drawer. */
+@media (max-width: 420px) {
+  .bar .wrap {
+    display: none;
   }
 }

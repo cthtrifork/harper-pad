@@ -204,7 +204,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
       <div class="top"><b>Secondary</b><span class="tag today">In the app</span></div>
       <div class="spec">
         <button class="hp secondary" type="button"><svg viewBox="0 0 16 16"><path d="M3 2h8l2 2v10H3zM5 2v4h5V2M5 14v-4h6v4"/></svg>Save</button>
-        <button class="hp secondary" type="button">Save as file…</button>
+        <button class="hp secondary" type="button">Save to disk…</button>
       </div>
       <ul><li>A normal action that runs once and is not the main one.</li><li>Raised fill, 1px <code>--line</code> border, text colour. Keep this look for actions only.</li><li>A split button (Save + caret) shares one border; the caret opens a menu.</li></ul>
     </div>
@@ -312,7 +312,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
       <div class="card"><h3>Menu</h3>
         <div style="margin-top:12px" class="menu" role="menu">
           <button type="button" role="menuitem">Save <span class="kbd">Ctrl+S</span></button>
-          <button type="button" role="menuitem" class="is-hover">Save as file… <span class="kbd">Ctrl+Shift+S</span></button>
+          <button type="button" role="menuitem" class="is-hover">Save to disk… <span class="kbd">Ctrl+Shift+S</span></button>
           <hr>
           <button type="button" role="menuitemradio" aria-checked="true">Markdown <span>✓</span></button>
           <button type="button" role="menuitemradio" aria-checked="false">Plain text <span></span></button>
@@ -422,7 +422,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
       <div class="dont"><b>Don't</b><span>Use two primary buttons in one view.</span></div>
       <div class="dont"><b>Don't</b><span>Show state by border colour alone, or by colour alone.</span></div>
       <div class="dont"><b>Don't</b><span>Make a toolbar of identical bordered buttons. Group by role and separate groups with a 1px divider.</span></div>
-      <div class="dont"><b>Don't</b><span>Interrupt writing with modals. Problems, updates and drafts live in panels and popovers. The one exception is a choice that must be made before the note is shown, such as a note that was deleted on another device (<code>DeletedElsewhereDialog.vue</code>): a native modal dialog, opened when a note is opened and never while typing, that Esc does not close. It has one primary button that loses nothing (Keep, focused) and one danger button (Remove) that can be undone. On a phone it is a bottom sheet.</span></div>
+      <div class="dont"><b>Don't</b><span>Interrupt writing with modals. Problems, updates and drafts live in panels and popovers. The one exception is a choice that must be made before the note is shown, such as a note that was deleted on another device (<code>DeletedElsewhereDialog.vue</code>): a native modal dialog, opened when a note is opened and never while typing, that Esc does not close. It has one primary button that loses nothing (Keep, focused) and one danger button (Remove) that can be undone. On a phone it stays centered, with larger buttons.</span></div>
       <div class="do"><b>Do</b><span>Say what sync is doing in the toast (<code>ToastBar.vue</code>, the one toast, with one action such as Undo or Open copy). A state that stays until it is settled, such as "Newer on the server", is plain status text beside the chip, not a toast.</span></div>
       <div class="dont"><b>Don't</b><span>Use <code>div</code> or <code>span</code> with click handlers. Tab skips them.</span></div>
       <div class="dont"><b>Don't</b><span>Use "Click here", "OK" or "Submit". Name the action.</span></div>
