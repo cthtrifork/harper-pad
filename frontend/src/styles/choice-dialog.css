@@ -1,5 +1,5 @@
-/* What the modal dialogs that force a choice share (DeletedElsewhereDialog.vue): the box, the backdrop, the buttons and the phone sizes. Each
-   dialog adds its own class for its width and its contents (gone-dialog.css). */
+/* What the modal dialogs that force a choice share (ConflictDialog.vue, DeletedElsewhereDialog.vue): the box, the backdrop, the buttons and
+   the phone sizes. Each dialog adds its own class for its width and its contents (conflict-dialog.css, gone-dialog.css). */
 .choice-dialog {
   width: min(var(--dialog-width, 360px), calc(100vw - 32px));
   box-sizing: border-box;
@@ -66,6 +66,11 @@
 .choice-dialog .actions .danger:hover {
   border-color: var(--bad);
   background: var(--raised);
+}
+
+.choice-dialog .actions button:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 /* A phone: still centered, with text and buttons big enough to tap. */
