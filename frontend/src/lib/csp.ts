@@ -1,4 +1,4 @@
-// The production page's Content-Security-Policy (docs/security.md), built for vite.config.js. Kept here so the unit tests can check it.
+// The production page's Content-Security-Policy (docs/security.md), built for vite.config.ts. Kept here so the unit tests can check it.
 // `syncOrigin` (the SYNC_ORIGIN build setting) is added to connect-src when set, and nothing else changes.
 
 // Anything that is not a bare https origin is a build error, so a typo cannot widen the policy.

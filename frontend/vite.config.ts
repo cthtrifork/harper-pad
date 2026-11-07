@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import wails from "@wailsio/runtime/plugins/vite";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { buildPolicy, syncOriginOf } from "./src/lib/csp.ts";
 
 // Vite empties dist/ on every build. The Go side embeds it, so `go vet` and `go test` need the
 // directory to exist even when nobody has built the frontend; keep the committed placeholder.
-const keepPlaceholder = () => ({
+const keepPlaceholder = (): Plugin => ({
   name: "keep-dist-placeholder",
   closeBundle() {
     writeFileSync("dist/.gitkeep", "");
@@ -21,7 +21,7 @@ const keepPlaceholder = () => ({
 const POLICY = buildPolicy({ syncOrigin: process.env.SYNC_ORIGIN });
 const WEB_POLICY = buildPolicy({ web: true, syncOrigin: process.env.SYNC_ORIGIN });
 
-const contentSecurityPolicy = (policy) => ({
+const contentSecurityPolicy = (policy: string): Plugin => ({
   name: "content-security-policy",
   apply: "build",
   transformIndexHtml: () => [
@@ -31,7 +31,7 @@ const contentSecurityPolicy = (policy) => ({
 
 // The splash in index.html paints before the bundled stylesheet has arrived, so it cannot read the tokens from it. Rather than copy
 // the colours there, the tokens are inlined into <head> from the one file that defines them (the stylesheet still loads them as usual).
-const inlineTokens = () => ({
+const inlineTokens = (): Plugin => ({
   name: "inline-tokens",
   transformIndexHtml: () => [
     {
@@ -53,7 +53,7 @@ const [LIGHT_PANEL, DARK_PANEL] = [
 
 const WEB_DIR = fileURLToPath(new URL("./web", import.meta.url));
 
-const webApp = () => {
+const webApp = (): Plugin => {
   let base = "/";
   return {
     name: "web-app",

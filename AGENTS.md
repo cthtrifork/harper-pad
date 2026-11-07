@@ -30,7 +30,7 @@ make bindings     # regenerate frontend/bindings (needs the wails3 CLI: make wai
   `lib/desktopSync.ts` are TypeScript, so their calls into the generated bindings are checked; import `.ts` files with the extension. Convert
   a `.js` file when you touch it, and keep the web bundle unchanged (compare `vite build` output with `main`).
 - **SQL only in Go.** All SQL lives in `internal/store`; the frontend calls specific service methods through the generated bindings and never sends SQL. See `docs/storage.md`.
-- Security model, the page's Content-Security-Policy and the OWASP mapping are in `docs/security.md`. Do not loosen the policy in `frontend/vite.config.js`; never use `v-html` or `innerHTML` with text from drafts, Harper or the network.
+- Security model, the page's Content-Security-Policy and the OWASP mapping are in `docs/security.md`. Do not loosen the policy in `frontend/vite.config.ts`; never use `v-html` or `innerHTML` with text from drafts, Harper or the network.
 - **Always open a PR** from a new branch off `main`; do not push to `main`.
 - **PR titles are `type(scope)!: summary`** (`feat`, `fix`, `security`, `perf`, `refactor`, `docs`, `test`,
   `chore`, `ci`, `build`, `deps`; `!` for breaking). `pr-title.yml` checks it and Release Drafter builds the notes
