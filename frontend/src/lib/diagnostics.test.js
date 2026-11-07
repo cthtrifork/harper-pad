@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatDiagnostics, noteOpen } from "./diagnostics.js";
+import { formatDiagnostics, noteOpen } from "./diagnostics.ts";
 
 const memory = () => {
   const data = new Map();

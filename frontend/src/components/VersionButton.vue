@@ -1,7 +1,7 @@
 <script setup>
 import "../styles/update-button.css"; // the same look as the desktop update button, loaded with this component
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import { copyDiagnostics } from "../lib/diagnostics.js";
+import { copyDiagnostics } from "../lib/diagnostics.ts";
 
 // The web build's end of the header on a wide window (a phone has the version in the drafts drawer): the release it was made from (a preview or local build has none and says "dev"), and a popup with
 // "Copy diagnostics" for a bug report or a slow start. There is nothing to update here: a reload loads the latest deploy.

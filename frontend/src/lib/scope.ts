@@ -6,4 +6,4 @@ const match = /\/(pr-\d+|preview)\/$/.exec(import.meta.env?.BASE_URL ?? "/");
 export const PREVIEW = match ? match[1] : "";
 
 // "harper-pad.autocorrect" -> "harper-pad.autocorrect" in production, "harper-pad.autocorrect.pr-123" in preview pr-123.
-export const scoped = (name) => (PREVIEW ? `${name}.${PREVIEW}` : name);
+export const scoped = (name: string) => (PREVIEW ? `${name}.${PREVIEW}` : name);

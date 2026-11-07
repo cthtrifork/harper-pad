@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { whenLabel, whenStamp } from "./when.js";
+import { whenLabel, whenStamp } from "./when.ts";
 
 // The exact wording depends on the ICU data of the Node build, so these check what is shown, not the format.
 const now = new Date(2026, 10, 5, 12, 0); // Thu 5 Nov 2026, local time

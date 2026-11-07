@@ -14,7 +14,7 @@ export const COPY_LABELS = {
 
 const stampOf = (side) => (side ? side.stamp : null);
 
-import { whenStamp } from "./when.js";
+import { whenStamp } from "./when.ts";
 
 // The versions involved, one row each, in the order draft, file, server (never more than three). Rows: {kind, label, when, tint}. `when` is the
 // version's timestamp from `whenStamp` ("6 Nov, 22:36", always with the date), or "–" when it is not known (`m.draftAt`, `m.file.at` and

@@ -6,10 +6,10 @@
 
 // "https://sync.example.com" -> the same. "" -> "". Anything that is not a bare https origin is a build error, so a typo cannot widen the
 // policy (a path, a wildcard or a scheme-only value would).
-export function syncOriginOf(value) {
+export function syncOriginOf(value?: string | null): string {
   const text = (value ?? "").trim();
   if (text === "") return "";
-  let url;
+  let url: URL;
   try {
     url = new URL(text);
   } catch {
@@ -22,7 +22,7 @@ export function syncOriginOf(value) {
 }
 
 // `web` adds manifest-src: the GitHub Pages build loads its own web app manifest, which `default-src 'none'` would block.
-export function buildPolicy({ web = false, syncOrigin = "" } = {}) {
+export function buildPolicy({ web = false, syncOrigin = "" }: { web?: boolean; syncOrigin?: string } = {}): string {
   const origin = syncOriginOf(syncOrigin);
   return [
     "default-src 'none'",

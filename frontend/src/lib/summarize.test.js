@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { summarize } from "./summarize.js";
+import { summarize } from "./summarize.ts";
 
 const fixtures = JSON.parse(readFileSync(new URL("../../../internal/store/testdata/summarize.json", import.meta.url), "utf8"));
 

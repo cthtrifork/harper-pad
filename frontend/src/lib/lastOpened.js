@@ -1,6 +1,6 @@
 // The draft that was open last, kept in browser storage of this device only (never synced), so a reload or relaunch shows the same draft.
 // Without one, or when it no longer exists, the start-up falls back to the most recently changed draft.
-import { scoped } from "./scope.js";
+import { scoped } from "./scope.ts";
 
 const key = () => scoped("harper-pad.last-opened");
 const ID = /^[0-9a-f]{32}$/;

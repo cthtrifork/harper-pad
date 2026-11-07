@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
-import { contentHash } from "./contentHash.js";
+import { contentHash } from "./contentHash.ts";
 import { createWebDrafts, openDatabase } from "./webDrafts.js";
 
 // A fresh, empty IndexedDB for each test. `raw` runs a function against the open database, as an older build of the app would.

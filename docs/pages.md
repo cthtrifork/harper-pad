@@ -66,7 +66,7 @@ request, deletes the folder. Without the label nothing is published.
   (`harper-pad`, the dictionary and drafts) is deliberately shared, so a preview opens with the real data. That means a preview that
   changes the schema (`DB_VERSION` in `webDrafts.js`) upgrades the real database for the released site too. Older builds still open
   it, as long as the migration is backwards compatible: see [Changing the schema](#changing-the-schema). The presentation settings and the cache are scoped, so a preview cannot
-  change the real site's look or cached files: the frontend derives a scope from the base path (`src/lib/scope.js`; `web/sw.js` does the
+  change the real site's look or cached files: the frontend derives a scope from the base path (`src/lib/scope.ts`; `web/sw.js` does the
   same for its cache), and on `/pr-<n>/` localStorage keys end in `.pr-<n>` and the cache is `harper-pad-pr-<n>-v1`. Production names do
   not change. New localStorage keys should go through `scoped()`.
 - **Branches of this repository only.** A pull request from a fork has a read-only token and is skipped. Adding the label needs triage

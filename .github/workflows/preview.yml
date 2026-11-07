@@ -43,7 +43,7 @@ jobs:
       - id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
-      # The base path /pr-<number>/ is what tells the frontend it is a preview (src/lib/scope.js, web/sw.js): its own
+      # The base path /pr-<number>/ is what tells the frontend it is a preview (src/lib/scope.ts, web/sw.js): its own
       # localStorage keys and service-worker cache on the shared origin. The IndexedDB database is shared on purpose (real data).
       - name: Build the web version for this pull request
         working-directory: frontend

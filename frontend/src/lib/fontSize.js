@@ -1,6 +1,6 @@
 // The text size: a few steps rather than a slider, kept in browser storage. "editor" and "preview" are separate; the Split view
 // scales its source and preview together from the editor's size.
-import { scoped } from "./scope.js";
+import { scoped } from "./scope.ts";
 
 export const SIZES = [16, 19, 22, 26];
 export const DEFAULT_SIZE = 19;

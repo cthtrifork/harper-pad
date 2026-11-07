@@ -3,7 +3,7 @@ import "../styles/update-button.css"; // loaded with this component, so the web 
 import { Browser } from "@wailsio/runtime";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { UpdateService } from "../../bindings/github.com/cthtrifork/harper-pad/internal/app";
-import { copyDiagnostics } from "../lib/diagnostics.js";
+import { copyDiagnostics } from "../lib/diagnostics.ts";
 
 const LATEST_RELEASE = "https://github.com/cthtrifork/harper-pad/releases/latest";
 
@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKey);
 });
 
-// Copy a diagnostics report (lib/diagnostics.js) for a bug report; the link says what happened for two seconds.
+// Copy a diagnostics report (lib/diagnostics.ts) for a bug report; the link says what happened for two seconds.
 const copied = ref("");
 let copiedTimer = 0;
 async function copyReport() {

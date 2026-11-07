@@ -6,7 +6,7 @@ const TASK = /^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$/;
 const HEAD = /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?)/;
 
 // At most n characters (not UTF-16 units, so an emoji counts once), with an ellipsis when something was cut off.
-function clip(s, n) {
+function clip(s: string, n: number): string {
   const chars = Array.from(s);
   return chars.length <= n
     ? s
@@ -16,12 +16,17 @@ function clip(s, n) {
         .trimEnd()}…`;
 }
 
-export function summarize(content) {
+export interface TaskLine {
+  text: string;
+  done: boolean;
+}
+
+export function summarize(content: string) {
   let title = "";
   let total = 0;
   let done = 0;
-  const tasks = [];
-  const rest = [];
+  const tasks: TaskLine[] = [];
+  const rest: string[] = [];
   for (const raw of content.split("\n")) {
     const line = raw.replace(/\r+$/, "");
     const m = TASK.exec(line);

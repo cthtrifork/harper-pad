@@ -40,7 +40,7 @@ type Changes struct {
 }
 
 // ContentHash is the hash a draft is compared by: SHA-256, in hex, of the format, a newline and the text, as UTF-8. The web build
-// computes the same value (frontend/src/lib/contentHash.js); both check internal/store/testdata/contenthash.json.
+// computes the same value (frontend/src/lib/contentHash.ts); both check internal/store/testdata/contenthash.json.
 func ContentHash(format, content string) string {
 	h := sha256.New()
 	h.Write([]byte(format))

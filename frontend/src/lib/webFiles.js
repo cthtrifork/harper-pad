@@ -1,7 +1,7 @@
 // Saving a draft to a file in the browser, the counterpart of DraftService.SaveDraftToFile. Chrome and Edge keep a handle to the
 // file, so later saves overwrite it. Elsewhere the page can only hand over a copy (share sheet or download) and the draft is never
 // linked to a file.
-import { summarize } from "./summarize.js";
+import { summarize } from "./summarize.ts";
 
 const TYPES = [
   { description: "Markdown", accept: { "text/markdown": [".md"] } },
