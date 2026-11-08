@@ -53,7 +53,7 @@ The site is at `https://<owner>.github.io/harper-pad/`, or at the root of the re
    with the URL can open the site, whatever the repository's visibility.
 
 Every later release and push to `main` that touches `frontend/` redeploys; nothing else to do. A deploy takes about a minute, and an installed
-phone app picks it up on its next launch (the service worker fetches the page network first).
+phone app fetches it in the background on one launch and shows it on the next (the service worker answers the page from its cache and refreshes it, so a launch never waits on the network; a new page is kept only once its scripts are cached too).
 
 ### Previews of a pull request
 
