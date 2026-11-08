@@ -52,6 +52,7 @@ async function staleWhileRevalidate(event) {
 // A release deletes the old assets/ from the site, and the new page names only the entry files (the rest are lazy chunks, the worker
 // and the wasm inside them). So a new page is kept only once everything it can reach is cached: otherwise one launch later it would
 // open offline without its scripts, or fail to load a chunk. If any file fails, the old page stays and the next launch tries again.
+// Then the assets neither this page nor the one it replaces can reach are deleted.
 // Inside a chunk a neighbour is `./name.js`, in the entry's preload list and in the page it is `assets/name.js`.
 const ASSET = /(?:\.\/|assets\/)[\w.-]+\.(?:js|css|wasm|woff2?|svg|png|jpe?g|webp)/g;
 
@@ -60,28 +61,51 @@ async function store(cache, req, res) {
   if (res.headers.get("content-type")?.includes("text/html")) {
     const html = await res.clone().text();
     const old = await cache.match(req, { ignoreSearch: true });
-    if (old && (await old.text()) === html) return;
-    await cacheAssets(cache, html);
+    const oldHtml = old && (await old.text());
+    if (oldHtml === html) return;
+    const keep = await cacheAssets(cache, html, true);
+    await cache.put(req, res);
+    await prune(cache, keep, oldHtml);
+    return;
   }
   await cache.put(req, res);
 }
 
-async function cacheAssets(cache, text) {
-  const queue = [...text.matchAll(ASSET)].map((m) => new URL(m[0], self.registration.scope).href);
+// Release by release the old assets/ would pile up in the cache. Once the new page is stored, drop what neither it nor the page it
+// replaces can reach. The replaced page is kept because it may still be open and load a lazy chunk; the next launch shows the new one.
+async function prune(cache, keep, oldHtml) {
+  try {
+    if (oldHtml) for (const url of await cacheAssets(cache, oldHtml, false)) keep.add(url);
+    for (const key of await cache.keys()) if (new URL(key.url).pathname.includes("/assets/") && !keep.has(key.url)) await cache.delete(key);
+  } catch {} // best effort: leaving old files in the cache is harmless
+}
+
+// Every file reachable from the page text, as a set of URLs. `online`: fetch what is not cached; without it only the cached files are
+// followed. A file the page names itself must exist (an error stops the walk). A name found inside a script is only a guess (a wasm
+// import module is called "./harper_wasm_slim_bg.js", for one), so when it is not on the site it is left out.
+async function cacheAssets(cache, text, online) {
+  const scope = self.registration.scope;
+  const queue = [...text.matchAll(ASSET)].map((m) => ({ url: new URL(m[0], scope).href, named: true }));
   const seen = new Set();
   while (queue.length && seen.size < 500) {
-    const url = queue.shift();
+    const { url, named } = queue.shift();
     if (seen.has(url)) continue;
-    seen.add(url);
     let res = await cache.match(url);
     if (!res) {
+      if (!online) continue;
       res = await fetch(url);
-      if (!res.ok) throw new Error(`${res.status} ${url}`);
+      if (!res.ok) {
+        if (named) throw new Error(`${res.status} ${url}`);
+        continue;
+      }
       await cache.put(url, res.clone());
     }
+    seen.add(url);
     if (/\.(?:js|css)$/.test(url)) {
-      for (const m of (await res.text()).matchAll(ASSET))
-        queue.push(new URL(m[0], m[0].startsWith("./") ? url : self.registration.scope).href);
+      for (const m of (await res.text()).matchAll(ASSET)) {
+        queue.push({ url: new URL(m[0], m[0].startsWith("./") ? url : scope).href, named: false });
+      }
     }
   }
+  return seen;
 }
