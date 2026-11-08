@@ -33,7 +33,7 @@
     "vue": "^3.5.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.5",
+    "@biomejs/biome": "2.6.6",
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.0",
     "fake-indexeddb": "^6.2.7",
