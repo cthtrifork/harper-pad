@@ -46,7 +46,11 @@ function setup({
       writeFile: async () => log.push("write"),
       applyFile: async () => log.push("applyFile"),
       current: () => ({ id: ID, text: draftText, format: "markdown", updatedAt: 7, revision: 1 }),
-      plain: async (t) => t,
+      plain: async (t, key?) => t,
+      unlockServer: async (_sealed, pass) => {
+        if (pass !== "right") throw new Error("Wrong passphrase.");
+        return "key";
+      },
     },
   };
   const sync = {
@@ -264,4 +268,23 @@ test("a stale same-text reconciliation rebuilds against the latest server versio
   await settle();
   assert.equal(c.model.value?.server?.text, "new server text");
   assert.equal(c.model.value?.server?.stamp, "3:9");
+});
+
+test("a server version this device cannot open is shown as sealed, and no choice is made until it is unlocked", async () => {
+  const { c, log, drafts } = setup({
+    server: { text: "hp-protected:1:{}" },
+    serverNow: { text: "hp-protected:1:{}", stamp: "2:5", updatedAt: 5 },
+  });
+  drafts.dialog.plain = async (t, key) => (key ? "server plain" : t.startsWith("hp-protected") ? null : t);
+  await settle();
+  assert.equal(c.model.value?.server?.sealed, "hp-protected:1:{}");
+  await c.choose("overwrite");
+  assert.equal(log.includes("push"), false, "nothing is sent while the server's version is unreadable");
+  await assert.rejects(c.unlockServer("wrong"));
+  assert.equal(c.model.value?.server?.sealed, "hp-protected:1:{}");
+  await c.unlockServer("right");
+  assert.equal(c.model.value?.server?.sealed, undefined);
+  assert.equal(c.model.value?.server?.text, "server plain");
+  await c.choose("keep");
+  assert.ok(log.some((l) => Array.isArray(l) && l[0] === "copy" && l[1] === "server plain"));
 });

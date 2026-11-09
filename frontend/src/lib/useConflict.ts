@@ -1,6 +1,6 @@
 import { ref, watch } from "vue";
 import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
-import { clearTitle, isProtected } from "./protect.ts";
+import { clearTitle, isProtected, type Session } from "./protect.ts";
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
@@ -22,6 +22,8 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
   const note = ref(""); // a line under the buttons: "Something changed, look again"
   const result = ref<{ copies: { id: string; from: Origin }[]; fileError: string; pushed: boolean | null } | null>(null); // for the toast
   let building = 0;
+  let serverKey: { id: string; key: Session } | null = null; // from "Unlock server version"
+  const keyFor = (id: string) => (serverKey?.id === id ? serverKey.key : undefined);
 
   const syncOn = () => sync.enrolled.value;
 
@@ -65,13 +67,16 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     }
     if (sv) {
       // Compared and copied as text: a protected draft's version is opened with the key held, or left alone when that is not possible.
-      const text = await drafts.dialog.plain(sv.text);
+      const text = await drafts.dialog.plain(sv.text, keyFor(id));
       if (mine !== building) return;
-      if (text === null) {
+      if (text === null && isProtected(sv.text) && !drafts.locked.value) {
+        // Protected with a key this device does not hold: the dialog is shown, but a choice waits until the person unlocks that version,
+        // because neither side could be compared and Keep could not copy it.
+        server = { text: "", stamp: sv.stamp, at: sv.updatedAt, sealed: sv.text };
+      } else if (text === null) {
         model.value = null;
         return;
-      }
-      server = { text, stamp: sv.stamp, at: sv.updatedAt };
+      } else server = { text, stamp: sv.stamp, at: sv.updatedAt };
     }
     if (mine !== building) return;
     // A protected draft's versions differ by their nonce even when the text is the same: nothing differs after all, so the server's version
@@ -81,6 +86,8 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     if (
       !f &&
       server &&
+      !server.sealed &&
+      !keyFor(id) &&
       server.text === compared.text &&
       sv?.format === compared.format &&
       compared.updatedAt !== undefined &&
@@ -143,7 +150,7 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       return { file: file?.stamp == null && m.file ? { stamp: "gone" } : (file as { stamp: string } | null), server };
     },
     applyFile: () => drafts.dialog.applyFile(),
-    saveCopy: (text: string, from: Origin) => drafts.dialog.saveCopy(text, from),
+    saveCopy: (text: string, from: Origin) => drafts.dialog.saveCopy(text, from, keyFor(m.id as string)),
     writeFile: drafts.current.value.filePath ? () => drafts.dialog.writeFile() : null,
     push: syncOn() ? () => sync.forcePush(m.id as string) : null,
   });
@@ -151,7 +158,7 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
   // The person chose. Both sides are looked at again first; if either moved, the dialog is redrawn and nothing is written.
   async function choose(choice: Choice) {
     const m = model.value;
-    if (!m || busy.value) return;
+    if (!m || busy.value || m.server?.sealed) return;
     busy.value = true;
     note.value = "";
     try {
@@ -174,5 +181,13 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     }
   }
 
-  return { model, busy, note, result, choose };
+  // Opens the server's protected version with its passphrase, then looks at both versions again. Rejects with WrongPassphrase.
+  async function unlockServer(passphrase: string) {
+    const m = model.value;
+    if (!m?.server?.sealed) return;
+    serverKey = { id: m.id as string, key: await drafts.dialog.unlockServer(m.server.sealed, passphrase) };
+    await build();
+  }
+
+  return { model, busy, note, result, choose, unlockServer };
 }

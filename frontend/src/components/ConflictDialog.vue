@@ -10,10 +10,11 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   note: { type: String, default: "" },
 });
-const emit = defineEmits(["choose"]);
+const emit = defineEmits(["choose", "unlock"]);
 const dialog = ref<HTMLDialogElement | null>(null);
 const text = computed(() => describeConflict(props.model));
 const rows = computed(() => summaryRows(props.model));
+const sealed = computed(() => !!props.model.server?.sealed);
 
 useModalDialog(dialog);
 </script>
@@ -31,11 +32,16 @@ useModalDialog(dialog);
       </tbody>
     </table>
     <p v-if="note" class="note" role="status">{{ note }}</p>
+    <p v-if="sealed" class="note" role="status">
+      The server's version is protected with a passphrase this device has not used for this draft, so it cannot be compared or copied yet.
+      Unlock it to choose; Keep would otherwise lose it.
+    </p>
     <div class="actions">
-      <button type="button" class="danger" :disabled="busy" :title="text.overwriteTitle" aria-describedby="conflict-overwrite-desc" @click="emit('choose', 'overwrite')">
+      <button v-if="sealed" type="button" class="primary" autofocus :disabled="busy" @click="emit('unlock')">Unlock server version</button>
+      <button type="button" class="danger" :disabled="busy || sealed" :title="text.overwriteTitle" aria-describedby="conflict-overwrite-desc" @click="emit('choose', 'overwrite')">
         {{ text.overwriteLabel }}
       </button>
-      <button type="button" class="primary" autofocus :disabled="busy" :title="text.keepTitle" aria-describedby="conflict-keep-desc" @click="emit('choose', 'keep')">
+      <button type="button" class="primary" :autofocus="!sealed" :disabled="busy || sealed" :title="text.keepTitle" aria-describedby="conflict-keep-desc" @click="emit('choose', 'keep')">
         {{ text.keepLabel }}
       </button>
     </div>

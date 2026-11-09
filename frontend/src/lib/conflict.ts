@@ -13,6 +13,8 @@ interface Side {
   text: string;
   stamp: string;
   at?: number;
+  /** The server's version is protected with a key this device does not hold: `text` is empty until it is unlocked. */
+  sealed?: string;
 }
 
 export interface ConflictModel {
