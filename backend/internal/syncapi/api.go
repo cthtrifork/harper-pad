@@ -142,6 +142,7 @@ func (a *API) Huma() huma.API { return a.api }
 // once: the log line is how the origin of a new client (a desktop webview) is found.
 func (a *API) CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff") // also on the documentation page, which ZAP flags without it
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			next.ServeHTTP(w, r)
