@@ -8,8 +8,8 @@
 
 export const PREFIX = "hp-protected:1:";
 
-// 32 MiB, 3 passes, 1 lane. `memoryKiB` and `passes` are parameters for the tests.
-export const COST = { memoryKiB: 32 * 1024, passes: 3 };
+// 128 MiB, 3 passes, 1 lane. `memoryKiB` and `passes` are parameters for the tests.
+export const COST = { memoryKiB: 128 * 1024, passes: 3 };
 
 /** The passphrase is wrong, or the stored draft was changed (its text, id or title): the seal cannot tell the two apart. */
 export class WrongPassphrase extends Error {
