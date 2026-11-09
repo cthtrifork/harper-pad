@@ -366,10 +366,10 @@ version. Ids, versions, times, the deleted flag, sizes and the fact that a draft
 
 - A copied ciphertext (stolen token, backup, database leak) can be guessed against offline for as long as the attacker likes. The
   passphrase strength and the Argon2id cost are the whole defence; the per-draft salt only stops work being shared between drafts.
-- The server can delete a protected draft or replay an older ciphertext (the version is in the additional data, but the server chooses
-  which version to serve). It cannot read or forge one.
-- If the server keeps older versions, the versions from before a draft was protected stay readable there, and so do the ciphertext
-  versions after it is unprotected.
+- The server can delete a protected draft, or replay an older ciphertext taken from a backup (the version is in the additional data, but
+  the server chooses which version to serve). It cannot read or forge one.
+- The server keeps one row per draft and overwrites it on each write, so protecting a draft replaces its plaintext there. Database
+  backups and write-ahead logs can still hold earlier plaintext versions, and ciphertext versions after a draft is unprotected.
 - A title shown in the list is readable by the server.
 - Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server
   that serves modified web app code.
