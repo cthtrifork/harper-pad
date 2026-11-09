@@ -144,7 +144,7 @@ async function submitPass(passphrase: string, title: string) {
     else await drafts.protect(passphrase, title);
     pass.value = null;
   } catch (err) {
-    passError.value = err instanceof WrongPassphrase ? "Wrong passphrase." : String((err as Error)?.message || err);
+    passError.value = err instanceof WrongPassphrase ? "Wrong passphrase. Try again." : String((err as Error)?.message || err);
   } finally {
     passBusy.value = false;
   }
@@ -588,7 +588,7 @@ onBeforeUnmount(() => {
         <!-- A locked draft shows no text at all; the editor behind is empty and inert. -->
         <div v-if="drafts.locked.value" class="locked-view">
           <p>This draft is protected.</p>
-          <button type="button" @click="askUnlock">Enter passphrase</button>
+          <button type="button" class="primary" @click="askUnlock">Unlock draft</button>
         </div>
         </div>
         <div class="toast-stack">

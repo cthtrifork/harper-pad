@@ -1,4 +1,7 @@
-/* The padlock in the status bar (PadlockButton.vue) and the empty view of a locked draft (App.vue). */
+/* The padlock in the status bar (PadlockButton.vue), the passphrase dialog (PassphraseDialog.vue) and the empty view of a locked draft
+   (App.vue). Button, field and menu looks follow docs/design-cheatsheet.html. */
+
+/* Quiet icon button: transparent and muted at rest, border and fill on hover, 32 x 32. The negative margin keeps the bar's height. */
 .status > .lock-wrap {
   position: relative;
   overflow: visible;
@@ -8,8 +11,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
+  margin: -6px 0;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -24,9 +28,11 @@
 
 .lock-btn:hover {
   border-color: var(--line);
+  background: var(--selected);
   color: var(--text);
 }
 
+/* Protected: the accent colour, and the closed shackle, so the state is not colour alone. */
 .lock-btn.locked,
 .lock-btn.unlocked {
   color: var(--accent);
@@ -42,6 +48,7 @@
   color: var(--bad);
 }
 
+/* Text field, as in the cheat sheet: --bg fill, hover border --mute, focus border and ring --accent, error border --bad. */
 .pass-dialog form {
   display: flex;
   flex-direction: column;
@@ -57,12 +64,35 @@
 .pass-dialog input {
   box-sizing: border-box;
   width: 100%;
-  padding: 8px 10px;
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
   color: var(--text);
   font: inherit;
+  transition: border-color 0.15s var(--ease);
+}
+
+.pass-dialog input::placeholder {
+  color: var(--mute);
+}
+
+.pass-dialog input:hover:not(:disabled) {
+  border-color: var(--mute);
+}
+
+.pass-dialog input:focus-visible {
+  border-color: var(--accent);
+}
+
+.pass-dialog input[aria-invalid="true"] {
+  border-color: var(--bad);
+}
+
+.pass-dialog input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .pass-dialog .pass-error {
@@ -77,17 +107,67 @@
   justify-content: flex-end;
 }
 
+/* Cancel is a secondary button: raised fill, 1px --line border. Protect, Unlock and Save are the one primary button, a verb. */
 .pass-dialog .actions button {
-  min-height: 32px;
+  position: relative;
+  height: 32px;
   padding: 0 14px;
   color: var(--text);
   cursor: pointer;
+}
+
+.pass-dialog .actions button:not(.primary) {
+  border-color: var(--line);
+  background: var(--raised);
+}
+
+.pass-dialog .actions button:not(.primary):hover:not(:disabled) {
+  border-color: var(--mute);
 }
 
 .pass-dialog .actions .primary {
   color: var(--on-accent);
 }
 
+.pass-dialog .actions button:disabled {
+  cursor: not-allowed;
+}
+
+/* Busy keeps the button's width: the label stays, hidden, and a spinner sits over it. */
+.pass-dialog .actions .primary.busy {
+  cursor: wait;
+}
+
+.pass-dialog .actions .primary.busy .label {
+  visibility: hidden;
+}
+
+.pass-dialog .actions .primary.busy .spin {
+  position: absolute;
+  top: calc(50% - 7px);
+  left: calc(50% - 7px);
+}
+
+/* A phone: fields at 16 px so iOS does not zoom in, and 44 px high on touch (the dialog's own phone rules size the buttons). */
+@media (max-width: 600px) {
+  .pass-dialog input {
+    font-size: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  .pass-dialog input {
+    height: 44px;
+  }
+}
+
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .pass-dialog .actions button {
+    height: 44px;
+  }
+}
+
+/* A locked draft: the one thing to do here is unlock it, so it is the primary button. */
 .col {
   position: relative;
 }
@@ -96,26 +176,29 @@
   position: absolute;
   inset: 0;
   z-index: 2;
-  background: var(--bg);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
+  background: var(--bg);
   color: var(--mute);
   text-align: center;
 }
 
-.locked-view button {
-  padding: 6px 14px;
-  border: 1px solid var(--line);
+.locked-view .primary {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
   border-radius: 6px;
-  background: transparent;
-  color: var(--text);
+  background: var(--accent);
+  color: var(--on-accent);
   font: inherit;
+  font-weight: 600;
   cursor: pointer;
+  transition: filter 0.15s var(--ease);
 }
 
-.locked-view button:hover {
-  border-color: var(--accent);
+.locked-view .primary:hover {
+  filter: brightness(1.08);
 }

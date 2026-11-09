@@ -20,6 +20,7 @@ useModalDialog(dialog);
 const passphrase = ref("");
 const again = ref("");
 const listTitle = ref(props.title ?? "");
+const message = computed(() => mismatch.value || props.error);
 const asksPassphrase = computed(() => props.mode !== "title");
 const asksTitle = computed(() => props.mode !== "unlock");
 const mismatch = ref("");
@@ -39,7 +40,7 @@ function submit() {
   mismatch.value = "";
   if (props.mode === "create") {
     if (passphrase.value.length < MIN_LENGTH) return void (mismatch.value = `Use at least ${MIN_LENGTH} characters.`);
-    if (passphrase.value !== again.value) return void (mismatch.value = "The two passphrases differ.");
+    if (passphrase.value !== again.value) return void (mismatch.value = "The two passphrases differ. Type them again.");
   } else if (asksPassphrase.value && !passphrase.value) return;
   emit("submit", passphrase.value, listTitle.value);
 }
@@ -56,16 +57,19 @@ function submit() {
       </template>
       <template v-if="asksPassphrase">
         <label for="pass-input">Passphrase</label>
-        <input id="pass-input" v-model="passphrase" type="password" autocomplete="off" spellcheck="false" :autofocus="mode !== 'title'" :disabled="busy" />
+        <input id="pass-input" v-model="passphrase" type="password" :aria-invalid="message ? 'true' : undefined" aria-describedby="pass-error" autocomplete="off" spellcheck="false" :autofocus="mode !== 'title'" :disabled="busy" />
       </template>
       <template v-if="mode === 'create'">
         <label for="pass-again">Repeat passphrase</label>
-        <input id="pass-again" v-model="again" type="password" autocomplete="off" spellcheck="false" :disabled="busy" />
+        <input id="pass-again" v-model="again" type="password" :aria-invalid="message ? 'true' : undefined" aria-describedby="pass-error" autocomplete="off" spellcheck="false" :disabled="busy" />
       </template>
-      <p class="pass-error" role="alert">{{ mismatch || error }}</p>
+      <p id="pass-error" class="pass-error" role="alert">{{ message }}</p>
       <div class="actions">
         <button type="button" :disabled="busy" @click="emit('cancel')">Cancel</button>
-        <button type="submit" class="primary" :disabled="busy">{{ busy ? "Working..." : mode === "unlock" ? "Unlock" : mode === "title" ? "Save" : "Protect" }}</button>
+        <button type="submit" class="primary" :class="{ busy }" :disabled="busy">
+          <span class="label">{{ mode === "unlock" ? "Unlock" : mode === "title" ? "Save" : "Protect" }}</span>
+          <span v-if="busy" class="spin" aria-hidden="true"></span>
+        </button>
       </div>
     </form>
   </dialog>
