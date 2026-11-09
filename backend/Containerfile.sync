@@ -15,7 +15,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 ARG GIT_SHA=""
 ARG APP_VERSION=""
 LABEL org.opencontainers.image.title="Harper Pad sync" \
-      org.opencontainers.image.description="Harper Pad sync service: stores the end-to-end encrypted drafts of the optional sync." \
+      org.opencontainers.image.description="Harper Pad sync service: stores the drafts of the optional sync." \
       org.opencontainers.image.source="https://github.com/cthtrifork/harper-pad" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.revision="${GIT_SHA}" \
