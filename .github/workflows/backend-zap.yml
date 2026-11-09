@@ -63,7 +63,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.sync == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write # the SARIF upload
@@ -73,31 +73,45 @@ jobs:
         with:
           persist-credentials: false
 
-      # The Caddy service mounts frontend/dist-web; the scan does not use it, but the directory must exist.
+      # The Caddy service mounts frontend/dist-web; the scan does not use it, but the directory must exist. The large ZAP image is
+      # pulled while the stack builds instead of after.
       - name: Start the stack
+        timeout-minutes: 10
         run: |
           mkdir -p frontend/dist-web
+          docker pull -q "$ZAP_IMAGE" > /dev/null &
           docker compose -f backend/test/e2e/compose.yaml up -d --build --wait
+          wait
 
       # harper-pad-admin applies the schema (it owns the tables); harper-pad-sync is not ready until it has. The Makefile prefers
       # podman, which is also on the runner, so COMPOSE is set explicitly (the stack above was started with docker compose).
       - name: Wait for the schema
+        timeout-minutes: 3
         env:
           COMPOSE: docker compose
         run: make -C backend wait-schema
 
       # The scan runs in a container on the stack's network and talks to the service directly (plain http, as Caddy does).
-      # -m limits the spider, -T the whole scan (minutes). Exit 1 means a FAIL rule fired, 2 only warnings; anything above 2 is ZAP
-      # itself failing. The status is kept for the last step, so the report and the comment are written first.
+      # -m limits the spider and -T the wait for ZAP to start and the passive scan (minutes); neither bounds the active scan, which
+      # is capped by the -z options (the whole scan, and any one rule, in minutes). `timeout` is the backstop: it stops the container
+      # before the step timeout kills the runner, so the report and the comment are still written. Exit 1 means a FAIL rule fired,
+      # 2 only warnings; anything above 2 is ZAP itself failing (124 is the backstop). The status is kept for the last step.
       - name: Run ZAP
+        timeout-minutes: 18
+        env:
+          # Pull requests get a shorter active scan; the weekly and manual runs keep the long one.
+          SCAN_MINUTES: ${{ github.event_name == 'pull_request' && 5 || 10 }}
         run: |
           mkdir -p zap-out && chmod 777 zap-out
           set +e
-          docker run --rm --network harper-pad-e2e_default \
+          timeout --kill-after=30s 14m docker run --rm --name zap --network harper-pad-e2e_default \
             -v "$PWD/backend/test/zap:/zap/wrk/rules:ro" -v "$PWD/zap-out:/zap/wrk/out" \
             "$ZAP_IMAGE" zap-full-scan.py -t http://sync:8080 -c rules/rules.tsv \
-            -m 5 -T 15 -r out/report.html -J out/report.json
-          echo $? > zap-out/status
+            -m 2 -T 5 -z "-config scanner.threadPerHost=8 -config scanner.maxScanDurationInMins=$SCAN_MINUTES -config scanner.maxRuleDurationInMins=2" \
+            -r out/report.html -J out/report.json
+          status=$?
+          docker rm -f zap > /dev/null 2>&1
+          echo $status > zap-out/status
 
       # Annotations (errors for FAIL rules, warnings for the rest) and a markdown table for the job summary.
       - name: Report
@@ -151,6 +165,7 @@ jobs:
 
       - name: Show the service log and stop the stack
         if: always()
+        timeout-minutes: 3
         run: |
           docker compose -f backend/test/e2e/compose.yaml logs --no-color --tail 100 sync
           docker compose -f backend/test/e2e/compose.yaml down -v
