@@ -249,10 +249,13 @@ check("protection is not reported, and nothing changes, when the encrypted write
   assert.equal(t.drafts.listTitle.value, "Plan", "the title is put back");
   assert.equal(t.drafts.protectedDraft.value, true, "still protected, and still unlocked");
   assert.equal(t.drafts.locked.value, false);
+
+  t.type("# Plan\nunsaved before rewrite");
+  await assert.rejects(t.drafts.setListTitle("A failed title"), /disk full/);
+  assert.equal(t.drafts.state.value, "dirty", "the edit that was already unsaved remains dirty");
   t.fail.saves = false;
-  t.type("# Plan\nmore");
   await t.flushAll();
-  assert.ok(isProtected(String(t.store.get(A)?.content)));
+  assert.equal((await unlockEnvelope(String(t.store.get(A)?.content), A, PW)).content, "# Plan\nunsaved before rewrite");
 });
 
 check("a protect that finishes after the draft was left changes nothing", async () => {
@@ -280,6 +283,36 @@ check("an unlock that finishes after the app was backgrounded installs no key", 
   await assert.rejects(pending, /changed while it was being unlocked/);
   assert.equal(t.drafts.locked.value, true);
   assert.equal(t.editor.value.text, "");
+});
+
+check("a pending protected reload cannot load plaintext after locking", async () => {
+  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
+  t.editor.value.text = t.open(A);
+  await t.drafts.protect(PW, "Plan");
+
+  const subtle = crypto.subtle as unknown as { decrypt: (...args: unknown[]) => Promise<ArrayBuffer> };
+  const decrypt = subtle.decrypt.bind(crypto.subtle);
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => (started = resolve));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  subtle.decrypt = async (...args) => {
+    started();
+    await gate;
+    return decrypt(...args);
+  };
+  try {
+    const pending = t.drafts.reloadCurrent();
+    await entered;
+    await t.drafts.lock();
+    release();
+    await pending;
+    assert.equal(t.drafts.locked.value, true);
+    assert.equal(t.editor.value.text, "");
+  } finally {
+    subtle.decrypt = decrypt;
+    release();
+  }
 });
 
 check("a copy of a protected draft is refused while it is locked, never saved as plain text", async () => {

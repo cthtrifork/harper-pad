@@ -246,13 +246,16 @@ export function useDrafts(
 
   // The text the editor shows for `d`, which setCurrent has just made the open draft: its own text, the decrypted text of a protected draft
   // that is still unlocked (the key is the same while the salt is), or "" while it is locked.
-  async function plainOf(d: Stored): Promise<string> {
+  async function plainOf(d: Stored, at = epoch, editAt = edits): Promise<string | null> {
     if (!protectedDraft.value) return d.content ?? "";
-    if (session) {
-      const t = await openWith(session, envelope, d.id);
-      if (t) {
+    const key = session;
+    if (key) {
+      const sealed = envelope;
+      const t = await openWith(key, sealed, d.id);
+      if (epoch !== at || current.value.id !== d.id || session !== key || locked.value || edits !== editAt) return null;
+      if (t !== null) {
         stored = { text: t, format: d.format };
-        listTitle.value = clearTitle(envelope);
+        listTitle.value = clearTitle(sealed);
         return t;
       }
       dropSession(); // another device protected it again with another passphrase
@@ -311,6 +314,7 @@ export function useDrafts(
   // fails it is all put back, nothing is reported as done, and the error is thrown.
   async function rewriteAs(change: () => void) {
     const before = { session, prot: protectedDraft.value, locked: locked.value, title: listTitle.value, envelope, stored };
+    const wasDirty = dirty;
     change();
     stored = null; // the text did not change, but its stored form did
     dirty = true;
@@ -325,7 +329,7 @@ export function useDrafts(
     listTitle.value = before.title;
     envelope = before.envelope;
     stored = before.stored;
-    dirty = edits !== mine; // text typed meanwhile still needs its own save
+    dirty = wasDirty || edits !== mine; // text already unsaved or typed meanwhile still needs its own save
     state.value = dirty ? "dirty" : "saved";
     error.value = "";
     throw new Error(why || "Not saved.");
@@ -538,11 +542,25 @@ export function useDrafts(
     },
     // The draft takes the file's text (it has no edits of its own), without pushing: the dialog pushes.
     applyFile: () => reloadFromFile({ push: false }),
-    current: () => ({ id: current.value.id, text: editor.value?.getText() ?? "", updatedAt: current.value.updatedAt }),
+    current: () => ({
+      id: current.value.id,
+      text: editor.value?.getText() ?? "",
+      format: current.value.format,
+      updatedAt: current.value.updatedAt,
+      revision: edits,
+    }),
     // A locked draft has no dialog until it is unlocked: its versions cannot be compared or copied without the key.
     locked: () => locked.value,
     // The text of a version held elsewhere (the server). null when it is protected with a key this device does not hold.
-    plain: async (text: string) => (isProtected(text) ? (session ? openWith(session, text, current.value.id) : null) : text),
+    async plain(text: string) {
+      if (!isProtected(text)) return text;
+      const key = session;
+      const id = current.value.id;
+      const at = epoch;
+      if (!key || locked.value) return null;
+      const plain = await openWith(key, text, id);
+      return epoch === at && current.value.id === id && session === key && !locked.value ? plain : null;
+    },
   };
 
   // "Reload from file" in the toast: the draft's text becomes the file's text, as one edit that Ctrl+Z takes back. Go reads the stored path and
@@ -820,8 +838,13 @@ export function useDrafts(
     try {
       const d = await be.getDraft(id);
       setCurrent(d);
-      editor.value?.load(await plainOf(d), d.format);
+      const at = epoch;
+      const editAt = edits;
+      const text = await plainOf(d, at, editAt);
+      if (text === null || epoch !== at || current.value.id !== d.id || edits !== editAt) return;
+      editor.value?.load(text, d.format);
       await checkDone;
+      if (epoch !== at || current.value.id !== d.id) return;
       onOpened?.(d.id);
     } catch (err) {
       showToast(`Could not open the draft: ${message(err)}`);
@@ -835,12 +858,19 @@ export function useDrafts(
   // Shows the stored version of the open draft again (a newer one was stored by sync). Does nothing if something was typed meanwhile.
   async function reloadCurrent() {
     if (!current.value.id || !canReplace()) return;
-    const d = await be.getDraft(current.value.id);
+    const id = current.value.id;
+    const before = epoch;
+    const d = await be.getDraft(id);
+    if (epoch !== before || current.value.id !== id || !canReplace()) return;
     const was = stored?.text;
     setCurrent(d);
+    const at = epoch;
+    const editAt = edits;
     // Newer text from the server: the linked file now lags the draft, so the next Ctrl+S writes it (and asks first if the file changed).
     if (current.value.filePath && was !== d.content) fileState.value = "stale";
-    editor.value?.load(await plainOf(d), d.format, true); // same draft, newer text: the person's selection stays
+    const text = await plainOf(d, at, editAt);
+    if (text === null || epoch !== at || current.value.id !== d.id || edits !== editAt || !canReplace()) return;
+    editor.value?.load(text, d.format, true); // same draft, newer text: the person's selection stays
   }
 
   async function create() {

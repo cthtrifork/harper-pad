@@ -388,11 +388,11 @@ export function useSync({
   };
 
   // The server's version becomes this device's (see createSyncer.takeServer), and the open draft shows it. False when it did not happen.
-  function takeServer(id: string): Promise<boolean> {
+  function takeServer(id: string, guard: Parameters<Syncer["takeServer"]>[1]): Promise<boolean> {
     if (!device || status.value === "signin") return Promise.resolve(false);
     const taken = chain.then(async () => {
       try {
-        const ok = await syncer().takeServer(id);
+        const ok = await syncer().takeServer(id, guard);
         if (ok) openHooks.onSwapped?.();
         return ok;
       } catch (err) {

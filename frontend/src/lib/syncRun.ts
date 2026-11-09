@@ -103,7 +103,7 @@ export function createSyncer({
   async function stripped(id: string, doc: Doc) {
     const mine = await drafts.get(id).catch(() => null);
     if (!mine || !isProtected(mine.content) || isProtected(parseData(doc).content)) return false;
-    await upload(mine, stateOf(doc));
+    if (!(await upload(mine, stateOf(doc)))) throw new SyncError("server", "Could not restore the protected draft.");
     onStripped(id);
     return true;
   }
@@ -329,13 +329,17 @@ export function createSyncer({
       throw new SyncError("server", "The settings changed on the server. Try again.");
     },
 
-    // The server's version becomes this device's, whatever the local one holds: for protected versions that decrypt to the same text (their
-    // ciphertexts differ by nonce, so the hashes do), and for a protected draft the person accepted as plain text. False when there is none.
-    async takeServer(id: string) {
+    // The compared server version becomes this device's only while its stamp and the local revision still match. False when either moved.
+    async takeServer(
+      id: string,
+      { stamp, updatedAt, stillCurrent = () => true }: { stamp: string; updatedAt: number; stillCurrent?: () => boolean },
+    ) {
       const doc = await getDoc({ device, id, fetchFn });
-      if (!doc || doc.deleted) return false;
+      if (!doc || doc.deleted || `${doc.version}:${doc.updatedAt}` !== stamp || !stillCurrent()) return false;
+      const mine = await drafts.get(id).catch(() => null);
+      if (!mine || mine.updatedAt !== updatedAt || !stillCurrent()) return false;
       await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
-      return true;
+      return stillCurrent();
     },
 
     // Only if the server still holds the tombstone. Resolves to the removed draft, so the caller can offer Undo.

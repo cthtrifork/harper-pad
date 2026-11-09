@@ -1,9 +1,13 @@
 import { ref, watch } from "vue";
 import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
+import { isProtected } from "./protect.ts";
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
-type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked">;
+type DraftsApi = Pick<
+  ReturnType<typeof useDrafts>,
+  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "protectedDraft"
+>;
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
@@ -25,7 +29,7 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     const mine = ++building;
     const id = drafts.current.value.id;
     const f = drafts.fileConflict.value?.id === id ? drafts.fileConflict.value : null;
-    let sv: { text: string; stamp: string; updatedAt: number } | null =
+    let sv: { text: string; format: string; stamp: string; updatedAt: number } | null =
       sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
     if ((!f && !sv) || drafts.locked.value) {
       model.value = null; // nothing differs, or the draft is locked: it is looked at again when it is unlocked
@@ -36,6 +40,12 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       await sync.checkNow(id);
       if (mine !== building) return;
       sv = sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
+    }
+    if (sv) {
+      const latest = await sync.inspectServer(id);
+      if (mine !== building) return;
+      if (latest === null) sv = null;
+      else if (latest) sv = latest;
     }
     let file: ConflictModel["file"] = null;
     let server: ConflictModel["server"] = null;
@@ -66,9 +76,35 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     if (mine !== building) return;
     // A protected draft's versions differ by their nonce even when the text is the same: nothing differs after all, so the server's version
     // is taken as this device's and there is no dialog.
-    if (!f && server && server.text === drafts.dialog.current().text) {
+    const compared = drafts.dialog.current();
+    const comparedProtected = drafts.protectedDraft.value;
+    if (
+      !f &&
+      server &&
+      server.text === compared.text &&
+      sv?.format === compared.format &&
+      compared.updatedAt !== undefined &&
+      (!comparedProtected || (!!sv && isProtected(sv.text)))
+    ) {
       model.value = null;
-      if (await sync.takeServer(id)) sync.clearConflict();
+      const stillCurrent = () => {
+        const now = drafts.dialog.current();
+        return (
+          now.id === compared.id &&
+          now.updatedAt === compared.updatedAt &&
+          now.text === compared.text &&
+          now.format === compared.format &&
+          now.revision === compared.revision &&
+          drafts.protectedDraft.value === comparedProtected &&
+          !drafts.locked.value
+        );
+      };
+      const stamp = sv?.stamp ?? "";
+      if (await sync.takeServer(id, { stamp, updatedAt: compared.updatedAt, stillCurrent })) sync.clearConflict();
+      else if (mine === building) {
+        const latest = await sync.inspectServer(id);
+        if (mine === building && (!stillCurrent() || latest === null || (latest && latest.stamp !== stamp))) await build();
+      }
       return;
     }
     const yours = f?.clean ? (file as { text: string }).text : drafts.dialog.current().text;

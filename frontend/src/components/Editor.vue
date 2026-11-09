@@ -57,6 +57,10 @@ watch(
   () => view && relint(view),
 );
 watch(
+  () => props.isolated,
+  () => view && relint(view),
+);
+watch(
   () => [props.format, props.source] as const,
   ([format, source]) => view && setMode(view, { format, source }),
 );

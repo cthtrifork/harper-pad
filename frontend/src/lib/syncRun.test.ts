@@ -91,7 +91,14 @@ function device(server, stripped = []) {
     inspect: (id) => syncer().inspect(id),
     probe: (id) => syncer().probe(id),
     force: (id) => syncer().force(id),
-    take: (id) => syncer().takeServer(id),
+    take: async (id, guard) => {
+      const engine = syncer();
+      const expected = guard ?? {
+        stamp: (await engine.inspect(id)).stamp,
+        updatedAt: (await drafts.get(id)).updatedAt,
+      };
+      return engine.takeServer(id, expected);
+    },
   };
 }
 const none = { uploaded: 0, downloaded: 0, removed: 0, failed: 0, skipped: 0 };
@@ -516,6 +523,65 @@ test("a protected draft syncs as ciphertext, opens on the other device, and a pl
   assert.deepEqual(stripped, [d.id]);
   assert.ok(JSON.parse(server.rows.get(d.id).data).content.startsWith("hp-protected:1:"), "and the server's plain copy is replaced");
   assert.deepEqual(await b.sync(), none);
+});
+
+test("a failed compare-and-set while restoring a stripped protected draft is reported and never applied", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const cost = { memoryKiB: 64, passes: 1 };
+  const d = await a.drafts.save({ content: "placeholder" });
+  const envelope = await seal(await newSession("pw", cost), d.id, "the secret text", "");
+  await tick();
+  await a.drafts.save({ id: d.id, content: envelope });
+  await a.sync();
+  await b.sync();
+
+  const row = server.rows.get(d.id);
+  server.rows.set(d.id, {
+    ...row,
+    version: row.version + 1,
+    updatedAt: row.updatedAt + 1000,
+    data: JSON.stringify({ v: 1, format: "markdown", content: "stripped" }),
+  });
+  const stripped = [];
+  const race = async (url, init) =>
+    init.method === "PUT" && url.includes(d.id)
+      ? { status: 409, json: async () => ({ current: server.rows.get(d.id) }) }
+      : server.fetchFn(url, init);
+  const engine = createSyncer({ device: DEVICE, drafts: b.drafts, fetchFn: race, onStripped: (id) => stripped.push(id) });
+
+  assert.deepEqual(await engine.all(), sum({ failed: 1 }));
+  assert.equal((await b.drafts.get(d.id)).content, envelope);
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "stripped");
+  assert.deepEqual(stripped, []);
+});
+
+test("taking a compared server version refuses a changed server stamp or local revision", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const d = await a.drafts.save({ content: "start" });
+  await a.sync();
+  await b.sync();
+
+  const observed = await b.inspect(d.id);
+  const local = await b.drafts.get(d.id);
+  const row = server.rows.get(d.id);
+  server.rows.set(d.id, { ...row, version: row.version + 1, updatedAt: row.updatedAt + 1 });
+  assert.equal(await b.take(d.id, { stamp: observed.stamp, updatedAt: local.updatedAt }), false);
+  assert.equal((await b.drafts.get(d.id)).content, "start");
+
+  server.rows.set(d.id, row);
+  const racingFetch = async (url, init) => {
+    if (init.method === "GET" && url.includes(d.id)) {
+      await b.drafts.save({ ...local, content: "new local edit" });
+    }
+    return server.fetchFn(url, init);
+  };
+  const engine = createSyncer({ device: DEVICE, drafts: b.drafts, fetchFn: racingFetch });
+  assert.equal(await engine.takeServer(d.id, { stamp: observed.stamp, updatedAt: local.updatedAt }), false);
+  assert.equal((await b.drafts.get(d.id)).content, "new local edit");
 });
 
 test("two protected versions of the same text are reconciled by taking the server's, which ends the conflict for good", async () => {
