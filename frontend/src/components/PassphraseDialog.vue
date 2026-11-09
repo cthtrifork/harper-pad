@@ -47,7 +47,7 @@ function submit() {
 </script>
 
 <template>
-  <dialog ref="dialog" class="choice-dialog pass-dialog" aria-labelledby="pass-title" aria-describedby="pass-text" @cancel.prevent="emit('cancel')">
+  <dialog ref="dialog" class="choice-dialog pass-dialog" aria-labelledby="pass-title" aria-describedby="pass-text" @cancel.prevent="!busy && emit('cancel')">
     <form @submit.prevent="submit">
       <h2 id="pass-title">{{ heading }}</h2>
       <p id="pass-text">{{ text }}</p>

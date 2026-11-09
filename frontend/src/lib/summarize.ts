@@ -46,9 +46,11 @@ export function summarize(content: string) {
     }
     if (!m) rest.push(line); // task lines are shown as tasks, so they stay out of the excerpt
   }
+  let excerpt = clip(rest.join(" ").split(/\s+/).filter(Boolean).join(" "), 160);
+  if (excerpt === PROTECTED_MARK) excerpt += "\u200b"; // a plain draft must not look like a protected one in the list
   return {
     title: title || "Untitled",
-    excerpt: clip(rest.join(" ").split(/\s+/).filter(Boolean).join(" "), 160),
+    excerpt,
     tasks,
     tasksTotal: total,
     tasksDone: done,

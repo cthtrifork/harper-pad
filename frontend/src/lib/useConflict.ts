@@ -1,12 +1,12 @@
 import { ref, watch } from "vue";
 import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
-import { isProtected } from "./protect.ts";
+import { clearTitle, isProtected } from "./protect.ts";
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
 type DraftsApi = Pick<
   ReturnType<typeof useDrafts>,
-  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "protectedDraft"
+  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "protectedDraft" | "listTitle"
 >;
 
 type SyncApi = Pick<
@@ -84,7 +84,7 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       server.text === compared.text &&
       sv?.format === compared.format &&
       compared.updatedAt !== undefined &&
-      (!comparedProtected || (!!sv && isProtected(sv.text)))
+      (!comparedProtected || (!!sv && isProtected(sv.text) && clearTitle(sv.text) === drafts.listTitle.value))
     ) {
       model.value = null;
       const stillCurrent = () => {

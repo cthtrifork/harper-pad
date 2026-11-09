@@ -304,8 +304,10 @@ export function useDrafts(
   async function otherProtected(exceptId: string) {
     for (let offset = 0; ; offset += SCAN) {
       const page = await be.listDrafts(SCAN, offset);
-      const hit = page.drafts.find((d) => d.id !== exceptId && isProtectedSummary(d));
-      if (hit) return be.getDraft(hit.id);
+      for (const hit of page.drafts.filter((d) => d.id !== exceptId && isProtectedSummary(d))) {
+        const full = await be.getDraft(hit.id);
+        if (typeof full?.content === "string" && isProtected(full.content)) return full; // the summary alone is not proof
+      }
       if (page.drafts.length < SCAN) return null;
     }
   }
@@ -973,6 +975,10 @@ export function useDrafts(
   // Save what is unsaved when the window is about to go away or loses focus.
   const onLeave = () => {
     flush();
+    void lock(); // switching to another application leaves the window visible, so this is the background too
+  };
+  const onPageHide = () => {
+    flush();
   };
   const onVisibility = () => {
     if (document.visibilityState === "hidden") {
@@ -982,14 +988,14 @@ export function useDrafts(
   };
   function attach() {
     window.addEventListener("blur", onLeave);
-    window.addEventListener("pagehide", onLeave);
+    window.addEventListener("pagehide", onPageHide);
     window.addEventListener("focus", checkFile);
     document.addEventListener("visibilitychange", onVisibility);
     for (const ev of ["keydown", "pointerdown", "wheel"]) window.addEventListener(ev, touch, { passive: true });
   }
   function detach() {
     window.removeEventListener("blur", onLeave);
-    window.removeEventListener("pagehide", onLeave);
+    window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("focus", checkFile);
     document.removeEventListener("visibilitychange", onVisibility);
     for (const ev of ["keydown", "pointerdown", "wheel"]) window.removeEventListener(ev, touch);
