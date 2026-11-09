@@ -11,6 +11,7 @@ export const PREFIX = "hp-protected:1:";
 // 32 MiB, 3 passes, 1 lane. `memoryKiB` and `passes` are parameters for the tests.
 export const COST = { memoryKiB: 32 * 1024, passes: 3 };
 
+/** The passphrase is wrong, or the stored draft was changed (its text, id or title): the seal cannot tell the two apart. */
 export class WrongPassphrase extends Error {
   constructor() {
     super("Wrong passphrase.");
@@ -33,7 +34,9 @@ interface Envelope {
 
 const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const unb64 = (text: string) => Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0));
-const aad = (id: string) => new TextEncoder().encode(id);
+// What the seal covers besides the text: the draft id, and the title that sits beside the ciphertext, so the server can neither move a copy to
+// another draft nor change or swap a title unnoticed. A draft without a title is covered by its id alone.
+const aad = (id: string, title: string) => new TextEncoder().encode(title ? `${id}\n${title}` : id);
 
 export const isProtected = (content: string) => content.startsWith(PREFIX);
 
@@ -86,7 +89,7 @@ export async function newSession(passphrase: string, cost = COST): Promise<Sessi
 export async function seal(session: Session, id: string, content: string, title: string): Promise<string> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const plain = new TextEncoder().encode(JSON.stringify({ v: 1, content }));
-  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(id) }, session.key, plain);
+  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(id, title) }, session.key, plain);
   const env: Envelope = { s: b64(session.salt), n: b64(nonce), c: b64(new Uint8Array(cipher)) };
   if (title) env.t = title;
   return PREFIX + JSON.stringify(env);
@@ -99,7 +102,7 @@ export async function unlock(content: string, id: string, passphrase: string, co
   const key = await deriveKey(passphrase, salt, cost);
   let plain: ArrayBuffer;
   try {
-    plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id) }, key, unb64(env.c));
+    plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id, env.t ?? "") }, key, unb64(env.c));
   } catch {
     throw new WrongPassphrase();
   }
@@ -120,7 +123,11 @@ export async function openWith(session: Session, content: string, id: string): P
   const salt = unb64(env.s);
   if (salt.length !== session.salt.length || salt.some((b, i) => b !== session.salt[i])) return null;
   try {
-    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id) }, session.key, unb64(env.c));
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id, env.t ?? "") },
+      session.key,
+      unb64(env.c),
+    );
     const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown };
     return typeof body.content === "string" ? body.content : null;
   } catch {

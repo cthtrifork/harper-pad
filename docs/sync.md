@@ -358,11 +358,13 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 ### Cryptography
 
 - The key comes from the passphrase and a random salt that is kept with the draft, through Argon2id, a hash made slow and memory-hungry
-  on purpose. The text is sealed with AES-256-GCM, with the draft id as additional data, so a copy cannot be moved to another
-  draft. A wrong passphrase fails the check built into GCM, so no check value is stored.
+  on purpose. The text is sealed with AES-256-GCM. The check covers the draft id and the title, so a copy cannot be moved to
+  another draft and a title cannot be changed or swapped unnoticed. A wrong passphrase, or a draft that was changed, fails the check
+  built into GCM, so no check value is stored, and the two cannot be told apart.
 - Local storage holds the same ciphertext as the server. The text is decrypted only in memory, and what is derived from it (lint
   results, search, undo history, autosave copies, exports) stays in memory or is skipped.
-- The "protected" flag is kept on the device. A server that serves a protected draft as plain text is refused, not shown.
+- Sync never replaces a protected draft with a plain one from the server, which could only be the server stripping the protection, and says
+  so. Protection is removed on a device, and that travels as an ordinary change.
 
 ### Limits
 
@@ -373,6 +375,7 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   cannot tell. It cannot read or forge one.
 - The server keeps one row per draft, so protecting a draft replaces its plain text there. Database backups can still hold earlier plain
   versions, and ciphertext versions after protection is removed.
-- A title given to a protected draft is readable by the server, so it should not give the text away.
+- A title given to a protected draft is readable by the server, so it should not give the text away. A title the server changed is only
+  noticed when the draft is opened; until then the draft list shows what the server sent.
 - Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server that
   serves modified web app code.

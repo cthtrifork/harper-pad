@@ -144,7 +144,7 @@ async function submitPass(passphrase: string, title: string) {
     else await drafts.protect(passphrase, title);
     pass.value = null;
   } catch (err) {
-    passError.value = err instanceof WrongPassphrase ? "Wrong passphrase. Try again." : String((err as Error)?.message || err);
+    passError.value = err instanceof WrongPassphrase ? "Wrong passphrase, or the draft was changed on the server. Try again." : String((err as Error)?.message || err);
   } finally {
     passBusy.value = false;
   }

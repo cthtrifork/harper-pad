@@ -77,3 +77,15 @@ test("a draft protected before titles existed lists as Locked draft and still op
   assert.equal(clearTitle(old), "");
   assert.equal((await unlock(old, ID, "pw", cost)).content, body);
 });
+
+test("a changed, removed or added title is detected, because the seal covers it", async () => {
+  const session = await newSession("pw", cost);
+  const withTitle = JSON.parse((await seal(session, ID, body, title)).slice("hp-protected:1:".length));
+  const without = JSON.parse((await seal(session, ID, body, "")).slice("hp-protected:1:".length));
+  const pack = (env) => `hp-protected:1:${JSON.stringify(env)}`;
+  await assert.rejects(unlock(pack({ ...withTitle, t: "Payroll passwords" }), ID, "pw", cost), WrongPassphrase);
+  const { t: _gone, ...stripped } = withTitle;
+  await assert.rejects(unlock(pack(stripped), ID, "pw", cost), WrongPassphrase);
+  await assert.rejects(unlock(pack({ ...without, t: title }), ID, "pw", cost), WrongPassphrase);
+  assert.equal((await unlock(pack(withTitle), ID, "pw", cost)).content, body); // untouched still opens
+});

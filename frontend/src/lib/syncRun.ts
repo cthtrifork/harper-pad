@@ -2,6 +2,7 @@
 // uploaded, downloaded or removed by this code only. `device` and `fetchFn` are the server, `drafts` the local store. Every decision is
 // recomputed from stored state, so a run that stops halfway (offline, a phone suspended) is just a partial one.
 import { contentHash } from "./contentHash.ts";
+import { isProtected } from "./protect.ts";
 import { changesTo, cleanLists, readSettings, sameLists, unionLists } from "./settingsItems.ts";
 import type { SettingsSyncRecord } from "./settingsSync.ts";
 import { type Doc, getDoc, getDocIfChanged, getSetting, listDocs, pushDraft, pushTombstone, putSetting } from "./syncClient.ts";
@@ -95,6 +96,15 @@ export function createSyncer({
     return true;
   }
 
+  // A protected draft is never replaced by a plain one from the server: it could only be the server stripping the protection, and the text
+  // typed next would then be stored unprotected. A real removal of protection happens on a device and is a change there, not a download.
+  async function downgrades(id: string, remote: { content: string }) {
+    const mine = await drafts.get(id).catch(() => null);
+    if (!mine || !isProtected(mine.content) || isProtected(remote.content)) return false;
+    onRejected(id, "the server sent this protected draft as plain text");
+    return true;
+  }
+
   // Does what `decide` says. Resolves to the count it adds to, "conflict", "" for nothing to do, or "stale" when `guessed` is set and the
   // server refused the upload because its state was not the one assumed.
   async function settleOne(
@@ -129,6 +139,7 @@ export function createSyncer({
     if (action === "download") {
       const doc = await getDoc({ device, id, fetchFn });
       if (!doc || doc.deleted) return "";
+      if (await downgrades(id, parseData(doc))) return "failed";
       await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
       return "downloaded";
     }
@@ -209,6 +220,7 @@ export function createSyncer({
       if (action === "remove-local") return "deleted"; // deleted on another device, and nothing was changed here: the person decides
       if (action !== "download") return "none";
       if (!canSwap()) return "newer";
+      if (await downgrades(id, parseData(got.doc))) return "none";
       await drafts.applyRemote({ id, ...parseData(got.doc), createdAt: got.doc.createdAt, updatedAt: got.doc.updatedAt }, got.doc.version);
       return "updated";
     },
