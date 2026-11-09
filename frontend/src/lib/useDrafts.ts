@@ -7,6 +7,7 @@ import {
   clearTitle,
   isProtected,
   isProtectedSummary,
+  newDraftId,
   newSession,
   openWith,
   type Session,
@@ -491,7 +492,10 @@ export function useDrafts(
     },
     // A new, ordinary, unlinked draft; labelled "Conflicted copy" in memory only. Returns its id.
     async saveCopy(text: string, from: string) {
-      const d = await be.saveDraft({ format: current.value.format, content: text });
+      // A copy of a protected draft is protected too, sealed under its own id with the key already held.
+      const id = protectedDraft.value && session ? newDraftId() : undefined;
+      const content = id && session ? await seal(session, id, text, listTitle.value) : text;
+      const d = await be.saveDraft({ id, format: current.value.format, content });
       copies.value = { ...copies.value, [d.id]: from };
       refreshListSoon();
       onSaved?.(d.id);
@@ -505,12 +509,11 @@ export function useDrafts(
     },
     // The draft takes the file's text (it has no edits of its own), without pushing: the dialog pushes.
     applyFile: () => reloadFromFile({ push: false }),
-    // A protected draft is compared and sent as its stored envelope, never as the text on screen.
-    current: () => ({
-      id: current.value.id,
-      text: protectedDraft.value ? envelope : (editor.value?.getText() ?? ""),
-      updatedAt: current.value.updatedAt,
-    }),
+    current: () => ({ id: current.value.id, text: editor.value?.getText() ?? "", updatedAt: current.value.updatedAt }),
+    // A locked draft has no dialog until it is unlocked: its versions cannot be compared or copied without the key.
+    locked: () => locked.value,
+    // The text of a version held elsewhere (the server). null when it is protected with a key this device does not hold.
+    plain: async (text: string) => (isProtected(text) ? (session ? openWith(session, text, current.value.id) : null) : text),
   };
 
   // "Reload from file" in the toast: the draft's text becomes the file's text, as one edit that Ctrl+Z takes back. Go reads the stored path and

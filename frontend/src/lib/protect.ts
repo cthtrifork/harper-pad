@@ -108,6 +108,11 @@ export async function unlock(content: string, id: string, passphrase: string, co
   return { session: { key, salt }, content: body.content };
 }
 
+/** A new draft id: 32 lowercase hex digits, as the stores make them. A protected copy needs its id before it is sealed. */
+export function newDraftId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /** Opens a newer version of a draft that is already unlocked, with the same key (the salt must be the same). null: another salt, so it
  * needs the passphrase again. */
 export async function openWith(session: Session, content: string, id: string): Promise<string | null> {

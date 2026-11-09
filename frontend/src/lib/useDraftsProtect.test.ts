@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ref } from "vue";
-import { isProtected, isProtectedSummary, WrongPassphrase } from "./protect.ts";
+import { isProtected, isProtectedSummary, unlock as unlockEnvelope, WrongPassphrase } from "./protect.ts";
 import { summarize } from "./summarize.ts";
 import { useDrafts } from "./useDrafts.ts";
 
@@ -187,4 +187,33 @@ check("a draft linked to a file cannot be protected, and a protected draft never
   await t.drafts.saveFile(true);
   await t.drafts.saveFile(false);
   assert.equal(t.fileWrites.length, 0);
+});
+
+check("a Conflicted copy of a protected draft is protected, under its own id, and opens with the same passphrase", async () => {
+  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
+  t.editor.value.text = t.open(A);
+  await t.drafts.protect(PW, "Plan");
+  const theirs = await t.drafts.dialog.plain(String(t.store.get(A)?.content));
+  assert.equal(theirs, "# Plan\nsecret words"); // a version from the server opens with the key held
+  const id = await t.drafts.dialog.saveCopy("# Plan\nthe server text", "server");
+  const copy = String(t.store.get(id)?.content);
+  assert.notEqual(id, A);
+  assert.ok(isProtected(copy) && !copy.includes("server text"));
+  assert.equal(t.store.get(id)?.title, "Plan");
+  assert.equal((await unlockEnvelope(copy, id, PW)).content, "# Plan\nthe server text");
+});
+
+check("a locked draft has no dialog, and a version it cannot open is not compared", async () => {
+  const w = setup({ [A]: { content: "# Plan\nsecret words" } });
+  w.editor.value.text = w.open(A);
+  await w.drafts.protect(PW, "Plan");
+  const envelope = String(w.store.get(A)?.content);
+
+  const t = setup({ [A]: { content: envelope } });
+  t.open(A);
+  assert.equal(t.drafts.dialog.locked(), true);
+  assert.equal(await t.drafts.dialog.plain(envelope), null);
+  await t.drafts.unlock(PW);
+  assert.equal(t.drafts.dialog.locked(), false);
+  assert.equal(await t.drafts.dialog.plain("plain server text"), "plain server text");
 });

@@ -349,8 +349,9 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 - **More than one device.** The server holds the ciphertext, so a protected draft syncs like any other. Each device unlocks it with the same
   passphrase, which is never sent anywhere, so it has to be typed on every device. A device that has not received a protected draft yet
   cannot tell that a passphrase exists, so protect the first draft on one device, let it sync, and only then protect drafts on the others.
-  Two devices that edit the same protected draft at once get the usual Keep or Overwrite question, and Keep makes a second protected copy
-  that opens with the same passphrase.
+  Two devices that edit the same protected draft at once get the usual Keep or Overwrite question. The versions are opened and
+  compared as text, so identical text is no conflict, and Keep makes a second protected copy that opens with the same passphrase. A locked
+  draft has no question until it is unlocked, and a version protected with a different passphrase is not compared.
 - **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, remove protection
   from every draft, then protect them again.
 

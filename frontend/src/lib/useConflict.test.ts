@@ -22,6 +22,7 @@ function setup({
   let currentServer = serverNow;
   const drafts = {
     current: ref({ id: ID, filePath: "/home/me/plan.md" }),
+    locked: ref(false),
     fileConflict,
     clearFileConflict: () => {
       fileConflict.value = null;
@@ -38,6 +39,7 @@ function setup({
       writeFile: async () => log.push("write"),
       applyFile: async () => log.push("applyFile"),
       current: () => ({ id: ID, text: draftText }),
+      plain: async (t) => t,
     },
   };
   const sync = {
@@ -146,4 +148,27 @@ test("the file's version stamp (its modified time in nanoseconds) becomes a time
   await settle();
   assert.equal(c.model.value.file.at, 1793995200123);
   assert.equal(new Date(c.model.value.file.at).toISOString(), "2026-11-06T20:00:00.123Z");
+});
+
+test("a locked protected draft has no dialog until it is unlocked, and the server's version is compared as text", async () => {
+  const { c, drafts, sync } = setup({ server: { text: "envelope-from-server" } });
+  (drafts.dialog as { plain: (t: string) => Promise<string | null> }).plain = async (t) =>
+    t === "envelope-from-server" ? "server text" : t;
+  drafts.locked.value = true;
+  await settle();
+  assert.equal(c.model.value, null);
+  drafts.locked.value = false;
+  await settle();
+  assert.equal(c.model.value?.server?.text, "server text");
+  assert.ok(sync.serverConflict.value);
+});
+
+test("a version that cannot be opened with the key held is not shown as a conflict", async () => {
+  const { c, drafts } = setup({ server: {} });
+  (drafts.dialog as { plain: (t: string) => Promise<string | null> }).plain = async () => null;
+  drafts.locked.value = true; // look again, as an unlock does
+  await settle();
+  drafts.locked.value = false;
+  await settle();
+  assert.equal(c.model.value, null);
 });

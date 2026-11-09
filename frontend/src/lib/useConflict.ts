@@ -3,7 +3,7 @@ import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolve
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
-type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict">;
+type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked">;
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
@@ -27,8 +27,8 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     const f = drafts.fileConflict.value?.id === id ? drafts.fileConflict.value : null;
     let sv: { text: string; stamp: string; updatedAt: number } | null =
       sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
-    if (!f && !sv) {
-      model.value = null;
+    if ((!f && !sv) || drafts.locked.value) {
+      model.value = null; // nothing differs, or the draft is locked: it is looked at again when it is unlocked
       return;
     }
     // A conflict with the file alone: look at the server too, so a draft that conflicts with both gets one dialog covering both.
@@ -53,7 +53,16 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       if (mine === building) model.value = null;
       return;
     }
-    if (sv) server = { text: sv.text, stamp: sv.stamp, at: sv.updatedAt };
+    if (sv) {
+      // Compared and copied as text: a protected draft's version is opened with the key held, or left alone when that is not possible.
+      const text = await drafts.dialog.plain(sv.text);
+      if (mine !== building) return;
+      if (text === null) {
+        model.value = null;
+        return;
+      }
+      server = { text, stamp: sv.stamp, at: sv.updatedAt };
+    }
     if (mine !== building) return;
     const yours = f?.clean ? (file as { text: string }).text : drafts.dialog.current().text;
     // An unedited draft takes the file's text. If the server then holds nothing or the same text, nothing differs after all: no dialog.
@@ -73,7 +82,11 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     };
   }
 
-  watch([() => drafts.fileConflict.value, () => sync.serverConflict.value, () => drafts.current.value.id], build, { immediate: true });
+  watch(
+    [() => drafts.fileConflict.value, () => sync.serverConflict.value, () => drafts.current.value.id, () => drafts.locked.value],
+    build,
+    { immediate: true },
+  );
 
   const ops = (m: ConflictModel): ConflictOps => ({
     async recheck() {
