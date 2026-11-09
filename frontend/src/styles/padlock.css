@@ -42,10 +42,6 @@
   color: var(--bad);
 }
 
-.lock-menu .tick {
-  min-width: 1em;
-}
-
 .pass-dialog form {
   display: flex;
   flex-direction: column;

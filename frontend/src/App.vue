@@ -111,32 +111,37 @@ const drafts = useDrafts(editor, showDrawer, {
 // Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
 const conflict = useConflict({ drafts, sync });
 // The padlock and its passphrase dialog (docs/sync.md, "Protected drafts").
-const pass = ref<{ mode: "create" | "verify" | "unlock" } | null>(null);
+const pass = ref<{ mode: "create" | "verify" | "unlock" | "title"; title: string } | null>(null);
 const passBusy = ref(false);
 const passError = ref("");
 const lockButton = computed(() =>
   !drafts.available.value
     ? null
-    : { state: !drafts.protectedDraft.value ? ("plain" as const) : drafts.locked.value ? ("locked" as const) : ("unlocked" as const), titleShown: drafts.titleShown.value },
+    : { state: !drafts.protectedDraft.value ? ("plain" as const) : drafts.locked.value ? ("locked" as const) : ("unlocked" as const) },
 );
 async function askProtect() {
   const c = await drafts.protectCheck();
   if ("error" in c) return drafts.showToast(c.error);
   passError.value = "";
-  pass.value = { mode: c.mode };
+  pass.value = { mode: c.mode, title: c.title };
 }
 function askUnlock() {
   passError.value = "";
-  pass.value = { mode: "unlock" };
+  pass.value = { mode: "unlock", title: "" };
 }
-async function submitPass(passphrase: string) {
+function askListTitle() {
+  passError.value = "";
+  pass.value = { mode: "title", title: drafts.listTitle.value };
+}
+async function submitPass(passphrase: string, title: string) {
   const p = pass.value;
   if (!p || passBusy.value) return;
   passBusy.value = true;
   passError.value = "";
   try {
     if (p.mode === "unlock") await drafts.unlock(passphrase);
-    else await drafts.protect(passphrase);
+    else if (p.mode === "title") await drafts.setListTitle(title);
+    else await drafts.protect(passphrase, title);
     pass.value = null;
   } catch (err) {
     passError.value = err instanceof WrongPassphrase ? "Wrong passphrase." : String((err as Error)?.message || err);
@@ -613,7 +618,7 @@ onBeforeUnmount(() => {
     </div>
     <!-- A note that was deleted on another device: a modal, so the person has to choose Keep or Remove. -->
     <ConflictDialog v-if="conflict.model.value" :model="conflict.model.value" :busy="conflict.busy.value" :note="conflict.note.value" @choose="conflict.choose" />
-    <PassphraseDialog v-if="pass" :mode="pass.mode" :busy="passBusy" :error="passError" @submit="submitPass" @cancel="pass = null" />
+    <PassphraseDialog v-if="pass" :mode="pass.mode" :title="pass.title" :busy="passBusy" :error="passError" @submit="submitPass" @cancel="pass = null" />
     <DeletedElsewhereDialog v-if="sync.gone.value && !conflict.model.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
     <StatusBar
       :state="state"
@@ -639,7 +644,7 @@ onBeforeUnmount(() => {
       @unlock="askUnlock"
       @lock="drafts.lock"
       @unprotect="drafts.unprotect"
-      @show-title="drafts.setTitleShown"
+      @list-title="askListTitle"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
     />

@@ -106,7 +106,7 @@ export function useDrafts(
   // only while the draft is open and unlocked. The passphrase itself is never kept.
   const protectedDraft = ref(false); // the open draft is protected, locked or not
   const locked = ref(false); // protected and not unlocked: the editor is empty and inert
-  const titleShown = ref(false); // the title is stored unencrypted, for the draft list
+  const listTitle = ref(""); // the title of the open protected draft in the draft list: stored unencrypted, and not taken from the text
   let session: Session | null = null;
   let envelope = ""; // what the open protected draft holds in storage
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -219,7 +219,7 @@ export function useDrafts(
     protectedDraft.value = prot;
     envelope = prot ? (d.content as string) : "";
     locked.value = prot && !session;
-    titleShown.value = prot && clearTitle(envelope) !== null;
+    listTitle.value = clearTitle(envelope);
     stored = d.id && typeof d.content === "string" && !prot ? { text: d.content, format: d.format } : null;
     state.value = d.id ? "saved" : "idle";
     checkDone = fileChange.check(current.value); // also clears the dialog of the draft that was open
@@ -245,9 +245,9 @@ export function useDrafts(
     if (session) {
       const t = await openWith(session, envelope, d.id);
       if (t) {
-        stored = { text: t.content, format: d.format };
-        titleShown.value = clearTitle(envelope) !== null;
-        return t.content;
+        stored = { text: t, format: d.format };
+        listTitle.value = clearTitle(envelope);
+        return t;
       }
       dropSession(); // another device protected it again with another passphrase
       locked.value = true;
@@ -275,9 +275,9 @@ export function useDrafts(
     if (current.value.id !== id || !locked.value) return;
     session = r.session;
     locked.value = false;
-    titleShown.value = clearTitle(envelope) !== null;
-    stored = { text: r.text.content, format: current.value.format };
-    editor.value?.load(r.text.content, current.value.format);
+    listTitle.value = clearTitle(envelope);
+    stored = { text: r.content, format: current.value.format };
+    editor.value?.load(r.content, current.value.format);
     touch();
     editor.value?.focus();
   }
@@ -289,7 +289,7 @@ export function useDrafts(
     return hit ? be.getDraft(hit.id) : null;
   }
 
-  // Writes the open draft again, in its new form (protected or not, title shown or not).
+  // Writes the open draft again, in its new form (protected or not, another list title).
   function rewrite() {
     stored = null; // the text did not change, but its stored form did
     dirty = true;
@@ -300,13 +300,13 @@ export function useDrafts(
 
   // What the padlock needs before it asks for a passphrase: a reason the open draft cannot be protected, or whether the passphrase is a new one
   // ("create") or the existing one ("verify").
-  async function protectCheck(): Promise<{ error: string } | { mode: "create" | "verify" }> {
+  async function protectCheck(): Promise<{ error: string } | { mode: "create" | "verify"; title: string }> {
     if (!available.value) return { error: "Drafts are unavailable." };
     await flush();
     if (!current.value.id) return { error: "Type something first, so there is a draft to protect." };
     if (current.value.filePath) return { error: "A draft saved to a file cannot be protected. Unlink the file first." };
     try {
-      return { mode: (await otherProtected(current.value.id)) ? "verify" : "create" };
+      return { mode: (await otherProtected(current.value.id)) ? "verify" : "create", title: suggestTitle() };
     } catch (err) {
       return { error: `Could not check the drafts: ${message(err)}` };
     }
@@ -314,7 +314,7 @@ export function useDrafts(
 
   // Protects the open draft. With no protected draft yet the passphrase is a new one; otherwise it must open another protected draft (rejects
   // with WrongPassphrase), so all of them share it.
-  async function protect(passphrase: string) {
+  async function protect(passphrase: string, title: string) {
     if (protectedDraft.value || !available.value) return;
     await flush();
     const id = current.value.id;
@@ -326,7 +326,7 @@ export function useDrafts(
     session = await newSession(passphrase);
     protectedDraft.value = true;
     locked.value = false;
-    titleShown.value = false;
+    listTitle.value = title.trim() || "Untitled";
     touch();
     await rewrite();
   }
@@ -336,17 +336,21 @@ export function useDrafts(
     if (!protectedDraft.value || !session) return;
     dropSession();
     protectedDraft.value = false;
-    titleShown.value = false;
+    listTitle.value = "";
     envelope = "";
     await rewrite();
   }
 
-  // Shows the title in the draft list (stored unencrypted), or encrypts it again.
-  async function setTitleShown(on: boolean) {
-    if (!protectedDraft.value || !session || on === titleShown.value) return;
-    titleShown.value = on;
+  // The title the draft list shows for the open protected draft. It stays as given; edits to the text do not change it.
+  async function setListTitle(title: string) {
+    const next = title.trim() || "Untitled";
+    if (!protectedDraft.value || !session || next === listTitle.value) return;
+    listTitle.value = next;
     await rewrite();
   }
+
+  // The title of the open draft's text, to offer as the list title when it is protected.
+  const suggestTitle = () => summarize(editor.value?.getText() ?? "").title;
 
   // Called after every change the user makes to the text.
   function edited() {
@@ -400,9 +404,7 @@ export function useDrafts(
     state.value = "saving";
     try {
       // A protected draft is written as its envelope; the text and the key stay here.
-      const content = session
-        ? await seal(session, current.value.id, { content: text, title: summarize(text).title }, titleShown.value)
-        : text;
+      const content = session ? await seal(session, current.value.id, text, listTitle.value) : text;
       const d = await be.saveDraft({
         id: current.value.id,
         format: current.value.format,
@@ -939,13 +941,14 @@ export function useDrafts(
     needsSave,
     protectedDraft,
     locked,
-    titleShown,
+    listTitle,
+    suggestTitle,
     lock,
     unlock,
     protect,
     protectCheck,
     unprotect,
-    setTitleShown,
+    setListTitle,
     fileName,
     fileDir,
     list,

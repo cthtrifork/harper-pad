@@ -3,7 +3,7 @@
 //
 //   hp-protected:1:{"s":"<salt>","n":"<nonce>","c":"<ciphertext>","t":"<title, only when shown in the list>"}
 //
-// Key = Argon2id(passphrase, salt); the text and the title are sealed with AES-256-GCM, with the draft id as additional data so a blob cannot
+// Key = Argon2id(passphrase, salt); the text is sealed with AES-256-GCM, with the draft id as additional data so a blob cannot
 // move to another draft. The salt stays the same for the life of the draft; the nonce is new on every write.
 
 export const PREFIX = "hp-protected:1:";
@@ -16,11 +16,6 @@ export class WrongPassphrase extends Error {
     super("Wrong passphrase.");
     this.name = "WrongPassphrase";
   }
-}
-
-export interface Sealed {
-  content: string;
-  title: string;
 }
 
 /** An unlocked draft: the key lives only in memory, and only as long as the draft stays open. */
@@ -54,14 +49,14 @@ function parse(content: string): Envelope {
   return env;
 }
 
-/** The title stored unencrypted for the draft list, or null when it is encrypted or the content is not protected. */
-export function clearTitle(content: string): string | null {
-  if (!isProtected(content)) return null;
+/** The title of a protected draft, stored unencrypted for the draft list and chosen when the draft is protected; "" for anything else. */
+export function clearTitle(content: string): string {
+  if (!isProtected(content)) return "";
   try {
     const t = parse(content).t;
-    return typeof t === "string" ? t : null;
+    return typeof t === "string" ? t : "";
   } catch {
-    return null;
+    return "";
   }
 }
 
@@ -86,18 +81,17 @@ export async function newSession(passphrase: string, cost = COST): Promise<Sessi
   return { salt, key: await deriveKey(passphrase, salt, cost) };
 }
 
-/** The envelope for `text`. `showTitle` stores the title in the clear, for the draft list. */
-export async function seal(session: Session, id: string, text: Sealed, showTitle: boolean): Promise<string> {
+/** The envelope for `content`, with `title` beside it in the clear. */
+export async function seal(session: Session, id: string, content: string, title: string): Promise<string> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const plain = new TextEncoder().encode(JSON.stringify({ v: 1, content: text.content, title: text.title }));
+  const plain = new TextEncoder().encode(JSON.stringify({ v: 1, content }));
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(id) }, session.key, plain);
-  const env: Envelope = { s: b64(session.salt), n: b64(nonce), c: b64(new Uint8Array(cipher)) };
-  if (showTitle) env.t = text.title;
+  const env: Envelope = { s: b64(session.salt), n: b64(nonce), c: b64(new Uint8Array(cipher)), t: title };
   return PREFIX + JSON.stringify(env);
 }
 
 /** Unlocks a protected draft. Throws WrongPassphrase when the passphrase does not open it. */
-export async function unlock(content: string, id: string, passphrase: string, cost = COST): Promise<{ session: Session; text: Sealed }> {
+export async function unlock(content: string, id: string, passphrase: string, cost = COST): Promise<{ session: Session; content: string }> {
   const env = parse(content);
   const salt = unb64(env.s);
   const key = await deriveKey(passphrase, salt, cost);
@@ -107,21 +101,21 @@ export async function unlock(content: string, id: string, passphrase: string, co
   } catch {
     throw new WrongPassphrase();
   }
-  const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown; title?: unknown };
-  if (typeof body.content !== "string" || typeof body.title !== "string") throw new Error("malformed protected draft");
-  return { session: { key, salt }, text: { content: body.content, title: body.title } };
+  const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown };
+  if (typeof body.content !== "string") throw new Error("malformed protected draft");
+  return { session: { key, salt }, content: body.content };
 }
 
 /** Opens a newer version of a draft that is already unlocked, with the same key (the salt must be the same). null: another salt, so it
  * needs the passphrase again. */
-export async function openWith(session: Session, content: string, id: string): Promise<Sealed | null> {
+export async function openWith(session: Session, content: string, id: string): Promise<string | null> {
   const env = parse(content);
   const salt = unb64(env.s);
   if (salt.length !== session.salt.length || salt.some((b, i) => b !== session.salt[i])) return null;
   try {
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id) }, session.key, unb64(env.c));
-    const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown; title?: unknown };
-    return typeof body.content === "string" && typeof body.title === "string" ? { content: body.content, title: body.title } : null;
+    const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown };
+    return typeof body.content === "string" ? body.content : null;
   } catch {
     return null;
   }

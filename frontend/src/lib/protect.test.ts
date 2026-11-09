@@ -4,64 +4,60 @@ import { clearTitle, isProtected, newSession, seal, unlock, WrongPassphrase } fr
 
 const cost = { memoryKiB: 64, passes: 1 }; // far below the real cost, to keep the tests fast
 const ID = "0123456789abcdef0123456789abcdef";
-const text = { content: "# Secret\nthe body", title: "Secret" };
+const body = "# Secret\nthe body";
+const title = "Meeting notes"; // not the first line: the title is chosen, not taken from the text
 
-test("seal and unlock round trip, and the envelope shows no text", async () => {
+test("seal and unlock round trip, and the envelope shows only the title", async () => {
   const session = await newSession("pw", cost);
-  const env = await seal(session, ID, text, false);
+  const env = await seal(session, ID, body, title);
   assert.ok(isProtected(env));
-  assert.ok(!env.includes("Secret") && !env.includes("body"));
-  assert.equal(clearTitle(env), null);
-  const opened = await unlock(env, ID, "pw", cost);
-  assert.deepEqual(opened.text, text);
+  assert.ok(!env.includes("Secret") && !env.includes("the body"));
+  assert.equal(clearTitle(env), title);
+  assert.equal((await unlock(env, ID, "pw", cost)).content, body);
 });
 
-test("the title is in the clear only when asked", async () => {
-  const session = await newSession("pw", cost);
-  const env = await seal(session, ID, text, true);
-  assert.equal(clearTitle(env), "Secret");
-  assert.ok(!env.includes("the body"));
-  assert.equal(clearTitle("plain text"), null);
+test("a plain draft has no list title", () => {
+  assert.equal(clearTitle("plain text"), "");
 });
 
 test("a wrong passphrase is refused", async () => {
-  const env = await seal(await newSession("pw", cost), ID, text, false);
+  const env = await seal(await newSession("pw", cost), ID, body, title);
   await assert.rejects(unlock(env, ID, "other", cost), WrongPassphrase);
 });
 
 test("a blob cannot move to another draft", async () => {
-  const env = await seal(await newSession("pw", cost), ID, text, false);
+  const env = await seal(await newSession("pw", cost), ID, body, title);
   await assert.rejects(unlock(env, "f".repeat(32), "pw", cost), WrongPassphrase);
 });
 
 test("every write has a new nonce but the session reopens all of them", async () => {
   const session = await newSession("pw", cost);
-  const a = await seal(session, ID, text, false);
-  const b = await seal(session, ID, text, false);
+  const a = await seal(session, ID, body, title);
+  const b = await seal(session, ID, body, title);
   assert.notEqual(a, b);
-  assert.deepEqual((await unlock(b, ID, "pw", cost)).text, text);
+  assert.equal((await unlock(b, ID, "pw", cost)).content, body);
 });
 
 test("tampering is detected", async () => {
-  const env = await seal(await newSession("pw", cost), ID, text, false);
+  const env = await seal(await newSession("pw", cost), ID, body, title);
   const json = JSON.parse(env.slice("hp-protected:1:".length));
   json.c = json.c.slice(0, -4) + (json.c.endsWith("AAAA") ? "BBBB" : "AAAA");
   await assert.rejects(unlock(`hp-protected:1:${JSON.stringify(json)}`, ID, "pw", cost), WrongPassphrase);
 });
 
-test("the draft list summary of a protected draft has no excerpt or tasks", async () => {
+test("the draft list summary of a protected draft has the chosen title, no excerpt and no tasks", async () => {
   const { summarize } = await import("./summarize.ts");
   const session = await newSession("pw", cost);
-  const hidden = summarize(await seal(session, ID, { content: "- [ ] a task\nbody", title: "Secret" }, false));
-  assert.deepEqual(hidden, { title: "Locked draft", excerpt: "hp-protected", tasks: [], tasksTotal: 0, tasksDone: 0 });
-  assert.equal(summarize(await seal(session, ID, text, true)).title, "Secret");
+  const listed = summarize(await seal(session, ID, "- [ ] a task\nbody", title));
+  assert.deepEqual(listed, { title, excerpt: "hp-protected", tasks: [], tasksTotal: 0, tasksDone: 0 });
+  assert.equal(summarize(await seal(session, ID, body, "")).title, "Untitled");
 });
 
 test("a newer version opens with the key already held, but not with another salt", async () => {
   const { openWith } = await import("./protect.ts");
   const session = await newSession("pw", cost);
-  const env = await seal(session, ID, text, false);
-  assert.deepEqual(await openWith(session, env, ID), text);
-  const other = await seal(await newSession("pw", cost), ID, text, false);
+  const env = await seal(session, ID, body, title);
+  assert.equal(await openWith(session, env, ID), body);
+  const other = await seal(await newSession("pw", cost), ID, body, title);
   assert.equal(await openWith(session, other, ID), null);
 });

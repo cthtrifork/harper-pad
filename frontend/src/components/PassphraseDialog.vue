@@ -7,26 +7,32 @@ import { useModalDialog } from "../lib/useModalDialog.ts";
 const MIN_LENGTH = 10;
 
 const props = defineProps<{
-  mode: "create" | "verify" | "unlock";
+  mode: "create" | "verify" | "unlock" | "title";
+  title?: string; // the title the draft list shows, offered when protecting and when changing it
   busy: boolean;
   error: string;
 }>();
-const emit = defineEmits<{ submit: [passphrase: string]; cancel: [] }>();
+const emit = defineEmits<{ submit: [passphrase: string, title: string]; cancel: [] }>();
 
 const dialog = ref<HTMLDialogElement | null>(null);
 useModalDialog(dialog);
 
 const passphrase = ref("");
 const again = ref("");
+const listTitle = ref(props.title ?? "");
+const asksPassphrase = computed(() => props.mode !== "title");
+const asksTitle = computed(() => props.mode !== "unlock");
 const mismatch = ref("");
 
-const title = computed(() => (props.mode === "unlock" ? "Unlock this draft" : "Protect this draft"));
+const heading = computed(() => (props.mode === "unlock" ? "Unlock this draft" : props.mode === "title" ? "Title in the draft list" : "Protect this draft"));
 const text = computed(() =>
   props.mode === "create"
     ? "Choose a passphrase. It cannot be changed or recovered: lose it and the protected drafts are gone."
     : props.mode === "verify"
       ? "Enter the passphrase of your other protected drafts."
-      : "Enter the passphrase of your protected drafts.",
+      : props.mode === "title"
+        ? "The title is not protected: the draft list and the server show it, and it does not follow the text."
+        : "Enter the passphrase of your protected drafts.",
 );
 
 function submit() {
@@ -34,18 +40,24 @@ function submit() {
   if (props.mode === "create") {
     if (passphrase.value.length < MIN_LENGTH) return void (mismatch.value = `Use at least ${MIN_LENGTH} characters.`);
     if (passphrase.value !== again.value) return void (mismatch.value = "The two passphrases differ.");
-  } else if (!passphrase.value) return;
-  emit("submit", passphrase.value);
+  } else if (asksPassphrase.value && !passphrase.value) return;
+  emit("submit", passphrase.value, listTitle.value);
 }
 </script>
 
 <template>
   <dialog ref="dialog" class="choice-dialog pass-dialog" aria-labelledby="pass-title" aria-describedby="pass-text" @cancel.prevent="emit('cancel')">
     <form @submit.prevent="submit">
-      <h2 id="pass-title">{{ title }}</h2>
+      <h2 id="pass-title">{{ heading }}</h2>
       <p id="pass-text">{{ text }}</p>
-      <label for="pass-input">Passphrase</label>
-      <input id="pass-input" v-model="passphrase" type="password" autocomplete="off" spellcheck="false" autofocus :disabled="busy" />
+      <template v-if="asksTitle">
+        <label for="pass-title-input">Title in the draft list</label>
+        <input id="pass-title-input" v-model="listTitle" type="text" maxlength="80" autocomplete="off" spellcheck="false" :autofocus="mode === 'title'" :disabled="busy" />
+      </template>
+      <template v-if="asksPassphrase">
+        <label for="pass-input">Passphrase</label>
+        <input id="pass-input" v-model="passphrase" type="password" autocomplete="off" spellcheck="false" :autofocus="mode !== 'title'" :disabled="busy" />
+      </template>
       <template v-if="mode === 'create'">
         <label for="pass-again">Repeat passphrase</label>
         <input id="pass-again" v-model="again" type="password" autocomplete="off" spellcheck="false" :disabled="busy" />
@@ -53,7 +65,7 @@ function submit() {
       <p class="pass-error" role="alert">{{ mismatch || error }}</p>
       <div class="actions">
         <button type="button" :disabled="busy" @click="emit('cancel')">Cancel</button>
-        <button type="submit" class="primary" :disabled="busy">{{ busy ? "Working..." : mode === "unlock" ? "Unlock" : "Protect" }}</button>
+        <button type="submit" class="primary" :disabled="busy">{{ busy ? "Working..." : mode === "unlock" ? "Unlock" : mode === "title" ? "Save" : "Protect" }}</button>
       </div>
     </form>
   </dialog>
