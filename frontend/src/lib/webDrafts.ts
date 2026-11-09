@@ -223,6 +223,16 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
 
   // Keeps the server's times (save would set the update time to now) and records the draft as synced.
   async function applyRemote(input: Partial<Draft>, version: number): Promise<StoredDraft> {
+    return (await applyRemoteChecked(input, version)) as StoredDraft;
+  }
+
+  // As applyRemote, but only while the stored draft's update time is still `expected`, compared in the transaction that writes it.
+  // false: the draft moved (or does not exist), nothing was written.
+  async function applyRemoteIf(input: Partial<Draft>, version: number, expected: number): Promise<boolean> {
+    return (await applyRemoteChecked(input, version, expected)) !== null;
+  }
+
+  async function applyRemoteChecked(input: Partial<Draft>, version: number, expected?: number): Promise<StoredDraft | null> {
     const format = input.format || "markdown";
     if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
     const content = input.content ?? "";
@@ -235,6 +245,10 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
       const tx = db.transaction(["drafts", "summaries", "sync"], "readwrite");
       const drafts = tx.objectStore("drafts");
       const existing = await drafts.get(input.id as string);
+      if (expected !== undefined && existing?.updatedAt !== expected) {
+        await tx.done;
+        return null;
+      }
       const d = {
         id: input.id as string,
         format,
@@ -281,6 +295,7 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
     markSynced,
     changes,
     applyRemote,
+    applyRemoteIf,
     applyRemoteDelete,
   };
 }

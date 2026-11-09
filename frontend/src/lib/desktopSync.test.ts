@@ -50,6 +50,7 @@ test("each operation goes to the Go method that does the same thing", async () =
   await d.changes();
   await d.syncState("c");
   await d.applyRemote(draft, 4);
+  await d.applyRemoteIf(draft, 4, 9);
   await d.applyRemoteDelete("e", 5, 6);
   assert.deepEqual(calls, [
     ["DraftService", "GetDraft", "a"],
@@ -59,6 +60,7 @@ test("each operation goes to the Go method that does the same thing", async () =
     ["SyncService", "DraftChanges"],
     ["SyncService", "DraftSyncState", "c"],
     ["SyncService", "ApplyRemote", sent, 4],
+    ["SyncService", "ApplyRemoteIf", sent, 4, 9],
     ["SyncService", "ApplyRemoteDelete", "e", 5, 6],
   ]);
 });

@@ -29,6 +29,8 @@ export interface SyncStore {
   syncState(id: string): Promise<SyncState | null>;
   markSynced(id: string, state: Partial<SyncState> & Pick<SyncState, "updatedAt" | "version">): Promise<unknown>;
   applyRemote(draft: LocalDraft, version: number): Promise<unknown>;
+  /** As applyRemote, only while the stored draft's update time is still `expectedUpdatedAt`, checked in the same transaction as the write. False: it had moved, nothing was written. */
+  applyRemoteIf(draft: LocalDraft, version: number, expectedUpdatedAt: number): Promise<boolean>;
   applyRemoteDelete(id: string, version: number, updatedAt: number): Promise<unknown>;
 }
 
@@ -338,8 +340,13 @@ export function createSyncer({
       if (!doc || doc.deleted || `${doc.version}:${doc.updatedAt}` !== stamp || !stillCurrent()) return false;
       const mine = await drafts.get(id).catch(() => null);
       if (!mine || mine.updatedAt !== updatedAt || !stillCurrent()) return false;
-      await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
-      return stillCurrent();
+      // The store checks the revision again in the transaction that writes, so a save that landed after the check above is not overwritten.
+      const applied = await drafts.applyRemoteIf(
+        { id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt },
+        doc.version,
+        updatedAt,
+      );
+      return applied && stillCurrent();
     },
 
     // Only if the server still holds the tombstone. Resolves to the removed draft, so the caller can offer Undo.

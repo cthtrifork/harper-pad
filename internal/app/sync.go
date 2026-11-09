@@ -70,6 +70,16 @@ func (s *SyncService) ApplyRemote(d store.Draft, version int64) (store.Draft, er
 	return st.ApplyRemote(d, version)
 }
 
+// ApplyRemoteIf is ApplyRemote for a draft whose stored update time must still be `expected`; it reports whether the server's version was
+// stored. False means the draft was saved meanwhile and nothing was written.
+func (s *SyncService) ApplyRemoteIf(d store.Draft, version, expected int64) (bool, error) {
+	st, err := s.db.open()
+	if err != nil {
+		return false, err
+	}
+	return st.ApplyRemoteIf(d, version, expected)
+}
+
 // ApplyRemoteDelete removes a draft because the server's copy is a tombstone, and records that, so it is not a pending delete.
 func (s *SyncService) ApplyRemoteDelete(id string, version, updatedAt int64) error {
 	st, err := s.db.open()

@@ -69,6 +69,7 @@ export const syncDrafts = web
       syncState: web.syncState,
       markSynced: web.markSynced,
       applyRemote: web.applyRemote,
+      applyRemoteIf: web.applyRemoteIf,
       applyRemoteDelete: web.applyRemoteDelete,
     }
   : createDesktopSyncDrafts(bindings);

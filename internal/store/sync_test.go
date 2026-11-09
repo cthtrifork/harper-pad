@@ -354,3 +354,34 @@ func TestAllIDsInOrder(t *testing.T) {
 		t.Errorf("AllIDs = %v, %v, want %v", ids, err, want)
 	}
 }
+
+func TestApplyRemoteIfOnlyWhileTheDraftIsUnchanged(t *testing.T) {
+	s, _ := open(t)
+	tick(s)
+	local, err := s.Save(Draft{Content: "local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := Draft{ID: local.ID, Format: FormatMarkdown, Content: "from the server", CreatedAt: 1000, UpdatedAt: 2000}
+
+	ok, err := s.ApplyRemoteIf(remote, 5, local.UpdatedAt+1) // the draft was saved again since it was compared
+	if err != nil || ok {
+		t.Fatalf("ApplyRemoteIf on a moved draft = %v, %v; want false, nil", ok, err)
+	}
+	if got, _ := s.Get(local.ID); got.Content != "local" {
+		t.Fatalf("a moved draft was overwritten: %q", got.Content)
+	}
+
+	ok, err = s.ApplyRemoteIf(remote, 5, local.UpdatedAt)
+	if err != nil || !ok {
+		t.Fatalf("ApplyRemoteIf on an unchanged draft = %v, %v; want true, nil", ok, err)
+	}
+	if got, _ := s.Get(local.ID); got.Content != "from the server" {
+		t.Fatalf("content = %q", got.Content)
+	}
+
+	missing := Draft{ID: "b" + local.ID[1:], Content: "x", CreatedAt: 1, UpdatedAt: 2}
+	if ok, err := s.ApplyRemoteIf(missing, 1, 2); err != nil || ok {
+		t.Fatalf("a draft that does not exist matches nothing: %v, %v", ok, err)
+	}
+}

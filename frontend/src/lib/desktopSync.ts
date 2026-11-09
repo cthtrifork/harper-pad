@@ -9,6 +9,7 @@ export const SYNC_STORE_METHODS = [
   "syncState",
   "markSynced",
   "applyRemote",
+  "applyRemoteIf",
   "applyRemoteDelete",
 ];
 
@@ -36,6 +37,8 @@ export function createDesktopSyncDrafts(bindings: () => Promise<Bindings>) {
         version: state.version,
       }),
     applyRemote: async (draft: Draft, version: number) => (await sync()).ApplyRemote(withSummary(draft), version),
+    applyRemoteIf: async (draft: Draft, version: number, expectedUpdatedAt: number) =>
+      (await sync()).ApplyRemoteIf(withSummary(draft), version, expectedUpdatedAt),
     applyRemoteDelete: async (id: string, version: number, updatedAt: number) => (await sync()).ApplyRemoteDelete(id, version, updatedAt),
   };
 }

@@ -584,6 +584,25 @@ test("taking a compared server version refuses a changed server stamp or local r
   assert.equal((await b.drafts.get(d.id)).content, "new local edit");
 });
 
+test("takeServer does not overwrite a save that lands after its own revision check", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const d = await a.drafts.save({ content: "start" });
+  await a.one(d.id);
+  const local = await a.drafts.get(d.id);
+  const observed = await a.inspect(d.id);
+  const racing = {
+    ...a.drafts,
+    applyRemoteIf: async (...args) => {
+      await a.drafts.save({ ...local, content: "typed in between" }); // lands after the check, before the write
+      return a.drafts.applyRemoteIf(...args);
+    },
+  };
+  const engine = createSyncer({ device: DEVICE, drafts: racing, fetchFn: server.fetchFn });
+  assert.equal(await engine.takeServer(d.id, { stamp: observed.stamp, updatedAt: local.updatedAt }), false);
+  assert.equal((await a.drafts.get(d.id)).content, "typed in between");
+});
+
 test("two protected versions of the same text are reconciled by taking the server's, which ends the conflict for good", async () => {
   const server = fakeServer();
   const a = device(server);

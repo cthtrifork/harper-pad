@@ -76,6 +76,21 @@ test("applyRemote keeps the server's times and the file link, and is not a chang
   assert.equal((await drafts.get(a.id)).content, "from the server");
 });
 
+test("applyRemoteIf writes only while the draft's update time is the expected one", async () => {
+  const { drafts } = setup();
+  const a = await drafts.save({ content: "local" });
+  const remote = { id: a.id, format: "markdown", content: "from the server", createdAt: 1000, updatedAt: 2000 };
+  assert.equal(await drafts.applyRemoteIf(remote, 5, a.updatedAt + 1), false);
+  assert.equal((await drafts.get(a.id)).content, "local");
+  assert.equal(
+    await drafts.applyRemoteIf({ ...remote, id: "0123456789abcdef0123456789abcdef" }, 5, 1),
+    false,
+    "a missing draft matches nothing",
+  );
+  assert.equal(await drafts.applyRemoteIf(remote, 5, a.updatedAt), true);
+  assert.equal((await drafts.get(a.id)).content, "from the server");
+});
+
 test("applyRemote checks what save checks", async () => {
   const { drafts, raw } = setup();
   const id = "0123456789abcdef0123456789abcdef";
