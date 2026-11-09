@@ -319,16 +319,47 @@ Not defended: a compromised device, a compromised server, and traffic analysis.
 - A pending count or progress line on the chip.
 - A server operations page: operating and backing up the server belongs to the cluster's GitOps repository.
 - Scheduled token rotation with reuse detection: it is the fallback if iOS clears the key.
-- End-to-end encryption, more than one client account, merging text, syncing other preferences (text size), and an OS keyring or TPM.
+- End-to-end encryption (see the option below), more than one client account, merging text, syncing other preferences (text size), and an OS keyring or TPM.
 
-## Option: end-to-end encryption
+## Option: end-to-end encryption for chosen drafts
 
-Not planned. The server would hold only ciphertext, still as opaque `data` strings by id and version. Ids, versions, times, the deleted flag
-and sizes stay visible.
+Not planned. This is the design if it is built: encryption is opt-in per draft, and a protected draft needs the passphrase every time it is
+opened. The server holds only ciphertext for those drafts, still as opaque `data` strings by id and version. Ids, versions, times, the
+deleted flag, sizes and the fact that a draft is protected stay visible to the server.
 
-- **Keys:** a random 256-bit data key from the first device; a per-draft key `HKDF-SHA-256(key, "harper-pad doc " + id)`; AES-256-GCM with
-  additional data `id|version|key id`, so a blob cannot move to another draft.
-- **Key bag** (`GET` and `PUT /keys`, compare-and-set): the data key wrapped by an Argon2id passphrase key (at least 32 MiB, 3 passes, 1 lane, in a worker) and by a generated 160-bit recovery key.
-- **Limits:** a copied token gets ciphertext but can guess the passphrase offline; revoking a stolen device needs a key rotation; losing the passphrase and the recovery key loses the drafts.
+**Decisions**
+
+- **One shared passphrase** for all protected drafts, not one per draft. One weak or leaked passphrase exposes all of them.
+- **No recovery.** There is no key bag and no recovery key. Losing the passphrase loses the protected drafts.
+- **Local copy is ciphertext too.** SQLite and IndexedDB hold the same ciphertext as the server, and the text is decrypted only in memory.
+  Otherwise protection would cover the server only.
+- **No file link on a protected draft.** Linking writes plaintext to disk, so the two are mutually exclusive.
+- **Lock on close, after inactivity, and when the app goes to the background.** The key lives in memory only, never in IndexedDB.
+
+**Cryptography**
+
+- Per draft, a random 128-bit salt, stored with the blob. Key = Argon2id(passphrase, salt), at least 32 MiB, 3 passes, 1 lane, in a worker.
+- AES-256-GCM with a fresh 96-bit nonce per write and additional data `id|version`, so a blob cannot move to another draft or version.
+  A wrong passphrase fails the GCM tag; there is no separate check value to attack.
+- The title, name, summary and list excerpt of a protected draft are inside the ciphertext. The list shows a locked placeholder until
+  the draft is opened.
+- The "protected" flag is authoritative on the client, kept in the local record and inside the ciphertext. A server that serves a
+  protected draft as plaintext is refused, not shown.
+
+**What stays outside the protection**
+
+- Everything derived from the text must be skipped or kept in memory only for protected drafts: Harper lint results, any search index,
+  undo history that is persisted, autosave copies, exports and the service worker cache.
+- Unprotecting a draft writes plaintext again. If the server keeps older versions, the ciphertext versions stay there, and any plaintext
+  version from before protection stays too.
+
+**Limits**
+
+- A copied ciphertext (stolen token, backup, database leak) can be guessed against offline for as long as the attacker likes. The
+  passphrase strength and the Argon2id cost are the whole defence; the per-draft salt only stops work being shared between drafts.
+- The server can delete a protected draft or replay an older ciphertext (the version is in the additional data, but the server chooses
+  which version to serve). It cannot read or forge one.
+- Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server
+  that serves modified web app code, unless the app is not served from the sync server.
 - **Measured:** Argon2id (hash-wasm 4.12.0) took about 101, 107 and 218 ms at 32, 64 and 128 MiB on an iPhone Home Screen app.
-- **Open:** which Argon2id WebAssembly package to pin, and device pairing as a third unlock method.
+- **To pin when built:** the Argon2id WebAssembly package (hash-wasm 4.12.0 is the one measured).
