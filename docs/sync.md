@@ -332,18 +332,22 @@ version. Ids, versions, times, the deleted flag, sizes and the fact that a draft
 - **The padlock.** An open draft shows a small padlock at the bottom. It is open for a plain draft, closed and unlocked for a protected
   draft whose passphrase has been entered, and closed and locked otherwise.
 - **Protecting a draft.** Click the padlock on a plain draft.
-  - If no draft is protected yet, the app asks for a new passphrase (twice). The first protected draft defines it.
+  - If no draft is protected yet, the app asks for a new passphrase (twice, at least 10 characters). The first protected draft defines it.
   - If other drafts are protected, the app asks for the existing passphrase and checks it by decrypting one of them, so every protected
     draft has the same passphrase.
 - **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
   again each time the draft is opened.
-- **Locking.** The key lives in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
-  the background, and when the padlock is clicked on an unlocked draft.
-- **The title.** By default the title is encrypted and the draft list shows a locked placeholder in its place. The padlock menu has a
+- **The padlock menu.** Clicking the padlock of an unlocked draft opens a small menu: "Lock now", "Show title in the draft list" and
+  "Remove protection".
+- **Locking.** The key lives in memory only. It is dropped when the draft is closed, after five minutes without a key press, click or
+  scroll, when the app goes to the background, and on "Lock now". What is unsaved is saved first.
+- **The title.** By default the title is encrypted and the draft list shows "Locked draft" in its place. The padlock menu has a
   "Show title in the draft list" option. When it is on, the title is stored unencrypted, and the server can read it. When it is off, the
   title is encrypted again.
 - **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft, locked or not.
-- **Unprotecting.** The padlock menu has "Remove protection", after the passphrase is entered. The draft is then stored as plain text.
+- **Unprotecting.** The padlock menu has "Remove protection". It is on an unlocked draft, so the passphrase has been entered already. The
+  draft is then stored as plain text.
+- **Size.** The envelope is about a third larger than the text, so a protected draft holds roughly 700 KB of text, against 1 MiB for a plain draft.
 - **No file link.** A protected draft cannot be linked to a file, because linking writes plaintext to disk. A linked draft cannot be
   protected.
 - **No passphrase change and no recovery.** The passphrase cannot be changed, and losing it loses the protected drafts. To use a new
@@ -353,9 +357,12 @@ version. Ids, versions, times, the deleted flag, sizes and the fact that a draft
 
 - Per draft, a random 128-bit salt, stored with the blob. Key = Argon2id(passphrase, salt), at least 32 MiB, 3 passes, 1 lane, in a
   worker. The implementation is hash-wasm 4.12.0, which took about 101, 107 and 218 ms at 32, 64 and 128 MiB on an iPhone Home Screen app.
-- AES-256-GCM with a fresh 96-bit nonce per write and additional data `id|version`, so a blob cannot move to another draft or version.
-  A wrong passphrase fails the GCM tag; there is no separate check value to attack.
-- The text, and the title unless it is shown in the list, are inside the ciphertext.
+- AES-256-GCM with a fresh 96-bit nonce per write and the draft id as additional data, so a blob cannot move to another draft. The
+  server assigns the version after the page has encrypted, so the version is not in the additional data. A wrong passphrase fails the GCM
+  tag; there is no separate check value to attack.
+- The text, and the title unless it is shown in the list, are inside the ciphertext. The envelope is the draft's `content`, so SQLite,
+  IndexedDB, the sync API and the sync run treat a protected draft as an ordinary draft. The list marks it by its excerpt, which no stored
+  field replaces, and shows no excerpt for it.
 - SQLite and IndexedDB hold the same ciphertext as the server. The text is decrypted only in memory.
 - The "protected" flag is authoritative on the client, kept in the local record and inside the ciphertext. A server that serves a
   protected draft as plaintext is refused, not shown.
@@ -366,8 +373,8 @@ version. Ids, versions, times, the deleted flag, sizes and the fact that a draft
 
 - A copied ciphertext (stolen token, backup, database leak) can be guessed against offline for as long as the attacker likes. The
   passphrase strength and the Argon2id cost are the whole defence; the per-draft salt only stops work being shared between drafts.
-- The server can delete a protected draft, or replay an older ciphertext taken from a backup (the version is in the additional data, but
-  the server chooses which version to serve). It cannot read or forge one.
+- The server can delete a protected draft, or replay an older ciphertext of the same draft, for example from a backup, and the device
+  cannot tell. It cannot read or forge one.
 - The server keeps one row per draft and overwrites it on each write, so protecting a draft replaces its plaintext there. Database
   backups and write-ahead logs can still hold earlier plaintext versions, and ciphertext versions after a draft is unprotected.
 - A title shown in the list is readable by the server.
