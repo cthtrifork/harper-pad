@@ -73,7 +73,6 @@ export function useSync({
   const lastSync = ref(0); // when it finished, ms
   const gone = ref<{ id: string } | null>(null); // the open draft was deleted on another device and the person has not chosen yet
   const setsFailed = ref(false); // the dictionary and ignore list did not sync last time (not a draft's failure)
-  const downgrade = ref<{ id: string } | null>(null); // the open protected draft arrived as plain text, and the person has not chosen yet
   const rejected = ref<{ id: string; title: string; reason: string } | null>(null); // the server refused this draft; it stays here and is tried again
   const serverConflict = ref<(Inspected & { id: string }) | null>(null); // the open draft and the server hold different text, and the person has not chosen yet
   const notice = ref<Notice | null>(null); // about the open draft
@@ -89,8 +88,9 @@ export function useSync({
       fetchFn,
       onGone: (id) => (gone.value = { id }),
       onRejected: noteRejected,
-      onDowngrade: (id) => {
-        if (isOpen(id)) downgrade.value = { id };
+      onStripped: (id) => {
+        if (isOpen(id))
+          notice.value = { id, kind: "updated", text: "The server's plain copy of this protected draft was replaced", at: Date.now() };
       },
     });
 
@@ -150,7 +150,6 @@ export function useSync({
     setsFailed.value = false;
     notice.value = null;
     gone.value = null;
-    downgrade.value = null;
     rejected.value = null;
     await deviceStore.clear();
     await settings?.store.clear(); // enrolling again starts from the server's lists
@@ -262,7 +261,6 @@ export function useSync({
   function noteOpened(id: string, { canSwap = () => true, onSwapped = () => {} }: Hooks = {}) {
     notice.value = null;
     gone.value = null;
-    downgrade.value = null;
     serverConflict.value = null;
     openHooks = { canSwap, onSwapped };
     if (!device || status.value === "signin") return Promise.resolve();
@@ -406,19 +404,6 @@ export function useSync({
     return taken;
   }
 
-  // The person's answer to "arrived as plain text": accept it (protection removed on another device), or keep the protected text, which
-  // goes to the server on top of the plain one.
-  async function acceptPlain() {
-    const d = downgrade.value;
-    downgrade.value = null;
-    if (d) await takeServer(d.id);
-  }
-  async function keepProtected() {
-    const d = downgrade.value;
-    downgrade.value = null;
-    if (d) await forcePush(d.id);
-  }
-
   // The person's answer to "deleted elsewhere", asked in a modal dialog they cannot leave without choosing: keep the draft (it is uploaded
   // again), or remove it here too (`onRemoved` shows another note, and an Undo toast follows).
   function keepGone() {
@@ -475,9 +460,6 @@ export function useSync({
     lastSync,
     notice,
     gone,
-    downgrade,
-    acceptPlain,
-    keepProtected,
     takeServer,
     serverConflict,
     rejected,

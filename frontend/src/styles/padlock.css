@@ -44,10 +44,6 @@
   min-width: 240px;
 }
 
-.lock-menu .item.danger {
-  color: var(--bad);
-}
-
 /* Text field, as in the cheat sheet: --bg fill, hover border --mute, focus border and ring --accent, error border --bad. */
 .pass-dialog form {
   display: flex;

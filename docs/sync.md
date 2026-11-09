@@ -334,16 +334,17 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   drafts must use the same one, so the app checks it against another protected draft.
 - **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
   again each time the draft is opened.
-- **The padlock menu.** On an unlocked draft the padlock opens a menu: lock now, change the title in the draft list, remove protection.
+- **The padlock menu.** On an unlocked draft the padlock opens a menu: lock now, change the title in the draft list.
 - **Locking.** The key is kept in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
   the background, and on "Lock now". What is unsaved is saved first, and if that fails the draft stays unlocked so the text is not lost.
-  Protecting or removing protection likewise changes nothing, and says why, when the write fails.
+  Protecting, or changing the title, likewise changes nothing, and says why, when the write fails.
 - **The title.** A protected draft shows "Locked draft" in the draft list. It can be given a title instead, when it is protected or later
   from the padlock menu. That title is not protected: the draft list and the server show it, and it does not follow the text. Drafts
   without one, including drafts protected before titles existed, keep "Locked draft".
 - **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
 - **Search.** Search reads the text of plain drafts. A protected draft matches on its title only, never on its stored text.
-- **Removing protection.** The draft is stored as plain text again.
+- **Protection is permanent.** A protected draft cannot be made plain again. To get the text out, unlock the draft, copy it into a new
+  draft and delete the protected one. That keeps one rule for sync: a plain version of a protected draft can never be legitimate.
 - **Private editing.** While a protected draft is open, nothing derived from its text is kept: no word is added to the dictionary and no
   finding is ignored (both are stored and synced in plain text), and autocorrect is off.
 - **No file link.** A protected draft cannot be linked to a file, and a linked draft cannot be protected, because a file would hold the text
@@ -356,8 +357,8 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   compared as text, so identical text is no conflict (the server's version is taken, with no question), and Keep makes a second protected
   copy that opens with the same passphrase. A locked draft has no question until it is unlocked, and a version protected with a different
   passphrase is not compared.
-- **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, remove protection
-  from every draft, then protect them again.
+- **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, copy each draft's
+  text into a new draft, protect that one, and delete the old.
 
 ### Cryptography
 
@@ -367,9 +368,8 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   built into GCM, so no check value is stored, and the two cannot be told apart.
 - Local storage holds the same ciphertext as the server. The text is decrypted only in memory, and what is derived from it (lint
   results, search, undo history, autosave copies, exports) stays in memory or is skipped.
-- Sync never replaces a protected draft with a plain one from the server on its own. It is either another device that removed the
-  protection or the server stripping it, so when the draft is open a dialog asks: keep it protected (the protected text goes back to the
-  server) or accept the plain text.
+- Sync never replaces a protected draft with a plain one from the server. That can only be the server (or an old build) stripping the
+  protection, so this device keeps its text, puts it back on the server, and says so.
 
 ### Limits
 
@@ -379,7 +379,7 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 - The server can delete a protected draft, or replay an older ciphertext of the same draft, for example from a backup, and the device
   cannot tell. It cannot read or forge one.
 - The server keeps one row per draft, so protecting a draft replaces its plain text there. Database backups can still hold earlier plain
-  versions, and ciphertext versions after protection is removed.
+  versions.
 - A title given to a protected draft is readable by the server, so it should not give the text away. A title the server changed is only
   noticed when the draft is opened; until then the draft list shows what the server sent.
 - Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server that

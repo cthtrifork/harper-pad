@@ -76,14 +76,14 @@ export function createSyncer({
   fetchFn,
   onGone = () => {},
   onRejected = () => {},
-  onDowngrade = () => {},
+  onStripped = () => {},
 }: {
   device: DeviceRecord;
   drafts: SyncStore;
   fetchFn?: typeof fetch;
   onGone?: (id: string) => void;
   onRejected?: (id: string, message: string) => void;
-  onDowngrade?: (id: string) => void;
+  onStripped?: (id: string) => void;
 }) {
   // Records the answer. True when the server took it.
   async function upload(draft: LocalDraft, state: ServerState | null) {
@@ -98,12 +98,13 @@ export function createSyncer({
     return true;
   }
 
-  // A protected draft is never replaced by a plain one from the server on its own: it is either another device removing the protection or the
-  // server stripping it, and only the person can tell. `onDowngrade(id)` asks them when the draft is open (`takeServer` carries out "accept").
-  async function downgrades(id: string, remote: { content: string }) {
+  // Protection is never removed, so a plain version of a protected draft can only be the server (or an old build) stripping it. It is not
+  // applied: this device's protected version, the source of truth, goes back on top of it. `onStripped(id)` tells the person.
+  async function stripped(id: string, doc: Doc) {
     const mine = await drafts.get(id).catch(() => null);
-    if (!mine || !isProtected(mine.content) || isProtected(remote.content)) return false;
-    onDowngrade(id);
+    if (!mine || !isProtected(mine.content) || isProtected(parseData(doc).content)) return false;
+    await upload(mine, stateOf(doc));
+    onStripped(id);
     return true;
   }
 
@@ -141,7 +142,7 @@ export function createSyncer({
     if (action === "download") {
       const doc = await getDoc({ device, id, fetchFn });
       if (!doc || doc.deleted) return "";
-      if (await downgrades(id, parseData(doc))) return "";
+      if (await stripped(id, doc)) return "";
       await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
       return "downloaded";
     }
@@ -222,7 +223,7 @@ export function createSyncer({
       if (action === "remove-local") return "deleted"; // deleted on another device, and nothing was changed here: the person decides
       if (action !== "download") return "none";
       if (!canSwap()) return "newer";
-      if (await downgrades(id, parseData(got.doc))) return "none";
+      if (await stripped(id, got.doc)) return "none";
       await drafts.applyRemote({ id, ...parseData(got.doc), createdAt: got.doc.createdAt, updatedAt: got.doc.updatedAt }, got.doc.version);
       return "updated";
     },

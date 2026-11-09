@@ -63,7 +63,7 @@ const key = await generateDeviceKey();
 const DEVICE = { server: "https://sync.example.com", token: "tok", ...key };
 
 // A device: its own IndexedDB, and `sync()` to run Sync all against the shared server.
-function device(server, downgraded = []) {
+function device(server, stripped = []) {
   const factory = new IDBFactory();
   const open = () => {
     globalThis.indexedDB = factory;
@@ -77,7 +77,7 @@ function device(server, downgraded = []) {
       drafts,
       fetchFn: server.fetchFn,
       onGone: (id) => gone.push(id),
-      onDowngrade: (id) => downgraded.push(id),
+      onStripped: (id) => stripped.push(id),
     });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
   return {
@@ -486,11 +486,11 @@ test("a delete is pushed by one(id), the way the end of the Undo window does it"
   assert.deepEqual(server.calls, []);
 });
 
-test("a protected draft syncs as ciphertext, opens on the other device, and the server cannot strip the protection", async () => {
+test("a protected draft syncs as ciphertext, opens on the other device, and a plain copy from the server is replaced by the protected one", async () => {
   const server = fakeServer();
   const a = device(server);
-  const downgraded = [];
-  const b = device(server, downgraded);
+  const stripped = [];
+  const b = device(server, stripped);
   const cost = { memoryKiB: 64, passes: 1 };
   const d = await a.drafts.save({ content: "placeholder" });
   const envelope = await seal(await newSession("pw", cost), d.id, "the secret text", "Groceries");
@@ -510,27 +510,11 @@ test("a protected draft syncs as ciphertext, opens on the other device, and the 
     updatedAt: row.updatedAt + 1000,
     data: JSON.stringify({ v: 1, format: "markdown", content: "forged plain text" }),
   });
-  assert.deepEqual(await b.sync(), none, "nothing is applied or counted: the person is asked when the draft is open");
+  // Protection is never removed, so this can only be the server (or an old build) stripping it: B keeps its text and puts it back on top.
+  assert.deepEqual(await b.sync(), sum({ uploaded: 0 }), "nothing is applied or counted");
   assert.equal((await b.drafts.get(d.id)).content, envelope, "the protected text is kept");
-  assert.deepEqual(downgraded, [d.id]);
-
-  // Open: the same question. Keep protected sends this device's text on top of the plain one.
-  downgraded.length = 0;
-  assert.equal(await b.open(d.id), "none");
-  assert.deepEqual(downgraded, [d.id]);
-  assert.equal(await b.force(d.id), true);
-  assert.ok(JSON.parse(server.rows.get(d.id).data).content.startsWith("hp-protected:1:"));
-
-  // Or the person accepts it (the protection was removed on another device): the server's plain version becomes this device's.
-  const row2 = server.rows.get(d.id);
-  server.rows.set(d.id, {
-    ...row2,
-    version: row2.version + 1,
-    updatedAt: row2.updatedAt + 1000,
-    data: JSON.stringify({ v: 1, format: "markdown", content: "removed on A" }),
-  });
-  assert.equal(await b.take(d.id), true);
-  assert.equal((await b.drafts.get(d.id)).content, "removed on A");
+  assert.deepEqual(stripped, [d.id]);
+  assert.ok(JSON.parse(server.rows.get(d.id).data).content.startsWith("hp-protected:1:"), "and the server's plain copy is replaced");
   assert.deepEqual(await b.sync(), none);
 });
 

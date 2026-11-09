@@ -371,18 +371,6 @@ export function useDrafts(
     touch();
   }
 
-  // Stores the open, unlocked protected draft as plain text again.
-  async function unprotect() {
-    if (!protectedDraft.value || !session) return;
-    await rewriteAs(() => {
-      session = null;
-      protectedDraft.value = false;
-      listTitle.value = "";
-      envelope = "";
-    });
-    dropSession();
-  }
-
   // The title the draft list shows for the open protected draft, "" for none. It stays as given; edits to the text do not change it.
   async function setListTitle(title: string) {
     const next = title.trim();
@@ -991,7 +979,6 @@ export function useDrafts(
     unlock,
     protect,
     protectCheck,
-    unprotect,
     setListTitle,
     fileName,
     fileDir,

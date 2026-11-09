@@ -174,15 +174,6 @@ check("the list title is the one chosen, kept when the text changes, and can be 
   assert.equal(t.store.get(A)?.title, "Locked draft");
 });
 
-check("removing protection stores the text as plain text", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  await t.drafts.protect(PW, "A title");
-  await t.drafts.unprotect();
-  assert.equal(t.store.get(A)?.content, "# Plan\nsecret words");
-  assert.equal(t.drafts.protectedDraft.value, false);
-});
-
 check("a draft linked to a file cannot be protected, and a protected draft never writes a file", async () => {
   const linked = setup({ [A]: { content: "text", filePath: "/home/me/a.md" } });
   linked.editor.value.text = linked.open(A);
@@ -254,7 +245,8 @@ check("protection is not reported, and nothing changes, when the encrypted write
   t.fail.saves = false;
   await t.drafts.protect(PW, "Plan");
   t.fail.saves = true;
-  await assert.rejects(t.drafts.unprotect(), /disk full/);
+  await assert.rejects(t.drafts.setListTitle("Another"), /disk full/);
+  assert.equal(t.drafts.listTitle.value, "Plan", "the title is put back");
   assert.equal(t.drafts.protectedDraft.value, true, "still protected, and still unlocked");
   assert.equal(t.drafts.locked.value, false);
   t.fail.saves = false;

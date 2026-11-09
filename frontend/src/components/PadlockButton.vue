@@ -4,7 +4,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 // The padlock in the status bar (docs/sync.md, "Protected drafts"): open for a plain draft, closed for a protected one. A click protects a
 // plain draft, unlocks a locked one, and opens a small menu on an unlocked one.
 const props = defineProps<{ state: "plain" | "locked" | "unlocked" }>();
-const emit = defineEmits<{ protect: []; unlock: []; lock: []; unprotect: []; "list-title": [] }>();
+const emit = defineEmits<{ protect: []; unlock: []; lock: []; "list-title": [] }>();
 
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
@@ -55,7 +55,6 @@ const label = {
       <div v-if="open" class="menu up lock-menu" role="menu">
         <button type="button" class="item" role="menuitem" @click="pick(() => emit('lock'))">Lock now</button>
         <button type="button" class="item" role="menuitem" @click="pick(() => emit('list-title'))">Change title in the draft list</button>
-        <button type="button" class="item danger" role="menuitem" @click="pick(() => emit('unprotect'))">Remove protection</button>
       </div>
     </Transition>
   </span>
