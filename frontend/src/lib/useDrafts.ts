@@ -108,6 +108,9 @@ export function useDrafts(
   const locked = ref(false); // protected and not unlocked: the editor is empty and inert
   const listTitle = ref(""); // the title of the open protected draft in the draft list: stored unencrypted, and not taken from the text
   let session: Session | null = null;
+  // Counts the moments that end what an unlock or a protect in flight was for (another draft, a lock, the app going to the background), so
+  // that one finishing after them installs no key and shows no text.
+  let epoch = 0;
   let envelope = ""; // what the open protected draft holds in storage
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -212,8 +215,11 @@ export function useDrafts(
     refreshed.value = null;
     unlinkedToast.value = null;
     const prot = typeof d.content === "string" && isProtected(d.content);
+    epoch++;
     if (d.id !== current.value.id || !prot) dropSession(); // the key never outlives the draft it opened
-    current.value = asCurrent(d);
+    // A protected draft has no file: one that arrived protected (another device protected it) is let go of, so the file never gets its text.
+    current.value = asCurrent(prot ? { ...d, filePath: "" } : d);
+    if (prot && d.filePath && !isWeb) void be.unlinkDraftFile(d.id).catch(() => {});
     fileState.value = current.value.filePath ? "unknown" : "none";
     dirty = false;
     protectedDraft.value = prot;
@@ -256,11 +262,17 @@ export function useDrafts(
   }
 
   // Locks the open protected draft: what is unsaved is saved first, then the key and the text leave memory.
+  // It does not lock when the save did not succeed: the key and the editor are the only copy of what was typed.
   async function lock() {
+    epoch++;
     if (!protectedDraft.value || !session) return;
     await flush();
     await chain;
     if (!session) return;
+    if (dirty || state.value === "error") {
+      showToast("Not locked: the draft could not be saved, so its text is kept on screen.");
+      return;
+    }
     dropSession();
     locked.value = true;
     stored = null;
@@ -271,8 +283,10 @@ export function useDrafts(
   async function unlock(passphrase: string) {
     if (!locked.value) return;
     const id = current.value.id;
+    const at = epoch;
     const r = await unlockEnvelope(envelope, id, passphrase);
-    if (current.value.id !== id || !locked.value) return;
+    if (epoch !== at || current.value.id !== id || !locked.value)
+      throw new Error("The draft changed while it was being unlocked. Try again.");
     session = r.session;
     locked.value = false;
     listTitle.value = clearTitle(envelope);
@@ -293,13 +307,28 @@ export function useDrafts(
     }
   }
 
-  // Writes the open draft again, in its new form (protected or not, another list title).
-  function rewrite() {
+  // Writes the open draft again in a new form (protected or not, another list title). `change` makes the new form current; when the write
+  // fails it is all put back, nothing is reported as done, and the error is thrown.
+  async function rewriteAs(change: () => void) {
+    const before = { session, prot: protectedDraft.value, locked: locked.value, title: listTitle.value, envelope, stored };
+    change();
     stored = null; // the text did not change, but its stored form did
     dirty = true;
-    edits++;
+    const mine = ++edits;
     state.value = "dirty";
-    return flush();
+    await flush();
+    if (!dirty && (state.value as State) !== "error") return; // the write went through
+    const why = error.value;
+    session = before.session;
+    protectedDraft.value = before.prot;
+    locked.value = before.locked;
+    listTitle.value = before.title;
+    envelope = before.envelope;
+    stored = before.stored;
+    dirty = edits !== mine; // text typed meanwhile still needs its own save
+    state.value = dirty ? "dirty" : "saved";
+    error.value = "";
+    throw new Error(why || "Not saved.");
   }
 
   // What the padlock needs before it asks for a passphrase: a reason the open draft cannot be protected, or whether the passphrase is a new one
@@ -324,33 +353,43 @@ export function useDrafts(
     const id = current.value.id;
     if (!id) throw new Error("Type something first, so there is a draft to protect.");
     if (current.value.filePath) throw new Error("A draft saved to a file cannot be protected. Unlink the file first.");
+    const at = epoch;
     const other = await otherProtected(id);
     if (other) await unlockEnvelope(other.content ?? "", other.id, passphrase);
-    if (current.value.id !== id) return;
-    session = await newSession(passphrase);
-    protectedDraft.value = true;
-    locked.value = false;
-    listTitle.value = title.trim();
+    const made = await newSession(passphrase);
+    // The draft may have been left, locked, linked to a file or protected meanwhile: what was checked above no longer holds.
+    if (epoch !== at || current.value.id !== id || protectedDraft.value || current.value.filePath) {
+      throw new Error("The draft changed while it was being protected. Try again.");
+    }
+    unlinkedToast.value = null; // its Undo would put a file link back
+    await rewriteAs(() => {
+      session = made;
+      protectedDraft.value = true;
+      locked.value = false;
+      listTitle.value = title.trim();
+    });
     touch();
-    await rewrite();
   }
 
   // Stores the open, unlocked protected draft as plain text again.
   async function unprotect() {
     if (!protectedDraft.value || !session) return;
+    await rewriteAs(() => {
+      session = null;
+      protectedDraft.value = false;
+      listTitle.value = "";
+      envelope = "";
+    });
     dropSession();
-    protectedDraft.value = false;
-    listTitle.value = "";
-    envelope = "";
-    await rewrite();
   }
 
   // The title the draft list shows for the open protected draft, "" for none. It stays as given; edits to the text do not change it.
   async function setListTitle(title: string) {
     const next = title.trim();
     if (!protectedDraft.value || !session || next === listTitle.value) return;
-    listTitle.value = next;
-    await rewrite();
+    await rewriteAs(() => {
+      listTitle.value = next;
+    });
   }
 
   // Called after every change the user makes to the text.
@@ -493,7 +532,9 @@ export function useDrafts(
     // A new, ordinary, unlinked draft; labelled "Conflicted copy" in memory only. Returns its id.
     async saveCopy(text: string, from: string) {
       // A copy of a protected draft is protected too, sealed under its own id with the key already held.
-      const id = protectedDraft.value && session ? newDraftId() : undefined;
+      // Never as plain text: a protected draft that locked meanwhile has no key to seal with, so the copy is refused.
+      if (protectedDraft.value && !session) throw new Error("the draft is locked. Unlock it and try again");
+      const id = protectedDraft.value ? newDraftId() : undefined;
       const content = id && session ? await seal(session, id, text, listTitle.value) : text;
       const d = await be.saveDraft({ id, format: current.value.format, content });
       copies.value = { ...copies.value, [d.id]: from };
@@ -523,7 +564,7 @@ export function useDrafts(
   function reloadFromFile({ auto = "", push = true } = {}) {
     const id = current.value.id;
     if (!auto) fileChange.clear();
-    if (!available.value || !id || !current.value.filePath) return Promise.resolve();
+    if (!available.value || !id || !current.value.filePath || protectedDraft.value) return Promise.resolve();
     const startEdits = edits;
     chain = chain.then(async () => {
       try {
@@ -593,7 +634,7 @@ export function useDrafts(
   function undoUnlink() {
     const t = unlinkedToast.value;
     unlinkedToast.value = null;
-    if (!t || !available.value) return Promise.resolve();
+    if (!t || !available.value || protectedDraft.value) return Promise.resolve(); // a protected draft has no file
     chain = chain.then(async () => {
       try {
         const d = await be.undoUnlinkDraftFile(t.id);
@@ -625,6 +666,7 @@ export function useDrafts(
 
   // Resolves to "" or the reason the file was not written. `push` false: the caller sends the draft to the server itself (the conflict dialog).
   async function writeFile(saveAs: boolean, force = false, push = true) {
+    if (protectedDraft.value) return "A protected draft cannot be written to a file."; // the file would hold its text unprotected
     const text = editor.value?.getText() ?? "";
     if (!current.value.id && text.trim() === "") return "";
     const mine = edits;

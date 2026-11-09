@@ -32,7 +32,13 @@ interface Envelope {
   t?: string;
 }
 
-const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+// In bounded pieces: spreading a whole large ciphertext into one call exceeds the engine's argument limit.
+const CHUNK = 0x8000;
+const b64 = (bytes: Uint8Array) => {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  return btoa(binary);
+};
 const unb64 = (text: string) => Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0));
 // What the seal covers besides the text: the draft id, and the title that sits beside the ciphertext, so the server can neither move a copy to
 // another draft nor change or swap a title unnoticed. A draft without a title is covered by its id alone.

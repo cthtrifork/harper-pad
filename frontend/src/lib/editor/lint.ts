@@ -81,6 +81,7 @@ export function harperSource(
   onResult: ((r: { count: number; ms: number }) => void) | undefined,
   persist?: Persist,
   auto?: { prefs(): Prefs | undefined; settle(): Promise<unknown> },
+  isPrivate?: () => boolean,
 ) {
   return linter(
     async (view) => {
@@ -108,7 +109,7 @@ export function harperSource(
         severity: severity(f.kind),
         source: f.kind,
         message: f.message,
-        actions: [...f.fixes.map(toAction), ...personalActions(harper, f, persist)],
+        actions: [...f.fixes.map(toAction), ...(isPrivate?.() ? [] : personalActions(harper, f, persist))],
         // For "Fix all safe issues": a finding with one clear fix carries it (see autocorrect.ts).
         ...(f.safe ? { safe: true, autofix: { fix: f.fixes[0], problem: f.problem, hash: f.hash } } : {}),
       }));

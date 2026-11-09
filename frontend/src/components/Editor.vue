@@ -13,6 +13,7 @@ const props = defineProps({
   doc: { type: String, default: "" },
   format: { type: String as PropType<"markdown" | "text">, default: "markdown" },
   source: { type: Boolean, default: false }, // the Split view's source pane: monospace, line numbers
+  isolated: { type: Boolean, default: false }, // the text is private (a protected draft): see EditorOptions.isPrivate
   persist: { type: Function as PropType<(note?: PersistNote) => unknown>, default: async () => {} },
   autocorrect: { type: Object as PropType<Prefs>, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) }, // see lib/autocorrect.ts
 });
@@ -35,6 +36,7 @@ onMounted(() => {
     onDoc: (text) => emit("doc", text),
     onEdit: () => emit("edited"),
     getAutocorrect: () => props.autocorrect,
+    isPrivate: () => props.isolated,
     onFixes: (list) => emit("fixes", list),
     onFixed: (ids) => emit("fixed", ids),
     onUserEdit: () => emit("user-edit"),

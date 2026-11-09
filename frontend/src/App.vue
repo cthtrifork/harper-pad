@@ -502,6 +502,17 @@ watch(
     toast.value = null;
   },
 );
+// A protected draft that locks (or becomes protected) leaves nothing of its text in the panels: the fixes' original and replacement text, the
+// undo toast and the findings.
+watch(
+  () => [drafts.locked.value, drafts.protectedDraft.value],
+  ([isLocked, isProtected]) => {
+    if (!isLocked && !isProtected) return;
+    fixed.value = [];
+    toast.value = null;
+    if (isLocked) problems.value = [];
+  },
+);
 onBeforeUnmount(() => {
   narrow.removeEventListener("change", onNarrowChange);
   window.removeEventListener("keydown", onKeydown);
@@ -573,6 +584,7 @@ onBeforeUnmount(() => {
             :source="mode === 'split'"
             :persist="persist"
             :autocorrect="autocorrect"
+            :isolated="drafts.protectedDraft.value"
             @fixes="fixed = $event"
             @fixed="onFixed"
             @user-edit="toast = null"

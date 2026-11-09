@@ -89,3 +89,10 @@ test("a changed, removed or added title is detected, because the seal covers it"
   await assert.rejects(unlock(pack({ ...without, t: title }), ID, "pw", cost), WrongPassphrase);
   assert.equal((await unlock(pack(withTitle), ID, "pw", cost)).content, body); // untouched still opens
 });
+
+test("a large draft is sealed and opened (the encoding is done in bounded pieces)", async () => {
+  const big = "lorem ipsum dolor sit amet ".repeat(30000); // about 800 KB
+  const session = await newSession("pw", cost);
+  const env = await seal(session, ID, big, title);
+  assert.equal((await unlock(env, ID, "pw", cost)).content, big);
+});

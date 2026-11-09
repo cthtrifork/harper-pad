@@ -66,6 +66,9 @@ export interface EditorOptions {
   onEdit?: () => void;
   persist?: (note?: PersistNote) => unknown;
   getAutocorrect?: () => Prefs | undefined;
+  /** True while the text is private (a protected draft): nothing derived from it is kept, so no word is added to the dictionary, no finding
+   * is ignored (both are stored and synced in plain text), and autocorrect stays off. */
+  isPrivate?: () => boolean;
   onFixes?: (list: { id: number; original: string; replacement: string }[]) => void;
   onFixed?: (ids: number[]) => void;
   onUserEdit?: () => void;
@@ -85,6 +88,7 @@ export function createEditor(
     onEdit,
     persist,
     getAutocorrect,
+    isPrivate,
     onFixes,
     onFixed,
     onUserEdit,
@@ -93,6 +97,7 @@ export function createEditor(
   const ctx = { onStats, onCursor, stats: null, problems: [], settling: null } as unknown as Ctx;
   // Ctrl+Z took fixes back: tell Harper to ignore those findings so they are not fixed again. The next lint waits for this.
   ctx.ignore = (entries) => {
+    if (isPrivate?.()) return;
     ctx.settling = (async () => {
       const harper = getHarper();
       for (const e of entries) {
@@ -107,7 +112,7 @@ export function createEditor(
       relint(view);
     })();
   };
-  const auto = { prefs: () => getAutocorrect?.(), settle: () => ctx.settling ?? Promise.resolve() };
+  const auto = { prefs: () => (isPrivate?.() ? undefined : getAutocorrect?.()), settle: () => ctx.settling ?? Promise.resolve() };
   const mode = new Compartment();
   const extensions = [
     mode.of(modeExtensions(initialMode)),
@@ -118,7 +123,7 @@ export function createEditor(
     EditorView.contentAttributes.of({ "aria-label": "Document" }), // the textbox needs an accessible name
     placeholder("Start writing. Harper checks as you type, and nothing leaves this computer."),
     autoField,
-    harperSource(getHarper, onResult, persist, auto),
+    harperSource(getHarper, onResult, persist, auto, isPrivate),
     theme,
     EditorView.updateListener.of((u) => {
       reportAutocorrect(u, { onFixes, onFixed, onUserEdit, ignore: ctx.ignore });
