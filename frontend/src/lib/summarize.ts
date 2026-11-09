@@ -1,5 +1,6 @@
 // What the drafts list shows: title, excerpt and a preview of the task lines. Made here for both builds (docs/architecture.md, "Go side").
 // Cases: testdata/summarize.json.
+import { clearTitle, isProtected } from "./protect.ts";
 
 const TASK = /^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$/;
 const HEAD = /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?)/;
@@ -21,6 +22,10 @@ interface TaskLine {
 }
 
 export function summarize(content: string) {
+  // A protected draft shows no excerpt and no tasks, and a title only when the user chose to show it (docs/sync.md, "Protected drafts").
+  if (isProtected(content)) {
+    return { title: clearTitle(content) ?? "Locked draft", excerpt: "", tasks: [] as TaskLine[], tasksTotal: 0, tasksDone: 0 };
+  }
   let title = "";
   let total = 0;
   let done = 0;
