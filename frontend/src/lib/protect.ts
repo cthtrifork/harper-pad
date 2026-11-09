@@ -8,7 +8,7 @@
 
 export const PREFIX = "hp-protected:1:";
 
-// 32 MiB, 3 passes, 1 lane (docs/sync.md). `memoryKiB` and `passes` are parameters for the tests.
+// 32 MiB, 3 passes, 1 lane. `memoryKiB` and `passes` are parameters for the tests.
 export const COST = { memoryKiB: 32 * 1024, passes: 3 };
 
 export class WrongPassphrase extends Error {
