@@ -73,12 +73,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # The Caddy service mounts frontend/dist-web; the scan does not use it, but the directory must exist.
+      # The Caddy service mounts frontend/dist-web; the scan does not use it, but the directory must exist. The large ZAP image is
+      # pulled while the stack builds instead of after.
       - name: Start the stack
         timeout-minutes: 10
         run: |
           mkdir -p frontend/dist-web
+          docker pull -q "$ZAP_IMAGE" > /dev/null &
           docker compose -f backend/test/e2e/compose.yaml up -d --build --wait
+          wait
 
       # harper-pad-admin applies the schema (it owns the tables); harper-pad-sync is not ready until it has. The Makefile prefers
       # podman, which is also on the runner, so COMPOSE is set explicitly (the stack above was started with docker compose).
@@ -95,13 +98,16 @@ jobs:
       # 2 only warnings; anything above 2 is ZAP itself failing (124 is the backstop). The status is kept for the last step.
       - name: Run ZAP
         timeout-minutes: 18
+        env:
+          # Pull requests get a shorter active scan; the weekly and manual runs keep the long one.
+          SCAN_MINUTES: ${{ github.event_name == 'pull_request' && 5 || 10 }}
         run: |
           mkdir -p zap-out && chmod 777 zap-out
           set +e
-          timeout --kill-after=30s 15m docker run --rm --name zap --network harper-pad-e2e_default \
+          timeout --kill-after=30s 14m docker run --rm --name zap --network harper-pad-e2e_default \
             -v "$PWD/backend/test/zap:/zap/wrk/rules:ro" -v "$PWD/zap-out:/zap/wrk/out" \
             "$ZAP_IMAGE" zap-full-scan.py -t http://sync:8080 -c rules/rules.tsv \
-            -m 3 -T 5 -z "-config scanner.maxScanDurationInMins=8 -config scanner.maxRuleDurationInMins=2" \
+            -m 2 -T 5 -z "-config scanner.threadPerHost=8 -config scanner.maxScanDurationInMins=$SCAN_MINUTES -config scanner.maxRuleDurationInMins=2" \
             -r out/report.html -J out/report.json
           status=$?
           docker rm -f zap > /dev/null 2>&1
