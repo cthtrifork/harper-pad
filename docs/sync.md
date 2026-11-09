@@ -330,15 +330,15 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 ### Using it
 
 - **The padlock.** An open draft shows a small padlock at the bottom: open for a plain draft, closed for a protected one.
-- **Protecting a draft.** Click the padlock on a plain draft. The first protected draft defines the passphrase, which is typed twice. Later
+- **Protecting a draft.** Click the padlock on a plain draft and choose the title the draft list will show (the text's own title is offered). The first protected draft defines the passphrase, which is typed twice. Later
   drafts must use the same one, so the app checks it against another protected draft.
 - **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
   again each time the draft is opened.
-- **The padlock menu.** On an unlocked draft the padlock opens a menu: lock now, show the title in the draft list, remove protection.
+- **The padlock menu.** On an unlocked draft the padlock opens a menu: lock now, change the title in the draft list, remove protection.
 - **Locking.** The key is kept in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
   the background, and on "Lock now". What is unsaved is saved first.
-- **The title.** The title is encrypted by default, and the draft list shows "Locked draft" instead. "Show title in the draft list" stores it
-  unencrypted, so the server can read it.
+- **The title.** The title is not protected. It is what you chose when protecting the draft, it does not follow the text, and the draft list
+  and the server show it. It can be changed from the padlock menu.
 - **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
 - **Removing protection.** The draft is stored as plain text again.
 - **No file link.** A protected draft cannot be linked to a file, and a linked draft cannot be protected, because a file would hold the text
@@ -350,7 +350,7 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 ### Cryptography
 
 - The key comes from the passphrase and a random salt that is kept with the draft, through Argon2id, a hash made slow and memory-hungry
-  on purpose. The text and the title are sealed with AES-256-GCM, with the draft id as additional data, so a copy cannot be moved to another
+  on purpose. The text is sealed with AES-256-GCM, with the draft id as additional data, so a copy cannot be moved to another
   draft. A wrong passphrase fails the check built into GCM, so no check value is stored.
 - Local storage holds the same ciphertext as the server. The text is decrypted only in memory, and what is derived from it (lint
   results, search, undo history, autosave copies, exports) stays in memory or is skipped.
@@ -365,6 +365,6 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   cannot tell. It cannot read or forge one.
 - The server keeps one row per draft, so protecting a draft replaces its plain text there. Database backups can still hold earlier plain
   versions, and ciphertext versions after protection is removed.
-- A title shown in the list is readable by the server.
+- The title is readable by the server, so it should not give the text away.
 - Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server that
   serves modified web app code.
