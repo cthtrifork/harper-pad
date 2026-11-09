@@ -324,59 +324,47 @@ Not defended: a compromised device, a compromised server (for drafts that are no
 ## Protected drafts (end-to-end encryption)
 
 A draft can be protected. The server and the local database then hold only ciphertext for it, and the text is readable only after the
-passphrase is entered. Other drafts are unaffected. The server stores a protected draft like any other: an opaque `data` string by id and
-version. Ids, versions, times, the deleted flag, sizes and the fact that a draft is protected are visible to the server.
+passphrase is entered. Other drafts are unaffected. The server stores a protected draft like any other draft; it sees ids, versions, times,
+the deleted flag, sizes and the fact that a draft is protected. How the text is sealed and stored is in `frontend/src/lib/protect.ts`.
 
 ### Using it
 
-- **The padlock.** An open draft shows a small padlock at the bottom. It is open for a plain draft, closed and unlocked for a protected
-  draft whose passphrase has been entered, and closed and locked otherwise.
-- **Protecting a draft.** Click the padlock on a plain draft.
-  - If no draft is protected yet, the app asks for a new passphrase (twice, at least 10 characters). The first protected draft defines it.
-  - If other drafts are protected, the app asks for the existing passphrase and checks it by decrypting one of them, so every protected
-    draft has the same passphrase.
+- **The padlock.** An open draft shows a small padlock at the bottom: open for a plain draft, closed for a protected one.
+- **Protecting a draft.** Click the padlock on a plain draft. The first protected draft defines the passphrase, which is typed twice. Later
+  drafts must use the same one, so the app checks it against another protected draft.
 - **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
   again each time the draft is opened.
-- **The padlock menu.** Clicking the padlock of an unlocked draft opens a small menu: "Lock now", "Show title in the draft list" and
-  "Remove protection".
-- **Locking.** The key lives in memory only. It is dropped when the draft is closed, after five minutes without a key press, click or
-  scroll, when the app goes to the background, and on "Lock now". What is unsaved is saved first.
-- **The title.** By default the title is encrypted and the draft list shows "Locked draft" in its place. The padlock menu has a
-  "Show title in the draft list" option. When it is on, the title is stored unencrypted, and the server can read it. When it is off, the
-  title is encrypted again.
-- **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft, locked or not.
-- **Unprotecting.** The padlock menu has "Remove protection". It is on an unlocked draft, so the passphrase has been entered already. The
-  draft is then stored as plain text.
-- **Size.** The envelope is about a third larger than the text, so a protected draft holds roughly 700 KB of text, against 1 MiB for a plain draft.
-- **No file link.** A protected draft cannot be linked to a file, because linking writes plaintext to disk. A linked draft cannot be
-  protected.
-- **No passphrase change and no recovery.** The passphrase cannot be changed, and losing it loses the protected drafts. To use a new
-  passphrase, unprotect every draft, then protect them again.
+- **The padlock menu.** On an unlocked draft the padlock opens a menu: lock now, show the title in the draft list, remove protection.
+- **Locking.** The key is kept in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
+  the background, and on "Lock now". What is unsaved is saved first.
+- **The title.** The title is encrypted by default, and the draft list shows "Locked draft" instead. "Show title in the draft list" stores it
+  unencrypted, so the server can read it.
+- **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
+- **Removing protection.** The draft is stored as plain text again.
+- **No file link.** A protected draft cannot be linked to a file, and a linked draft cannot be protected, because a file would hold the text
+  unprotected.
+- **Size.** Sealing makes a draft about a third larger, so a protected draft holds less text than a plain one before it reaches the limit.
+- **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, remove protection
+  from every draft, then protect them again.
 
 ### Cryptography
 
-- Per draft, a random 128-bit salt, stored with the blob. Key = Argon2id(passphrase, salt), at least 32 MiB, 3 passes, 1 lane, in a
-  worker. The implementation is hash-wasm 4.12.0, which took about 101, 107 and 218 ms at 32, 64 and 128 MiB on an iPhone Home Screen app.
-- AES-256-GCM with a fresh 96-bit nonce per write and the draft id as additional data, so a blob cannot move to another draft. The
-  server assigns the version after the page has encrypted, so the version is not in the additional data. A wrong passphrase fails the GCM
-  tag; there is no separate check value to attack.
-- The text, and the title unless it is shown in the list, are inside the ciphertext. The envelope is the draft's `content`, so SQLite,
-  IndexedDB, the sync API and the sync run treat a protected draft as an ordinary draft. The list marks it by its excerpt, which no stored
-  field replaces, and shows no excerpt for it.
-- SQLite and IndexedDB hold the same ciphertext as the server. The text is decrypted only in memory.
-- The "protected" flag is authoritative on the client, kept in the local record and inside the ciphertext. A server that serves a
-  protected draft as plaintext is refused, not shown.
-- For a protected draft, everything derived from the text is kept in memory only or skipped: Harper lint results, any search index,
-  undo history, autosave copies, exports and the service worker cache.
+- The key comes from the passphrase and a random salt that is kept with the draft, through Argon2id, a hash made slow and memory-hungry
+  on purpose. The text and the title are sealed with AES-256-GCM, with the draft id as additional data, so a copy cannot be moved to another
+  draft. A wrong passphrase fails the check built into GCM, so no check value is stored.
+- Local storage holds the same ciphertext as the server. The text is decrypted only in memory, and what is derived from it (lint
+  results, search, undo history, autosave copies, exports) stays in memory or is skipped.
+- The "protected" flag is kept on the device. A server that serves a protected draft as plain text is refused, not shown.
 
 ### Limits
 
-- A copied ciphertext (stolen token, backup, database leak) can be guessed against offline for as long as the attacker likes. The
-  passphrase strength and the Argon2id cost are the whole defence; the per-draft salt only stops work being shared between drafts.
+- A copied ciphertext (stolen token, backup, database leak) can be guessed against offline for as long as the attacker likes. The passphrase
+  and the cost of Argon2id are the whole defence. The salt only stops one guess from testing every draft at once; changing the salt over
+  time does not help, because it is stored beside the ciphertext and the passphrase stays the same.
 - The server can delete a protected draft, or replay an older ciphertext of the same draft, for example from a backup, and the device
   cannot tell. It cannot read or forge one.
-- The server keeps one row per draft and overwrites it on each write, so protecting a draft replaces its plaintext there. Database
-  backups and write-ahead logs can still hold earlier plaintext versions, and ciphertext versions after a draft is unprotected.
+- The server keeps one row per draft, so protecting a draft replaces its plain text there. Database backups can still hold earlier plain
+  versions, and ciphertext versions after protection is removed.
 - A title shown in the list is readable by the server.
-- Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server
-  that serves modified web app code.
+- Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server that
+  serves modified web app code.
