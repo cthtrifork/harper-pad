@@ -46,7 +46,7 @@ function setup({
       writeFile: async () => log.push("write"),
       applyFile: async () => log.push("applyFile"),
       current: () => ({ id: ID, text: draftText, format: "markdown", updatedAt: 7, revision: 1 }),
-      plain: async (t) => t,
+      plain: async (t, _key?) => t,
       unlockServer: async (_sealed, pass) => {
         if (pass !== "right") throw new Error("Wrong passphrase.");
         return "key";
