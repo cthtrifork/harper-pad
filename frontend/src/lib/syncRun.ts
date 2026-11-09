@@ -76,12 +76,14 @@ export function createSyncer({
   fetchFn,
   onGone = () => {},
   onRejected = () => {},
+  onDowngrade = () => {},
 }: {
   device: DeviceRecord;
   drafts: SyncStore;
   fetchFn?: typeof fetch;
   onGone?: (id: string) => void;
   onRejected?: (id: string, message: string) => void;
+  onDowngrade?: (id: string) => void;
 }) {
   // Records the answer. True when the server took it.
   async function upload(draft: LocalDraft, state: ServerState | null) {
@@ -96,12 +98,12 @@ export function createSyncer({
     return true;
   }
 
-  // A protected draft is never replaced by a plain one from the server: it could only be the server stripping the protection, and the text
-  // typed next would then be stored unprotected. A real removal of protection happens on a device and is a change there, not a download.
+  // A protected draft is never replaced by a plain one from the server on its own: it is either another device removing the protection or the
+  // server stripping it, and only the person can tell. `onDowngrade(id)` asks them when the draft is open (`takeServer` carries out "accept").
   async function downgrades(id: string, remote: { content: string }) {
     const mine = await drafts.get(id).catch(() => null);
     if (!mine || !isProtected(mine.content) || isProtected(remote.content)) return false;
-    onRejected(id, "the server sent this protected draft as plain text");
+    onDowngrade(id);
     return true;
   }
 
@@ -139,7 +141,7 @@ export function createSyncer({
     if (action === "download") {
       const doc = await getDoc({ device, id, fetchFn });
       if (!doc || doc.deleted) return "";
-      if (await downgrades(id, parseData(doc))) return "failed";
+      if (await downgrades(id, parseData(doc))) return "";
       await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
       return "downloaded";
     }
@@ -324,6 +326,15 @@ export function createSyncer({
         return;
       }
       throw new SyncError("server", "The settings changed on the server. Try again.");
+    },
+
+    // The server's version becomes this device's, whatever the local one holds: for protected versions that decrypt to the same text (their
+    // ciphertexts differ by nonce, so the hashes do), and for a protected draft the person accepted as plain text. False when there is none.
+    async takeServer(id: string) {
+      const doc = await getDoc({ device, id, fetchFn });
+      if (!doc || doc.deleted) return false;
+      await drafts.applyRemote({ id, ...parseData(doc), createdAt: doc.createdAt, updatedAt: doc.updatedAt }, doc.version);
+      return true;
     },
 
     // Only if the server still holds the tombstone. Resolves to the removed draft, so the caller can offer Undo.

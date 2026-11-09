@@ -56,6 +56,10 @@ function setup({
       serverConflict.value = null;
       log.push("clearServer");
     },
+    takeServer: async () => {
+      log.push("take");
+      return true;
+    },
   };
   return {
     c: useConflict({ drafts, sync } as unknown as Parameters<typeof useConflict>[0]),
@@ -171,4 +175,16 @@ test("a version that cannot be opened with the key held is not shown as a confli
   drafts.locked.value = false;
   await settle();
   assert.equal(c.model.value, null);
+});
+
+test("a server version with the same text as yours is taken without a dialog (protected versions differ only by their nonce)", async () => {
+  const { c, log, drafts } = setup({ server: { text: "envelope-b" }, draftText: "same" });
+  drafts.dialog.plain = async () => "same";
+  drafts.locked.value = true;
+  await settle();
+  drafts.locked.value = false;
+  await settle();
+  assert.equal(c.model.value, null);
+  assert.ok(log.includes("take"));
+  assert.ok(log.includes("clearServer"));
 });

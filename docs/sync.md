@@ -336,13 +336,16 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   again each time the draft is opened.
 - **The padlock menu.** On an unlocked draft the padlock opens a menu: lock now, change the title in the draft list, remove protection.
 - **Locking.** The key is kept in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
-  the background, and on "Lock now". What is unsaved is saved first.
+  the background, and on "Lock now". What is unsaved is saved first, and if that fails the draft stays unlocked so the text is not lost.
+  Protecting or removing protection likewise changes nothing, and says why, when the write fails.
 - **The title.** A protected draft shows "Locked draft" in the draft list. It can be given a title instead, when it is protected or later
   from the padlock menu. That title is not protected: the draft list and the server show it, and it does not follow the text. Drafts
   without one, including drafts protected before titles existed, keep "Locked draft".
 - **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
 - **Search.** Search reads the text of plain drafts. A protected draft matches on its title only, never on its stored text.
 - **Removing protection.** The draft is stored as plain text again.
+- **Private editing.** While a protected draft is open, nothing derived from its text is kept: no word is added to the dictionary and no
+  finding is ignored (both are stored and synced in plain text), and autocorrect is off.
 - **No file link.** A protected draft cannot be linked to a file, and a linked draft cannot be protected, because a file would hold the text
   unprotected.
 - **Size.** Sealing makes a draft about a third larger, so a protected draft holds less text than a plain one before it reaches the limit.
@@ -350,8 +353,9 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   passphrase, which is never sent anywhere, so it has to be typed on every device. A device that has not received a protected draft yet
   cannot tell that a passphrase exists, so protect the first draft on one device, let it sync, and only then protect drafts on the others.
   Two devices that edit the same protected draft at once get the usual Keep or Overwrite question. The versions are opened and
-  compared as text, so identical text is no conflict, and Keep makes a second protected copy that opens with the same passphrase. A locked
-  draft has no question until it is unlocked, and a version protected with a different passphrase is not compared.
+  compared as text, so identical text is no conflict (the server's version is taken, with no question), and Keep makes a second protected
+  copy that opens with the same passphrase. A locked draft has no question until it is unlocked, and a version protected with a different
+  passphrase is not compared.
 - **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, remove protection
   from every draft, then protect them again.
 
@@ -363,8 +367,9 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   built into GCM, so no check value is stored, and the two cannot be told apart.
 - Local storage holds the same ciphertext as the server. The text is decrypted only in memory, and what is derived from it (lint
   results, search, undo history, autosave copies, exports) stays in memory or is skipped.
-- Sync never replaces a protected draft with a plain one from the server, which could only be the server stripping the protection, and says
-  so. Protection is removed on a device, and that travels as an ordinary change.
+- Sync never replaces a protected draft with a plain one from the server on its own. It is either another device that removed the
+  protection or the server stripping it, so when the draft is open a dialog asks: keep it protected (the protected text goes back to the
+  server) or accept the plain text.
 
 ### Limits
 

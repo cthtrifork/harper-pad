@@ -5,6 +5,7 @@ import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ConflictDialog from "./components/ConflictDialog.vue";
+import DowngradeDialog from "./components/DowngradeDialog.vue";
 import PassphraseDialog from "./components/PassphraseDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, type Prefs, savePrefs } from "./lib/autocorrect.ts";
@@ -631,6 +632,7 @@ onBeforeUnmount(() => {
     <!-- A note that was deleted on another device: a modal, so the person has to choose Keep or Remove. -->
     <ConflictDialog v-if="conflict.model.value" :model="conflict.model.value" :busy="conflict.busy.value" :note="conflict.note.value" @choose="conflict.choose" />
     <PassphraseDialog v-if="pass" :mode="pass.mode" :title="pass.title" :busy="passBusy" :error="passError" @submit="submitPass" @cancel="pass = null" />
+    <DowngradeDialog v-if="sync.downgrade.value && !conflict.model.value" @keep="sync.keepProtected()" @accept="sync.acceptPlain()" />
     <DeletedElsewhereDialog v-if="sync.gone.value && !conflict.model.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
     <StatusBar
       :state="state"

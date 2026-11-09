@@ -7,7 +7,7 @@ type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" |
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
-  "enrolled" | "serverConflict" | "checkNow" | "inspectServer" | "forcePush" | "clearConflict"
+  "enrolled" | "serverConflict" | "checkNow" | "inspectServer" | "forcePush" | "clearConflict" | "takeServer"
 >;
 
 // The Keep or Overwrite dialog for the open draft (ConflictDialog.vue): the model for lib/conflict.ts, and the choice. Only the open draft
@@ -64,6 +64,13 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       server = { text, stamp: sv.stamp, at: sv.updatedAt };
     }
     if (mine !== building) return;
+    // A protected draft's versions differ by their nonce even when the text is the same: nothing differs after all, so the server's version
+    // is taken as this device's and there is no dialog.
+    if (!f && server && server.text === drafts.dialog.current().text) {
+      model.value = null;
+      if (await sync.takeServer(id)) sync.clearConflict();
+      return;
+    }
     const yours = f?.clean ? (file as { text: string }).text : drafts.dialog.current().text;
     // An unedited draft takes the file's text. If the server then holds nothing or the same text, nothing differs after all: no dialog.
     if (f?.clean && (!server || server.text === yours)) {

@@ -63,7 +63,7 @@ const key = await generateDeviceKey();
 const DEVICE = { server: "https://sync.example.com", token: "tok", ...key };
 
 // A device: its own IndexedDB, and `sync()` to run Sync all against the shared server.
-function device(server, rejected = []) {
+function device(server, downgraded = []) {
   const factory = new IDBFactory();
   const open = () => {
     globalThis.indexedDB = factory;
@@ -77,7 +77,7 @@ function device(server, rejected = []) {
       drafts,
       fetchFn: server.fetchFn,
       onGone: (id) => gone.push(id),
-      onRejected: (id, why) => rejected.push([id, why]),
+      onDowngrade: (id) => downgraded.push(id),
     });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
   return {
@@ -91,6 +91,7 @@ function device(server, rejected = []) {
     inspect: (id) => syncer().inspect(id),
     probe: (id) => syncer().probe(id),
     force: (id) => syncer().force(id),
+    take: (id) => syncer().takeServer(id),
   };
 }
 const none = { uploaded: 0, downloaded: 0, removed: 0, failed: 0, skipped: 0 };
@@ -488,8 +489,8 @@ test("a delete is pushed by one(id), the way the end of the Undo window does it"
 test("a protected draft syncs as ciphertext, opens on the other device, and the server cannot strip the protection", async () => {
   const server = fakeServer();
   const a = device(server);
-  const rejected = [];
-  const b = device(server, rejected);
+  const downgraded = [];
+  const b = device(server, downgraded);
   const cost = { memoryKiB: 64, passes: 1 };
   const d = await a.drafts.save({ content: "placeholder" });
   const envelope = await seal(await newSession("pw", cost), d.id, "the secret text", "Groceries");
@@ -509,8 +510,51 @@ test("a protected draft syncs as ciphertext, opens on the other device, and the 
     updatedAt: row.updatedAt + 1000,
     data: JSON.stringify({ v: 1, format: "markdown", content: "forged plain text" }),
   });
-  assert.deepEqual(await b.sync(), sum({ failed: 1 }));
+  assert.deepEqual(await b.sync(), none, "nothing is applied or counted: the person is asked when the draft is open");
   assert.equal((await b.drafts.get(d.id)).content, envelope, "the protected text is kept");
-  assert.equal(rejected.length, 1);
-  assert.match(rejected[0][1], /plain text/);
+  assert.deepEqual(downgraded, [d.id]);
+
+  // Open: the same question. Keep protected sends this device's text on top of the plain one.
+  downgraded.length = 0;
+  assert.equal(await b.open(d.id), "none");
+  assert.deepEqual(downgraded, [d.id]);
+  assert.equal(await b.force(d.id), true);
+  assert.ok(JSON.parse(server.rows.get(d.id).data).content.startsWith("hp-protected:1:"));
+
+  // Or the person accepts it (the protection was removed on another device): the server's plain version becomes this device's.
+  const row2 = server.rows.get(d.id);
+  server.rows.set(d.id, {
+    ...row2,
+    version: row2.version + 1,
+    updatedAt: row2.updatedAt + 1000,
+    data: JSON.stringify({ v: 1, format: "markdown", content: "removed on A" }),
+  });
+  assert.equal(await b.take(d.id), true);
+  assert.equal((await b.drafts.get(d.id)).content, "removed on A");
+  assert.deepEqual(await b.sync(), none);
+});
+
+test("two protected versions of the same text are reconciled by taking the server's, which ends the conflict for good", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const cost = { memoryKiB: 64, passes: 1 };
+  const session = await newSession("pw", cost);
+  const d = await a.drafts.save({ content: "placeholder" });
+  await tick();
+  await a.drafts.save({ id: d.id, content: await seal(session, d.id, "start", "T") });
+  await a.sync();
+  await b.sync();
+  // Both devices save the same text; each seal has its own nonce, so the stored versions differ.
+  await tick();
+  const fromA = await seal(session, d.id, "same text", "T");
+  await a.drafts.save({ id: d.id, content: fromA });
+  await tick();
+  await b.drafts.save({ id: d.id, content: await seal(session, d.id, "same text", "T") });
+  await a.sync();
+  assert.deepEqual(await b.sync(), none, "the engine sees two different versions and leaves them for the dialog");
+  assert.equal(await b.take(d.id), true);
+  assert.equal((await b.drafts.get(d.id)).content, fromA);
+  assert.deepEqual(await b.sync(), none);
+  assert.deepEqual(await b.drafts.changes(), { changed: [], deleted: [] });
 });
