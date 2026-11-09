@@ -39,3 +39,16 @@ test("search matches the text ignoring case and keeps the order", async () => {
     [saved[2].id, saved[0].id],
   );
 });
+
+test("search reads the title of a protected draft, never its ciphertext", async () => {
+  const { drafts, saved } = await withDrafts(
+    "plain notes about apples",
+    'hp-protected:1:{"s":"c2FsdA==","n":"bm9uY2U=","c":"YXBwbGUtY2lwaGVydGV4dA==","t":"Orchard"}',
+    'hp-protected:1:{"s":"c2FsdA==","n":"bm9uY2U=","c":"YXBwbGUtY2lwaGVydGV4dA=="}',
+  );
+  const ids = async (q) => (await drafts.search(q, 50)).drafts.map((d) => d.id);
+  assert.deepEqual(await ids("apple"), [saved[0].id]); // not the ciphertext of the other two
+  assert.deepEqual(await ids("orchard"), [saved[1].id]);
+  assert.deepEqual(await ids("locked"), [saved[2].id]);
+  assert.deepEqual(await ids("hp-protected"), []);
+});

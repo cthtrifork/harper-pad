@@ -4,6 +4,7 @@ import { type IDBPDatabase, openDB } from "idb";
 import type { Draft, List, Summary, SyncState } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { withDb as sharedWithDb } from "./kv.ts";
 import { contentHash } from "./contentHash.ts";
+import { isProtected } from "./protect.ts";
 import { summarize } from "./summarize.ts";
 
 export const DB_NAME = "harper-pad";
@@ -137,14 +138,17 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
     return withDb((db) => page(db, null, limit, offset));
   }
 
-  // Case-insensitive; the only place the text is read, one draft at a time.
+  // Case-insensitive; the only place the text is read, one draft at a time. A protected draft is ciphertext, so it matches on its title.
   async function search(query: string, limit?: number) {
     const q = query.trim().toLowerCase();
     if (!q) return list(limit, 0);
     return withDb(async (db) => {
       const matches = new Set<string>();
+      const titles = new Map<string, string>();
+      for await (const cur of db.transaction("summaries").store) titles.set(cur.value.id, cur.value.title);
       for await (const cur of db.transaction("drafts").store) {
-        if (cur.value.content.toLowerCase().includes(q)) matches.add(cur.value.id);
+        const text = isProtected(cur.value.content) ? (titles.get(cur.value.id) ?? "") : cur.value.content;
+        if (text.toLowerCase().includes(q)) matches.add(cur.value.id);
       }
       return page(db, matches, limit, 0);
     });

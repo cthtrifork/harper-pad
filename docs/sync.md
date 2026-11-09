@@ -341,6 +341,7 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   from the padlock menu. That title is not protected: the draft list and the server show it, and it does not follow the text. Drafts
   without one, including drafts protected before titles existed, keep "Locked draft".
 - **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
+- **Search.** Search reads the text of plain drafts. A protected draft matches on its title only, never on its stored text.
 - **Removing protection.** The draft is stored as plain text again.
 - **No file link.** A protected draft cannot be linked to a file, and a linked draft cannot be protected, because a file would hold the text
   unprotected.

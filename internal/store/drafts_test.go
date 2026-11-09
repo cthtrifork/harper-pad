@@ -197,6 +197,38 @@ func TestSearch(t *testing.T) {
 	}
 }
 
+// A protected draft is ciphertext, so search reads its title and never its content.
+func TestSearchProtected(t *testing.T) {
+	s, _ := open(t)
+	tick(s)
+	sealed := ProtectedPrefix + `{"s":"c2FsdA==","n":"bm9uY2U=","c":"cGFpcmVkLXVwLWNpcGhlcnRleHQ="}`
+	for _, d := range []Draft{
+		{Content: "plain notes about groceries"},
+		{Content: sealed, Title: "Groceries", Excerpt: "hp-protected"},
+		{Content: sealed, Title: "Locked draft", Excerpt: "hp-protected"},
+	} {
+		if _, err := s.Save(d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cases := map[string]int{
+		"groceries":     2, // the plain text and the protected title
+		"locked":        1,
+		"cipher":        0, // the ciphertext is never searched
+		"paired":        0,
+		ProtectedPrefix: 0,
+		"hp-protected":  0,
+		"notes about":   1,
+		"c2FsdA":        0,
+	}
+	for q, want := range cases {
+		l, err := s.Search(q, 50)
+		if err != nil || len(l.Drafts) != want || l.Total != want {
+			t.Errorf("Search(%q) = %d drafts (total %d), %v; want %d", q, len(l.Drafts), l.Total, err, want)
+		}
+	}
+}
+
 // The summary the page sends is what the list shows, cut to the list's bounds, and each save replaces it.
 func TestSummaries(t *testing.T) {
 	s, _ := open(t)

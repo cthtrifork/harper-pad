@@ -9,7 +9,6 @@ import {
   isProtectedSummary,
   newSession,
   openWith,
-  PREFIX as PROTECTED_PREFIX,
   type Session,
   seal,
   unlock as unlockEnvelope,
@@ -77,6 +76,7 @@ const SAVE_DELAY_MS = 100;
 const SEARCH_DELAY_MS = 200;
 const PAGE = 50; // drafts shown at first, and added by "Show more"
 const TOAST_MS = 8000;
+const SCAN = 200; // drafts looked at per call when scanning the list
 const IDLE_LOCK_MS = 5 * 60 * 1000; // an unlocked protected draft locks again after this long without a key press, click or scroll
 
 const message = (err: unknown) => String((err as Error)?.message || err);
@@ -282,10 +282,14 @@ export function useDrafts(
   }
 
   // A protected draft elsewhere, to check a passphrase against: every protected draft has the same one, and no draft stores a check value.
+  // Search does not read protected drafts, so this pages through the list and looks for the marker in each summary.
   async function otherProtected(exceptId: string) {
-    const found = await be.searchDrafts(PROTECTED_PREFIX, 50);
-    const hit = found.drafts.find((d) => d.id !== exceptId && isProtectedSummary(d));
-    return hit ? be.getDraft(hit.id) : null;
+    for (let offset = 0; ; offset += SCAN) {
+      const page = await be.listDrafts(SCAN, offset);
+      const hit = page.drafts.find((d) => d.id !== exceptId && isProtectedSummary(d));
+      if (hit) return be.getDraft(hit.id);
+      if (page.drafts.length < SCAN) return null;
+    }
   }
 
   // Writes the open draft again, in its new form (protected or not, another list title).

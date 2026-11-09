@@ -256,7 +256,7 @@ func (s *Store) List(limit, offset int) (List, error) {
 	return s.query(nil, limit, offset)
 }
 
-// Search returns the drafts whose text contains query, newest first. The match ignores case for ASCII letters only
+// Search returns the drafts whose text contains query, newest first (a protected draft: whose title does). The match ignores case for ASCII letters only
 // (SQLite's LIKE); an empty query lists everything.
 func (s *Store) Search(query string, limit int) (List, error) {
 	query = strings.TrimSpace(query)
@@ -268,9 +268,14 @@ func (s *Store) Search(query string, limit int) (List, error) {
 	return s.query(&pattern, limit, 0)
 }
 
+// ProtectedPrefix starts the content of a protected draft (frontend/src/lib/protect.ts), which is ciphertext. Search never reads it: a
+// protected draft matches on its title alone.
+const ProtectedPrefix = "hp-protected:1:"
+
 // whereMatches is the only fragment ever added to the list query, and it is a constant: the caller's text reaches SQLite
-// only as the value of its ? parameter, never as SQL.
-const whereMatches = ` WHERE json_extract(data, '$.content') LIKE ? ESCAPE '\'`
+// only as the value of its ? parameter, never as SQL. It takes the prefix length, the prefix, then the pattern twice.
+const whereMatches = ` WHERE CASE WHEN substr(json_extract(data, '$.content'), 1, ?) = ? THEN title LIKE ? ESCAPE '\'
+	ELSE json_extract(data, '$.content') LIKE ? ESCAPE '\' END`
 
 // query lists drafts newest first. pattern is a LIKE pattern for the content, or nil for no filter.
 func (s *Store) query(pattern *string, limit, offset int) (List, error) {
@@ -283,7 +288,7 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	where := ""
 	if pattern != nil {
 		where = whereMatches
-		args = append(args, *pattern)
+		args = append(args, len(ProtectedPrefix), ProtectedPrefix, *pattern, *pattern)
 	}
 	out := List{Drafts: []Summary{}}
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM drafts`+where, args...).Scan(&out.Total); err != nil {

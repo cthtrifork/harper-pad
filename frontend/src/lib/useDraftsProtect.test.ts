@@ -55,11 +55,10 @@ function setup(initial: Record<string, { content: string; filePath?: string }>) 
       store.set(d.id, row);
       return row;
     },
-    searchDrafts: async (q: string) => ({
-      drafts: [...store.values()].filter((d) => d.content.includes(q)).map((d) => ({ id: d.id, ...summarize(d.content) })),
-      total: 0,
-    }),
-    listDrafts: async () => ({ drafts: [], total: 0 }),
+    listDrafts: async (limit: number, offset: number) => {
+      const all = [...store.values()].map((d) => ({ id: d.id, ...summarize(d.content) }));
+      return { drafts: all.slice(offset, offset + limit), total: all.length };
+    },
     saveDraftToFile: async (...args: unknown[]) => {
       fileWrites.push(args);
       return { draft: {}, cancelled: false, conflict: false };
