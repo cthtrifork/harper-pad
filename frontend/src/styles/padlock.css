@@ -1,0 +1,118 @@
+/* The padlock in the status bar (PadlockButton.vue) and the empty view of a locked draft (App.vue). */
+.status > .lock-wrap {
+  position: relative;
+  overflow: visible;
+}
+
+.lock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mute);
+  cursor: pointer;
+  transition:
+    background-color 0.15s var(--ease),
+    border-color 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+
+.lock-btn:hover {
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.lock-btn.locked,
+.lock-btn.unlocked {
+  color: var(--accent);
+}
+
+.lock-menu {
+  right: 0;
+  left: auto;
+  min-width: 240px;
+}
+
+.lock-menu .item.danger {
+  color: var(--bad);
+}
+
+.lock-menu .tick {
+  min-width: 1em;
+}
+
+.pass-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pass-dialog label {
+  margin-top: 8px;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.pass-dialog input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.pass-dialog .pass-error {
+  min-height: 1.4em;
+  margin-top: 8px;
+  color: var(--bad);
+  font-size: 12px;
+}
+
+.pass-dialog .actions {
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.pass-dialog .actions button {
+  min-height: 32px;
+  padding: 0 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pass-dialog .actions .primary {
+  color: var(--on-accent);
+}
+
+.locked-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 40vh;
+  color: var(--mute);
+  text-align: center;
+}
+
+.locked-view button {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.locked-view button:hover {
+  border-color: var(--accent);
+}

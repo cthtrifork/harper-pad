@@ -6,7 +6,7 @@
 // Key = Argon2id(passphrase, salt); the text and the title are sealed with AES-256-GCM, with the draft id as additional data so a blob cannot
 // move to another draft. The salt stays the same for the life of the draft; the nonce is new on every write.
 
-const PREFIX = "hp-protected:1:";
+export const PREFIX = "hp-protected:1:";
 
 // 32 MiB, 3 passes, 1 lane (docs/sync.md). `memoryKiB` and `passes` are parameters for the tests.
 export const COST = { memoryKiB: 32 * 1024, passes: 3 };
@@ -41,6 +41,11 @@ const unb64 = (text: string) => Uint8Array.from(atob(text), (ch) => ch.charCodeA
 const aad = (id: string) => new TextEncoder().encode(id);
 
 export const isProtected = (content: string) => content.startsWith(PREFIX);
+
+/** The excerpt of a protected draft's list entry. No stored field says "protected", and the list shows no excerpt for such a draft, so this
+ * marker is how the list (and the check of a passphrase against another protected draft) tells one from a plain draft. */
+export const PROTECTED_MARK = "hp-protected";
+export const isProtectedSummary = (d: { excerpt: string }) => d.excerpt === PROTECTED_MARK;
 
 function parse(content: string): Envelope {
   if (!isProtected(content)) throw new Error("not a protected draft");
@@ -105,4 +110,19 @@ export async function unlock(content: string, id: string, passphrase: string, co
   const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown; title?: unknown };
   if (typeof body.content !== "string" || typeof body.title !== "string") throw new Error("malformed protected draft");
   return { session: { key, salt }, text: { content: body.content, title: body.title } };
+}
+
+/** Opens a newer version of a draft that is already unlocked, with the same key (the salt must be the same). null: another salt, so it
+ * needs the passphrase again. */
+export async function openWith(session: Session, content: string, id: string): Promise<Sealed | null> {
+  const env = parse(content);
+  const salt = unb64(env.s);
+  if (salt.length !== session.salt.length || salt.some((b, i) => b !== session.salt[i])) return null;
+  try {
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id) }, session.key, unb64(env.c));
+    const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown; title?: unknown };
+    return typeof body.content === "string" && typeof body.title === "string" ? { content: body.content, title: body.title } : null;
+  } catch {
+    return null;
+  }
 }

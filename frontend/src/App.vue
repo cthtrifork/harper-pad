@@ -5,6 +5,7 @@ import Editor from "./components/Editor.vue";
 import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ConflictDialog from "./components/ConflictDialog.vue";
+import PassphraseDialog from "./components/PassphraseDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, type Prefs, savePrefs } from "./lib/autocorrect.ts";
 import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.ts";
@@ -18,6 +19,7 @@ import type { changesTo } from "./lib/settingsItems.ts";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.ts";
 import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.ts";
+import { WrongPassphrase } from "./lib/protect.ts";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
 import { useConflict } from "./lib/useConflict.ts";
@@ -108,6 +110,40 @@ const drafts = useDrafts(editor, showDrawer, {
 });
 // Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
 const conflict = useConflict({ drafts, sync });
+// The padlock and its passphrase dialog (docs/sync.md, "Protected drafts").
+const pass = ref<{ mode: "create" | "verify" | "unlock" } | null>(null);
+const passBusy = ref(false);
+const passError = ref("");
+const lockButton = computed(() =>
+  !drafts.available.value
+    ? null
+    : { state: !drafts.protectedDraft.value ? ("plain" as const) : drafts.locked.value ? ("locked" as const) : ("unlocked" as const), titleShown: drafts.titleShown.value },
+);
+async function askProtect() {
+  const c = await drafts.protectCheck();
+  if ("error" in c) return drafts.showToast(c.error);
+  passError.value = "";
+  pass.value = { mode: c.mode };
+}
+function askUnlock() {
+  passError.value = "";
+  pass.value = { mode: "unlock" };
+}
+async function submitPass(passphrase: string) {
+  const p = pass.value;
+  if (!p || passBusy.value) return;
+  passBusy.value = true;
+  passError.value = "";
+  try {
+    if (p.mode === "unlock") await drafts.unlock(passphrase);
+    else await drafts.protect(passphrase);
+    pass.value = null;
+  } catch (err) {
+    passError.value = err instanceof WrongPassphrase ? "Wrong passphrase." : String((err as Error)?.message || err);
+  } finally {
+    passBusy.value = false;
+  }
+}
 const copyBadge = computed(() => COPY_LABELS[drafts.copies.value[drafts.current.value.id]] ?? "");
 
 // The status line: where the open draft's text is and who has it, joined from the draft and the sync (lib/statusLine.ts).
@@ -520,7 +556,7 @@ onBeforeUnmount(() => {
       />
       </Transition>
       <div class="page" :class="mode">
-        <div v-show="mode !== 'preview'" class="col">
+        <div v-show="mode !== 'preview'" class="col" :inert="drafts.locked.value">
         <header v-if="mode === 'split'" class="phead">Markdown</header>
         <main ref="pane" class="pane" @mousedown.self.prevent="focusFromPress" @scroll.passive="onPaneScroll">
           <Editor
@@ -544,6 +580,11 @@ onBeforeUnmount(() => {
           />
           <pre v-if="error" class="error">{{ error }}</pre>
         </main>
+        </div>
+        <!-- A locked draft shows no text at all; the editor behind is empty and inert. -->
+        <div v-if="drafts.locked.value" class="locked-view">
+          <p>This draft is protected.</p>
+          <button type="button" @click="askUnlock">Enter passphrase</button>
         </div>
         <div class="toast-stack">
           <Transition name="toast-bar">
@@ -572,6 +613,7 @@ onBeforeUnmount(() => {
     </div>
     <!-- A note that was deleted on another device: a modal, so the person has to choose Keep or Remove. -->
     <ConflictDialog v-if="conflict.model.value" :model="conflict.model.value" :busy="conflict.busy.value" :note="conflict.note.value" @choose="conflict.choose" />
+    <PassphraseDialog v-if="pass" :mode="pass.mode" :busy="passBusy" :error="passError" @submit="submitPass" @cancel="pass = null" />
     <DeletedElsewhereDialog v-if="sync.gone.value && !conflict.model.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
     <StatusBar
       :state="state"
@@ -592,6 +634,12 @@ onBeforeUnmount(() => {
       :autocorrect="autocorrect.on"
       @toggle-autocorrect="setAutocorrect({ ...autocorrect, on: !autocorrect.on })"
       :sync="sync"
+      :lock="lockButton"
+      @protect="askProtect"
+      @unlock="askUnlock"
+      @lock="drafts.lock"
+      @unprotect="drafts.unprotect"
+      @show-title="drafts.setTitleShown"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
     />

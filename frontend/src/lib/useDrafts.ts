@@ -3,6 +3,18 @@ import type { List } from "../../bindings/github.com/cthtrifork/harper-pad/inter
 import * as backend from "./backend.ts";
 import { createFileChange } from "./fileChange.ts";
 import { saveLastOpened } from "./lastOpened.ts";
+import {
+  clearTitle,
+  isProtected,
+  isProtectedSummary,
+  newSession,
+  openWith,
+  PREFIX as PROTECTED_PREFIX,
+  type Session,
+  seal,
+  unlock as unlockEnvelope,
+} from "./protect.ts";
+import { summarize } from "./summarize.ts";
 
 const { isWeb } = backend;
 
@@ -66,6 +78,7 @@ const SAVE_DELAY_MS = 100;
 const SEARCH_DELAY_MS = 200;
 const PAGE = 50; // drafts shown at first, and added by "Show more"
 const TOAST_MS = 8000;
+const IDLE_LOCK_MS = 5 * 60 * 1000; // an unlocked protected draft locks again after this long without a key press, click or scroll
 
 const message = (err: unknown) => String((err as Error)?.message || err);
 
@@ -88,6 +101,15 @@ export function useDrafts(
   const query = ref("");
   const toast = ref<{ message: string; undo: (() => unknown) | null } | null>(null); // while the "Draft deleted" bar is showing
   const available = ref(true); // false when the database cannot be opened: the editor still works, nothing is saved
+
+  // Protected drafts (docs/sync.md, "Protected drafts"). Their stored content is an envelope (lib/protect.ts); the key lives here, in memory,
+  // only while the draft is open and unlocked. The passphrase itself is never kept.
+  const protectedDraft = ref(false); // the open draft is protected, locked or not
+  const locked = ref(false); // protected and not unlocked: the editor is empty and inert
+  const titleShown = ref(false); // the title is stored unencrypted, for the draft list
+  let session: Session | null = null;
+  let envelope = ""; // what the open protected draft holds in storage
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
   const home = ref(""); // the user's home folder, from the backend
   const fileState = ref<FileState>("none");
@@ -189,16 +211,146 @@ export function useDrafts(
   function setCurrent(d: Stored) {
     refreshed.value = null;
     unlinkedToast.value = null;
+    const prot = typeof d.content === "string" && isProtected(d.content);
+    if (d.id !== current.value.id || !prot) dropSession(); // the key never outlives the draft it opened
     current.value = asCurrent(d);
     fileState.value = current.value.filePath ? "unknown" : "none";
     dirty = false;
-    stored = d.id && typeof d.content === "string" ? { text: d.content, format: d.format } : null;
+    protectedDraft.value = prot;
+    envelope = prot ? (d.content as string) : "";
+    locked.value = prot && !session;
+    titleShown.value = prot && clearTitle(envelope) !== null;
+    stored = d.id && typeof d.content === "string" && !prot ? { text: d.content, format: d.format } : null;
     state.value = d.id ? "saved" : "idle";
     checkDone = fileChange.check(current.value); // also clears the dialog of the draft that was open
   }
 
+  function dropSession() {
+    session = null;
+    clearTimeout(idleTimer);
+    idleTimer = undefined;
+  }
+
+  // Any key press, click or scroll while a protected draft is unlocked starts the idle time again.
+  function touch() {
+    if (!session) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => void lock(), IDLE_LOCK_MS);
+  }
+
+  // The text the editor shows for `d`, which setCurrent has just made the open draft: its own text, the decrypted text of a protected draft
+  // that is still unlocked (the key is the same while the salt is), or "" while it is locked.
+  async function plainOf(d: Stored): Promise<string> {
+    if (!protectedDraft.value) return d.content ?? "";
+    if (session) {
+      const t = await openWith(session, envelope, d.id);
+      if (t) {
+        stored = { text: t.content, format: d.format };
+        titleShown.value = clearTitle(envelope) !== null;
+        return t.content;
+      }
+      dropSession(); // another device protected it again with another passphrase
+      locked.value = true;
+    }
+    return "";
+  }
+
+  // Locks the open protected draft: what is unsaved is saved first, then the key and the text leave memory.
+  async function lock() {
+    if (!protectedDraft.value || !session) return;
+    await flush();
+    await chain;
+    if (!session) return;
+    dropSession();
+    locked.value = true;
+    stored = null;
+    editor.value?.load("", current.value.format); // also drops the undo history
+  }
+
+  // Unlocks the open protected draft. Rejects with WrongPassphrase (lib/protect.ts) when the passphrase does not open it.
+  async function unlock(passphrase: string) {
+    if (!locked.value) return;
+    const id = current.value.id;
+    const r = await unlockEnvelope(envelope, id, passphrase);
+    if (current.value.id !== id || !locked.value) return;
+    session = r.session;
+    locked.value = false;
+    titleShown.value = clearTitle(envelope) !== null;
+    stored = { text: r.text.content, format: current.value.format };
+    editor.value?.load(r.text.content, current.value.format);
+    touch();
+    editor.value?.focus();
+  }
+
+  // A protected draft elsewhere, to check a passphrase against: every protected draft has the same one, and no draft stores a check value.
+  async function otherProtected(exceptId: string) {
+    const found = await be.searchDrafts(PROTECTED_PREFIX, 50);
+    const hit = found.drafts.find((d) => d.id !== exceptId && isProtectedSummary(d));
+    return hit ? be.getDraft(hit.id) : null;
+  }
+
+  // Writes the open draft again, in its new form (protected or not, title shown or not).
+  function rewrite() {
+    stored = null; // the text did not change, but its stored form did
+    dirty = true;
+    edits++;
+    state.value = "dirty";
+    return flush();
+  }
+
+  // What the padlock needs before it asks for a passphrase: a reason the open draft cannot be protected, or whether the passphrase is a new one
+  // ("create") or the existing one ("verify").
+  async function protectCheck(): Promise<{ error: string } | { mode: "create" | "verify" }> {
+    if (!available.value) return { error: "Drafts are unavailable." };
+    await flush();
+    if (!current.value.id) return { error: "Type something first, so there is a draft to protect." };
+    if (current.value.filePath) return { error: "A draft saved to a file cannot be protected. Unlink the file first." };
+    try {
+      return { mode: (await otherProtected(current.value.id)) ? "verify" : "create" };
+    } catch (err) {
+      return { error: `Could not check the drafts: ${message(err)}` };
+    }
+  }
+
+  // Protects the open draft. With no protected draft yet the passphrase is a new one; otherwise it must open another protected draft (rejects
+  // with WrongPassphrase), so all of them share it.
+  async function protect(passphrase: string) {
+    if (protectedDraft.value || !available.value) return;
+    await flush();
+    const id = current.value.id;
+    if (!id) throw new Error("Type something first, so there is a draft to protect.");
+    if (current.value.filePath) throw new Error("A draft saved to a file cannot be protected. Unlink the file first.");
+    const other = await otherProtected(id);
+    if (other) await unlockEnvelope(other.content ?? "", other.id, passphrase);
+    if (current.value.id !== id) return;
+    session = await newSession(passphrase);
+    protectedDraft.value = true;
+    locked.value = false;
+    titleShown.value = false;
+    touch();
+    await rewrite();
+  }
+
+  // Stores the open, unlocked protected draft as plain text again.
+  async function unprotect() {
+    if (!protectedDraft.value || !session) return;
+    dropSession();
+    protectedDraft.value = false;
+    titleShown.value = false;
+    envelope = "";
+    await rewrite();
+  }
+
+  // Shows the title in the draft list (stored unencrypted), or encrypts it again.
+  async function setTitleShown(on: boolean) {
+    if (!protectedDraft.value || !session || on === titleShown.value) return;
+    titleShown.value = on;
+    await rewrite();
+  }
+
   // Called after every change the user makes to the text.
   function edited() {
+    touch();
     refreshed.value = null; // the Undo offer is for the refresh alone, not for text typed after it
     recreated.value = false;
     dropCopy(current.value.id); // a Conflicted copy that is edited is an ordinary draft
@@ -240,15 +392,25 @@ export function useDrafts(
       state.value = "saved";
       return;
     }
+    if (protectedDraft.value && !session) {
+      dirty = false; // locked: there is nothing to write, the editor is inert
+      state.value = "saved";
+      return;
+    }
     state.value = "saving";
     try {
+      // A protected draft is written as its envelope; the text and the key stay here.
+      const content = session
+        ? await seal(session, current.value.id, { content: text, title: summarize(text).title }, titleShown.value)
+        : text;
       const d = await be.saveDraft({
         id: current.value.id,
         format: current.value.format,
-        content: text,
+        content,
         createdAt: current.value.createdAt,
       });
-      stored = { text: d.content ?? text, format: d.format };
+      if (session) envelope = d.content ?? content;
+      stored = { text: session ? text : (d.content ?? text), format: d.format };
       current.value = asCurrent(d);
       if (edits === mine) {
         dirty = false;
@@ -278,6 +440,11 @@ export function useDrafts(
   // file keeps its modified time), and always asks sync to look at the server (`onSaved` with `explicit`).
   function saveFile(saveAs = false) {
     if (!available.value) return Promise.resolve();
+    if (protectedDraft.value) {
+      // Writing a file would put the text on disk unprotected. Ctrl+S still saves the draft and syncs it.
+      if (saveAs) showToast("A protected draft cannot be saved to a file.");
+      return flush().then(() => current.value.id && onSaved?.(current.value.id, { explicit: true }));
+    }
     // A file that cannot be used right now (gone, no permission) is written again by every Ctrl+S, whatever the draft's state.
     if (!saveAs && !(current.value.filePath && (fileState.value === "stale" || fileChange.problem.value))) {
       return flush().then(async () => {
@@ -336,7 +503,12 @@ export function useDrafts(
     },
     // The draft takes the file's text (it has no edits of its own), without pushing: the dialog pushes.
     applyFile: () => reloadFromFile({ push: false }),
-    current: () => ({ id: current.value.id, text: editor.value?.getText() ?? "", updatedAt: current.value.updatedAt }),
+    // A protected draft is compared and sent as its stored envelope, never as the text on screen.
+    current: () => ({
+      id: current.value.id,
+      text: protectedDraft.value ? envelope : (editor.value?.getText() ?? ""),
+      updatedAt: current.value.updatedAt,
+    }),
   };
 
   // "Reload from file" in the toast: the draft's text becomes the file's text, as one edit that Ctrl+Z takes back. Go reads the stored path and
@@ -584,7 +756,7 @@ export function useDrafts(
     }
     if (start.open) {
       setCurrent(start.open);
-      return start.open.content;
+      return protectedDraft.value ? "" : start.open.content;
     }
     return fallback;
   }
@@ -613,7 +785,7 @@ export function useDrafts(
     try {
       const d = await be.getDraft(id);
       setCurrent(d);
-      editor.value?.load(d.content, d.format);
+      editor.value?.load(await plainOf(d), d.format);
       await checkDone;
       onOpened?.(d.id);
     } catch (err) {
@@ -633,7 +805,7 @@ export function useDrafts(
     setCurrent(d);
     // Newer text from the server: the linked file now lags the draft, so the next Ctrl+S writes it (and asks first if the file changed).
     if (current.value.filePath && was !== d.content) fileState.value = "stale";
-    editor.value?.load(d.content, d.format, true); // same draft, newer text: the person's selection stays
+    editor.value?.load(await plainOf(d), d.format, true); // same draft, newer text: the person's selection stays
   }
 
   async function create() {
@@ -738,21 +910,25 @@ export function useDrafts(
     flush();
   };
   const onVisibility = () => {
-    if (document.visibilityState === "hidden") flush();
-    else checkFile();
+    if (document.visibilityState === "hidden") {
+      flush();
+      void lock(); // a protected draft locks when the app goes to the background
+    } else checkFile();
   };
   function attach() {
     window.addEventListener("blur", onLeave);
     window.addEventListener("pagehide", onLeave);
     window.addEventListener("focus", checkFile);
     document.addEventListener("visibilitychange", onVisibility);
+    for (const ev of ["keydown", "pointerdown", "wheel"]) window.addEventListener(ev, touch, { passive: true });
   }
   function detach() {
     window.removeEventListener("blur", onLeave);
     window.removeEventListener("pagehide", onLeave);
     window.removeEventListener("focus", checkFile);
     document.removeEventListener("visibilitychange", onVisibility);
-    for (const t of [timer, listTimer, searchTimer, toastTimer]) clearTimeout(t);
+    for (const ev of ["keydown", "pointerdown", "wheel"]) window.removeEventListener(ev, touch);
+    for (const t of [timer, listTimer, searchTimer, toastTimer, idleTimer]) clearTimeout(t);
   }
 
   return {
@@ -761,6 +937,15 @@ export function useDrafts(
     state,
     fileState,
     needsSave,
+    protectedDraft,
+    locked,
+    titleShown,
+    lock,
+    unlock,
+    protect,
+    protectCheck,
+    unprotect,
+    setTitleShown,
     fileName,
     fileDir,
     list,
@@ -800,6 +985,7 @@ export function useDrafts(
     refreshList,
     setQuery,
     showMore,
+    showToast,
     open,
     create,
     remove,

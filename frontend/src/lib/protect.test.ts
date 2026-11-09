@@ -53,6 +53,15 @@ test("the draft list summary of a protected draft has no excerpt or tasks", asyn
   const { summarize } = await import("./summarize.ts");
   const session = await newSession("pw", cost);
   const hidden = summarize(await seal(session, ID, { content: "- [ ] a task\nbody", title: "Secret" }, false));
-  assert.deepEqual(hidden, { title: "Locked draft", excerpt: "", tasks: [], tasksTotal: 0, tasksDone: 0 });
+  assert.deepEqual(hidden, { title: "Locked draft", excerpt: "hp-protected", tasks: [], tasksTotal: 0, tasksDone: 0 });
   assert.equal(summarize(await seal(session, ID, text, true)).title, "Secret");
+});
+
+test("a newer version opens with the key already held, but not with another salt", async () => {
+  const { openWith } = await import("./protect.ts");
+  const session = await newSession("pw", cost);
+  const env = await seal(session, ID, text, false);
+  assert.deepEqual(await openWith(session, env, ID), text);
+  const other = await seal(await newSession("pw", cost), ID, text, false);
+  assert.equal(await openWith(session, other, ID), null);
 });

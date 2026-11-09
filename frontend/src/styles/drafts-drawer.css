@@ -509,3 +509,9 @@
   color: var(--mute);
   font-size: 11px;
 }
+
+.drawer .title .padlock {
+  margin-right: 5px;
+  vertical-align: -1px;
+  color: var(--mute);
+}
