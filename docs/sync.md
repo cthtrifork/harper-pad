@@ -303,14 +303,14 @@ the draft rows, and is never sent; an older build ignores it. The SQLite table i
 | Concern | Handling |
 |---|---|
 | Transport | HTTPS only (cert-manager, HSTS at the ingress). The client refuses an `http:` server |
-| Who can read the data | The server and its operator; Cloudflare is not in the sync path. Use encrypted volumes and keep bodies out of logs |
+| Who can read the data | The server and its operator, except the text of [protected drafts](#protected-drafts-end-to-end-encryption); Cloudflare is not in the sync path. Use encrypted volumes and keep bodies out of logs |
 | Stolen token | Revoke the device |
 | Account isolation | The account comes from the device row and every query filters on it. With one account this is a guard; narrow the row-security policy to the account before adding a second |
 | Database and cluster | Client certificates only, PostgreSQL reachable only from the sync and admin pods, separate roles ([backend README](../backend/README.md)), default-deny NetworkPolicies, images pinned by digest |
 | Admin UI | No Service and no listener outside its pod; reached through a Cloudflare Tunnel behind Cloudflare Access (OIDC, MFA); same-origin checks, CSRF tokens, strict CSP ([admin README](../backend/cmd/harper-pad-admin/README.md#access)) |
 | Draft text from the server | Untrusted like pasted text: never run, never inserted as HTML, validated first |
 
-Not defended: a compromised device, a compromised server, and traffic analysis.
+Not defended: a compromised device, a compromised server (for drafts that are not protected), and traffic analysis.
 
 ## Not built
 
@@ -319,47 +319,57 @@ Not defended: a compromised device, a compromised server, and traffic analysis.
 - A pending count or progress line on the chip.
 - A server operations page: operating and backing up the server belongs to the cluster's GitOps repository.
 - Scheduled token rotation with reuse detection: it is the fallback if iOS clears the key.
-- End-to-end encryption (see the option below), more than one client account, merging text, syncing other preferences (text size), and an OS keyring or TPM.
+- More than one client account, merging text, syncing other preferences (text size), and an OS keyring or TPM.
 
-## Option: end-to-end encryption for chosen drafts
+## Protected drafts (end-to-end encryption)
 
-Not planned. This is the design if it is built: encryption is opt-in per draft, and a protected draft needs the passphrase every time it is
-opened. The server holds only ciphertext for those drafts, still as opaque `data` strings by id and version. Ids, versions, times, the
-deleted flag, sizes and the fact that a draft is protected stay visible to the server.
+A draft can be protected. The server and the local database then hold only ciphertext for it, and the text is readable only after the
+passphrase is entered. Other drafts are unaffected. The server stores a protected draft like any other: an opaque `data` string by id and
+version. Ids, versions, times, the deleted flag, sizes and the fact that a draft is protected are visible to the server.
 
-**Decisions**
+### Using it
 
-- **One shared passphrase** for all protected drafts, not one per draft. One weak or leaked passphrase exposes all of them.
-- **No recovery.** There is no key bag and no recovery key. Losing the passphrase loses the protected drafts.
-- **Local copy is ciphertext too.** SQLite and IndexedDB hold the same ciphertext as the server, and the text is decrypted only in memory.
-  Otherwise protection would cover the server only.
-- **No file link on a protected draft.** Linking writes plaintext to disk, so the two are mutually exclusive.
-- **Lock on close, after inactivity, and when the app goes to the background.** The key lives in memory only, never in IndexedDB.
+- **The padlock.** An open draft shows a small padlock at the bottom. It is open for a plain draft, closed and unlocked for a protected
+  draft whose passphrase has been entered, and closed and locked otherwise.
+- **Protecting a draft.** Click the padlock on a plain draft.
+  - If no draft is protected yet, the app asks for a new passphrase (twice). The first protected draft defines it.
+  - If other drafts are protected, the app asks for the existing passphrase and checks it by decrypting one of them, so every protected
+    draft has the same passphrase.
+- **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
+  again each time the draft is opened.
+- **Locking.** The key lives in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
+  the background, and when the padlock is clicked on an unlocked draft.
+- **The title.** By default the title is encrypted and the draft list shows a locked placeholder in its place. The padlock menu has a
+  "Show title in the draft list" option. When it is on, the title is stored unencrypted, and the server can read it. When it is off, the
+  title is encrypted again.
+- **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft, locked or not.
+- **Unprotecting.** The padlock menu has "Remove protection", after the passphrase is entered. The draft is then stored as plain text.
+- **No file link.** A protected draft cannot be linked to a file, because linking writes plaintext to disk. A linked draft cannot be
+  protected.
+- **No passphrase change and no recovery.** The passphrase cannot be changed, and losing it loses the protected drafts. To use a new
+  passphrase, unprotect every draft, then protect them again.
 
-**Cryptography**
+### Cryptography
 
-- Per draft, a random 128-bit salt, stored with the blob. Key = Argon2id(passphrase, salt), at least 32 MiB, 3 passes, 1 lane, in a worker.
+- Per draft, a random 128-bit salt, stored with the blob. Key = Argon2id(passphrase, salt), at least 32 MiB, 3 passes, 1 lane, in a
+  worker. The implementation is hash-wasm 4.12.0, which took about 101, 107 and 218 ms at 32, 64 and 128 MiB on an iPhone Home Screen app.
 - AES-256-GCM with a fresh 96-bit nonce per write and additional data `id|version`, so a blob cannot move to another draft or version.
   A wrong passphrase fails the GCM tag; there is no separate check value to attack.
-- The title, name, summary and list excerpt of a protected draft are inside the ciphertext. The list shows a locked placeholder until
-  the draft is opened.
+- The text, and the title unless it is shown in the list, are inside the ciphertext.
+- SQLite and IndexedDB hold the same ciphertext as the server. The text is decrypted only in memory.
 - The "protected" flag is authoritative on the client, kept in the local record and inside the ciphertext. A server that serves a
   protected draft as plaintext is refused, not shown.
+- For a protected draft, everything derived from the text is kept in memory only or skipped: Harper lint results, any search index,
+  undo history, autosave copies, exports and the service worker cache.
 
-**What stays outside the protection**
-
-- Everything derived from the text must be skipped or kept in memory only for protected drafts: Harper lint results, any search index,
-  undo history that is persisted, autosave copies, exports and the service worker cache.
-- Unprotecting a draft writes plaintext again. If the server keeps older versions, the ciphertext versions stay there, and any plaintext
-  version from before protection stays too.
-
-**Limits**
+### Limits
 
 - A copied ciphertext (stolen token, backup, database leak) can be guessed against offline for as long as the attacker likes. The
   passphrase strength and the Argon2id cost are the whole defence; the per-draft salt only stops work being shared between drafts.
 - The server can delete a protected draft or replay an older ciphertext (the version is in the additional data, but the server chooses
   which version to serve). It cannot read or forge one.
+- If the server keeps older versions, the versions from before a draft was protected stay readable there, and so do the ciphertext
+  versions after it is unprotected.
+- A title shown in the list is readable by the server.
 - Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server
-  that serves modified web app code, unless the app is not served from the sync server.
-- **Measured:** Argon2id (hash-wasm 4.12.0) took about 101, 107 and 218 ms at 32, 64 and 128 MiB on an iPhone Home Screen app.
-- **To pin when built:** the Argon2id WebAssembly package (hash-wasm 4.12.0 is the one measured).
+  that serves modified web app code.
