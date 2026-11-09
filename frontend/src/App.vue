@@ -556,9 +556,9 @@ onBeforeUnmount(() => {
       />
       </Transition>
       <div class="page" :class="mode">
-        <div v-show="mode !== 'preview'" class="col" :inert="drafts.locked.value">
+        <div v-show="mode !== 'preview'" class="col">
         <header v-if="mode === 'split'" class="phead">Markdown</header>
-        <main ref="pane" class="pane" @mousedown.self.prevent="focusFromPress" @scroll.passive="onPaneScroll">
+        <main ref="pane" class="pane" :inert="drafts.locked.value" @mousedown.self.prevent="focusFromPress" @scroll.passive="onPaneScroll">
           <Editor
             ref="editor"
             :class="{ wide: mode === 'split' }"
@@ -580,11 +580,11 @@ onBeforeUnmount(() => {
           />
           <pre v-if="error" class="error">{{ error }}</pre>
         </main>
-        </div>
         <!-- A locked draft shows no text at all; the editor behind is empty and inert. -->
         <div v-if="drafts.locked.value" class="locked-view">
           <p>This draft is protected.</p>
           <button type="button" @click="askUnlock">Enter passphrase</button>
+        </div>
         </div>
         <div class="toast-stack">
           <Transition name="toast-bar">
