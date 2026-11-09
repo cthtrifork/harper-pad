@@ -49,7 +49,8 @@ function parse(content: string): Envelope {
   return env;
 }
 
-/** The title of a protected draft, stored unencrypted for the draft list and chosen when the draft is protected; "" for anything else. */
+/** The title the user gave a protected draft, stored unencrypted for the draft list; "" when none was given, which includes every draft
+ * protected before titles existed. */
 export function clearTitle(content: string): string {
   if (!isProtected(content)) return "";
   try {
@@ -81,12 +82,13 @@ export async function newSession(passphrase: string, cost = COST): Promise<Sessi
   return { salt, key: await deriveKey(passphrase, salt, cost) };
 }
 
-/** The envelope for `content`, with `title` beside it in the clear. */
+/** The envelope for `content`, with `title` beside it in the clear unless it is empty. */
 export async function seal(session: Session, id: string, content: string, title: string): Promise<string> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const plain = new TextEncoder().encode(JSON.stringify({ v: 1, content }));
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(id) }, session.key, plain);
-  const env: Envelope = { s: b64(session.salt), n: b64(nonce), c: b64(new Uint8Array(cipher)), t: title };
+  const env: Envelope = { s: b64(session.salt), n: b64(nonce), c: b64(new Uint8Array(cipher)) };
+  if (title) env.t = title;
   return PREFIX + JSON.stringify(env);
 }
 

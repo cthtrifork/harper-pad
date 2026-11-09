@@ -8,7 +8,7 @@ const MIN_LENGTH = 10;
 
 const props = defineProps<{
   mode: "create" | "verify" | "unlock" | "title";
-  title?: string; // the title the draft list shows, offered when protecting and when changing it
+  title?: string; // the title the draft list shows now, if any
   busy: boolean;
   error: string;
 }>();
@@ -31,7 +31,7 @@ const text = computed(() =>
     : props.mode === "verify"
       ? "Enter the passphrase of your other protected drafts."
       : props.mode === "title"
-        ? "The title is not protected: the draft list and the server show it, and it does not follow the text."
+        ? "The title is not protected: the draft list and the server show it, and it does not follow the text. Leave it empty for no title."
         : "Enter the passphrase of your protected drafts.",
 );
 
@@ -52,7 +52,7 @@ function submit() {
       <p id="pass-text">{{ text }}</p>
       <template v-if="asksTitle">
         <label for="pass-title-input">Title in the draft list</label>
-        <input id="pass-title-input" v-model="listTitle" type="text" maxlength="80" autocomplete="off" spellcheck="false" :autofocus="mode === 'title'" :disabled="busy" />
+        <input id="pass-title-input" v-model="listTitle" type="text" maxlength="80" placeholder="Locked draft" autocomplete="off" spellcheck="false" :autofocus="mode === 'title'" :disabled="busy" />
       </template>
       <template v-if="asksPassphrase">
         <label for="pass-input">Passphrase</label>

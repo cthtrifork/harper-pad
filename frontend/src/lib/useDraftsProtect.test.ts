@@ -137,7 +137,7 @@ check("a second draft must use the passphrase of the first", async () => {
   t.editor.value.text = t.open(A);
   await t.drafts.protect(PW, "A title");
   await t.drafts.open(B);
-  assert.deepEqual(await t.drafts.protectCheck(), { mode: "verify", title: "Two" });
+  assert.deepEqual(await t.drafts.protectCheck(), { mode: "verify" });
   await assert.rejects(t.drafts.protect("another passphrase", "A title"), WrongPassphrase);
   assert.equal(t.drafts.protectedDraft.value, false);
   assert.equal(t.store.get(B)?.content, "# Two\ntwo");
@@ -148,13 +148,13 @@ check("a second draft must use the passphrase of the first", async () => {
 check("the first protected draft takes a new passphrase", async () => {
   const t = setup({ [A]: { content: "# One\none" } });
   t.editor.value.text = t.open(A);
-  assert.deepEqual(await t.drafts.protectCheck(), { mode: "create", title: "One" });
+  assert.deepEqual(await t.drafts.protectCheck(), { mode: "create" });
 });
 
 check("the list title is the one chosen, kept when the text changes, and can be changed", async () => {
   const t = setup({ [A]: { content: "# Plan\nsecret words" } });
   t.editor.value.text = t.open(A);
-  assert.deepEqual(await t.drafts.protectCheck(), { mode: "create", title: "Plan" });
+  assert.deepEqual(await t.drafts.protectCheck(), { mode: "create" });
   await t.drafts.protect(PW, "Groceries");
   assert.equal(t.store.get(A)?.title, "Groceries");
   assert.ok(!String(t.store.get(A)?.content).includes("secret"));
@@ -164,7 +164,7 @@ check("the list title is the one chosen, kept when the text changes, and can be 
   await t.drafts.setListTitle("Errands");
   assert.equal(t.store.get(A)?.title, "Errands");
   await t.drafts.setListTitle("  ");
-  assert.equal(t.store.get(A)?.title, "Untitled");
+  assert.equal(t.store.get(A)?.title, "Locked draft");
 });
 
 check("removing protection stores the text as plain text", async () => {

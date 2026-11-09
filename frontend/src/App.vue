@@ -123,7 +123,7 @@ async function askProtect() {
   const c = await drafts.protectCheck();
   if ("error" in c) return drafts.showToast(c.error);
   passError.value = "";
-  pass.value = { mode: c.mode, title: c.title };
+  pass.value = { mode: c.mode, title: "" };
 }
 function askUnlock() {
   passError.value = "";

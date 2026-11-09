@@ -330,20 +330,26 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 ### Using it
 
 - **The padlock.** An open draft shows a small padlock at the bottom: open for a plain draft, closed for a protected one.
-- **Protecting a draft.** Click the padlock on a plain draft and choose the title the draft list will show (the text's own title is offered). The first protected draft defines the passphrase, which is typed twice. Later
+- **Protecting a draft.** Click the padlock on a plain draft. It can also be given a title for the draft list. The first protected draft defines the passphrase, which is typed twice. Later
   drafts must use the same one, so the app checks it against another protected draft.
 - **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
   again each time the draft is opened.
 - **The padlock menu.** On an unlocked draft the padlock opens a menu: lock now, change the title in the draft list, remove protection.
 - **Locking.** The key is kept in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
   the background, and on "Lock now". What is unsaved is saved first.
-- **The title.** The title is not protected. It is what you chose when protecting the draft, it does not follow the text, and the draft list
-  and the server show it. It can be changed from the padlock menu.
+- **The title.** A protected draft shows "Locked draft" in the draft list. It can be given a title instead, when it is protected or later
+  from the padlock menu. That title is not protected: the draft list and the server show it, and it does not follow the text. Drafts
+  without one, including drafts protected before titles existed, keep "Locked draft".
 - **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
 - **Removing protection.** The draft is stored as plain text again.
 - **No file link.** A protected draft cannot be linked to a file, and a linked draft cannot be protected, because a file would hold the text
   unprotected.
 - **Size.** Sealing makes a draft about a third larger, so a protected draft holds less text than a plain one before it reaches the limit.
+- **More than one device.** The server holds the ciphertext, so a protected draft syncs like any other. Each device unlocks it with the same
+  passphrase, which is never sent anywhere, so it has to be typed on every device. A device that has not received a protected draft yet
+  cannot tell that a passphrase exists, so protect the first draft on one device, let it sync, and only then protect drafts on the others.
+  Two devices that edit the same protected draft at once get the usual Keep or Overwrite question, and Keep makes a second protected copy
+  that opens with the same passphrase.
 - **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, remove protection
   from every draft, then protect them again.
 
@@ -365,6 +371,6 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
   cannot tell. It cannot read or forge one.
 - The server keeps one row per draft, so protecting a draft replaces its plain text there. Database backups can still hold earlier plain
   versions, and ciphertext versions after protection is removed.
-- The title is readable by the server, so it should not give the text away.
+- A title given to a protected draft is readable by the server, so it should not give the text away.
 - Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server that
   serves modified web app code.

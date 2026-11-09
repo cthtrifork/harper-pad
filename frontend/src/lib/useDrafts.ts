@@ -14,7 +14,6 @@ import {
   seal,
   unlock as unlockEnvelope,
 } from "./protect.ts";
-import { summarize } from "./summarize.ts";
 
 const { isWeb } = backend;
 
@@ -300,13 +299,13 @@ export function useDrafts(
 
   // What the padlock needs before it asks for a passphrase: a reason the open draft cannot be protected, or whether the passphrase is a new one
   // ("create") or the existing one ("verify").
-  async function protectCheck(): Promise<{ error: string } | { mode: "create" | "verify"; title: string }> {
+  async function protectCheck(): Promise<{ error: string } | { mode: "create" | "verify" }> {
     if (!available.value) return { error: "Drafts are unavailable." };
     await flush();
     if (!current.value.id) return { error: "Type something first, so there is a draft to protect." };
     if (current.value.filePath) return { error: "A draft saved to a file cannot be protected. Unlink the file first." };
     try {
-      return { mode: (await otherProtected(current.value.id)) ? "verify" : "create", title: suggestTitle() };
+      return { mode: (await otherProtected(current.value.id)) ? "verify" : "create" };
     } catch (err) {
       return { error: `Could not check the drafts: ${message(err)}` };
     }
@@ -326,7 +325,7 @@ export function useDrafts(
     session = await newSession(passphrase);
     protectedDraft.value = true;
     locked.value = false;
-    listTitle.value = title.trim() || "Untitled";
+    listTitle.value = title.trim();
     touch();
     await rewrite();
   }
@@ -341,16 +340,13 @@ export function useDrafts(
     await rewrite();
   }
 
-  // The title the draft list shows for the open protected draft. It stays as given; edits to the text do not change it.
+  // The title the draft list shows for the open protected draft, "" for none. It stays as given; edits to the text do not change it.
   async function setListTitle(title: string) {
-    const next = title.trim() || "Untitled";
+    const next = title.trim();
     if (!protectedDraft.value || !session || next === listTitle.value) return;
     listTitle.value = next;
     await rewrite();
   }
-
-  // The title of the open draft's text, to offer as the list title when it is protected.
-  const suggestTitle = () => summarize(editor.value?.getText() ?? "").title;
 
   // Called after every change the user makes to the text.
   function edited() {
@@ -942,7 +938,6 @@ export function useDrafts(
     protectedDraft,
     locked,
     listTitle,
-    suggestTitle,
     lock,
     unlock,
     protect,

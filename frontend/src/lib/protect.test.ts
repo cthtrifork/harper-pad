@@ -50,7 +50,7 @@ test("the draft list summary of a protected draft has the chosen title, no excer
   const session = await newSession("pw", cost);
   const listed = summarize(await seal(session, ID, "- [ ] a task\nbody", title));
   assert.deepEqual(listed, { title, excerpt: "hp-protected", tasks: [], tasksTotal: 0, tasksDone: 0 });
-  assert.equal(summarize(await seal(session, ID, body, "")).title, "Untitled");
+  assert.equal(summarize(await seal(session, ID, body, "")).title, "Locked draft");
 });
 
 test("a newer version opens with the key already held, but not with another salt", async () => {
@@ -60,4 +60,20 @@ test("a newer version opens with the key already held, but not with another salt
   assert.equal(await openWith(session, env, ID), body);
   const other = await seal(await newSession("pw", cost), ID, body, title);
   assert.equal(await openWith(session, other, ID), null);
+});
+
+test("a draft protected before titles existed lists as Locked draft and still opens", async () => {
+  const { summarize } = await import("./summarize.ts");
+  const session = await newSession("pw", cost);
+  // The earlier form: the title (if shown) beside the ciphertext, and a title inside the encrypted text.
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const plain = new TextEncoder().encode(JSON.stringify({ v: 1, content: body, title: "Secret" }));
+  const cipher = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: new TextEncoder().encode(ID) }, session.key, plain),
+  );
+  const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
+  const old = `hp-protected:1:${JSON.stringify({ s: b64(session.salt), n: b64(nonce), c: b64(cipher) })}`;
+  assert.equal(summarize(old).title, "Locked draft");
+  assert.equal(clearTitle(old), "");
+  assert.equal((await unlock(old, ID, "pw", cost)).content, body);
 });

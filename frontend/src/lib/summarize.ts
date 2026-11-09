@@ -22,9 +22,9 @@ interface TaskLine {
 }
 
 export function summarize(content: string) {
-  // A protected draft shows no excerpt and no tasks, and the title chosen when it was protected (docs/sync.md, "Protected drafts").
+  // A protected draft shows no excerpt and no tasks, and the title the user gave it, if any (docs/sync.md, "Protected drafts").
   if (isProtected(content)) {
-    return { title: clearTitle(content) || "Untitled", excerpt: PROTECTED_MARK, tasks: [] as TaskLine[], tasksTotal: 0, tasksDone: 0 };
+    return { title: clearTitle(content) || "Locked draft", excerpt: PROTECTED_MARK, tasks: [] as TaskLine[], tasksTotal: 0, tasksDone: 0 };
   }
   let title = "";
   let total = 0;
