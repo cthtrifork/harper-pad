@@ -32,13 +32,7 @@ interface Envelope {
   t?: string;
 }
 
-// In bounded pieces: spreading a whole large ciphertext into one call exceeds the engine's argument limit.
-const CHUNK = 0x8000;
-const b64 = (bytes: Uint8Array) => {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  return btoa(binary);
-};
+const encodeBase64 = (bytes: Uint8Array): string => bytes.toBase64();
 const unb64 = (text: string) => Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0));
 // What the seal covers besides the text: the draft id, and the title that sits beside the ciphertext, so the server can neither move a copy to
 // another draft nor change or swap a title unnoticed. A draft without a title is covered by its id alone.
@@ -91,7 +85,7 @@ export async function seal(session: Session, id: string, content: string, title:
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const plain = new TextEncoder().encode(JSON.stringify({ v: 1, content }));
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(id, title) }, session.key, plain);
-  const env: Envelope = { s: b64(session.salt), n: b64(nonce), c: b64(new Uint8Array(cipher)) };
+  const env: Envelope = { s: encodeBase64(session.salt), n: encodeBase64(nonce), c: encodeBase64(new Uint8Array(cipher)) };
   if (title) env.t = title;
   return PREFIX + JSON.stringify(env);
 }

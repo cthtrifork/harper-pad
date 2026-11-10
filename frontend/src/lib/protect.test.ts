@@ -71,8 +71,7 @@ test("a draft protected before titles existed lists as Locked draft and still op
   const cipher = new Uint8Array(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: new TextEncoder().encode(ID) }, session.key, plain),
   );
-  const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
-  const old = `hp-protected:1:${JSON.stringify({ s: b64(session.salt), n: b64(nonce), c: b64(cipher) })}`;
+  const old = `hp-protected:1:${JSON.stringify({ s: session.salt.toBase64(), n: nonce.toBase64(), c: cipher.toBase64() })}`;
   assert.equal(summarize(old).title, "Locked draft");
   assert.equal(clearTitle(old), "");
   assert.equal((await unlock(old, ID, "pw", cost)).content, body);
@@ -90,7 +89,7 @@ test("a changed, removed or added title is detected, because the seal covers it"
   assert.equal((await unlock(pack(withTitle), ID, "pw", cost)).content, body); // untouched still opens
 });
 
-test("a large draft is sealed and opened (the encoding is done in bounded pieces)", async () => {
+test("a large draft is sealed and opened with native base64 encoding", async () => {
   const big = "lorem ipsum dolor sit amet ".repeat(30000); // about 800 KB
   const session = await newSession("pw", cost);
   const env = await seal(session, ID, big, title);
