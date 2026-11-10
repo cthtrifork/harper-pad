@@ -4,7 +4,8 @@ Sync keeps your drafts, your personal dictionary and your ignore list the same o
 its drafts and works without the server. The server is plain storage with compare-and-set: it never merges and never makes copies.
 Sync is off until you enroll a device; without it the app uses the network only to check for an app update.
 
-When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**.
+When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**. A protected draft has its own
+two-button form of it, **Overwrite theirs or Discard ours**, because its versions cannot be compared or copied ([below](#a-protected-drafts-conflict)).
 
 Blue is the app, orange the file, green the server, amber a question for you.
 
@@ -54,6 +55,7 @@ flowchart LR
 | Your draft is edited and its file changed | The Keep or Overwrite dialog | Keep, Overwrite |
 | Your draft is edited and the server holds different text | The same dialog | Keep, Overwrite |
 | Your draft is unedited, and the file and the server disagree | The same dialog; the changed file counts as your edit | Keep, Overwrite |
+| A protected draft was changed on both sides | The protected form of the dialog, with no text in it | Overwrite theirs, Discard ours |
 | The open draft was deleted on another device | A dialog | Keep Creates the server draft again; Remove Deletes the draft here (the toast offers Undo) |
 | The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the full path and the reason | Ctrl+S retries; the unlink button on the file name Deletes the link; unlink first to pick another path with Save to disk. A file that is not text is never updated |
 | The token was revoked | The chip says "Sign in again" | Paste a fresh invite |
@@ -183,6 +185,42 @@ Sync is never periodic. Every moment uses the same rules.
 
 A draft that changed on both sides with different text is the dialog's; Sync all leaves it untouched. Typing and then undoing is no change.
 
+### A protected draft's conflict
+
+A protected version is ciphertext with a new nonce on every save, so two devices that saved the same text still hold different strings, and a
+key from one device does not open a version sealed with another device's salt. The app therefore does not open, compare or copy protected
+versions at all. When the server holds a protected version that differs from this device's, the dialog has a title, the two rows (your draft
+and the server, each with its time), two buttons and a footer saying that one version is lost. It appears with the draft locked or unlocked, since
+it needs no key.
+
+```mermaid
+flowchart TD
+    S["A choice is made"] --> Q{"Server changed again?"}
+    Q -->|yes| D["Redraws the dialog<br>nothing is updated"]:::ask
+    Q -->|no| B{"Which button?"}
+    B -->|"Overwrite theirs"| O["Updates the server<br>with this device's version<br>the server's version is deleted"]:::server
+    B -->|"Discard ours"| G{"Draft changed here<br>since the dialog?"}
+    G -->|yes| D
+    G -->|no| T["Replaces this device's version<br>with the server's, in one transaction<br>this device's version is deleted"]:::app
+    O --> Z["Finishes<br>the draft keeps its id"]
+    T --> Z
+    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
+    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
+    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
+```
+
+- **Overwrite theirs** Updates the server with this device's version. The server's version is Deleted, with no undo. If this device's draft is
+  plain (it was never protected here), it replaces the protected version with plain text: that is the one way a plain version replaces a
+  protected one, and only because the person chose it.
+- **Discard ours** replaces this device's version with the server's. It is refused, and the dialog redrawn, if the draft was saved here after
+  the dialog was drawn (the store checks the update time in the same transaction as the write, in both the SQLite and the IndexedDB store).
+  This device's version is Deleted, with no undo. A draft that was unlocked is locked again if the server's version used another salt.
+- Neither choice makes a Conflicted copy, and neither asks for the passphrase.
+- Only a protected *server* version gets this form. A plain server version of an unlocked protected draft (the server, or an old build,
+  stripped it) gets the ordinary Keep or Overwrite dialog, and Keep makes a protected copy; while the draft is locked it has no dialog. A file
+  conflict never arises, because a protected draft has no file link.
+- Both buttons are the danger style and neither has the focus. The dialog cannot be dismissed, like the other one.
+
 ### The decision for one draft
 
 ```mermaid
@@ -201,6 +239,7 @@ flowchart TD
     B -->|"deleted it"| B3["Creates the server draft<br>the edit survives"]:::server
     B -->|"same text on both"| B4["Updates the sync state<br>no copy needed"]:::app
     B -->|"different text"| B5["Asks Keep or Overwrite<br>open draft only"]:::ask
+    B -->|"protected, any difference"| B6["Asks Overwrite theirs or Discard ours<br>open draft only, never compared"]:::ask
     C -->|unchanged| C1["Deletes the server draft"]:::server
     C -->|"edited on another device"| C2["Creates the draft<br>the delete is dropped"]:::app
     C -->|"deleted there too"| C3["Does nothing"]
@@ -353,10 +392,9 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 - **More than one device.** The server holds the ciphertext, so a protected draft syncs like any other. Each device unlocks it with the same
   passphrase, which is never sent anywhere, so it has to be typed on every device. A device that has not received a protected draft yet
   cannot tell that a passphrase exists, so protect the first draft on one device, let it sync, and only then protect drafts on the others.
-  Two devices that edit the same protected draft at once get the usual Keep or Overwrite question. The versions are opened and
-  compared as text, so identical text is no conflict (the server's version is taken, with no question), and Keep makes a second protected
-  copy that opens with the same passphrase. A locked draft has no question until it is unlocked, and a version protected with a different
-  passphrase is not compared.
+  Two devices that edit the same protected draft at once get a two-button question, **Overwrite theirs** or **Discard ours**
+  ([the dialog](#a-protected-drafts-conflict)). The versions are never opened or compared, so even identical text is a conflict (each save has
+  its own nonce), no copy is made, and no passphrase is asked. One of the two versions is lost, so save anything worth keeping first.
 - **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, copy each draft's
   text into a new draft, protect that one, and delete the old.
 
@@ -369,7 +407,8 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 - Local storage holds the same ciphertext as the server. The text is decrypted only in memory, and what is derived from it (lint
   results, search, undo history, autosave copies, exports) stays in memory or is skipped.
 - Sync never replaces a protected draft with a plain one from the server. That can only be the server (or an old build) stripping the
-  protection, so this device keeps its text, puts it back on the server, and says so.
+  protection, so this device keeps its text, puts it back on the server, and says so. The only plain-over-protected replacement is the
+  person's own **Overwrite theirs** from a draft that is plain on this device.
 
 ### Limits
 
