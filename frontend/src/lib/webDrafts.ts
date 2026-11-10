@@ -1,6 +1,6 @@
 // DraftService's operations over IndexedDB, for the web build. A draft's text and its summary are two records in one transaction, so
 // listing never reads the text. IDs, limits and messages match internal/store.
-import { type IDBPDatabase, type IDBPTransaction, openDB } from "idb";
+import { type IDBPDatabase, openDB } from "idb";
 import type { Draft, List, Summary, SyncState } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { withDb as sharedWithDb } from "./kv.ts";
 import { contentHash } from "./contentHash.ts";
@@ -8,35 +8,31 @@ import { isProtected } from "./protect.ts";
 import { summarize } from "./summarize.ts";
 
 export const DB_NAME = "harper-pad";
-export const DB_VERSION = 4; // 2 added drafts, 3 sync state, 4 explicit protection metadata in summaries
+export const DB_VERSION = 3; // 1 had only the key/value store used for settings, 2 added the drafts, 3 the sync state
 
 const MAX_CONTENT_BYTES = 1 << 20;
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 1000;
 const ID = /^[0-9a-f]{32}$/;
 
-// Additive migrations preserve the records older builds understand (docs/pages.md, "Changing the schema").
-function upgrade(
-  db: IDBPDatabase,
-  oldVersion: number,
-  _newVersion: number | null,
-  tx: IDBPTransaction<unknown, string[], "versionchange">,
-) {
+// The limits that save and applyRemote share (checkDraft in internal/store/sync.go): a known format, at most MAX_CONTENT_BYTES of text.
+function checkDraft(input: Partial<Draft>) {
+  const format = input.format || "markdown";
+  if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
+  const content = input.content ?? "";
+  const bytes = new TextEncoder().encode(content).length;
+  if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
+  return { format, content };
+}
+
+// Migrations must only add object stores, and sync state stays out of the draft records: docs/pages.md, "Changing the schema".
+function upgrade(db: IDBPDatabase) {
   if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
   if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts", { keyPath: "id" });
   if (!db.objectStoreNames.contains("summaries")) {
     db.createObjectStore("summaries", { keyPath: "id" }).createIndex("byUpdated", "updatedAt");
   }
   if (!db.objectStoreNames.contains("sync")) db.createObjectStore("sync", { keyPath: "id" });
-  if (oldVersion < 4) {
-    // Existing summaries may use the old excerpt marker. Rebuild them from content, not that ambiguous marker.
-    const migrate = async () => {
-      for await (const cursor of tx.objectStore("drafts")) {
-        await tx.objectStore("summaries").put(summaryOf(cursor.value));
-      }
-    };
-    void migrate().catch(() => tx.abort()); // openDatabase rejects if the migration cannot be committed
-  }
 }
 
 // A database that is already newer (another build on the same origin migrated it) is opened as it is instead of failing with a
@@ -69,17 +65,17 @@ interface SyncRecord extends SyncState {
   id: string;
 }
 
-const summaryOf = (d: Omit<StoredDraft, "filePath"> & { filePath?: string }) => ({
-  id: d.id,
-  format: d.format,
-  createdAt: d.createdAt,
-  updatedAt: d.updatedAt,
-  filePath: d.filePath ?? "",
-  ...summarize(d.content),
-});
-
 export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
   const withDb = <T>(work: (db: IDBPDatabase) => Promise<T>) => sharedWithDb(open, work);
+
+  const summaryOf = (d: Omit<StoredDraft, "filePath"> & { filePath?: string }) => ({
+    id: d.id,
+    format: d.format,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    filePath: d.filePath ?? "",
+    ...summarize(d.content),
+  });
 
   async function get(id: string): Promise<StoredDraft> {
     return withDb(async (db) => {
@@ -90,11 +86,7 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
   }
 
   async function save(input: Partial<Draft>): Promise<StoredDraft> {
-    const format = input.format || "markdown";
-    if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
-    const content = input.content ?? "";
-    const bytes = new TextEncoder().encode(content).length;
-    if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
+    const { format, content } = checkDraft(input);
     const now = Date.now();
     let id = input.id as string;
     if (!id) id = newId(now);
@@ -237,11 +229,7 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
 
   // Keeps the server's times (save would set the update time to now) and records the draft as synced.
   async function applyRemote(input: Partial<Draft>, version: number): Promise<StoredDraft> {
-    const format = input.format || "markdown";
-    if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
-    const content = input.content ?? "";
-    const bytes = new TextEncoder().encode(content).length;
-    if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
+    const { format, content } = checkDraft(input);
     if (!ID.test(input.id ?? "")) throw new Error(`"${input.id}" is not a draft id`);
     if (!((input.createdAt ?? 0) > 0 && (input.updatedAt ?? 0) > 0)) throw new Error("a synced draft needs its created and updated times");
     const hash = await contentHash(format, content); // before the transaction: it would not wait for this

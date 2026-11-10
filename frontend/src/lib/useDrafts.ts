@@ -1,4 +1,4 @@
-import { computed, type Ref, ref, watch } from "vue";
+import { computed, type Ref, ref, shallowRef, watch } from "vue";
 import type { List } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import * as backend from "./backend.ts";
 import { createFileChange } from "./fileChange.ts";
@@ -92,14 +92,14 @@ export function useDrafts(
 
   // Protected drafts (docs/sync.md, "Protected drafts"). Their stored content is an envelope (lib/protect.ts); the key lives here, in memory,
   // only while the draft is open and unlocked. The passphrase itself is never kept.
-  const protectedDraft = ref(false); // the open draft is protected, locked or not
-  const locked = ref(false); // protected and not unlocked: the editor is empty and inert
-  const listTitle = ref(""); // the title of the open protected draft in the draft list: stored unencrypted, and not taken from the text
-  let session: Session | null = null;
+  const envelope = ref(""); // what the open protected draft holds in storage; "" for an ordinary draft
+  const session = shallowRef<Session | null>(null);
+  const protectedDraft = computed(() => envelope.value !== ""); // the open draft is protected, locked or not
+  const locked = computed(() => protectedDraft.value && !session.value); // protected and not unlocked: the editor is empty and inert
+  const listTitle = computed(() => clearTitle(envelope.value)); // the open protected draft's title in the draft list: stored unencrypted, and not taken from the text
   // Counts the moments that end what an unlock or a creation in flight was for (another draft, a lock, the app going to the background), so
   // that one finishing after them installs no key and shows no text.
   let epoch = 0;
-  let envelope = ""; // what the open protected draft holds in storage
 
   const home = ref(""); // the user's home folder, from the backend
   const fileState = ref<FileState>("none");
@@ -203,39 +203,29 @@ export function useDrafts(
     unlinkedToast.value = null;
     const prot = typeof d.content === "string" && isProtected(d.content);
     epoch++;
-    if (d.id !== current.value.id || !prot) dropSession(); // the key never outlives the draft it opened
+    if (d.id !== current.value.id || !prot) session.value = null; // the key never outlives the draft it opened
     current.value = asCurrent(d);
     fileState.value = current.value.filePath ? "unknown" : "none";
     dirty = false;
-    protectedDraft.value = prot;
-    envelope = prot ? (d.content as string) : "";
-    locked.value = prot && !session;
-    listTitle.value = clearTitle(envelope);
+    envelope.value = prot ? (d.content as string) : "";
     stored = d.id && typeof d.content === "string" && !prot ? { text: d.content, format: d.format } : null;
     state.value = d.id ? "saved" : "idle";
     checkDone = fileChange.check(current.value); // also clears the dialog of the draft that was open
-  }
-
-  function dropSession() {
-    session = null;
   }
 
   // The text the editor shows for `d`, which setCurrent has just made the open draft: its own text, the decrypted text of a protected draft
   // that is still unlocked (the key is the same while the salt is), or "" while it is locked.
   async function plainOf(d: Stored, at = epoch, editAt = edits): Promise<string | null> {
     if (!protectedDraft.value) return d.content ?? "";
-    const key = session;
+    const key = session.value;
     if (key) {
-      const sealed = envelope;
-      const t = await openWith(key, sealed, d.id);
-      if (epoch !== at || current.value.id !== d.id || session !== key || locked.value || edits !== editAt) return null;
+      const t = await openWith(key, envelope.value, d.id);
+      if (epoch !== at || current.value.id !== d.id || session.value !== key || edits !== editAt) return null;
       if (t !== null) {
         stored = { text: t, format: d.format };
-        listTitle.value = clearTitle(sealed);
         return t;
       }
-      dropSession();
-      locked.value = true;
+      session.value = null;
     }
     return "";
   }
@@ -244,16 +234,15 @@ export function useDrafts(
   // It does not lock when the save did not succeed: the key and the editor are the only copy of what was typed.
   async function lock() {
     epoch++;
-    if (!protectedDraft.value || !session) return;
+    if (!session.value) return;
     await flush();
     await chain;
-    if (!session) return;
+    if (!session.value) return;
     if (dirty || state.value === "error") {
       showToast("Not locked: the draft could not be saved, so its text is kept on screen.");
       return;
     }
-    dropSession();
-    locked.value = true;
+    session.value = null;
     stored = null;
     editor.value?.load("", current.value.format); // also drops the undo history
   }
@@ -263,12 +252,10 @@ export function useDrafts(
     if (!locked.value) return;
     const id = current.value.id;
     const at = epoch;
-    const r = await unlockEnvelope(envelope, id, passphrase);
+    const r = await unlockEnvelope(envelope.value, id, passphrase);
     if (epoch !== at || current.value.id !== id || !locked.value)
       throw new Error("The draft changed while it was being unlocked. Try again.");
-    session = r.session;
-    locked.value = false;
-    listTitle.value = clearTitle(envelope);
+    session.value = r.session;
     stored = { text: r.content, format: current.value.format };
     editor.value?.load(r.content, current.value.format);
     editor.value?.focus();
@@ -286,11 +273,8 @@ export function useDrafts(
     if (epoch !== at) throw new Error("The draft changed while the new one was being made. Try again.");
     if (dirty || state.value === "error") throw new Error("The current draft could not be saved. Try again.");
     setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
-    session = made;
-    protectedDraft.value = true;
-    locked.value = false;
-    listTitle.value = title.trim();
-    envelope = empty;
+    session.value = made;
+    envelope.value = empty;
     editor.value?.load("", "markdown");
     editor.value?.focus();
   }
@@ -338,7 +322,7 @@ export function useDrafts(
       state.value = "saved";
       return;
     }
-    if (protectedDraft.value && !session) {
+    if (locked.value) {
       dirty = false; // locked: there is nothing to write, the editor is inert
       state.value = "saved";
       return;
@@ -347,16 +331,17 @@ export function useDrafts(
     try {
       // A protected draft is written as its envelope; the text and the key stay here.
       // A new protected draft gets its id here, as the seal covers it.
-      const id = current.value.id || (session ? newDraftId() : "");
-      const content = session ? await seal(session, id, text, listTitle.value) : text;
+      const key = session.value;
+      const id = current.value.id || (key ? newDraftId() : "");
+      const content = key ? await seal(key, id, text, listTitle.value) : text;
       const d = await be.saveDraft({
         id,
         format: current.value.format,
         content,
         createdAt: current.value.createdAt,
       });
-      if (session) envelope = d.content ?? content;
-      stored = { text: session ? text : (d.content ?? text), format: d.format };
+      if (key) envelope.value = d.content ?? content;
+      stored = { text: key ? text : (d.content ?? text), format: d.format };
       current.value = asCurrent(d);
       if (edits === mine) {
         dirty = false;
@@ -435,8 +420,8 @@ export function useDrafts(
     },
     // A new, unlinked draft; labelled "Conflicted copy" in memory only. Protected conflicts carry envelopes, never editor text.
     async saveCopy(text: string, from: string) {
-      if (protectedDraft.value && !session) throw new Error("the draft is locked. Unlock it and try again");
-      const key = session;
+      if (locked.value) throw new Error("the draft is locked. Unlock it and try again");
+      const key = session.value;
       const at = epoch;
       const source = current.value;
       let id: string | undefined;
@@ -446,7 +431,7 @@ export function useDrafts(
         if (plain === null) throw new Error("Could not open the protected version. Nothing was copied.");
         id = newDraftId();
         content = await seal(key, id, plain, clearTitle(text));
-        if (epoch !== at || session !== key) throw new Error("The draft changed while it was being copied. Try again.");
+        if (epoch !== at || session.value !== key) throw new Error("The draft changed while it was being copied. Try again.");
       }
       const d = await be.saveDraft({ id, format: source.format, content });
       copies.value = { ...copies.value, [d.id]: from };
@@ -464,7 +449,7 @@ export function useDrafts(
     applyFile: () => reloadFromFile({ push: false }),
     current: () => ({
       id: current.value.id,
-      text: protectedDraft.value ? envelope : (editor.value?.getText() ?? ""),
+      text: protectedDraft.value ? envelope.value : (editor.value?.getText() ?? ""),
       format: current.value.format,
       updatedAt: current.value.updatedAt,
       revision: edits,

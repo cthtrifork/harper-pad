@@ -121,25 +121,15 @@ func (s *Store) prepare() error {
 	return s.ensureSyncState()
 }
 
-// ensureProtected adds explicit list metadata and replaces the old excerpt marker without changing draft contents or sync state.
+// ensureProtected adds protected to a drafts table that lacks it: whether the draft is protected, so that listing need not read its text.
+// Additive like file_hash, so an older build ignores it.
 func (s *Store) ensureProtected() error {
 	var n int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('drafts') WHERE name = 'protected'`).Scan(&n); err != nil || n > 0 {
 		return err
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.Exec(`ALTER TABLE drafts ADD COLUMN protected INTEGER NOT NULL DEFAULT 0`); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE drafts SET protected = 1, excerpt = '', tasks = '[]', tasks_total = 0, tasks_done = 0
-		WHERE substr(json_extract(data, '$.content'), 1, ?) = ?`, len(ProtectedPrefix), ProtectedPrefix); err != nil {
-		return err
-	}
-	return tx.Commit()
+	_, err := s.db.Exec(`ALTER TABLE drafts ADD COLUMN protected INTEGER NOT NULL DEFAULT 0`)
+	return err
 }
 
 // ensureFileHash adds file_hash to a drafts table that lacks it: the hash of the text the draft had when it last matched its file, to tell a

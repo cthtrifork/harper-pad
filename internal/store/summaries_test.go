@@ -67,19 +67,13 @@ func TestProtectedSummaryMetadata(t *testing.T) {
 	}
 }
 
-func TestProtectionMetadataMigration(t *testing.T) {
+func TestProtectedColumnAddedToOlderDatabase(t *testing.T) {
 	s, path := open(t)
-	protected, err := s.Save(Draft{Content: ProtectedPrefix + `{"s":"salt","n":"nonce","c":"ciphertext"}`, Title: "Private notes"})
+	plain, err := s.Save(Draft{Content: "Title\nbody", Title: "Title", Excerpt: "body"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	plain, err := s.Save(Draft{Content: "Title\nhp-protected", Title: "Title", Excerpt: "hp-protected"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Reproduce the summary columns from the earlier build, including the ambiguous excerpt marker.
-	if _, err := s.db.Exec(`ALTER TABLE drafts DROP COLUMN protected;
-		UPDATE drafts SET excerpt = 'hp-protected' WHERE id = ?`, protected.ID); err != nil {
+	if _, err := s.db.Exec(`ALTER TABLE drafts DROP COLUMN protected`); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := Open(path)
@@ -87,19 +81,19 @@ func TestProtectionMetadataMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	list, err := reopened.List(10, 0)
-	if err != nil {
+	if got, err := reopened.Get(plain.ID); err != nil || got.Content != plain.Content {
+		t.Fatalf("migration changed the draft: %+v, %v", got, err)
+	}
+	if _, err := reopened.Save(Draft{Content: ProtectedPrefix + `{"s":"salt","n":"nonce","c":"ciphertext"}`, Title: "Private"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, d := range list.Drafts {
-		if d.ID == protected.ID && (!d.Protected || d.Excerpt != "" || d.Title != "Private notes") {
-			t.Errorf("protected migration = %+v", d)
-		}
-		if d.ID == plain.ID && (d.Protected || d.Excerpt != "hp-protected") {
-			t.Errorf("plain migration = %+v", d)
-		}
+	list, err := reopened.List(10, 0)
+	if err != nil || len(list.Drafts) != 2 {
+		t.Fatalf("list = %+v, %v", list, err)
 	}
-	if got, err := reopened.Get(protected.ID); err != nil || got.Content != protected.Content || got.UpdatedAt != protected.UpdatedAt {
-		t.Fatalf("migration changed the draft: %+v, %v", got, err)
+	for _, d := range list.Drafts {
+		if d.Protected != (d.Title == "Private") {
+			t.Errorf("protected flag wrong: %+v", d)
+		}
 	}
 }
