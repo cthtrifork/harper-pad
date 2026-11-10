@@ -2,11 +2,6 @@
    (App.vue). Button, field and menu looks follow docs/design-cheatsheet.html. */
 
 /* Quiet icon button: transparent and muted at rest, border and fill on hover, 32 x 32. The negative margin keeps the bar's height. */
-.status > .lock-wrap {
-  position: relative;
-  overflow: visible;
-}
-
 .lock-btn {
   display: inline-flex;
   align-items: center;
@@ -36,12 +31,6 @@
 .lock-btn.locked,
 .lock-btn.unlocked {
   color: var(--accent);
-}
-
-.lock-menu {
-  right: 0;
-  left: auto;
-  min-width: 240px;
 }
 
 /* Text field, as in the cheat sheet: --bg fill, hover border --mute, focus border and ring --accent, error border --bad. */

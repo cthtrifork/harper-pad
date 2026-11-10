@@ -217,9 +217,7 @@ export function useDrafts(
     const prot = typeof d.content === "string" && isProtected(d.content);
     epoch++;
     if (d.id !== current.value.id || !prot) dropSession(); // the key never outlives the draft it opened
-    // A protected draft has no file: one that arrived protected (another device protected it) is let go of, so the file never gets its text.
-    current.value = asCurrent(prot ? { ...d, filePath: "" } : d);
-    if (prot && d.filePath && !isWeb) void be.unlinkDraftFile(d.id).catch(() => {});
+    current.value = asCurrent(d);
     fileState.value = current.value.filePath ? "unknown" : "none";
     dirty = false;
     protectedDraft.value = prot;
@@ -299,12 +297,12 @@ export function useDrafts(
     editor.value?.focus();
   }
 
-  // A protected draft elsewhere, to check a passphrase against: every protected draft has the same one, and no draft stores a check value.
+  // A protected draft, to check a passphrase against: every protected draft has the same one, and no draft stores a check value.
   // Search does not read protected drafts, so this pages through the list and looks for the marker in each summary.
-  async function otherProtected(exceptId: string) {
+  async function otherProtected() {
     for (let offset = 0; ; offset += SCAN) {
       const page = await be.listDrafts(SCAN, offset);
-      for (const hit of page.drafts.filter((d) => d.id !== exceptId && isProtectedSummary(d))) {
+      for (const hit of page.drafts.filter(isProtectedSummary)) {
         const full = await be.getDraft(hit.id);
         if (typeof full?.content === "string" && isProtected(full.content)) return full; // the summary alone is not proof
       }
@@ -312,78 +310,25 @@ export function useDrafts(
     }
   }
 
-  // Writes the open draft again in a new form (protected or not, another list title). `change` makes the new form current; when the write
-  // fails it is all put back, nothing is reported as done, and the error is thrown.
-  async function rewriteAs(change: () => void) {
-    const before = { session, prot: protectedDraft.value, locked: locked.value, title: listTitle.value, envelope, stored };
-    const wasDirty = dirty;
-    change();
-    stored = null; // the text did not change, but its stored form did
-    dirty = true;
-    const mine = ++edits;
-    state.value = "dirty";
+  // Starts a new, empty protected draft. With no protected draft yet the passphrase is a new one; otherwise it must open another protected
+  // draft (rejects with WrongPassphrase), so all of them share it. Nothing is stored until something is typed. A draft is protected from
+  // its first save and stays so: protection is never added to or taken from an existing draft.
+  async function createSecure(passphrase: string, title: string) {
+    if (!available.value) return;
     await flush();
-    if (!dirty && (state.value as State) !== "error") return; // the write went through
-    const why = error.value;
-    session = before.session;
-    protectedDraft.value = before.prot;
-    locked.value = before.locked;
-    listTitle.value = before.title;
-    envelope = before.envelope;
-    stored = before.stored;
-    dirty = wasDirty || edits !== mine; // text already unsaved or typed meanwhile still needs its own save
-    state.value = dirty ? "dirty" : "saved";
-    error.value = "";
-    throw new Error(why || "Not saved.");
-  }
-
-  // What the padlock needs before it asks for a passphrase: a reason the open draft cannot be protected, or whether the passphrase is a new one
-  // ("create") or the existing one ("verify").
-  async function protectCheck(): Promise<{ error: string } | { mode: "create" | "verify" }> {
-    if (!available.value) return { error: "Drafts are unavailable." };
-    await flush();
-    if (!current.value.id) return { error: "Type something first, so there is a draft to protect." };
-    if (current.value.filePath) return { error: "A draft saved to a file cannot be protected. Unlink the file first." };
-    try {
-      return { mode: (await otherProtected(current.value.id)) ? "verify" : "create" };
-    } catch (err) {
-      return { error: `Could not check the drafts: ${message(err)}` };
-    }
-  }
-
-  // Protects the open draft. With no protected draft yet the passphrase is a new one; otherwise it must open another protected draft (rejects
-  // with WrongPassphrase), so all of them share it.
-  async function protect(passphrase: string, title: string) {
-    if (protectedDraft.value || !available.value) return;
-    await flush();
-    const id = current.value.id;
-    if (!id) throw new Error("Type something first, so there is a draft to protect.");
-    if (current.value.filePath) throw new Error("A draft saved to a file cannot be protected. Unlink the file first.");
     const at = epoch;
-    const other = await otherProtected(id);
+    const other = await otherProtected();
     if (other) await unlockEnvelope(other.content ?? "", other.id, passphrase);
     const made = await newSession(passphrase);
-    // The draft may have been left, locked, linked to a file or protected meanwhile: what was checked above no longer holds.
-    if (epoch !== at || current.value.id !== id || protectedDraft.value || current.value.filePath) {
-      throw new Error("The draft changed while it was being protected. Try again.");
-    }
-    unlinkedToast.value = null; // its Undo would put a file link back
-    await rewriteAs(() => {
-      session = made;
-      protectedDraft.value = true;
-      locked.value = false;
-      listTitle.value = title.trim();
-    });
+    if (epoch !== at) throw new Error("The draft changed while the new one was being made. Try again.");
+    setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
+    session = made;
+    protectedDraft.value = true;
+    locked.value = false;
+    listTitle.value = title.trim();
+    editor.value?.load("", "markdown");
     touch();
-  }
-
-  // The title the draft list shows for the open protected draft, "" for none. It stays as given; edits to the text do not change it.
-  async function setListTitle(title: string) {
-    const next = title.trim();
-    if (!protectedDraft.value || !session || next === listTitle.value) return;
-    await rewriteAs(() => {
-      listTitle.value = next;
-    });
+    editor.value?.focus();
   }
 
   // Called after every change the user makes to the text.
@@ -438,9 +383,11 @@ export function useDrafts(
     state.value = "saving";
     try {
       // A protected draft is written as its envelope; the text and the key stay here.
-      const content = session ? await seal(session, current.value.id, text, listTitle.value) : text;
+      // A new protected draft gets its id here, as the seal covers it.
+      const id = current.value.id || (session ? newDraftId() : "");
+      const content = session ? await seal(session, id, text, listTitle.value) : text;
       const d = await be.saveDraft({
-        id: current.value.id,
+        id,
         format: current.value.format,
         content,
         createdAt: current.value.createdAt,
@@ -1001,9 +948,8 @@ export function useDrafts(
     listTitle,
     lock,
     unlock,
-    protect,
-    protectCheck,
-    setListTitle,
+    createSecure,
+    hasProtected: async () => !!(await otherProtected()),
     fileName,
     fileDir,
     list,

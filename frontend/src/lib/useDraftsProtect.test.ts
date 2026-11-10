@@ -48,12 +48,7 @@ function setup(initial: Record<string, { content: string; filePath?: string }>) 
     focus() {},
   });
   const fail = { saves: false, gate: null as Promise<void> | null }; // `saves` makes every save fail; `gate` holds the list back
-  const unlinked: string[] = [];
   const api = {
-    unlinkDraftFile: async (id: string) => {
-      unlinked.push(id);
-      return { id };
-    },
     getDraft: async (id: string) => ({ ...store.get(id) }),
     saveDraft: async (d: { id: string; content: string; format: string; createdAt?: number }) => {
       if (fail.saves) throw new Error("disk full");
@@ -81,129 +76,102 @@ function setup(initial: Record<string, { content: string; filePath?: string }>) 
     drafts.edited();
   };
   const flushAll = () => drafts.flush();
-  return { drafts, editor, store, writes, fileWrites, loads, toasts, open, type, flushAll, fail, unlinked };
+  return { drafts, editor, store, writes, fileWrites, loads, toasts, open, type, flushAll, fail };
 }
 
-check("protecting a draft writes only an envelope, and the text stays on screen", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  const shown = t.open(A);
-  t.editor.value.text = shown;
-  await t.drafts.protect(PW, "A title");
-  const stored = t.store.get(A)?.content ?? "";
+// A new protected draft with some text typed and saved; returns its id.
+async function secure(t: ReturnType<typeof setup>, text: string, title = "Plan") {
+  await t.drafts.createSecure(PW, title);
+  t.type(text);
+  await t.flushAll();
+  return t.drafts.current.value.id;
+}
+
+check("a new secure draft stores nothing until typed, then only an envelope, and the text stays on screen", async () => {
+  const t = setup({});
+  await t.drafts.createSecure(PW, "A title");
+  assert.equal(t.store.size, 0);
+  assert.equal(t.drafts.protectedDraft.value, true);
+  assert.equal(t.drafts.locked.value, false);
+  const id = await secure(t, "# Plan\nsecret words", "A title");
+  const stored = t.store.get(id)?.content ?? "";
   assert.ok(isProtected(stored));
   assert.ok(!stored.includes("secret"));
   assert.equal(t.editor.value.text, "# Plan\nsecret words");
-  assert.equal(t.drafts.protectedDraft.value, true);
-  assert.equal(t.drafts.locked.value, false);
-  assert.ok(isProtectedSummary(t.store.get(A) as never));
-});
+  assert.ok(isProtectedSummary(t.store.get(id) as never));
+  assert.equal(t.store.get(id)?.title, "A title");
 
-check("typing in an unlocked protected draft keeps writing envelopes", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  await t.drafts.protect(PW, "A title");
   t.writes.length = 0;
   t.type("# Plan\nmore secret words");
   await t.flushAll();
   assert.equal(t.writes.length, 1);
   assert.ok(isProtected(t.writes[0]) && !t.writes[0].includes("secret"));
+  assert.equal(t.store.get(id)?.title, "A title", "the title is kept when the text changes");
 });
 
 check("a protected draft opens locked with an empty editor, and unlocks with the passphrase", async () => {
-  const w = setup({ [A]: { content: "# Plan\nsecret words" } });
-  w.editor.value.text = w.open(A);
-  await w.drafts.protect(PW, "A title");
-  const envelope = w.store.get(A)?.content as string;
+  const w = setup({});
+  const id = await secure(w, "# Plan\nsecret words");
+  const envelope = w.store.get(id)?.content as string;
 
-  const t = setup({ [A]: { content: envelope } });
-  assert.equal(t.open(A), "");
+  const t = setup({ [id]: { content: envelope } });
+  const shown = t.open(id);
+  assert.equal(shown, "");
   assert.equal(t.drafts.locked.value, true);
   await assert.rejects(t.drafts.unlock("wrong passphrase"), WrongPassphrase);
   assert.equal(t.drafts.locked.value, true);
   await t.drafts.unlock(PW);
-  assert.equal(t.drafts.locked.value, false);
   assert.equal(t.editor.value.text, "# Plan\nsecret words");
 });
 
-check("locking saves first, then empties the editor", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  await t.drafts.protect(PW, "A title");
+check("locking saves first, then empties the editor, and unlocking brings the text back", async () => {
+  const t = setup({});
+  const id = await secure(t, "# Plan\nsecret words");
   t.type("# Plan\nedited secret");
   await t.drafts.lock();
   assert.equal(t.drafts.locked.value, true);
   assert.equal(t.editor.value.text, "");
-  const env = t.store.get(A)?.content as string;
+  assert.ok(isProtected(t.store.get(id)?.content as string));
   await t.drafts.unlock(PW);
   assert.equal(t.editor.value.text, "# Plan\nedited secret");
-  assert.ok(isProtected(env));
 });
 
-check("a second draft must use the passphrase of the first", async () => {
-  const t = setup({ [A]: { content: "# One\none" }, [B]: { content: "# Two\ntwo" } });
-  t.editor.value.text = t.open(A);
-  await t.drafts.protect(PW, "A title");
-  await t.drafts.open(B);
-  assert.deepEqual(await t.drafts.protectCheck(), { mode: "verify" });
-  await assert.rejects(t.drafts.protect("another passphrase", "A title"), WrongPassphrase);
-  assert.equal(t.drafts.protectedDraft.value, false);
-  assert.equal(t.store.get(B)?.content, "# Two\ntwo");
-  await t.drafts.protect(PW, "A title");
-  assert.ok(isProtected(t.store.get(B)?.content as string));
+check("the first secure draft takes a new passphrase, later ones must use the same", async () => {
+  const t = setup({ [B]: { content: "# Two\ntwo" } });
+  await secure(t, "# One\none");
+  await assert.rejects(t.drafts.createSecure("another passphrase", "Two"), WrongPassphrase);
+  assert.equal(t.drafts.protectedDraft.value, true, "still on the first draft");
+  await t.drafts.createSecure(PW, "Two");
+  assert.equal(t.drafts.current.value.id, "");
 });
 
-check("the first protected draft takes a new passphrase", async () => {
-  const t = setup({ [A]: { content: "# One\none" } });
-  t.editor.value.text = t.open(A);
-  assert.deepEqual(await t.drafts.protectCheck(), { mode: "create" });
-});
+check("a plain draft stays plain, and a protected draft never writes a file", async () => {
+  const plain = setup({ [B]: { content: "text" } });
+  plain.editor.value.text = plain.open(B);
+  assert.equal(plain.drafts.protectedDraft.value, false);
 
-check("the list title is the one chosen, kept when the text changes, and can be changed", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  assert.deepEqual(await t.drafts.protectCheck(), { mode: "create" });
-  await t.drafts.protect(PW, "Groceries");
-  assert.equal(t.store.get(A)?.title, "Groceries");
-  assert.ok(!String(t.store.get(A)?.content).includes("secret"));
-  t.type("# Something else\nmore");
-  await t.flushAll();
-  assert.equal(t.store.get(A)?.title, "Groceries");
-  await t.drafts.setListTitle("Errands");
-  assert.equal(t.store.get(A)?.title, "Errands");
-  await t.drafts.setListTitle("  ");
-  assert.equal(t.store.get(A)?.title, "Locked draft");
-});
-
-check("a draft linked to a file cannot be protected, and a protected draft never writes a file", async () => {
-  const linked = setup({ [A]: { content: "text", filePath: "/home/me/a.md" } });
-  linked.editor.value.text = linked.open(A);
-  assert.ok("error" in (await linked.drafts.protectCheck()));
-  await assert.rejects(linked.drafts.protect(PW, "A title"));
-
-  const t = setup({ [B]: { content: "text" } });
-  t.editor.value.text = t.open(B);
-  await t.drafts.protect(PW, "A title");
+  const t = setup({});
+  await secure(t, "text");
   await t.drafts.saveFile(true);
   await t.drafts.saveFile(false);
   assert.equal(t.fileWrites.length, 0);
+  await assert.rejects(t.drafts.dialog.writeFile(), /cannot be written to a file/);
 });
 
 check("a Conflicted copy of a protected draft is protected, under its own id, and opens with the same passphrase", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  await t.drafts.protect(PW, "Plan");
+  const t = setup({});
+  const mine = await secure(t, "# Plan\nsecret words");
   const id = await t.drafts.dialog.saveCopy("# Plan\nthe server text", "server");
   const copy = String(t.store.get(id)?.content);
-  assert.notEqual(id, A);
+  assert.notEqual(id, mine);
   assert.ok(isProtected(copy) && !copy.includes("server text"));
   assert.equal(t.store.get(id)?.title, "Plan");
   assert.equal((await unlockEnvelope(copy, id, PW)).content, "# Plan\nthe server text");
 });
 
 check("a draft is not locked when its last save failed: the text stays on screen", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  await t.drafts.protect(PW, "Plan");
+  const t = setup({});
+  await secure(t, "# Plan\nsecret words");
   t.type("# Plan\nunsaved edit");
   t.fail.saves = true;
   await t.drafts.lock();
@@ -216,51 +184,24 @@ check("a draft is not locked when its last save failed: the text stays on screen
   assert.equal(t.drafts.locked.value, true);
 });
 
-check("protection is not reported, and nothing changes, when the encrypted write fails", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  t.fail.saves = true;
-  await assert.rejects(t.drafts.protect(PW, "Plan"), /disk full/);
-  assert.equal(t.drafts.protectedDraft.value, false);
-  assert.equal(t.store.get(A)?.content, "# Plan\nsecret words");
-  assert.equal(t.drafts.state.value, "saved");
-
-  t.fail.saves = false;
-  await t.drafts.protect(PW, "Plan");
-  t.fail.saves = true;
-  await assert.rejects(t.drafts.setListTitle("Another"), /disk full/);
-  assert.equal(t.drafts.listTitle.value, "Plan", "the title is put back");
-  assert.equal(t.drafts.protectedDraft.value, true, "still protected, and still unlocked");
-  assert.equal(t.drafts.locked.value, false);
-
-  t.type("# Plan\nunsaved before rewrite");
-  await assert.rejects(t.drafts.setListTitle("A failed title"), /disk full/);
-  assert.equal(t.drafts.state.value, "dirty", "the edit that was already unsaved remains dirty");
-  t.fail.saves = false;
-  await t.flushAll();
-  assert.equal((await unlockEnvelope(String(t.store.get(A)?.content), A, PW)).content, "# Plan\nunsaved before rewrite");
-});
-
-check("a protect that finishes after the draft was left changes nothing", async () => {
+check("making a secure draft that finishes after the draft was left changes nothing", async () => {
   const t = setup({ [A]: { content: "# One\none" }, [B]: { content: "# Two\ntwo" } });
   t.editor.value.text = t.open(A);
   let release = () => {};
   t.fail.gate = new Promise<void>((r) => (release = r));
-  const pending = t.drafts.protect(PW, "One");
+  const pending = t.drafts.createSecure(PW, "One");
   await t.drafts.open(B);
   release();
-  await assert.rejects(pending, /changed while it was being protected/);
-  assert.equal(t.store.get(A)?.content, "# One\none");
-  assert.equal(t.store.get(B)?.content, "# Two\ntwo");
+  await assert.rejects(pending, /changed while the new one was being made/);
   assert.equal(t.drafts.protectedDraft.value, false);
+  assert.equal(t.drafts.current.value.id, B);
 });
 
 check("an unlock that finishes after the app was backgrounded installs no key", async () => {
-  const w = setup({ [A]: { content: "# Plan\nsecret words" } });
-  w.editor.value.text = w.open(A);
-  await w.drafts.protect(PW, "Plan");
-  const t = setup({ [A]: { content: String(w.store.get(A)?.content) } });
-  t.open(A);
+  const w = setup({});
+  const id = await secure(w, "# Plan\nsecret words");
+  const t = setup({ [id]: { content: String(w.store.get(id)?.content) } });
+  t.open(id);
   const pending = t.drafts.unlock(PW);
   await t.drafts.lock(); // what the app going to the background does
   await assert.rejects(pending, /changed while it was being unlocked/);
@@ -269,9 +210,8 @@ check("an unlock that finishes after the app was backgrounded installs no key", 
 });
 
 check("a pending protected reload cannot load plaintext after locking", async () => {
-  const t = setup({ [A]: { content: "# Plan\nsecret words" } });
-  t.editor.value.text = t.open(A);
-  await t.drafts.protect(PW, "Plan");
+  const t = setup({});
+  await secure(t, "# Plan\nsecret words");
 
   const subtle = crypto.subtle as unknown as { decrypt: (...args: unknown[]) => Promise<ArrayBuffer> };
   const decrypt = subtle.decrypt.bind(crypto.subtle);
@@ -299,33 +239,11 @@ check("a pending protected reload cannot load plaintext after locking", async ()
 });
 
 check("a copy of a protected draft is refused while it is locked, never saved as plain text", async () => {
-  const w = setup({ [A]: { content: "# Plan\nsecret words" } });
-  w.editor.value.text = w.open(A);
-  await w.drafts.protect(PW, "Plan");
-  const t = setup({ [A]: { content: String(w.store.get(A)?.content) } });
-  t.open(A);
+  const w = setup({});
+  const id = await secure(w, "# Plan\nsecret words");
+  const t = setup({ [id]: { content: String(w.store.get(id)?.content) } });
+  t.open(id);
   await assert.rejects(t.drafts.dialog.saveCopy("# Plan\nthe server text", "server"), /locked/);
   assert.equal(t.store.size, 1);
   assert.equal(t.writes.length, 0);
-});
-
-check("a protected draft lets go of its file, never writes one, and its unlink Undo is withdrawn", async () => {
-  const w = setup({ [A]: { content: "# Plan\nsecret words" } });
-  w.editor.value.text = w.open(A);
-  await w.drafts.protect(PW, "Plan");
-  const envelope = String(w.store.get(A)?.content);
-
-  const t = setup({ [A]: { content: envelope, filePath: "/home/me/plan.md" } });
-  t.open(A);
-  assert.equal(t.drafts.current.value.filePath, "");
-  assert.deepEqual(t.unlinked, [A]);
-  await t.drafts.unlock(PW);
-  await assert.rejects(t.drafts.dialog.writeFile(), /cannot be written to a file/);
-  assert.equal(t.fileWrites.length, 0);
-
-  const u = setup({ [B]: { content: "# Two\ntwo" } });
-  u.editor.value.text = u.open(B);
-  u.drafts.unlinkedToast.value = { id: B, name: "two.md", tick: 1 };
-  await u.drafts.protect(PW, "Two");
-  assert.equal(u.drafts.unlinkedToast.value, null);
 });

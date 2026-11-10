@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, type PropType, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
 import type { Summary } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { isProtectedSummary } from "../lib/protect.ts";
 import { copyDiagnostics } from "../lib/diagnostics.ts";
@@ -16,7 +16,29 @@ const props = defineProps({
   // Draft id -> where a Conflicted copy came from, in memory only (useDrafts): the row says so until the copy is edited, deleted or dismissed.
   copies: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
 });
-const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet", "dismiss-copy"]);
+const emit = defineEmits(["open", "create", "create-secure", "remove", "search", "more", "close", "undo", "snippet", "dismiss-copy"]);
+
+// "New draft" with a small menu for a secure one: a draft is made protected when it is created, never later (docs/sync.md).
+const newMenu = ref(false);
+const newWrap = ref<HTMLElement | null>(null);
+const outside = (e: Event) => {
+  if (newMenu.value && !newWrap.value?.contains(e.target as Node)) newMenu.value = false;
+};
+const onEscape = (e: KeyboardEvent) => {
+  if (e.key === "Escape") newMenu.value = false;
+};
+onMounted(() => {
+  document.addEventListener("pointerdown", outside);
+  document.addEventListener("keydown", onEscape);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", outside);
+  document.removeEventListener("keydown", onEscape);
+});
+function newSecure() {
+  newMenu.value = false;
+  emit("create-secure");
+}
 
 const help = ref(false); // the snippets help page replaces the list
 const q = ref(props.query);
@@ -100,7 +122,17 @@ const baseName = (path: string) => path.split(/[\\/]/).pop();
     <header>
       <h2>Drafts</h2>
       <div class="actions">
-        <button type="button" class="primary" @click="emit('create')">New draft</button>
+        <span ref="newWrap" class="new-wrap">
+          <button type="button" class="primary new" @click="emit('create')">New draft</button>
+          <button type="button" class="primary new-more" aria-label="More ways to start a draft" aria-haspopup="menu" :aria-expanded="newMenu" @click="newMenu = !newMenu">
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
+          </button>
+          <Transition name="pop">
+            <div v-if="newMenu" class="menu new-menu" role="menu">
+              <button type="button" class="item" role="menuitem" @click="newSecure">New secure draft</button>
+            </div>
+          </Transition>
+        </span>
         <button type="button" class="close" aria-label="Close the drafts list" @click="emit('close')">
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" /></svg>
         </button>

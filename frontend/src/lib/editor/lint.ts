@@ -51,9 +51,8 @@ const relintEffect = StateEffect.define<null>();
 
 // Add the word to the dictionary (spelling only), or ignore this finding in its context; `persist` saves the new state and the editor
 // lints again so the underline goes away. markClass makes them quieter than the fixes and keeps them out of the Problems panel's list.
-export function personalActions(harper: HarperLinter, f: Finding, persist?: Persist, isPrivate?: () => boolean): Action[] {
+function personalActions(harper: HarperLinter, f: Finding, persist?: Persist): Action[] {
   const run = (work: () => Promise<unknown>, note?: PersistNote) => async (view: EditorView) => {
-    if (isPrivate?.()) return;
     try {
       await work();
       await persist?.(note);
@@ -82,7 +81,6 @@ export function harperSource(
   onResult: ((r: { count: number; ms: number }) => void) | undefined,
   persist?: Persist,
   auto?: { prefs(): Prefs | undefined; settle(): Promise<unknown> },
-  isPrivate?: () => boolean,
 ) {
   return linter(
     async (view) => {
@@ -110,7 +108,7 @@ export function harperSource(
         severity: severity(f.kind),
         source: f.kind,
         message: f.message,
-        actions: [...f.fixes.map(toAction), ...(isPrivate?.() ? [] : personalActions(harper, f, persist, isPrivate))],
+        actions: [...f.fixes.map(toAction), ...personalActions(harper, f, persist)],
         // For "Fix all safe issues": a finding with one clear fix carries it (see autocorrect.ts).
         ...(f.safe ? { safe: true, autofix: { fix: f.fixes[0], problem: f.problem, hash: f.hash } } : {}),
       }));

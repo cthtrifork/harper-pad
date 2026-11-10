@@ -7,7 +7,7 @@ import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.ts";
-import { newSession, seal, unlock } from "./protect.ts";
+import { newSession, seal } from "./protect.ts";
 import { listDocs } from "./syncClient.ts";
 import { createSyncer, summaryText } from "./syncRun.ts";
 import { createWebDrafts, openDatabase } from "./webDrafts.ts";
@@ -490,67 +490,6 @@ test("a delete is pushed by one(id), the way the end of the Undo window does it"
   server.calls.length = 0;
   assert.equal(await a.one(never.id), "");
   assert.deepEqual(server.calls, []);
-});
-
-test("Sync all preserves a plain server version when another device has a protected copy", async () => {
-  const server = fakeServer();
-  const a = device(server);
-  const b = device(server);
-  const cost = { memoryKiB: 64, passes: 1 };
-  const d = await a.drafts.save({ content: "placeholder" });
-  const envelope = await seal(await newSession("pw", cost), d.id, "the secret text", "Groceries");
-  await tick();
-  await a.drafts.save({ id: d.id, content: envelope });
-  await a.sync();
-  assert.ok(!server.rows.get(d.id).data.includes("secret text"));
-
-  assert.deepEqual(await b.sync(), sum({ downloaded: 1 }));
-  assert.equal((await unlock((await b.drafts.get(d.id)).content, d.id, "pw", cost)).content, "the secret text");
-
-  // The server now serves the same draft as plain text, newer than what B has seen.
-  const row = server.rows.get(d.id);
-  server.rows.set(d.id, {
-    ...row,
-    version: row.version + 1,
-    updatedAt: row.updatedAt + 1000,
-    data: JSON.stringify({ v: 1, format: "markdown", content: "plain server text" }),
-  });
-  // It may be an intentional removal on another device: keep both sides for the person to resolve.
-  assert.deepEqual(await b.sync(), none, "nothing is applied, counted, or uploaded");
-  assert.equal((await b.drafts.get(d.id)).content, envelope, "the protected text is kept");
-  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "plain server text", "the plain server version is kept");
-  assert.deepEqual(await b.sync(), none);
-});
-
-test("opening a protected draft against a plain server version reports a conflict without uploading", async () => {
-  const server = fakeServer();
-  const a = device(server);
-  const b = device(server);
-  const cost = { memoryKiB: 64, passes: 1 };
-  const d = await a.drafts.save({ content: "placeholder" });
-  const envelope = await seal(await newSession("pw", cost), d.id, "the secret text", "");
-  await tick();
-  await a.drafts.save({ id: d.id, content: envelope });
-  await a.sync();
-  await b.sync();
-
-  const row = server.rows.get(d.id);
-  server.rows.set(d.id, {
-    ...row,
-    version: row.version + 1,
-    updatedAt: row.updatedAt + 1000,
-    data: JSON.stringify({ v: 1, format: "markdown", content: "plain server version" }),
-  });
-
-  server.calls.length = 0;
-  assert.equal(await b.open(d.id), "conflict");
-  assert.equal((await b.drafts.get(d.id)).content, envelope);
-  assert.equal((await b.inspect(d.id)).text, "plain server version");
-  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "plain server version");
-  assert.equal(
-    server.calls.some((call) => call.startsWith("PUT ")),
-    false,
-  );
 });
 
 test("taking a compared server version refuses a changed server stamp or local revision", async () => {
