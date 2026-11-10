@@ -26,6 +26,7 @@ export interface ConflictModel {
   /** The draft has no edits of its own and only the file changed: the file's text is "yours" and the draft takes it first. */
   applyFile?: boolean;
   sync?: boolean;
+  protected?: boolean;
 }
 
 // What the words and the rows need of a model: no stamps.

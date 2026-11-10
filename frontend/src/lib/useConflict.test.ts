@@ -198,6 +198,7 @@ const protectedServer = { text: ENVELOPE, stamp: "2:5", updatedAt: 5 };
 test("protected envelopes use the shared dialog after unlocking", async () => {
   const { c, drafts } = setup({ draftText: ENVELOPE, server: protectedServer, serverNow: protectedServer });
   await settle();
+  assert.equal(c.model.value?.protected, true);
   assert.equal(c.model.value?.server?.text, ENVELOPE);
   assert.equal(c.model.value?.yours, ENVELOPE);
   drafts.locked.value = true;

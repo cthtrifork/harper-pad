@@ -20,7 +20,7 @@ useModalDialog(dialog);
 
 <template>
   <dialog ref="dialog" class="choice-dialog conflict-dialog" role="alertdialog" aria-labelledby="conflict-title" aria-describedby="conflict-summary conflict-footer" :aria-busy="busy" @cancel.prevent>
-    <h2 id="conflict-title">{{ text.title }}</h2>
+    <h2 id="conflict-title" tabindex="-1" :autofocus="model.protected">{{ text.title }}</h2>
     <table id="conflict-summary" class="summary" aria-label="The versions">
       <tbody>
         <tr v-for="r in rows" :key="r.kind" :class="{ tint: r.tint }">
@@ -35,7 +35,7 @@ useModalDialog(dialog);
       <button type="button" class="danger" :disabled="busy" :title="text.overwriteTitle" aria-describedby="conflict-overwrite-desc" @click="emit('choose', 'overwrite')">
         {{ text.overwriteLabel }}
       </button>
-      <button type="button" class="primary" autofocus :disabled="busy" :title="text.keepTitle" aria-describedby="conflict-keep-desc" @click="emit('choose', 'keep')">
+      <button type="button" class="primary" :autofocus="!model.protected" :disabled="busy" :title="text.keepTitle" aria-describedby="conflict-keep-desc" @click="emit('choose', 'keep')">
         {{ text.keepLabel }}
       </button>
     </div>
