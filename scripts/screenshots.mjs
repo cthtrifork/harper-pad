@@ -107,7 +107,7 @@ await page.waitForSelector("dialog.pass-dialog[open]");
 await page.fill("#pass-input", "correct horse battery");
 await page.fill("#pass-again", "correct horse battery");
 await page.fill("#pass-title-input", "Private notes");
-await page.getByRole("button", { name: "Protect" }).click();
+await page.locator("dialog.pass-dialog").getByRole("button", { name: "Protect", exact: true }).click();
 await page.waitForSelector("dialog.pass-dialog", { state: "detached", timeout: 60000 }); // Argon2id with 128 MiB takes a moment
 await page.click("#lock-btn.unlocked");
 await page.getByRole("menuitem", { name: "Lock now" }).click();
