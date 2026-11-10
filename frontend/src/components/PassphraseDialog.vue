@@ -2,12 +2,11 @@
 import { computed, ref } from "vue";
 import { useModalDialog } from "../lib/useModalDialog.ts";
 
-// Asks for the passphrase of protected drafts (docs/sync.md, "Protected drafts"): a new one for the first protected draft (typed twice), or
-// the existing one to make another protected draft or to unlock one. Unlike the conflict dialogs it can be cancelled: nothing depends on the answer.
+// Each secure draft has its own passphrase, typed twice on creation. Unlike the conflict dialog, this dialog can be cancelled.
 const MIN_LENGTH = 10;
 
 const props = defineProps<{
-  mode: "create" | "verify" | "unlock";
+  mode: "create" | "unlock";
   busy: boolean;
   error: string;
 }>();
@@ -26,10 +25,8 @@ const mismatch = ref("");
 const heading = computed(() => (props.mode === "unlock" ? "Unlock this draft" : "New secure draft"));
 const text = computed(() =>
   props.mode === "create"
-    ? "Choose a passphrase. It cannot be changed or recovered: lose it and the protected drafts are gone."
-    : props.mode === "verify"
-      ? "Enter the passphrase of your other protected drafts."
-      : "Enter the passphrase of your protected drafts.",
+    ? "Choose a passphrase for this draft. It cannot be changed or recovered: lose it and this draft is gone."
+    : "Enter this draft's passphrase.",
 );
 
 function submit() {

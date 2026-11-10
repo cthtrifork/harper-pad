@@ -1,25 +1,16 @@
 import { ref, watch } from "vue";
-import {
-  type Choice,
-  type ConflictModel,
-  type ConflictOps,
-  type Origin,
-  type ProtectedChoice,
-  resolveConflict,
-  staleNote,
-} from "./conflict.ts";
-import { isProtected } from "./protect.ts";
+import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
 type DraftsApi = Pick<
   ReturnType<typeof useDrafts>,
-  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "flush" | "needsSave"
+  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "flush" | "state"
 >;
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
-  "enrolled" | "serverConflict" | "checkNow" | "inspectServer" | "forcePush" | "clearConflict" | "takeServer"
+  "enrolled" | "serverConflict" | "checkNow" | "inspectServer" | "forcePush" | "clearConflict"
 >;
 
 // The Keep or Overwrite dialog for the open draft (ConflictDialog.vue): the model for lib/conflict.ts, and the choice. Only the open draft
@@ -55,22 +46,8 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       if (latest === null) sv = null;
       else if (latest) sv = latest;
     }
-    // A protected version is not compared or copied, with or without the key: the person keeps one side (docs/sync.md, "Protected drafts").
-    if (sv && isProtected(sv.text)) {
-      model.value = f
-        ? null // protected drafts have no file, so this is another draft's state: nothing to ask
-        : {
-            id,
-            protected: true,
-            file: null,
-            server: { text: "", stamp: sv.stamp, at: sv.updatedAt },
-            sync: true,
-            draftAt: drafts.dialog.current().updatedAt,
-          };
-      return;
-    }
     if (drafts.locked.value) {
-      model.value = null; // a locked draft's text cannot be compared: it is looked at again when it is unlocked
+      model.value = null; // Keep needs the key to seal the copy under its new id. Ask after unlocking.
       return;
     }
     let file: ConflictModel["file"] = null;
@@ -132,61 +109,23 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     push: syncOn() ? () => sync.forcePush(m.id as string) : null,
   });
 
-  // A protected draft's two choices: "Overwrite theirs" sends this device's version on top of the server's, "Discard ours" takes the server's.
-  // Save first, and redraw if the dialog's draft or server version moved before the choice.
-  async function prepareProtectedChoice(m: ConflictModel) {
-    await drafts.flush();
-    if (drafts.needsSave.value) {
-      note.value = "This draft could not be saved. Check it and choose again.";
-      await build();
-      return false;
-    }
-    const current = drafts.dialog.current();
-    if (current.id !== m.id || current.updatedAt !== m.draftAt) {
-      note.value = "This draft changed meanwhile. Check the rows and choose again.";
-      await build();
-      return false;
-    }
-    return true;
-  }
-
-  async function chooseProtected(choice: ProtectedChoice, m: ConflictModel) {
-    const id = m.id as string;
-    if (!(await prepareProtectedChoice(m))) return;
-    const seen = m.server?.stamp;
-    const now = await sync.inspectServer(id);
-    if (now && now.stamp !== seen) {
-      note.value = staleNote(m, ["server"]);
-      await build();
-      return;
-    }
-    if (choice === "overwrite") {
-      if (!(await sync.forcePush(id))) throw new Error("the server did not take it");
-    } else {
-      const at = drafts.dialog.current();
-      const stillCurrent = () => {
-        const here = drafts.dialog.current();
-        return here.id === at.id && here.updatedAt === at.updatedAt && here.revision === at.revision;
-      };
-      if (!(await sync.takeServer(id, { stamp: seen ?? "", updatedAt: at.updatedAt as number, stillCurrent }))) {
-        note.value = "This draft changed meanwhile. Check the rows and choose again.";
-        await build();
-        return;
-      }
-    }
-    sync.clearConflict();
-    model.value = null;
-  }
-
   // The person chose. Both sides are looked at again first; if either moved, the dialog is redrawn and nothing is written.
-  async function choose(choice: Choice | ProtectedChoice) {
+  async function choose(choice: Choice) {
     const m = model.value;
     if (!m || busy.value) return;
     busy.value = true;
     note.value = "";
     try {
-      if (m.protected) return await chooseProtected(choice as ProtectedChoice, m);
-      const r = await resolveConflict(choice as Choice, m, ops(m));
+      await drafts.flush();
+      if (["dirty", "saving", "error"].includes(drafts.state.value))
+        throw new Error("This draft could not be saved. Check it and choose again.");
+      const current = drafts.dialog.current();
+      if (drafts.locked.value || current.id !== m.id || current.updatedAt !== m.draftAt) {
+        note.value = "This draft changed meanwhile. Check the rows and choose again.";
+        await build();
+        return;
+      }
+      const r = await resolveConflict(choice, m, ops(m));
       if (r.status === "stale") {
         note.value = staleNote(m, r.changed);
         await drafts.recheckFile();

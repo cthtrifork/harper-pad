@@ -96,21 +96,20 @@ await page.waitForSelector("#drafts-drawer .item", { timeout: 15000 });
 await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
 expect((await page.locator("#drafts-drawer .item").count()) === 1, "the drafts list should hold the one draft that was typed");
 
-// A protected draft next to it: the padlock asks for a passphrase (typed twice, and a title the list may show), then "Lock now" closes it.
+// A protected draft next to it: New secure draft asks for its own passphrase (typed twice) and an optional list title.
 // The list marks it with a padlock and shows no excerpt, so the picture shows what a protected draft looks like among plain ones.
-await page.getByRole("button", { name: "New draft" }).click();
-await page.locator(".cm-content").click();
-await page.keyboard.type("Bank details and the spare key code. None of this should be readable in the list.");
-await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
-await page.click("#lock-btn.plain");
+await page.getByRole("button", { name: "More ways to start a draft" }).click();
+await page.getByRole("menuitem", { name: "New secure draft" }).click();
 await page.waitForSelector("dialog.pass-dialog[open]");
 await page.fill("#pass-input", "correct horse battery");
 await page.fill("#pass-again", "correct horse battery");
 await page.fill("#pass-title-input", "Private notes");
-await page.locator("dialog.pass-dialog").getByRole("button", { name: "Protect", exact: true }).click();
+await page.locator("dialog.pass-dialog").getByRole("button", { name: "Create", exact: true }).click();
 await page.waitForSelector("dialog.pass-dialog", { state: "detached", timeout: 60000 }); // Argon2id with 128 MiB takes a moment
+await page.locator(".cm-content").click();
+await page.keyboard.type("Bank details and the spare key code. None of this should be readable in the list.");
+await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
 await page.click("#lock-btn.unlocked");
-await page.getByRole("menuitem", { name: "Lock now" }).click();
 await page.waitForSelector("#lock-btn.locked", { timeout: 15000 });
 await page.keyboard.press("Control+j"); // New draft closed the scratch pad; open it for the list
 await page.waitForSelector("#drafts-drawer");

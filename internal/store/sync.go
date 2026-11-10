@@ -169,66 +169,40 @@ func (s *Store) Changes() (Changes, error) {
 // ApplyRemote stores a draft as the server has it, with the server's timestamps, and records it as synced. An existing draft keeps
 // its file link.
 func (s *Store) ApplyRemote(d Draft, version int64) (Draft, error) {
-	_, err := s.applyRemote(d, version, nil)
-	if err != nil {
+	if err := checkDraft(&d); err != nil {
 		return Draft{}, err
 	}
-	return s.Get(d.ID)
-}
-
-// ApplyRemoteIf is ApplyRemote that only goes ahead while the stored draft's update time is still `expected` (a draft that does not exist
-// yet matches nothing). The check and the write are one transaction, so a save that lands in between is never overwritten. False when the
-// draft had moved: nothing was written.
-func (s *Store) ApplyRemoteIf(d Draft, version, expected int64) (bool, error) {
-	return s.applyRemote(d, version, &expected)
-}
-
-func (s *Store) applyRemote(d Draft, version int64, expected *int64) (bool, error) {
-	if err := checkDraft(&d); err != nil {
-		return false, err
-	}
 	if !idPattern.MatchString(d.ID) {
-		return false, fmt.Errorf("%q is not a draft id", d.ID)
+		return Draft{}, fmt.Errorf("%q is not a draft id", d.ID)
 	}
 	if d.CreatedAt <= 0 || d.UpdatedAt <= 0 {
-		return false, errors.New("a synced draft needs its created and updated times")
+		return Draft{}, errors.New("a synced draft needs its created and updated times")
 	}
 	data, err := json.Marshal(blob{V: 1, Format: d.Format, Content: d.Content})
 	if err != nil {
-		return false, err
+		return Draft{}, err
 	}
 	sm := clampSummary(d)
 	tx, err := s.db.Begin()
 	if err != nil {
-		return false, err
+		return Draft{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if expected != nil {
-		var at int64
-		switch err := tx.QueryRow(`SELECT updated_at FROM drafts WHERE id = ?`, d.ID).Scan(&at); {
-		case errors.Is(err, sql.ErrNoRows):
-			return false, nil
-		case err != nil:
-			return false, err
-		case at != *expected:
-			return false, nil
-		}
-	}
-	if _, err := tx.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, format, title, excerpt, tasks, tasks_total, tasks_done)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	if _, err := tx.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, format, title, excerpt, tasks, tasks_total, tasks_done, protected)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET created_at = excluded.created_at, updated_at = excluded.updated_at, data = excluded.data,
 			format = excluded.format, title = excluded.title, excerpt = excluded.excerpt, tasks = excluded.tasks,
-			tasks_total = excluded.tasks_total, tasks_done = excluded.tasks_done`,
-		d.ID, d.CreatedAt, d.UpdatedAt, string(data), sm.format, sm.title, sm.excerpt, sm.tasks, sm.total, sm.done); err != nil {
-		return false, err
+			tasks_total = excluded.tasks_total, tasks_done = excluded.tasks_done, protected = excluded.protected`,
+		d.ID, d.CreatedAt, d.UpdatedAt, string(data), sm.format, sm.title, sm.excerpt, sm.tasks, sm.total, sm.done, sm.protected); err != nil {
+		return Draft{}, err
 	}
 	if err := putState(tx, d.ID, SyncState{Hash: ContentHash(d.Format, d.Content), UpdatedAt: d.UpdatedAt, Version: version}); err != nil {
-		return false, err
+		return Draft{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return false, err
+		return Draft{}, err
 	}
-	return true, nil
+	return s.Get(d.ID)
 }
 
 // ApplyRemoteDelete removes a draft whose server copy is a tombstone, and records that so it is not a pending delete. A missing

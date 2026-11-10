@@ -256,15 +256,3 @@ test("the notes: which side changed again, and nothing-changed only when it is t
     (e: Error & { untouched?: boolean }) => e.untouched === false,
   );
 });
-
-test("a protected draft's dialog has two named choices and no copies", () => {
-  const m = { protected: true, draftAt: 1, server: { text: "", at: 2 } };
-  const d = describeConflict(m);
-  assert.equal(d.overwriteLabel, "Overwrite theirs");
-  assert.equal(d.keepLabel, "Discard ours");
-  assert.equal(d.versions, 2);
-  assert.deepEqual(
-    summaryRows(m).map((r) => r.kind),
-    ["draft", "server"],
-  );
-});

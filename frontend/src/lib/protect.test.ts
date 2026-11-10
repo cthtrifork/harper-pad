@@ -49,7 +49,7 @@ test("the draft list summary of a protected draft has the chosen title, no excer
   const { summarize } = await import("./summarize.ts");
   const session = await newSession("pw", cost);
   const listed = summarize(await seal(session, ID, "- [ ] a task\nbody", title));
-  assert.deepEqual(listed, { title, excerpt: "hp-protected", tasks: [], tasksTotal: 0, tasksDone: 0 });
+  assert.deepEqual(listed, { protected: true, title, excerpt: "", tasks: [], tasksTotal: 0, tasksDone: 0 });
   assert.equal(summarize(await seal(session, ID, body, "")).title, "Locked draft");
 });
 

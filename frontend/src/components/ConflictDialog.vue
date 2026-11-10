@@ -14,7 +14,6 @@ const emit = defineEmits(["choose"]);
 const dialog = ref<HTMLDialogElement | null>(null);
 const text = computed(() => describeConflict(props.model));
 const rows = computed(() => summaryRows(props.model));
-const isProtected = computed(() => !!props.model.protected);
 
 useModalDialog(dialog);
 </script>
@@ -36,7 +35,7 @@ useModalDialog(dialog);
       <button type="button" class="danger" :disabled="busy" :title="text.overwriteTitle" aria-describedby="conflict-overwrite-desc" @click="emit('choose', 'overwrite')">
         {{ text.overwriteLabel }}
       </button>
-      <button type="button" :class="isProtected ? 'danger' : 'primary'" :autofocus="!isProtected" :disabled="busy" :title="text.keepTitle" aria-describedby="conflict-keep-desc" @click="emit('choose', isProtected ? 'discard' : 'keep')">
+      <button type="button" class="primary" autofocus :disabled="busy" :title="text.keepTitle" aria-describedby="conflict-keep-desc" @click="emit('choose', 'keep')">
         {{ text.keepLabel }}
       </button>
     </div>

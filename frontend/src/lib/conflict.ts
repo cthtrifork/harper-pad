@@ -26,8 +26,6 @@ export interface ConflictModel {
   /** The draft has no edits of its own and only the file changed: the file's text is "yours" and the draft takes it first. */
   applyFile?: boolean;
   sync?: boolean;
-  /** A protected draft: the versions are not compared or copied, and the choices are `ProtectedChoice`. */
-  protected?: boolean;
 }
 
 // What the words and the rows need of a model: no stamps.
@@ -39,8 +37,6 @@ interface View {
   server?: Pick<Side, "text" | "at"> | null;
   applyFile?: boolean;
   sync?: boolean;
-  /** A protected draft: the versions are not compared or copied, and the choices are `ProtectedChoice`. */
-  protected?: boolean;
 }
 
 interface Row {
@@ -51,8 +47,6 @@ interface Row {
 }
 
 export type Choice = "keep" | "overwrite";
-/** A protected draft: "overwrite" puts this device's version on the server ("Overwrite theirs"), "discard" takes the server's ("Discard ours"). */
-export type ProtectedChoice = "overwrite" | "discard";
 export type Origin = "file" | "server" | "file and server";
 
 const stampOf = (side: { stamp: string } | null | undefined) => (side ? side.stamp : null);
@@ -73,17 +67,6 @@ const sameText = (m: View) => !!m.file && !!m.server && m.file.text === m.server
 // The words of the dialog: title, button labels and footer are what is seen; each button's sentence is its tooltip and what assistive
 // technology reads.
 export function describeConflict(m: View) {
-  if (m.protected) {
-    return {
-      title: "This protected draft changed on another device",
-      versions: 2,
-      keepLabel: "Discard ours",
-      overwriteLabel: "Overwrite theirs",
-      keepTitle: "Takes the server's version and drops this device's. No undo.",
-      overwriteTitle: "Puts this device's version on the server and drops the server's. No undo.",
-      footer: "Protected versions are not compared or copied, so one of them is lost. Neither choice can be undone.",
-    };
-  }
   const fileOther = !!m.file && !m.applyFile; // an unedited draft takes the file's text: the file is not an "other" version then
   const versions = summaryRows(m).length;
   const title = m.applyFile

@@ -43,14 +43,6 @@ export function ApplyRemoteDelete(id: string, version: number, updatedAt: number
 }
 
 /**
- * ApplyRemoteIf is ApplyRemote for a draft whose stored update time must still be `expected`; it reports whether the server's version was
- * stored. False means the draft was saved meanwhile and nothing was written.
- */
-export function ApplyRemoteIf(d: store$0.Draft, version: number, expected: number): $CancellablePromise<boolean> {
-    return $Call.ByID(783696958, d, version, expected);
-}
-
-/**
  * DraftChanged reports whether one draft differs from what the server last held (false when there is no such draft).
  */
 export function DraftChanged(id: string): $CancellablePromise<boolean> {

@@ -1,6 +1,6 @@
 // What the drafts list shows: title, excerpt and a preview of the task lines. Made here for both builds (docs/architecture.md, "Go side").
 // Cases: testdata/summarize.json.
-import { clearTitle, isProtected, PROTECTED_MARK } from "./protect.ts";
+import { clearTitle, isProtected } from "./protect.ts";
 
 const TASK = /^\s*[-*+]\s+\[([ xX])\]\s+(.*\S)\s*$/;
 const HEAD = /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?)/;
@@ -24,7 +24,14 @@ interface TaskLine {
 export function summarize(content: string) {
   // A protected draft shows no excerpt and no tasks, and the title the user gave it, if any (docs/sync.md, "Protected drafts").
   if (isProtected(content)) {
-    return { title: clearTitle(content) || "Locked draft", excerpt: PROTECTED_MARK, tasks: [] as TaskLine[], tasksTotal: 0, tasksDone: 0 };
+    return {
+      protected: true,
+      title: clearTitle(content) || "Locked draft",
+      excerpt: "",
+      tasks: [] as TaskLine[],
+      tasksTotal: 0,
+      tasksDone: 0,
+    };
   }
   let title = "";
   let total = 0;
@@ -46,11 +53,10 @@ export function summarize(content: string) {
     }
     if (!m) rest.push(line); // task lines are shown as tasks, so they stay out of the excerpt
   }
-  let excerpt = clip(rest.join(" ").split(/\s+/).filter(Boolean).join(" "), 160);
-  if (excerpt === PROTECTED_MARK) excerpt += "\u200b"; // a plain draft must not look like a protected one in the list
   return {
+    protected: false,
     title: title || "Untitled",
-    excerpt,
+    excerpt: clip(rest.join(" ").split(/\s+/).filter(Boolean).join(" "), 160),
     tasks,
     tasksTotal: total,
     tasksDone: done,

@@ -383,23 +383,6 @@ export function useSync({
     serverConflict.value = null;
   };
 
-  // The server's version becomes this device's (see createSyncer.takeServer), and the open draft shows it. False when it did not happen.
-  function takeServer(id: string, guard: Parameters<Syncer["takeServer"]>[1]): Promise<boolean> {
-    if (!device || status.value === "signin") return Promise.resolve(false);
-    const taken = chain.then(async () => {
-      try {
-        const ok = await syncer().takeServer(id, guard);
-        if (ok) openHooks.onSwapped?.();
-        return ok;
-      } catch (err) {
-        stopped(err);
-        return false;
-      }
-    });
-    chain = taken;
-    return taken;
-  }
-
   // The person's answer to "deleted elsewhere", asked in a modal dialog they cannot leave without choosing: keep the draft (it is uploaded
   // again), or remove it here too (`onRemoved` shows another note, and an Undo toast follows).
   function keepGone() {
@@ -456,7 +439,6 @@ export function useSync({
     lastSync,
     notice,
     gone,
-    takeServer,
     serverConflict,
     rejected,
     inspectServer,

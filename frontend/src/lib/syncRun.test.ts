@@ -90,14 +90,6 @@ function device(server) {
     inspect: (id) => syncer().inspect(id),
     probe: (id) => syncer().probe(id),
     force: (id) => syncer().force(id),
-    take: async (id, guard) => {
-      const engine = syncer();
-      const expected = guard ?? {
-        stamp: (await engine.inspect(id)).stamp,
-        updatedAt: (await drafts.get(id)).updatedAt,
-      };
-      return engine.takeServer(id, expected);
-    },
   };
 }
 const none = { uploaded: 0, downloaded: 0, removed: 0, failed: 0, skipped: 0 };
@@ -492,53 +484,7 @@ test("a delete is pushed by one(id), the way the end of the Undo window does it"
   assert.deepEqual(server.calls, []);
 });
 
-test("taking a compared server version refuses a changed server stamp or local revision", async () => {
-  const server = fakeServer();
-  const a = device(server);
-  const b = device(server);
-  const d = await a.drafts.save({ content: "start" });
-  await a.sync();
-  await b.sync();
-
-  const observed = await b.inspect(d.id);
-  const local = await b.drafts.get(d.id);
-  const row = server.rows.get(d.id);
-  server.rows.set(d.id, { ...row, version: row.version + 1, updatedAt: row.updatedAt + 1 });
-  assert.equal(await b.take(d.id, { stamp: observed.stamp, updatedAt: local.updatedAt }), false);
-  assert.equal((await b.drafts.get(d.id)).content, "start");
-
-  server.rows.set(d.id, row);
-  const racingFetch = async (url, init) => {
-    if (init.method === "GET" && url.includes(d.id)) {
-      await b.drafts.save({ ...local, content: "new local edit" });
-    }
-    return server.fetchFn(url, init);
-  };
-  const engine = createSyncer({ device: DEVICE, drafts: b.drafts, fetchFn: racingFetch });
-  assert.equal(await engine.takeServer(d.id, { stamp: observed.stamp, updatedAt: local.updatedAt }), false);
-  assert.equal((await b.drafts.get(d.id)).content, "new local edit");
-});
-
-test("takeServer does not overwrite a save that lands after its own revision check", async () => {
-  const server = fakeServer();
-  const a = device(server);
-  const d = await a.drafts.save({ content: "start" });
-  await a.one(d.id);
-  const local = await a.drafts.get(d.id);
-  const observed = await a.inspect(d.id);
-  const racing = {
-    ...a.drafts,
-    applyRemoteIf: async (...args) => {
-      await a.drafts.save({ ...local, content: "typed in between" }); // lands after the check, before the write
-      return a.drafts.applyRemoteIf(...args);
-    },
-  };
-  const engine = createSyncer({ device: DEVICE, drafts: racing, fetchFn: server.fetchFn });
-  assert.equal(await engine.takeServer(d.id, { stamp: observed.stamp, updatedAt: local.updatedAt }), false);
-  assert.equal((await a.drafts.get(d.id)).content, "typed in between");
-});
-
-test("two protected versions of the same text are reconciled by taking the server's, which ends the conflict for good", async () => {
+test("protected envelopes use the ordinary conflict and force-push path without repeated conflicts", async () => {
   const server = fakeServer();
   const a = device(server);
   const b = device(server);
@@ -551,14 +497,16 @@ test("two protected versions of the same text are reconciled by taking the serve
   await b.sync();
   // Both devices save the same text; each seal has its own nonce, so the stored versions differ.
   await tick();
-  const fromA = await seal(session, d.id, "same text", "T");
-  await a.drafts.save({ id: d.id, content: fromA });
+  await a.drafts.save({ id: d.id, content: await seal(session, d.id, "same text", "T") });
   await tick();
-  await b.drafts.save({ id: d.id, content: await seal(session, d.id, "same text", "T") });
+  const fromB = await seal(session, d.id, "same text", "T");
+  await b.drafts.save({ id: d.id, content: fromB });
   await a.sync();
   assert.deepEqual(await b.sync(), none, "the engine sees two different versions and leaves them for the dialog");
-  assert.equal(await b.take(d.id), true);
-  assert.equal((await b.drafts.get(d.id)).content, fromA);
+  assert.equal(await b.force(d.id), true);
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, fromB);
   assert.deepEqual(await b.sync(), none);
+  assert.deepEqual(await a.sync(), sum({ downloaded: 1 }));
+  assert.equal((await a.drafts.get(d.id)).content, fromB);
   assert.deepEqual(await b.drafts.changes(), { changed: [], deleted: [] });
 });

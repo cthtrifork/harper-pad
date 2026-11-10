@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
 import type { Summary } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
-import { isProtectedSummary } from "../lib/protect.ts";
 import { copyDiagnostics } from "../lib/diagnostics.ts";
 import { whenLabel } from "../lib/when.ts";
 import { COPY_LABELS } from "../lib/conflict.ts";
@@ -161,12 +160,12 @@ const baseName = (path: string) => path.split(/[\\/]/).pop();
         <button type="button" class="card" :aria-current="d.id === currentId ? 'true' : undefined" @click="open(d.id)">
           <span class="top">
             <span class="title">
-              <svg v-if="isProtectedSummary(d)" class="padlock" width="11" height="11" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none" /><path d="M4.5 6V4.2a2.5 2.5 0 0 1 5 0V6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
-              <span v-if="isProtectedSummary(d)" class="sr-only">Protected: </span>{{ d.title }}
+              <svg v-if="d.protected" class="padlock" width="11" height="11" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none" /><path d="M4.5 6V4.2a2.5 2.5 0 0 1 5 0V6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
+              <span v-if="d.protected" class="sr-only">Protected: </span>{{ d.title }}
             </span>
             <time :datetime="iso(d.updatedAt)">{{ whenLabel(d.updatedAt) }}</time>
           </span>
-          <template v-if="d.tasks.length && !isProtectedSummary(d)">
+          <template v-if="d.tasks.length && !d.protected">
             <span class="tasks">
               <span v-for="(t, i) in d.tasks" :key="i" class="task" :class="{ done: t.done }">
                 <span class="box" aria-hidden="true">
@@ -177,7 +176,7 @@ const baseName = (path: string) => path.split(/[\\/]/).pop();
             </span>
             <span class="progress">{{ d.tasksDone }} of {{ d.tasksTotal }} {{ d.tasksTotal === 1 ? "task" : "tasks" }} done</span>
           </template>
-          <span v-else-if="d.excerpt && !isProtectedSummary(d)" class="excerpt">{{ d.excerpt }}</span>
+          <span v-else-if="d.excerpt && !d.protected" class="excerpt">{{ d.excerpt }}</span>
           <!-- Only drafts that were saved to a file carry this; the others are just drafts. -->
           <span v-if="d.filePath" class="file" :title="d.filePath">
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4l2.5 2.5v6.5H3zM7 1.5V4h2.5" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none" /></svg>

@@ -111,20 +111,14 @@ const drafts = useDrafts(editor, showDrawer, {
 // Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
 const conflict = useConflict({ drafts, sync });
 // The padlock and its passphrase dialog (docs/sync.md, "Protected drafts").
-const pass = ref<{ mode: "create" | "verify" | "unlock" } | null>(null);
+const pass = ref<{ mode: "create" | "unlock" } | null>(null);
 const passBusy = ref(false);
 const passError = ref("");
 const lockButton = computed(() => (drafts.protectedDraft.value ? { locked: drafts.locked.value } : null));
-async function askSecure() {
+function askSecure() {
   if (!drafts.available.value) return;
-  let mode: "create" | "verify";
-  try {
-    mode = (await drafts.hasProtected()) ? "verify" : "create";
-  } catch (err) {
-    return drafts.showToast(`Could not check the drafts: ${(err as Error)?.message || err}`);
-  }
   passError.value = "";
-  pass.value = { mode };
+  pass.value = { mode: "create" };
 }
 function askUnlock() {
   passError.value = "";

@@ -51,4 +51,8 @@ test("search reads the title of a protected draft, never its ciphertext", async 
   assert.deepEqual(await ids("orchard"), [saved[1].id]);
   assert.deepEqual(await ids("locked"), [saved[2].id]);
   assert.deepEqual(await ids("hp-protected"), []);
+  const listed = (await drafts.list()).drafts;
+  assert.equal(listed.find((d) => d.id === saved[0].id).protected, false);
+  assert.equal(listed.find((d) => d.id === saved[1].id).protected, true);
+  assert.equal(listed.find((d) => d.id === saved[1].id).excerpt, "");
 });

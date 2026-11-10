@@ -46,11 +46,6 @@ const aad = (id: string, title: string) => new TextEncoder().encode(title ? `${i
 
 export const isProtected = (content: string) => content.startsWith(PREFIX);
 
-/** The excerpt of a protected draft's list entry. No stored field says "protected", and the list shows no excerpt for such a draft, so this
- * marker is how the list (and the check of a passphrase against another protected draft) tells one from a plain draft. */
-export const PROTECTED_MARK = "hp-protected";
-export const isProtectedSummary = (d: { excerpt: string }) => d.excerpt === PROTECTED_MARK;
-
 function parse(content: string): Envelope {
   if (!isProtected(content)) throw new Error("not a protected draft");
   const env = JSON.parse(content.slice(PREFIX.length)) as Envelope;

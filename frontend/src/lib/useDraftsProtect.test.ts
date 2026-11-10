@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ref } from "vue";
-import { isProtected, isProtectedSummary, unlock as unlockEnvelope, WrongPassphrase } from "./protect.ts";
+import { computed, ref } from "vue";
+import { isProtected, newSession, seal, unlock as unlockEnvelope, WrongPassphrase } from "./protect.ts";
 import { summarize } from "./summarize.ts";
+import { useConflict } from "./useConflict.ts";
 import { useDrafts } from "./useDrafts.ts";
 
 // detach() removes the page's listeners; there is no page here.
-const noEvents = { addEventListener() {}, removeEventListener() {} };
-Object.assign(globalThis, { window: noEvents, document: noEvents });
+Object.assign(globalThis, { window: new EventTarget(), document: new EventTarget() });
 
 const A = "a".repeat(32);
 const B = "b".repeat(32);
 const PW = "correct horse battery";
 const setups: { detach(): void }[] = [];
 
-// The idle lock timer would keep the process alive, so every test ends by detaching.
+// Clear autosave timers and page listeners after each test.
 const check = (name: string, fn: () => Promise<void>) =>
   test(name, async () => {
     try {
@@ -47,7 +47,7 @@ function setup(initial: Record<string, { content: string; filePath?: string }>) 
     undo() {},
     focus() {},
   });
-  const fail = { saves: false, gate: null as Promise<void> | null }; // `saves` makes every save fail; `gate` holds the list back
+  const fail = { saves: false };
   const api = {
     getDraft: async (id: string) => ({ ...store.get(id) }),
     saveDraft: async (d: { id: string; content: string; format: string; createdAt?: number }) => {
@@ -58,7 +58,6 @@ function setup(initial: Record<string, { content: string; filePath?: string }>) 
       return row;
     },
     listDrafts: async (limit: number, offset: number) => {
-      await fail.gate;
       const all = [...store.values()].map((d) => ({ id: d.id, ...summarize(d.content) }));
       return { drafts: all.slice(offset, offset + limit), total: all.length };
     },
@@ -98,7 +97,7 @@ check("a new secure draft stores nothing until typed, then only an envelope, and
   assert.ok(isProtected(stored));
   assert.ok(!stored.includes("secret"));
   assert.equal(t.editor.value.text, "# Plan\nsecret words");
-  assert.ok(isProtectedSummary(t.store.get(id) as never));
+  assert.equal(t.store.get(id)?.protected, true);
   assert.equal(t.store.get(id)?.title, "A title");
 
   t.writes.length = 0;
@@ -136,13 +135,52 @@ check("locking saves first, then empties the editor, and unlocking brings the te
   assert.equal(t.editor.value.text, "# Plan\nedited secret");
 });
 
-check("the first secure draft takes a new passphrase, later ones must use the same", async () => {
+check("an empty secure draft can lock and unlock without creating a stored draft", async () => {
+  const t = setup({});
+  await t.drafts.createSecure(PW, "Empty");
+  await t.drafts.lock();
+  assert.equal(t.drafts.locked.value, true);
+  assert.equal(t.store.size, 0);
+  await t.drafts.unlock(PW);
+  assert.equal(t.drafts.locked.value, false);
+  assert.equal(t.editor.value.text, "");
+  t.type("first edit");
+  await t.flushAll();
+  const id = t.drafts.current.value.id;
+  assert.equal((await unlockEnvelope(String(t.store.get(id)?.content), id, PW)).content, "first edit");
+});
+
+check("backgrounding still saves and locks a secure draft without an idle timer", async () => {
+  const t = setup({});
+  await secure(t, "saved");
+  t.drafts.attach();
+  t.type("newest edit");
+  window.dispatchEvent(new Event("blur"));
+  await t.flushAll();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(t.drafts.locked.value, true);
+  assert.equal(t.editor.value.text, "");
+  await t.drafts.unlock(PW);
+  assert.equal(t.editor.value.text, "newest edit");
+});
+
+check("each secure draft has an independent passphrase", async () => {
   const t = setup({ [B]: { content: "# Two\ntwo" } });
-  await secure(t, "# One\none");
-  await assert.rejects(t.drafts.createSecure("another passphrase", "Two"), WrongPassphrase);
-  assert.equal(t.drafts.protectedDraft.value, true, "still on the first draft");
-  await t.drafts.createSecure(PW, "Two");
-  assert.equal(t.drafts.current.value.id, "");
+  const first = await secure(t, "# One\none");
+  await t.drafts.createSecure("another passphrase", "Two");
+  t.type("second secret");
+  await t.flushAll();
+  const second = t.drafts.current.value.id;
+  assert.notEqual(first, second);
+  await t.drafts.lock();
+  await assert.rejects(t.drafts.unlock(PW), WrongPassphrase);
+  await t.drafts.unlock("another passphrase");
+  assert.equal(t.editor.value.text, "second secret");
+  await t.drafts.open(first);
+  assert.equal(t.drafts.locked.value, true);
+  await assert.rejects(t.drafts.unlock("another passphrase"), WrongPassphrase);
+  await t.drafts.unlock(PW);
+  assert.equal(t.editor.value.text, "# One\none");
 });
 
 check("a plain draft stays plain, and a protected draft never writes a file", async () => {
@@ -158,15 +196,53 @@ check("a plain draft stays plain, and a protected draft never writes a file", as
   await assert.rejects(t.drafts.dialog.writeFile(), /cannot be written to a file/);
 });
 
-check("a Conflicted copy of a protected draft is protected, under its own id, and opens with the same passphrase", async () => {
+check("Keep both preserves the server as an encrypted copy under its own id before pushing the local version", async () => {
   const t = setup({});
   const mine = await secure(t, "# Plan\nsecret words");
-  const id = await t.drafts.dialog.saveCopy("# Plan\nthe server text", "server");
+  const remoteSession = (await unlockEnvelope(String(t.store.get(mine)?.content), mine, PW)).session;
+  const remote = await seal(remoteSession, mine, "# Plan\nthe server text", "Plan");
+  assert.equal(t.drafts.dialog.current().text, t.store.get(mine)?.content, "conflicts compare envelopes, not plaintext");
+  const serverConflict = ref({ id: mine, text: remote, format: "markdown", stamp: "2:2", updatedAt: 2, deleted: false });
+  let pushed = "";
+  const sync = {
+    enrolled: computed(() => true),
+    serverConflict,
+    checkNow: async () => {},
+    inspectServer: async () => serverConflict.value,
+    forcePush: async () => {
+      assert.equal(t.store.size, 2, "the other version is saved before overwriting the server");
+      pushed = String(t.store.get(mine)?.content);
+      return true;
+    },
+    clearConflict: () => {
+      serverConflict.value = null;
+    },
+  };
+  const conflict = useConflict({ drafts: t.drafts, sync });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await conflict.choose("keep");
+  assert.equal(conflict.note.value, "");
+  const id = conflict.result.value?.copies[0]?.id;
+  assert.ok(id);
+  assert.equal(pushed, t.store.get(mine)?.content);
   const copy = String(t.store.get(id)?.content);
   assert.notEqual(id, mine);
   assert.ok(isProtected(copy) && !copy.includes("server text"));
   assert.equal(t.store.get(id)?.title, "Plan");
   assert.equal((await unlockEnvelope(copy, id, PW)).content, "# Plan\nthe server text");
+  await assert.rejects(unlockEnvelope(copy, mine, PW), WrongPassphrase, "a copy remains bound to its own id");
+  assert.equal(t.editor.value.text, "# Plan\nsecret words", "keeping the server copy does not replace local text");
+});
+
+check("Keep refuses an unreadable protected version instead of overwriting it or making a plaintext copy", async () => {
+  const t = setup({});
+  const mine = await secure(t, "local");
+  const otherKey = await newSession("another passphrase", { memoryKiB: 64, passes: 1 });
+  const remote = await seal(otherKey, mine, "remote", "Plan");
+  const count = t.writes.length;
+  await assert.rejects(t.drafts.dialog.saveCopy(remote, "server"), /Could not open/);
+  assert.equal(t.writes.length, count);
+  assert.equal(t.store.size, 1);
 });
 
 check("a draft is not locked when its last save failed: the text stays on screen", async () => {
@@ -187,11 +263,8 @@ check("a draft is not locked when its last save failed: the text stays on screen
 check("making a secure draft that finishes after the draft was left changes nothing", async () => {
   const t = setup({ [A]: { content: "# One\none" }, [B]: { content: "# Two\ntwo" } });
   t.editor.value.text = t.open(A);
-  let release = () => {};
-  t.fail.gate = new Promise<void>((r) => (release = r));
   const pending = t.drafts.createSecure(PW, "One");
   await t.drafts.open(B);
-  release();
   await assert.rejects(pending, /changed while the new one was being made/);
   assert.equal(t.drafts.protectedDraft.value, false);
   assert.equal(t.drafts.current.value.id, B);

@@ -3,17 +3,7 @@ import type { List } from "../../bindings/github.com/cthtrifork/harper-pad/inter
 import * as backend from "./backend.ts";
 import { createFileChange } from "./fileChange.ts";
 import { saveLastOpened } from "./lastOpened.ts";
-import {
-  clearTitle,
-  isProtected,
-  isProtectedSummary,
-  newDraftId,
-  newSession,
-  openWith,
-  type Session,
-  seal,
-  unlock as unlockEnvelope,
-} from "./protect.ts";
+import { clearTitle, isProtected, newDraftId, newSession, openWith, type Session, seal, unlock as unlockEnvelope } from "./protect.ts";
 
 const { isWeb } = backend;
 
@@ -77,8 +67,6 @@ const SAVE_DELAY_MS = 100;
 const SEARCH_DELAY_MS = 200;
 const PAGE = 50; // drafts shown at first, and added by "Show more"
 const TOAST_MS = 8000;
-const SCAN = 200; // drafts looked at per call when scanning the list
-const IDLE_LOCK_MS = 5 * 60 * 1000; // an unlocked protected draft locks again after this long without a key press, click or scroll
 
 const message = (err: unknown) => String((err as Error)?.message || err);
 
@@ -108,11 +96,10 @@ export function useDrafts(
   const locked = ref(false); // protected and not unlocked: the editor is empty and inert
   const listTitle = ref(""); // the title of the open protected draft in the draft list: stored unencrypted, and not taken from the text
   let session: Session | null = null;
-  // Counts the moments that end what an unlock or a protect in flight was for (another draft, a lock, the app going to the background), so
+  // Counts the moments that end what an unlock or a creation in flight was for (another draft, a lock, the app going to the background), so
   // that one finishing after them installs no key and shows no text.
   let epoch = 0;
   let envelope = ""; // what the open protected draft holds in storage
-  let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
   const home = ref(""); // the user's home folder, from the backend
   const fileState = ref<FileState>("none");
@@ -231,15 +218,6 @@ export function useDrafts(
 
   function dropSession() {
     session = null;
-    clearTimeout(idleTimer);
-    idleTimer = undefined;
-  }
-
-  // Any key press, click or scroll while a protected draft is unlocked starts the idle time again.
-  function touch() {
-    if (!session) return;
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => void lock(), IDLE_LOCK_MS);
   }
 
   // The text the editor shows for `d`, which setCurrent has just made the open draft: its own text, the decrypted text of a protected draft
@@ -256,7 +234,7 @@ export function useDrafts(
         listTitle.value = clearTitle(sealed);
         return t;
       }
-      dropSession(); // another device protected it again with another passphrase
+      dropSession();
       locked.value = true;
     }
     return "";
@@ -293,47 +271,32 @@ export function useDrafts(
     listTitle.value = clearTitle(envelope);
     stored = { text: r.content, format: current.value.format };
     editor.value?.load(r.content, current.value.format);
-    touch();
     editor.value?.focus();
   }
 
-  // A protected draft, to check a passphrase against: every protected draft has the same one, and no draft stores a check value.
-  // Search does not read protected drafts, so this pages through the list and looks for the marker in each summary.
-  async function otherProtected() {
-    for (let offset = 0; ; offset += SCAN) {
-      const page = await be.listDrafts(SCAN, offset);
-      for (const hit of page.drafts.filter(isProtectedSummary)) {
-        const full = await be.getDraft(hit.id);
-        if (typeof full?.content === "string" && isProtected(full.content)) return full; // the summary alone is not proof
-      }
-      if (page.drafts.length < SCAN) return null;
-    }
-  }
-
-  // Starts a new, empty protected draft. With no protected draft yet the passphrase is a new one; otherwise it must open another protected
-  // draft (rejects with WrongPassphrase), so all of them share it. Nothing is stored until something is typed. A draft is protected from
-  // its first save and stays so: protection is never added to or taken from an existing draft.
+  // Each new secure draft has its own passphrase. Nothing is stored until something is typed, and protection never changes after creation.
   async function createSecure(passphrase: string, title: string) {
     if (!available.value) return;
     await flush();
     const at = epoch;
-    const other = await otherProtected();
-    if (other) await unlockEnvelope(other.content ?? "", other.id, passphrase);
     const made = await newSession(passphrase);
+    const empty = await seal(made, "", "", title.trim()); // lets an empty, unsaved draft lock and unlock too
     if (epoch !== at) throw new Error("The draft changed while the new one was being made. Try again.");
+    await flush(); // edits made while the key was derived still belong to the previous draft
+    if (epoch !== at) throw new Error("The draft changed while the new one was being made. Try again.");
+    if (dirty || state.value === "error") throw new Error("The current draft could not be saved. Try again.");
     setCurrent({ id: "", createdAt: 0, format: "markdown", filePath: "" });
     session = made;
     protectedDraft.value = true;
     locked.value = false;
     listTitle.value = title.trim();
+    envelope = empty;
     editor.value?.load("", "markdown");
-    touch();
     editor.value?.focus();
   }
 
   // Called after every change the user makes to the text.
   function edited() {
-    touch();
     refreshed.value = null; // the Undo offer is for the refresh alone, not for text typed after it
     recreated.value = false;
     dropCopy(current.value.id); // a Conflicted copy that is edited is an ordinary draft
@@ -470,14 +433,22 @@ export function useDrafts(
       const st = await be.linkedFileStatus(current.value.id);
       return st.state === "changed" ? st.stamp : null;
     },
-    // A new, ordinary, unlinked draft; labelled "Conflicted copy" in memory only. Returns its id.
+    // A new, unlinked draft; labelled "Conflicted copy" in memory only. Protected conflicts carry envelopes, never editor text.
     async saveCopy(text: string, from: string) {
-      // A copy of a protected draft is protected too, sealed under its own id with the key already held.
-      // Never as plain text: a protected draft that locked meanwhile has no key to seal with, so the copy is refused.
       if (protectedDraft.value && !session) throw new Error("the draft is locked. Unlock it and try again");
-      const id = protectedDraft.value ? newDraftId() : undefined;
-      const content = id && session ? await seal(session, id, text, listTitle.value) : text;
-      const d = await be.saveDraft({ id, format: current.value.format, content });
+      const key = session;
+      const at = epoch;
+      const source = current.value;
+      let id: string | undefined;
+      let content = text;
+      if (key) {
+        const plain = await openWith(key, text, source.id);
+        if (plain === null) throw new Error("Could not open the protected version. Nothing was copied.");
+        id = newDraftId();
+        content = await seal(key, id, plain, clearTitle(text));
+        if (epoch !== at || session !== key) throw new Error("The draft changed while it was being copied. Try again.");
+      }
+      const d = await be.saveDraft({ id, format: source.format, content });
       copies.value = { ...copies.value, [d.id]: from };
       refreshListSoon();
       onSaved?.(d.id);
@@ -493,7 +464,7 @@ export function useDrafts(
     applyFile: () => reloadFromFile({ push: false }),
     current: () => ({
       id: current.value.id,
-      text: editor.value?.getText() ?? "",
+      text: protectedDraft.value ? envelope : (editor.value?.getText() ?? ""),
       format: current.value.format,
       updatedAt: current.value.updatedAt,
       revision: edits,
@@ -926,15 +897,13 @@ export function useDrafts(
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("focus", checkFile);
     document.addEventListener("visibilitychange", onVisibility);
-    for (const ev of ["keydown", "pointerdown", "wheel"]) window.addEventListener(ev, touch, { passive: true });
   }
   function detach() {
     window.removeEventListener("blur", onLeave);
     window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("focus", checkFile);
     document.removeEventListener("visibilitychange", onVisibility);
-    for (const ev of ["keydown", "pointerdown", "wheel"]) window.removeEventListener(ev, touch);
-    for (const t of [timer, listTimer, searchTimer, toastTimer, idleTimer]) clearTimeout(t);
+    for (const t of [timer, listTimer, searchTimer, toastTimer]) clearTimeout(t);
   }
 
   return {
@@ -949,7 +918,6 @@ export function useDrafts(
     lock,
     unlock,
     createSecure,
-    hasProtected: async () => !!(await otherProtected()),
     fileName,
     fileDir,
     list,

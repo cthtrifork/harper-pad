@@ -6,8 +6,6 @@ import { useConflict } from "./useConflict.ts";
 const ID = "a".repeat(32);
 const settle = () => new Promise((r) => setTimeout(r, 15));
 type Inspection = { text: string; format?: string; stamp: string; updatedAt?: number } | null | false;
-type TakeGuard = { stamp: string; updatedAt: number; stillCurrent: () => boolean };
-type TakeResult = boolean | ((guard: TakeGuard, setServer: (value: Inspection) => void) => boolean);
 
 // useDrafts and useSync reduced to what the dialog uses, recording what it does.
 function setup({
@@ -19,9 +17,9 @@ function setup({
   serverNow = undefined,
   serverInspectNow = serverNow,
   fileStampNow = undefined,
-  takeResult = true as TakeResult,
   flushDraft = undefined,
   needsSave = false,
+  saveState = needsSave ? "error" : "saved",
 }) {
   const log = [];
   const fileConflict = ref(file ? { id: ID, name: "plan.md", stamp: "10", clean: false, ...file } : null);
@@ -34,6 +32,7 @@ function setup({
     current: ref({ id: ID, filePath: "/home/me/plan.md" }),
     locked: ref(false),
     needsSave: needsSaveRef,
+    state: ref(saveState),
     flush: async () => {
       log.push("flush");
       flushDraft?.(currentDraft, needsSaveRef);
@@ -82,10 +81,6 @@ function setup({
       serverConflict.value = null;
       log.push("clearServer");
     },
-    takeServer: async (_id, guard) => {
-      log.push(["take", guard]);
-      return typeof takeResult === "function" ? takeResult(guard, (v) => (currentServer = v)) : takeResult;
-    },
   };
   return {
     c: useConflict({ drafts, sync } as unknown as Parameters<typeof useConflict>[0]),
@@ -115,7 +110,7 @@ test("a draft that conflicts with both gets one dialog covering both, and Keep s
   assert.equal(c.model.value.server.text, "server text");
   await c.choose("keep");
   assert.deepEqual(
-    log.filter((l) => l !== "checkNow"),
+    log.filter((l) => l !== "checkNow" && l !== "flush"),
     [["copy", "file text", "file"], ["copy", "server text", "server"], "write", "push", "clearFile", "clearServer"],
   );
   assert.equal(c.model.value, null);
@@ -132,9 +127,19 @@ test("an unedited draft: the file's text is yours; Keep copies only the server's
   assert.equal(c.model.value.yours, "file text");
   await c.choose("keep");
   assert.deepEqual(
-    log.filter((l) => l !== "checkNow" && l !== "clearFile" && l !== "clearServer"),
+    log.filter((l) => l !== "checkNow" && l !== "clearFile" && l !== "clearServer" && l !== "flush"),
     ["applyFile", ["copy", "server text", "server"], "push"],
   );
+});
+
+test("a saved draft whose linked file still needs writing can resolve its conflict", async () => {
+  const { c, log } = setup({ file: {}, needsSave: true, saveState: "saved" });
+  await settle();
+  await c.choose("keep");
+  assert.equal(c.note.value, "");
+  assert.ok(log.includes("write"));
+  assert.ok(log.includes("push"));
+  assert.equal(c.model.value, null);
 });
 
 test("if either side moved since the dialog was drawn it is redrawn and nothing is written", async () => {
@@ -190,39 +195,38 @@ test("the file's version stamp (its modified time in nanoseconds) becomes a time
 const ENVELOPE = 'hp-protected:1:{"s":"AA","n":"AA","c":"AA"}';
 const protectedServer = { text: ENVELOPE, stamp: "2:5", updatedAt: 5 };
 
-test("a protected server version is one dialog with two choices, whatever the key and the text, even for a locked draft", async () => {
-  const { c, drafts } = setup({ server: protectedServer, serverNow: protectedServer });
+test("protected envelopes use the shared dialog after unlocking", async () => {
+  const { c, drafts } = setup({ draftText: ENVELOPE, server: protectedServer, serverNow: protectedServer });
   await settle();
-  assert.equal(c.model.value?.protected, true);
-  assert.equal(c.model.value?.server?.text, "", "the encrypted text is never put in the dialog");
+  assert.equal(c.model.value?.server?.text, ENVELOPE);
+  assert.equal(c.model.value?.yours, ENVELOPE);
   drafts.locked.value = true;
   await settle();
-  assert.equal(c.model.value?.protected, true);
+  assert.equal(c.model.value, null, "Keep needs the key to seal the copy under its new id");
+  drafts.locked.value = false;
+  await settle();
+  assert.equal(c.model.value?.server?.text, ENVELOPE);
 });
 
-test("Overwrite theirs sends this device's version and copies nothing", async () => {
+test("Overwrite server sends this device's protected version and copies nothing", async () => {
   const { c, log, sync } = setup({ server: protectedServer, serverNow: protectedServer });
   await settle();
   await c.choose("overwrite");
   assert.ok(log.includes("push"));
   assert.equal(
-    log.some((l) => Array.isArray(l) && (l[0] === "copy" || l[0] === "take")),
+    log.some((l) => Array.isArray(l) && l[0] === "copy"),
     false,
   );
   assert.equal(c.model.value, null);
   assert.equal(sync.serverConflict.value, null);
 });
 
-test("Discard ours takes the server's version, guarded by its stamp and this device's revision, and sends nothing", async () => {
-  const { c, log } = setup({ server: protectedServer, serverNow: protectedServer });
+test("Keep both copies the protected server envelope before pushing this device's version", async () => {
+  const { c, log, drafts } = setup({ server: protectedServer, serverNow: protectedServer });
+  drafts.current.value.filePath = "";
   await settle();
-  await c.choose("discard");
-  const take = log.find((l) => Array.isArray(l) && l[0] === "take");
-  assert.ok(take);
-  assert.equal(take[1].stamp, "2:5");
-  assert.equal(take[1].updatedAt, 7);
-  assert.equal(take[1].stillCurrent(), true);
-  assert.equal(log.includes("push"), false);
+  await c.choose("keep");
+  assert.deepEqual(log, ["flush", ["copy", ENVELOPE, "server"], "push", "clearFile", "clearServer"]);
   assert.equal(c.model.value, null);
 });
 
@@ -236,14 +240,19 @@ test("if the server moved since a protected dialog was drawn, it is redrawn and 
   assert.equal(c.model.value?.server?.stamp, "3:9");
 });
 
-test("Discard ours does nothing when this device's draft changed meanwhile", async () => {
-  const { c, drafts, log } = setup({ server: protectedServer, serverNow: protectedServer, takeResult: false });
+test("a conflict choice does nothing when the draft locked meanwhile", async () => {
+  const { c, drafts, log } = setup({
+    server: protectedServer,
+    serverNow: protectedServer,
+    flushDraft: () => {
+      drafts.locked.value = true;
+    },
+  });
   await settle();
-  await c.choose("discard");
-  assert.ok(log.some((l) => Array.isArray(l) && l[0] === "take"));
+  await c.choose("keep");
+  assert.deepEqual(log, ["flush"]);
   assert.match(c.note.value, /changed meanwhile/);
-  assert.ok(c.model.value, "the dialog stays for another choice");
-  void drafts;
+  assert.equal(c.model.value, null, "the unlock button is available again");
 });
 
 test("protected choices flush first and redraw if the saved draft changed since the dialog opened", async () => {
@@ -256,10 +265,10 @@ test("protected choices flush first and redraw if the saved draft changed since 
     },
   });
   await settle();
-  await c.choose("discard");
+  await c.choose("keep");
   assert.ok(log.includes("flush"));
   assert.equal(
-    log.some((entry) => Array.isArray(entry) && entry[0] === "take"),
+    log.some((entry) => Array.isArray(entry) && entry[0] === "copy"),
     false,
   );
   assert.match(c.note.value, /changed meanwhile/);

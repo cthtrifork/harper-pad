@@ -14,6 +14,7 @@ test("there are fixtures", () => {
 for (const f of fixtures) {
   test(f.name, () => {
     assert.deepEqual(summarize(f.content), {
+      protected: false,
       title: f.title,
       excerpt: f.excerpt,
       tasks: f.tasks,

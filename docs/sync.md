@@ -4,8 +4,8 @@ Sync keeps your drafts, your personal dictionary and your ignore list the same o
 its drafts and works without the server. The server is plain storage with compare-and-set: it never merges and never makes copies.
 Sync is off until you enroll a device; without it the app uses the network only to check for an app update.
 
-When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**. A protected draft has its own
-two-button form of it, **Overwrite theirs or Discard ours**, because its versions cannot be compared or copied ([below](#a-protected-drafts-conflict)).
+When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**. Protected drafts use the
+same flow after unlocking, with encrypted copies ([below](#a-protected-drafts-conflict)).
 
 Blue is the app, orange the file, green the server, amber a question for you.
 
@@ -55,7 +55,7 @@ flowchart LR
 | Your draft is edited and its file changed | The Keep or Overwrite dialog | Keep, Overwrite |
 | Your draft is edited and the server holds different text | The same dialog | Keep, Overwrite |
 | Your draft is unedited, and the file and the server disagree | The same dialog; the changed file counts as your edit | Keep, Overwrite |
-| A protected draft was changed on both sides | The protected form of the dialog, with no text in it | Overwrite theirs, Discard ours |
+| A protected draft was changed on both sides | The same dialog after unlocking, with no text in it | Keep both, Overwrite server |
 | The open draft was deleted on another device | A dialog | Keep Creates the server draft again; Remove Deletes the draft here (the toast offers Undo) |
 | The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the full path and the reason | Ctrl+S retries; the unlink button on the file name Deletes the link; unlink first to pick another path with Save to disk. A file that is not text is never updated |
 | The token was revoked | The chip says "Sign in again" | Paste a fresh invite |
@@ -187,37 +187,18 @@ A draft that changed on both sides with different text is the dialog's; Sync all
 
 ### A protected draft's conflict
 
-A protected version is ciphertext with a new nonce on every save, so two devices that saved the same text still hold different strings, and a
-key from one device does not open a version sealed with another device's salt. The app therefore does not open, compare or copy protected
-versions at all. When the server holds a protected version that differs from this device's, the dialog has a title, the two rows (your draft
-and the server, each with its time), two buttons and a footer saying that one version is lost. It appears with the draft locked or unlocked, since
-it needs no key.
+A protected version is ciphertext with a new nonce on every save, so two devices that saved the same text can still hold different strings.
+The syncer compares these envelopes using the ordinary rules; it has no protection-specific path. Protection is fixed at creation, so the app
+never produces a plain version of an existing protected draft.
 
-```mermaid
-flowchart TD
-    S["A choice is made"] --> Q{"Server changed again?"}
-    Q -->|yes| D["Redraws the dialog<br>nothing is updated"]:::ask
-    Q -->|no| B{"Which button?"}
-    B -->|"Overwrite theirs"| O["Updates the server<br>with this device's version<br>the server's version is deleted"]:::server
-    B -->|"Discard ours"| G{"Draft changed here<br>since the dialog?"}
-    G -->|yes| D
-    G -->|no| T["Replaces this device's version<br>with the server's, in one transaction<br>this device's version is deleted"]:::app
-    O --> Z["Finishes<br>the draft keeps its id"]
-    T --> Z
-    classDef app fill:#dbe8fb,stroke:#2a6bd8,color:#1d2330
-    classDef server fill:#d9f2e9,stroke:#1aa57a,color:#1d2330
-    classDef ask fill:#fdf0cf,stroke:#b36b00,color:#1d2330
-```
+The shared Keep or Overwrite dialog waits until the draft is unlocked. It shows version times, never the text or ciphertext:
 
-- **Overwrite theirs** Updates the server with this device's version. The server's version is Deleted, with no undo.
-- **Discard ours** replaces this device's version with the server's. It is refused, and the dialog redrawn, if the draft was saved here after
-  the dialog was drawn (the store checks the update time in the same transaction as the write, in both the SQLite and the IndexedDB store).
-  This device's version is Deleted, with no undo. A draft that was unlocked is locked again if the server's version used another salt.
-- Neither choice makes a Conflicted copy, and neither asks for the passphrase.
-- Only a protected *server* version gets this form. A plain server version of an unlocked protected draft (the server, or an old build,
-  stripped it) gets the ordinary Keep or Overwrite dialog, and Keep makes a protected copy; while the draft is locked it has no dialog. A file
-  conflict never arises, because a protected draft has no file link.
-- Both buttons are the danger style and neither has the focus. The dialog cannot be dismissed, like the other one.
+- **Keep both** opens the server envelope with the key already held, then seals it under a new draft id as a protected Conflicted copy.
+  The copy retains the server title and the original passphrase. Only after saving it does the app push this device's version.
+  If the server envelope cannot be opened, Keep fails without uploading or making a plaintext copy.
+- **Overwrite server** pushes this device's version without making a copy. The server's other version is lost, with no undo.
+- Both choices first save pending edits and recheck the versions, as for plain drafts. A changed draft or server redraws the dialog.
+- A file conflict never arises, because a protected draft has no file link.
 
 ### The decision for one draft
 
@@ -237,7 +218,6 @@ flowchart TD
     B -->|"deleted it"| B3["Creates the server draft<br>the edit survives"]:::server
     B -->|"same text on both"| B4["Updates the sync state<br>no copy needed"]:::app
     B -->|"different text"| B5["Asks Keep or Overwrite<br>open draft only"]:::ask
-    B -->|"protected, any difference"| B6["Asks Overwrite theirs or Discard ours<br>open draft only, never compared"]:::ask
     C -->|unchanged| C1["Deletes the server draft"]:::server
     C -->|"edited on another device"| C2["Creates the draft<br>the delete is dropped"]:::app
     C -->|"deleted there too"| C3["Does nothing"]
@@ -360,39 +340,38 @@ Not defended: a compromised device, a compromised server (for drafts that are no
 
 ## Protected drafts (end-to-end encryption)
 
-A draft can be protected. The server and the local database then hold only ciphertext for it, and the text is readable only after the
+A draft can be created as protected. The server and the local database then hold only ciphertext for it, and the text is readable only after the
 passphrase is entered. Other drafts are unaffected. The server stores a protected draft like any other draft; it sees ids, versions, times,
 the deleted flag, sizes and the fact that a draft is protected. How the text is sealed and stored is in `frontend/src/lib/protect.ts`.
 
 ### Using it
 
 - **Making one.** A draft is protected when it is created, never later: "New draft" in the drafts list has a small menu with "New secure draft".
-  It asks for the passphrase and an optional title for the draft list, and nothing is stored until something is typed. The first protected
-  draft defines the passphrase, which is typed twice. Later drafts must use the same one, so the app checks it against another protected draft.
+  It asks for a new passphrase, typed twice, and an optional title for the draft list. Each secure draft has its own passphrase; it is not
+  checked against other drafts. Nothing is stored until something is typed.
 - **The padlock.** Only an open protected draft shows a small padlock at the bottom. Click it to lock the draft, or to unlock a locked one.
 - **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
   again each time the draft is opened.
-- **Locking.** The key is kept in memory only. It is dropped when the draft is closed, after a period of inactivity, when the app goes to
-  the background, and on locking it. What is unsaved is saved first, and if that fails the draft stays unlocked so the text is not lost.
+- **Locking.** The key is kept in memory only. It is dropped when the draft is closed, when the app goes to the background, and on locking it.
+  There is no idle timer. What is unsaved is saved first, and if that fails the draft stays unlocked so the text is not lost.
 - **The title.** A protected draft shows "Locked draft" in the draft list, or the title it was given when it was made. That title is not
   protected: the draft list and the server show it, it does not follow the text, and it cannot be changed. Drafts without one keep "Locked draft".
 - **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
+  Its summary has an explicit `protected` flag in SQLite and IndexedDB, derived from the stored envelope, not a marker in the excerpt.
 - **Search.** Search reads the text of plain drafts. A protected draft matches on its title only, never on its stored text.
 - **Protection is permanent.** A plain draft cannot be protected and a protected draft cannot be made plain. To get the text out, unlock the
   draft, copy it into a new draft and delete the protected one; to protect a plain draft, copy its text into a new secure draft. That keeps one
   rule for sync: a draft's form never changes, so a plain version of a protected draft can never be legitimate.
-- **No Harper.** Harper does not check a protected draft, and autocorrect is off, so nothing derived from the text is computed or kept, and no
-  word is added to the dictionary (stored and synced in plain text). The Problems panel stays empty.
+- **No Harper.** Harper does not check a protected draft, and autocorrect is off. No lint results are produced, and no word is added to the
+  dictionary (stored and synced in plain text). The Problems panel stays empty.
 - **No file link.** A protected draft cannot be linked to a file or saved to one, because a file would hold the text unprotected.
 - **Size.** Sealing makes a draft about a third larger, so a protected draft holds less text than a plain one before it reaches the limit.
-- **More than one device.** The server holds the ciphertext, so a protected draft syncs like any other. Each device unlocks it with the same
-  passphrase, which is never sent anywhere, so it has to be typed on every device. A device that has not received a protected draft yet
-  cannot tell that a passphrase exists, so make the first secure draft on one device, let it sync, and only then make them on the others.
-  Two devices that edit the same protected draft at once get a two-button question, **Overwrite theirs** or **Discard ours**
-  ([the dialog](#a-protected-drafts-conflict)). The versions are never opened or compared, so even identical text is a conflict (each save has
-  its own nonce), no copy is made, and no passphrase is asked. One of the two versions is lost, so save anything worth keeping first.
-- **No passphrase change and no recovery.** Losing the passphrase loses the protected drafts. To use a new passphrase, copy each draft's
-  text into a new secure draft with it, and delete the old.
+- **More than one device.** The server holds the ciphertext, so a protected draft syncs like any other. Each device unlocks it with that
+  draft's passphrase, which is never sent anywhere, so it has to be typed on every device.
+  Concurrent edits use the ordinary **Keep both** or **Overwrite server** question after unlocking
+  ([the dialog](#a-protected-drafts-conflict)). Even identical text can be a conflict because each save has its own nonce.
+- **No passphrase change and no recovery.** Losing a draft's passphrase loses that draft. To use a new passphrase, copy its text into a new
+  secure draft with it, and delete the old.
 
 ### Cryptography
 
