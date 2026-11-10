@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { test } from "node:test";
 import { clearTitle, isProtected, newSession, seal, unlock, WrongPassphrase } from "./protect.ts";
+
+if (typeof Uint8Array.prototype.toBase64 !== "function") {
+  Object.defineProperty(Uint8Array.prototype, "toBase64", {
+    value(this: Uint8Array) {
+      return Buffer.from(this).toString("base64");
+    },
+  });
+}
 
 const cost = { memoryKiB: 64, passes: 1 }; // far below the real cost, to keep the tests fast
 const ID = "0123456789abcdef0123456789abcdef";
