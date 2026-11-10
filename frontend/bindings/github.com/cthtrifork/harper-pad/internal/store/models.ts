@@ -168,6 +168,7 @@ export class Summary {
     "createdAt": number;
     "updatedAt": number;
     "filePath": string;
+    "protected": boolean;
 
     /**
      * Excerpt is the start of the text after the title, on one line, without the task lines (they are in Tasks).
@@ -201,6 +202,9 @@ export class Summary {
         if (!("filePath" in $$source)) {
             this["filePath"] = "";
         }
+        if (!("protected" in $$source)) {
+            this["protected"] = false;
+        }
         if (!("excerpt" in $$source)) {
             this["excerpt"] = "";
         }
@@ -221,10 +225,10 @@ export class Summary {
      * Creates a new Summary instance from a string or object.
      */
     static createFrom($$source: any = {}): Summary {
-        const $$createField7_0 = $$createType2;
+        const $$createField8_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("tasks" in $$parsedSource) {
-            $$parsedSource["tasks"] = $$createField7_0($$parsedSource["tasks"]);
+            $$parsedSource["tasks"] = $$createField8_0($$parsedSource["tasks"]);
         }
         return new Summary($$parsedSource as Partial<Summary>);
     }

@@ -13,6 +13,7 @@ const props = defineProps({
   doc: { type: String, default: "" },
   format: { type: String as PropType<"markdown" | "text">, default: "markdown" },
   source: { type: Boolean, default: false }, // the Split view's source pane: monospace, line numbers
+  isolated: { type: Boolean, default: false }, // the text is private (a protected draft): Harper does not check it, and autocorrect stays off
   persist: { type: Function as PropType<(note?: PersistNote) => unknown>, default: async () => {} },
   autocorrect: { type: Object as PropType<Prefs>, default: () => ({ on: false, typos: true, caps: true, reps: true, spaces: true }) }, // see lib/autocorrect.ts
 });
@@ -26,7 +27,7 @@ onMounted(() => {
   view = createEditor(el, {
     doc: props.doc,
     mode: { format: props.format, source: props.source },
-    getHarper: () => props.harper,
+    getHarper: () => (props.isolated ? null : props.harper),
     onResult: (r) => emit("result", r),
     onProblems: (list) => emit("problems", list),
     persist: (note) => props.persist(note),
@@ -34,7 +35,7 @@ onMounted(() => {
     onCursor: (c) => emit("cursor", c),
     onDoc: (text) => emit("doc", text),
     onEdit: () => emit("edited"),
-    getAutocorrect: () => props.autocorrect,
+    getAutocorrect: () => (props.isolated ? undefined : props.autocorrect),
     onFixes: (list) => emit("fixes", list),
     onFixed: (ids) => emit("fixed", ids),
     onUserEdit: () => emit("user-edit"),
@@ -52,6 +53,10 @@ watch(
 // Harper arrives after the editor: run the first check as soon as it does.
 watch(
   () => props.harper,
+  () => view && relint(view),
+);
+watch(
+  () => props.isolated,
   () => view && relint(view),
 );
 watch(

@@ -42,7 +42,7 @@ test("each operation goes to the Go method that does the same thing", async () =
   const { calls, bindings } = fakeBindings();
   const d = createDesktopSyncDrafts(bindings);
   const draft = { id: "a".repeat(32), content: "x" } as unknown as Draft;
-  const sent = { ...draft, title: "x", excerpt: "", tasks: [], tasksTotal: 0, tasksDone: 0 }; // Go stores the summary the page makes
+  const sent = { ...draft, protected: false, title: "x", excerpt: "", tasks: [], tasksTotal: 0, tasksDone: 0 }; // Go stores the summary the page makes
   await d.get("a");
   await d.save(draft);
   await d.allIds();

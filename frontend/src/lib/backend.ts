@@ -108,16 +108,19 @@ interface DraftInput {
   filePath?: string;
 }
 
+const draftWithSummary = (draft: DraftInput): Draft =>
+  withSummary({ id: "", format: "markdown", createdAt: 0, updatedAt: 0, filePath: "", ...draft });
+
 // An empty id creates a draft; an id that is no longer stored brings it back.
 export async function saveDraft(draft: DraftInput) {
-  return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(withSummary(draft) as Draft);
+  return isWeb ? web.save(draft) : (await bindings()).DraftService.SaveDraft(draftWithSummary(draft));
 }
 
 // `conflict` is true when something else changed the file since it was written, unless `overwrite` is set.
 export async function saveDraftToFile(draft: DraftInput, saveAs: boolean, overwrite = false) {
   // Go stores the summary as sent and keeps only the base name of the file; the name the dialog offers is made here, as on the web.
   if (!isWeb) {
-    const sent = withSummary(draft) as Draft;
+    const sent = draftWithSummary(draft);
     return (await bindings()).DraftService.SaveDraftToFile(sent, saveAs, overwrite, fileName(sent.title, sent.format));
   }
   return saveWebFile(

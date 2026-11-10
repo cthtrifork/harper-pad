@@ -7,6 +7,7 @@ import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.ts";
+import { newSession, seal } from "./protectedDrafts.ts";
 import { listDocs } from "./syncClient.ts";
 import { createSyncer, summaryText } from "./syncRun.ts";
 import { createWebDrafts, openDatabase } from "./webDrafts.ts";
@@ -70,7 +71,13 @@ function device(server) {
   };
   const drafts = createWebDrafts(open);
   const gone = []; // the ids Sync all left alone because they were deleted elsewhere
-  const syncer = () => createSyncer({ device: DEVICE, drafts, fetchFn: server.fetchFn, onGone: (id) => gone.push(id) });
+  const syncer = () =>
+    createSyncer({
+      device: DEVICE,
+      drafts,
+      fetchFn: server.fetchFn,
+      onGone: (id) => gone.push(id),
+    });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
   return {
     drafts,
@@ -475,4 +482,31 @@ test("a delete is pushed by one(id), the way the end of the Undo window does it"
   server.calls.length = 0;
   assert.equal(await a.one(never.id), "");
   assert.deepEqual(server.calls, []);
+});
+
+test("protected envelopes use the ordinary conflict and force-push path without repeated conflicts", async () => {
+  const server = fakeServer();
+  const a = device(server);
+  const b = device(server);
+  const cost = { memoryKiB: 64, passes: 1 };
+  const session = await newSession("pw", cost);
+  const d = await a.drafts.save({ content: "placeholder" });
+  await tick();
+  await a.drafts.save({ id: d.id, content: await seal(session, d.id, "start", "T") });
+  await a.sync();
+  await b.sync();
+  // Both devices save the same text; each seal has its own nonce, so the stored versions differ.
+  await tick();
+  await a.drafts.save({ id: d.id, content: await seal(session, d.id, "same text", "T") });
+  await tick();
+  const fromB = await seal(session, d.id, "same text", "T");
+  await b.drafts.save({ id: d.id, content: fromB });
+  await a.sync();
+  assert.deepEqual(await b.sync(), none, "the engine sees two different versions and leaves them for the dialog");
+  assert.equal(await b.force(d.id), true);
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, fromB);
+  assert.deepEqual(await b.sync(), none);
+  assert.deepEqual(await a.sync(), sum({ downloaded: 1 }));
+  assert.equal((await a.drafts.get(d.id)).content, fromB);
+  assert.deepEqual(await b.drafts.changes(), { changed: [], deleted: [] });
 });

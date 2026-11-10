@@ -1,9 +1,13 @@
 import { ref, watch } from "vue";
 import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
+import { isProtected } from "./protectedDrafts.ts";
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
-type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict">;
+type DraftsApi = Pick<
+  ReturnType<typeof useDrafts>,
+  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "protectedDraft" | "flush" | "state"
+>;
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
@@ -25,7 +29,7 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     const mine = ++building;
     const id = drafts.current.value.id;
     const f = drafts.fileConflict.value?.id === id ? drafts.fileConflict.value : null;
-    let sv: { text: string; stamp: string; updatedAt: number } | null =
+    let sv: { text: string; format: string; stamp: string; updatedAt: number } | null =
       sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
     if (!f && !sv) {
       model.value = null;
@@ -36,6 +40,16 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       await sync.checkNow(id);
       if (mine !== building) return;
       sv = sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
+    }
+    if (sv) {
+      const latest = await sync.inspectServer(id);
+      if (mine !== building) return;
+      if (latest === null) sv = null;
+      else if (latest) sv = latest;
+    }
+    if (drafts.locked.value) {
+      model.value = null; // Keep needs the key to seal the copy under its new id. Ask after unlocking.
+      return;
     }
     let file: ConflictModel["file"] = null;
     let server: ConflictModel["server"] = null;
@@ -69,11 +83,16 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       server,
       applyFile: !!f?.clean,
       sync: syncOn(),
+      protected: drafts.protectedDraft?.value || (!!sv && isProtected(sv.text)),
       draftAt: drafts.dialog.current().updatedAt,
     };
   }
 
-  watch([() => drafts.fileConflict.value, () => sync.serverConflict.value, () => drafts.current.value.id], build, { immediate: true });
+  watch(
+    [() => drafts.fileConflict.value, () => sync.serverConflict.value, () => drafts.current.value.id, () => drafts.locked.value],
+    build,
+    { immediate: true },
+  );
 
   const ops = (m: ConflictModel): ConflictOps => ({
     async recheck() {
@@ -99,6 +118,15 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     busy.value = true;
     note.value = "";
     try {
+      await drafts.flush();
+      if (["dirty", "saving", "error"].includes(drafts.state.value))
+        throw new Error("This draft could not be saved. Check it and choose again.");
+      const current = drafts.dialog.current();
+      if (drafts.locked.value || current.id !== m.id || current.updatedAt !== m.draftAt) {
+        note.value = "This draft changed meanwhile. Check the rows and choose again.";
+        await build();
+        return;
+      }
       const r = await resolveConflict(choice, m, ops(m));
       if (r.status === "stale") {
         note.value = staleNote(m, r.changed);

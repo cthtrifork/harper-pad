@@ -30,3 +30,70 @@ func TestListDoesNotReadTheText(t *testing.T) {
 		t.Errorf("listing 20 drafts of 1 MB allocated %d bytes; it must not read their text", grown)
 	}
 }
+
+func TestProtectedSummaryMetadata(t *testing.T) {
+	s, _ := open(t)
+	for _, remote := range []bool{false, true} {
+		d := Draft{
+			ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Content: ProtectedPrefix + `{"s":"salt","n":"nonce","c":"ciphertext"}`,
+			CreatedAt: 1, UpdatedAt: 2, Title: "Private notes", Excerpt: "must not appear",
+			Tasks: []Task{{Text: "must not appear"}}, TasksTotal: 1,
+		}
+		var err error
+		if remote {
+			_, err = s.ApplyRemote(d, 1)
+		} else {
+			_, err = s.Save(d)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		list, err := s.List(1, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := list.Drafts[0]
+		if !got.Protected || got.Title != d.Title || got.Excerpt != "" || len(got.Tasks) != 0 || got.TasksTotal != 0 || got.TasksDone != 0 {
+			t.Fatalf("remote=%v: summary = %+v", remote, got)
+		}
+	}
+	plain, err := s.Save(Draft{Content: "# Title\nhp-protected", Excerpt: "hp-protected"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.Search("hp-protected", 10)
+	if err != nil || len(list.Drafts) != 1 || list.Drafts[0].ID != plain.ID || list.Drafts[0].Protected || list.Drafts[0].Excerpt != "hp-protected" {
+		t.Fatalf("plain marker text: list = %+v, %v", list, err)
+	}
+}
+
+func TestProtectedColumnAddedToOlderDatabase(t *testing.T) {
+	s, path := open(t)
+	plain, err := s.Save(Draft{Content: "Title\nbody", Title: "Title", Excerpt: "body"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE drafts DROP COLUMN protected`); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if got, err := reopened.Get(plain.ID); err != nil || got.Content != plain.Content {
+		t.Fatalf("migration changed the draft: %+v, %v", got, err)
+	}
+	if _, err := reopened.Save(Draft{Content: ProtectedPrefix + `{"s":"salt","n":"nonce","c":"ciphertext"}`, Title: "Private"}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := reopened.List(10, 0)
+	if err != nil || len(list.Drafts) != 2 {
+		t.Fatalf("list = %+v, %v", list, err)
+	}
+	for _, d := range list.Drafts {
+		if d.Protected != (d.Title == "Private") {
+			t.Errorf("protected flag wrong: %+v", d)
+		}
+	}
+}

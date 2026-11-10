@@ -4,6 +4,7 @@ import { type IDBPDatabase, openDB } from "idb";
 import type { Draft, List, Summary, SyncState } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { withDb as sharedWithDb } from "./kv.ts";
 import { contentHash } from "./contentHash.ts";
+import { isProtected } from "./protectedDrafts.ts";
 import { summarize } from "./summarize.ts";
 
 export const DB_NAME = "harper-pad";
@@ -13,6 +14,16 @@ const MAX_CONTENT_BYTES = 1 << 20;
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 1000;
 const ID = /^[0-9a-f]{32}$/;
+
+// The limits that save and applyRemote share (checkDraft in internal/store/sync.go): a known format, at most MAX_CONTENT_BYTES of text.
+function checkDraft(input: Partial<Draft>) {
+  const format = input.format || "markdown";
+  if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
+  const content = input.content ?? "";
+  const bytes = new TextEncoder().encode(content).length;
+  if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
+  return { format, content };
+}
 
 // Migrations must only add object stores, and sync state stays out of the draft records: docs/pages.md, "Changing the schema".
 function upgrade(db: IDBPDatabase) {
@@ -75,11 +86,7 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
   }
 
   async function save(input: Partial<Draft>): Promise<StoredDraft> {
-    const format = input.format || "markdown";
-    if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
-    const content = input.content ?? "";
-    const bytes = new TextEncoder().encode(content).length;
-    if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
+    const { format, content } = checkDraft(input);
     const now = Date.now();
     let id = input.id as string;
     if (!id) id = newId(now);
@@ -137,14 +144,17 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
     return withDb((db) => page(db, null, limit, offset));
   }
 
-  // Case-insensitive; the only place the text is read, one draft at a time.
+  // Case-insensitive; the only place the text is read, one draft at a time. A protected draft is ciphertext, so it matches on its title.
   async function search(query: string, limit?: number) {
     const q = query.trim().toLowerCase();
     if (!q) return list(limit, 0);
     return withDb(async (db) => {
       const matches = new Set<string>();
+      const titles = new Map<string, string>();
+      for await (const cur of db.transaction("summaries").store) titles.set(cur.value.id, cur.value.title);
       for await (const cur of db.transaction("drafts").store) {
-        if (cur.value.content.toLowerCase().includes(q)) matches.add(cur.value.id);
+        const text = isProtected(cur.value.content) ? (titles.get(cur.value.id) ?? "") : cur.value.content;
+        if (text.toLowerCase().includes(q)) matches.add(cur.value.id);
       }
       return page(db, matches, limit, 0);
     });
@@ -219,11 +229,7 @@ export function createWebDrafts(open: () => Promise<IDBPDatabase>) {
 
   // Keeps the server's times (save would set the update time to now) and records the draft as synced.
   async function applyRemote(input: Partial<Draft>, version: number): Promise<StoredDraft> {
-    const format = input.format || "markdown";
-    if (format !== "markdown" && format !== "text") throw new Error(`unknown draft format "${format}"`);
-    const content = input.content ?? "";
-    const bytes = new TextEncoder().encode(content).length;
-    if (bytes > MAX_CONTENT_BYTES) throw new Error(`the draft is ${bytes} bytes; the limit is ${MAX_CONTENT_BYTES}`);
+    const { format, content } = checkDraft(input);
     if (!ID.test(input.id ?? "")) throw new Error(`"${input.id}" is not a draft id`);
     if (!((input.createdAt ?? 0) > 0 && (input.updatedAt ?? 0) > 0)) throw new Error("a synced draft needs its created and updated times");
     const hash = await contentHash(format, content); // before the transaction: it would not wait for this

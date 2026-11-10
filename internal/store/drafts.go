@@ -74,6 +74,7 @@ type Summary struct {
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
 	FilePath  string `json:"filePath"`
+	Protected bool   `json:"protected"`
 	// Excerpt is the start of the text after the title, on one line, without the task lines (they are in Tasks).
 	Excerpt string `json:"excerpt"`
 	// Tasks holds the first few task lines; TasksTotal and TasksDone count all of them.
@@ -126,12 +127,12 @@ func (s *Store) Save(d Draft) (Draft, error) {
 		return Draft{}, err
 	}
 	sm := clampSummary(d)
-	_, err = s.db.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, format, title, excerpt, tasks, tasks_total, tasks_done)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err = s.db.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, format, title, excerpt, tasks, tasks_total, tasks_done, protected)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data, format = excluded.format,
 			title = excluded.title, excerpt = excluded.excerpt, tasks = excluded.tasks,
-			tasks_total = excluded.tasks_total, tasks_done = excluded.tasks_done`,
-		d.ID, created, now.UnixMilli(), string(data), sm.format, sm.title, sm.excerpt, sm.tasks, sm.total, sm.done)
+			tasks_total = excluded.tasks_total, tasks_done = excluded.tasks_done, protected = excluded.protected`,
+		d.ID, created, now.UnixMilli(), string(data), sm.format, sm.title, sm.excerpt, sm.tasks, sm.total, sm.done, sm.protected)
 	if err != nil {
 		return Draft{}, err
 	}
@@ -256,7 +257,7 @@ func (s *Store) List(limit, offset int) (List, error) {
 	return s.query(nil, limit, offset)
 }
 
-// Search returns the drafts whose text contains query, newest first. The match ignores case for ASCII letters only
+// Search returns the drafts whose text contains query, newest first (a protected draft: whose title does). The match ignores case for ASCII letters only
 // (SQLite's LIKE); an empty query lists everything.
 func (s *Store) Search(query string, limit int) (List, error) {
 	query = strings.TrimSpace(query)
@@ -268,9 +269,14 @@ func (s *Store) Search(query string, limit int) (List, error) {
 	return s.query(&pattern, limit, 0)
 }
 
+// ProtectedPrefix starts the content of a protected draft (frontend/src/lib/protect.ts), which is ciphertext. Search never reads it: a
+// protected draft matches on its title alone.
+const ProtectedPrefix = "hp-protected:1:"
+
 // whereMatches is the only fragment ever added to the list query, and it is a constant: the caller's text reaches SQLite
-// only as the value of its ? parameter, never as SQL.
-const whereMatches = ` WHERE json_extract(data, '$.content') LIKE ? ESCAPE '\'`
+// only as the value of its ? parameter, never as SQL. It takes the pattern twice.
+const whereMatches = ` WHERE CASE WHEN protected THEN title LIKE ? ESCAPE '\'
+	ELSE json_extract(data, '$.content') LIKE ? ESCAPE '\' END`
 
 // query lists drafts newest first. pattern is a LIKE pattern for the content, or nil for no filter.
 func (s *Store) query(pattern *string, limit, offset int) (List, error) {
@@ -283,14 +289,14 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	where := ""
 	if pattern != nil {
 		where = whereMatches
-		args = append(args, *pattern)
+		args = append(args, *pattern, *pattern)
 	}
 	out := List{Drafts: []Summary{}}
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM drafts`+where, args...).Scan(&out.Total); err != nil {
 		return List{}, err
 	}
 	// Only the summary columns are read, never the text (the data column), so this stays quick however large the drafts are.
-	rows, err := s.db.Query(`SELECT id, created_at, updated_at, file_path, format, title, excerpt, tasks, tasks_total, tasks_done FROM drafts`+where+
+	rows, err := s.db.Query(`SELECT id, created_at, updated_at, file_path, format, title, excerpt, tasks, tasks_total, tasks_done, protected FROM drafts`+where+
 		` ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if err != nil {
 		return List{}, err
@@ -299,7 +305,7 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 	for rows.Next() {
 		var sum Summary
 		var tasks string
-		if err := rows.Scan(&sum.ID, &sum.CreatedAt, &sum.UpdatedAt, &sum.FilePath, &sum.Format, &sum.Title, &sum.Excerpt, &tasks, &sum.TasksTotal, &sum.TasksDone); err != nil {
+		if err := rows.Scan(&sum.ID, &sum.CreatedAt, &sum.UpdatedAt, &sum.FilePath, &sum.Format, &sum.Title, &sum.Excerpt, &tasks, &sum.TasksTotal, &sum.TasksDone, &sum.Protected); err != nil {
 			return List{}, err
 		}
 		if err := json.Unmarshal([]byte(tasks), &sum.Tasks); err != nil || sum.Tasks == nil {
@@ -317,11 +323,15 @@ func (s *Store) query(pattern *string, limit, offset int) (List, error) {
 type summaryColumns struct {
 	format, title, excerpt, tasks string
 	total, done                   int
+	protected                     bool
 }
 
 // clampSummary is the summary the page sent with a draft, cut to what the list shows (80, 160 and 120 characters, three tasks): the
 // columns are the page's to fill, so they are kept small whatever it sends.
 func clampSummary(d Draft) summaryColumns {
+	if strings.HasPrefix(d.Content, ProtectedPrefix) {
+		return summaryColumns{format: d.Format, title: truncate(d.Title, 80), tasks: "[]", protected: true}
+	}
 	tasks := make([]Task, 0, 3)
 	for _, t := range d.Tasks[:min(len(d.Tasks), 3)] {
 		tasks = append(tasks, Task{Text: truncate(t.Text, 120), Done: t.Done})

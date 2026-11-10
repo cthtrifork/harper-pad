@@ -23,6 +23,9 @@ Everything the app remembers is in **one SQLite file**, `harper-pad.db`, in the 
   and rewrites the whole file on every change. The `sqlite` service lets the frontend send raw SQL (rule 2).
 - **A rollback journal, not WAL.** The database is one file at rest, which is simpler to back up and sync, and a single-user app does not need
   WAL's concurrent readers.
+- **Explicit protection metadata in draft summaries.** A `protected` column is derived from the stored envelope on Save and ApplyRemote.
+  Listing need not read ciphertext, and protected summaries have no excerpt or tasks. The column is added to an existing database when it is
+  opened, without changing draft contents or sync state. The web build keeps the same flag in its IndexedDB summaries, with no schema change.
 
 ## Safety
 

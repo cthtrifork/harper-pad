@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, type PropType, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
 import type { Summary } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { copyDiagnostics } from "../lib/diagnostics.ts";
 import { whenLabel } from "../lib/when.ts";
@@ -15,7 +15,29 @@ const props = defineProps({
   // Draft id -> where a Conflicted copy came from, in memory only (useDrafts): the row says so until the copy is edited, deleted or dismissed.
   copies: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
 });
-const emit = defineEmits(["open", "create", "remove", "search", "more", "close", "undo", "snippet", "dismiss-copy"]);
+const emit = defineEmits(["open", "create", "create-secure", "remove", "search", "more", "close", "undo", "snippet", "dismiss-copy"]);
+
+// "New draft" with a small menu for a secure one: a draft is made protected when it is created, never later (docs/sync.md).
+const newMenu = ref(false);
+const newWrap = ref<HTMLElement | null>(null);
+const outside = (e: Event) => {
+  if (newMenu.value && !newWrap.value?.contains(e.target as Node)) newMenu.value = false;
+};
+const onEscape = (e: KeyboardEvent) => {
+  if (e.key === "Escape") newMenu.value = false;
+};
+onMounted(() => {
+  document.addEventListener("pointerdown", outside);
+  document.addEventListener("keydown", onEscape);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", outside);
+  document.removeEventListener("keydown", onEscape);
+});
+function newSecure() {
+  newMenu.value = false;
+  emit("create-secure");
+}
 
 const help = ref(false); // the snippets help page replaces the list
 const q = ref(props.query);
@@ -99,7 +121,17 @@ const baseName = (path: string) => path.split(/[\\/]/).pop();
     <header>
       <h2>Drafts</h2>
       <div class="actions">
-        <button type="button" class="primary" @click="emit('create')">New draft</button>
+        <span ref="newWrap" class="new-wrap">
+          <button type="button" class="primary new" @click="emit('create')">New draft</button>
+          <button type="button" class="primary new-more" aria-label="More ways to start a draft" aria-haspopup="menu" :aria-expanded="newMenu" @click="newMenu = !newMenu">
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
+          </button>
+          <Transition name="pop">
+            <div v-if="newMenu" class="menu new-menu" role="menu">
+              <button type="button" class="item" role="menuitem" @click="newSecure">New secure draft</button>
+            </div>
+          </Transition>
+        </span>
         <button type="button" class="close" aria-label="Close the drafts list" @click="emit('close')">
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" /></svg>
         </button>
@@ -127,10 +159,13 @@ const baseName = (path: string) => path.split(/[\\/]/).pop();
         <span class="swipe-bg" aria-hidden="true">Delete</span>
         <button type="button" class="card" :aria-current="d.id === currentId ? 'true' : undefined" @click="open(d.id)">
           <span class="top">
-            <span class="title">{{ d.title }}</span>
+            <span class="title">
+              <svg v-if="d.protected" class="padlock" width="11" height="11" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none" /><path d="M4.5 6V4.2a2.5 2.5 0 0 1 5 0V6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" /></svg>
+              <span v-if="d.protected" class="sr-only">Protected: </span>{{ d.title }}
+            </span>
             <time :datetime="iso(d.updatedAt)">{{ whenLabel(d.updatedAt) }}</time>
           </span>
-          <template v-if="d.tasks.length">
+          <template v-if="d.tasks.length && !d.protected">
             <span class="tasks">
               <span v-for="(t, i) in d.tasks" :key="i" class="task" :class="{ done: t.done }">
                 <span class="box" aria-hidden="true">
@@ -141,7 +176,7 @@ const baseName = (path: string) => path.split(/[\\/]/).pop();
             </span>
             <span class="progress">{{ d.tasksDone }} of {{ d.tasksTotal }} {{ d.tasksTotal === 1 ? "task" : "tasks" }} done</span>
           </template>
-          <span v-else-if="d.excerpt" class="excerpt">{{ d.excerpt }}</span>
+          <span v-else-if="d.excerpt && !d.protected" class="excerpt">{{ d.excerpt }}</span>
           <!-- Only drafts that were saved to a file carry this; the others are just drafts. -->
           <span v-if="d.filePath" class="file" :title="d.filePath">
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4l2.5 2.5v6.5H3zM7 1.5V4h2.5" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none" /></svg>

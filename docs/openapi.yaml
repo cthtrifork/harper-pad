@@ -728,7 +728,7 @@ servers:
 tags:
   - description: Spend an invite from the admin UI and get a device token.
     name: enrollment
-  - description: List, read and write the end-to-end encrypted drafts of an enrolled device.
+  - description: List, read and write the drafts of an enrolled device.
     name: drafts
   - description: The personal dictionary and the ignore list, one document; the last device to write wins.
     name: settings

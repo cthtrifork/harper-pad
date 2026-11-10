@@ -36,6 +36,32 @@
   font-weight: 600;
 }
 
+/* "New draft" and its menu arrow as one button; the menu opens below, aligned to the right edge. */
+.drawer .new-wrap {
+  position: relative;
+  display: inline-flex;
+  gap: 1px;
+}
+
+.drawer .new {
+  border-radius: 6px 0 0 6px;
+}
+
+.drawer .new-more {
+  width: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 6px 6px 0;
+}
+
+.drawer .new-menu {
+  right: 0;
+  left: auto;
+  min-width: 170px;
+}
+
 .drawer .close {
   width: 30px;
   height: 30px;
@@ -508,4 +534,10 @@
   background: none;
   color: var(--mute);
   font-size: 11px;
+}
+
+.drawer .title .padlock {
+  margin-right: 5px;
+  vertical-align: -1px;
+  color: var(--mute);
 }

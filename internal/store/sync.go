@@ -188,12 +188,12 @@ func (s *Store) ApplyRemote(d Draft, version int64) (Draft, error) {
 		return Draft{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, format, title, excerpt, tasks, tasks_total, tasks_done)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	if _, err := tx.Exec(`INSERT INTO drafts (id, created_at, updated_at, data, format, title, excerpt, tasks, tasks_total, tasks_done, protected)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET created_at = excluded.created_at, updated_at = excluded.updated_at, data = excluded.data,
 			format = excluded.format, title = excluded.title, excerpt = excluded.excerpt, tasks = excluded.tasks,
-			tasks_total = excluded.tasks_total, tasks_done = excluded.tasks_done`,
-		d.ID, d.CreatedAt, d.UpdatedAt, string(data), sm.format, sm.title, sm.excerpt, sm.tasks, sm.total, sm.done); err != nil {
+			tasks_total = excluded.tasks_total, tasks_done = excluded.tasks_done, protected = excluded.protected`,
+		d.ID, d.CreatedAt, d.UpdatedAt, string(data), sm.format, sm.title, sm.excerpt, sm.tasks, sm.total, sm.done, sm.protected); err != nil {
 		return Draft{}, err
 	}
 	if err := putState(tx, d.ID, SyncState{Hash: ContentHash(d.Format, d.Content), UpdatedAt: d.UpdatedAt, Version: version}); err != nil {

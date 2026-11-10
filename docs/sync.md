@@ -4,7 +4,8 @@ Sync keeps your drafts, your personal dictionary and your ignore list the same o
 its drafts and works without the server. The server is plain storage with compare-and-set: it never merges and never makes copies.
 Sync is off until you enroll a device; without it the app uses the network only to check for an app update.
 
-When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**.
+When your draft differs from another version of it, the app asks one question, in one dialog: **Keep or Overwrite**. Protected drafts use the
+same flow after unlocking, with encrypted copies ([below](#a-protected-drafts-conflict)).
 
 Blue is the app, orange the file, green the server, amber a question for you.
 
@@ -54,6 +55,7 @@ flowchart LR
 | Your draft is edited and its file changed | The Keep or Overwrite dialog | Keep, Overwrite |
 | Your draft is edited and the server holds different text | The same dialog | Keep, Overwrite |
 | Your draft is unedited, and the file and the server disagree | The same dialog; the changed file counts as your edit | Keep, Overwrite |
+| A protected draft was changed on both sides | The same dialog after unlocking, with no text in it | Keep both, Overwrite server |
 | The open draft was deleted on another device | A dialog | Keep Creates the server draft again; Remove Deletes the draft here (the toast offers Undo) |
 | The linked file is gone, unreadable or not text | The file name in the header is struck through; its tooltip gives the full path and the reason | Ctrl+S retries; the unlink button on the file name Deletes the link; unlink first to pick another path with Save to disk. A file that is not text is never updated |
 | The token was revoked | The chip says "Sign in again" | Paste a fresh invite |
@@ -183,6 +185,21 @@ Sync is never periodic. Every moment uses the same rules.
 
 A draft that changed on both sides with different text is the dialog's; Sync all leaves it untouched. Typing and then undoing is no change.
 
+### A protected draft's conflict
+
+A protected version is ciphertext with a new nonce on every save, so two devices that saved the same text can still hold different strings.
+The syncer compares these envelopes using the ordinary rules; it has no protection-specific path. Protection is fixed at creation, so the app
+never produces a plain version of an existing protected draft.
+
+The shared Keep or Overwrite dialog waits until the draft is unlocked. It shows version times, never the text or ciphertext:
+
+- **Keep both** opens the server envelope with the key already held, then seals it under a new draft id as a protected Conflicted copy.
+  The copy retains the server title and the original passphrase. Only after saving it does the app push this device's version.
+  If the server envelope cannot be opened, Keep fails without uploading or making a plaintext copy.
+- **Overwrite server** pushes this device's version without making a copy. The server's other version is lost, with no undo.
+- Both choices first save pending edits and recheck the versions, as for plain drafts. A changed draft or server redraws the dialog.
+- A file conflict never arises, because a protected draft has no file link.
+
 ### The decision for one draft
 
 ```mermaid
@@ -303,14 +320,14 @@ the draft rows, and is never sent; an older build ignores it. The SQLite table i
 | Concern | Handling |
 |---|---|
 | Transport | HTTPS only (cert-manager, HSTS at the ingress). The client refuses an `http:` server |
-| Who can read the data | The server and its operator; Cloudflare is not in the sync path. Use encrypted volumes and keep bodies out of logs |
+| Who can read the data | The server and its operator, except the text of [protected drafts](#protected-drafts-end-to-end-encryption); Cloudflare is not in the sync path. Use encrypted volumes and keep bodies out of logs |
 | Stolen token | Revoke the device |
 | Account isolation | The account comes from the device row and every query filters on it. With one account this is a guard; narrow the row-security policy to the account before adding a second |
 | Database and cluster | Client certificates only, PostgreSQL reachable only from the sync and admin pods, separate roles ([backend README](../backend/README.md)), default-deny NetworkPolicies, images pinned by digest |
 | Admin UI | No Service and no listener outside its pod; reached through a Cloudflare Tunnel behind Cloudflare Access (OIDC, MFA); same-origin checks, CSRF tokens, strict CSP ([admin README](../backend/cmd/harper-pad-admin/README.md#access)) |
 | Draft text from the server | Untrusted like pasted text: never run, never inserted as HTML, validated first |
 
-Not defended: a compromised device, a compromised server, and traffic analysis.
+Not defended: a compromised device, a compromised server (for drafts that are not protected), and traffic analysis.
 
 ## Not built
 
@@ -319,16 +336,60 @@ Not defended: a compromised device, a compromised server, and traffic analysis.
 - A pending count or progress line on the chip.
 - A server operations page: operating and backing up the server belongs to the cluster's GitOps repository.
 - Scheduled token rotation with reuse detection: it is the fallback if iOS clears the key.
-- End-to-end encryption, more than one client account, merging text, syncing other preferences (text size), and an OS keyring or TPM.
+- More than one client account, merging text, syncing other preferences (text size), and an OS keyring or TPM.
 
-## Option: end-to-end encryption
+## Protected drafts (end-to-end encryption)
 
-Not planned. The server would hold only ciphertext, still as opaque `data` strings by id and version. Ids, versions, times, the deleted flag
-and sizes stay visible.
+A draft can be created as protected. The server and the local database then hold only ciphertext for it, and the text is readable only after the
+passphrase is entered. Other drafts are unaffected. The server stores a protected draft like any other draft; it sees ids, versions, times,
+the deleted flag, sizes and the fact that a draft is protected. How the text is sealed and stored is in `frontend/src/lib/protect.ts`.
 
-- **Keys:** a random 256-bit data key from the first device; a per-draft key `HKDF-SHA-256(key, "harper-pad doc " + id)`; AES-256-GCM with
-  additional data `id|version|key id`, so a blob cannot move to another draft.
-- **Key bag** (`GET` and `PUT /keys`, compare-and-set): the data key wrapped by an Argon2id passphrase key (at least 32 MiB, 3 passes, 1 lane, in a worker) and by a generated 160-bit recovery key.
-- **Limits:** a copied token gets ciphertext but can guess the passphrase offline; revoking a stolen device needs a key rotation; losing the passphrase and the recovery key loses the drafts.
-- **Measured:** Argon2id (hash-wasm 4.12.0) took about 101, 107 and 218 ms at 32, 64 and 128 MiB on an iPhone Home Screen app.
-- **Open:** which Argon2id WebAssembly package to pin, and device pairing as a third unlock method.
+### Using it
+
+- **Making one.** A draft is protected when it is created, never later: "New draft" in the drafts list has a small menu with "New secure draft".
+  It asks for a new passphrase, typed twice, and an optional title for the draft list. Each secure draft has its own passphrase; it is not
+  checked against other drafts. Nothing is stored until something is typed.
+- **The padlock.** The draft list marks a protected draft with a small padlock. There is no lock button: opening another draft locks it.
+- **Opening a protected draft.** It opens locked. Click Unlock draft, enter the passphrase, and the text appears. The passphrase is asked
+  again each time the draft is opened.
+- **Locking.** The key is kept in memory only. It is dropped when the draft is closed, when the app goes to the background, and when the app goes to the background.
+  There is no idle timer. What is unsaved is saved first, and if that fails the draft stays unlocked so the text is not lost.
+- **The title.** A protected draft shows "Locked draft" in the draft list, or the title it was given when it was made. That title is not
+  protected: the draft list and the server show it, it does not follow the text, and it cannot be changed. Drafts without one keep "Locked draft".
+- **No excerpt.** The draft list never shows an excerpt, summary or preview of a protected draft.
+  Its summary has an explicit `protected` flag in SQLite and IndexedDB, derived from the stored envelope, not a marker in the excerpt.
+- **Search.** Search reads the text of plain drafts. A protected draft matches on its title only, never on its stored text.
+- **Protection is permanent.** A plain draft cannot be protected and a protected draft cannot be made plain. To get the text out, unlock the
+  draft, copy it into a new draft and delete the protected one; to protect a plain draft, copy its text into a new secure draft. That keeps one
+  rule for sync: a draft's form never changes, so a plain version of a protected draft can never be legitimate.
+- **No Harper.** Harper does not check a protected draft, and autocorrect is off. No lint results are produced, and no word is added to the
+  dictionary (stored and synced in plain text). The Problems panel stays empty.
+- **No file link.** A protected draft cannot be linked to a file or saved to one, because a file would hold the text unprotected.
+- **Size.** Sealing makes a draft about a third larger, so a protected draft holds less text than a plain one before it reaches the limit.
+- **More than one device.** The server holds the ciphertext, so a protected draft syncs like any other. Each device unlocks it with that
+  draft's passphrase, which is never sent anywhere, so it has to be typed on every device.
+  Concurrent edits use the ordinary **Keep both** or **Overwrite server** question after unlocking
+  ([the dialog](#a-protected-drafts-conflict)). Even identical text can be a conflict because each save has its own nonce.
+- **No passphrase change and no recovery.** Losing a draft's passphrase loses that draft. To use a new passphrase, copy its text into a new
+  secure draft with it, and delete the old.
+
+### Cryptography
+
+- The key comes from the passphrase and a random salt that is kept with the draft, through Argon2id, a hash made slow and memory-hungry
+  on purpose. The text is sealed with AES-256-GCM. The check covers the draft id and the title, so a copy cannot be moved to
+  another draft and a title cannot be changed or swapped unnoticed. A wrong passphrase, or a draft that was changed, fails the check
+  built into GCM, so no check value is stored, and the two cannot be told apart.
+- Local storage holds the same ciphertext as the server. The text is decrypted only in memory, and what is derived from it (lint
+  results, search, undo history, autosave copies, exports) stays in memory or is skipped.
+
+### Limits
+
+- A copied ciphertext (stolen token, backup, database leak) can be guessed against offline for as long as the attacker likes. The passphrase
+  and the cost of Argon2id are the whole defence. The salt only stops one guess from testing every draft at once; changing the salt over
+  time does not help, because it is stored beside the ciphertext and the passphrase stays the same.
+- The server can delete a protected draft, replace it with plain text of its own, or replay an older ciphertext of the same draft, for example
+  from a backup, and the device cannot tell. It cannot read or forge one.
+- A title given to a protected draft is readable by the server, so it should not give the text away. A title the server changed is only
+  noticed when the draft is opened; until then the draft list shows what the server sent.
+- Not covered: a compromised device while a draft is open (it sees the plaintext and the passphrase), traffic analysis, and a server that
+  serves modified web app code.

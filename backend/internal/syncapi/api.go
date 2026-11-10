@@ -81,7 +81,7 @@ func (a *API) config() huma.Config {
 	cfg.Info.License = &huma.License{Name: "Apache-2.0", Identifier: "Apache-2.0"}
 	cfg.Tags = []*huma.Tag{
 		{Name: "enrollment", Description: "Spend an invite from the admin UI and get a device token."},
-		{Name: "drafts", Description: "List, read and write the end-to-end encrypted drafts of an enrolled device."},
+		{Name: "drafts", Description: "List, read and write the drafts of an enrolled device."},
 		{Name: "settings", Description: "The personal dictionary and the ignore list, one document; the last device to write wins."},
 	}
 	cfg.ExternalDocs = &huma.ExternalDocs{Description: "How the sync works (docs/sync.md)", URL: "https://github.com/cthtrifork/harper-pad/blob/main/docs/sync.md"}

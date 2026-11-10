@@ -82,7 +82,13 @@ export function useSync({
 
   // One syncer for every path, so a conflict is announced the same way wherever it was found.
   const syncer = () =>
-    createSyncer({ device: device as DeviceRecord, drafts, fetchFn, onGone: (id) => (gone.value = { id }), onRejected: noteRejected });
+    createSyncer({
+      device: device as DeviceRecord,
+      drafts,
+      fetchFn,
+      onGone: (id) => (gone.value = { id }),
+      onRejected: noteRejected,
+    });
 
   // The server refused a draft: the chip says which and why, with no dialog. The text stays local and goes again on the next push.
   async function noteRejected(id: string, reason: string) {

@@ -95,9 +95,28 @@ await page.keyboard.type(" It is saved as you type.");
 await page.waitForSelector("#drafts-drawer .item", { timeout: 15000 });
 await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
 expect((await page.locator("#drafts-drawer .item").count()) === 1, "the drafts list should hold the one draft that was typed");
+
+// A protected draft next to it: New secure draft asks for its own passphrase (typed twice) and an optional list title.
+// The list marks it with a padlock and shows no excerpt, so the picture shows what a protected draft looks like among plain ones.
+await page.getByRole("button", { name: "More ways to start a draft" }).click();
+await page.getByRole("menuitem", { name: "New secure draft" }).click();
+await page.waitForSelector("dialog.pass-dialog[open]");
+await page.fill("#pass-input", "correct horse battery");
+await page.fill("#pass-again", "correct horse battery");
+await page.fill("#pass-title-input", "Private notes");
+await page.locator("dialog.pass-dialog").getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForSelector("dialog.pass-dialog", { state: "detached", timeout: 60000 }); // Argon2id with 128 MiB takes a moment
+await page.locator(".cm-content").click();
+await page.keyboard.type("Bank details and the spare key code. None of this should be readable in the list.");
+await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
+await page.keyboard.press("Control+j"); // New draft closed the scratch pad; open it for the list
+await page.waitForSelector("#drafts-drawer");
+await page.waitForFunction(() => document.querySelectorAll("#drafts-drawer .item").length === 2, null, { timeout: 15000 });
+expect((await page.locator("#drafts-drawer .item svg.padlock").count()) === 1, "exactly one draft in the list should carry the padlock");
+expect(!(await page.locator("#drafts-drawer").innerText()).includes("Bank details"), "the list must not show the protected draft's text");
 await shot("04-drafts-drawer");
 
-// A second draft, saved to a file with Ctrl+Shift+S and then edited. Real code all the way: the file is written by the Go service
+// A third draft, saved to a file with Ctrl+Shift+S and then edited. Real code all the way: the file is written by the Go service
 // into the demo's Documents folder and the draft keeps its link in SQLite, so the list shows both drafts and the toolbar names the file.
 await page.getByRole("button", { name: "New draft" }).click();
 await page.locator(".cm-content").click();
@@ -121,7 +140,7 @@ await page.waitForFunction(() => document.querySelector("#draft-status")?.textCo
 // New draft closed the scratch pad; open it again for the list.
 await page.keyboard.press("Control+j");
 await page.waitForSelector("#drafts-drawer");
-await page.waitForFunction(() => document.querySelectorAll("#drafts-drawer .item").length === 2, null, { timeout: 15000 });
+await page.waitForFunction(() => document.querySelectorAll("#drafts-drawer .item").length === 3, null, { timeout: 15000 });
 if (filesDir) {
   expect(readFileSync(path.join(filesDir, "Meeting notes.md"), "utf8").endsWith("Friday."), "the file should not change until Ctrl+S");
 }
@@ -233,6 +252,7 @@ expect(!(await phone.evaluate(() => document.documentElement.scrollWidth > inner
 await phone.click(".drawer-btn");
 await phone.waitForSelector("#drafts-drawer .item");
 expect((await phone.locator(".views").count()) === 0, "the view switcher should be hidden while the scratch pad is open");
+expect((await phone.locator("#drafts-drawer .item svg.padlock").count()) === 1, "the phone's list should mark the protected draft with a padlock");
 await phoneShot("09-mobile-drafts-drawer");
 
 // A new draft with a few mistakes, then Problems as a bottom sheet under the text.
