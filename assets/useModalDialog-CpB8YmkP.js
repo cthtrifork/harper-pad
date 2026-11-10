@@ -1,1 +1,0 @@
-import{b as e,x as t}from"./runtime-core.esm-bundler-6Mx7K5Km.js";function n(n){let r=null;t(()=>{r=document.activeElement,n.value?.showModal()}),e(()=>{n.value?.close(),r?.isConnected&&r.focus()})}export{n as t};
