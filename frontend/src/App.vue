@@ -111,7 +111,7 @@ const drafts = useDrafts(editor, showDrawer, {
 // Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
 const conflict = useConflict({ drafts, sync });
 // The padlock and its passphrase dialog (docs/sync.md, "Protected drafts").
-const pass = ref<{ mode: "create" | "verify" | "unlock" | "title"; title: string; target?: "server" } | null>(null);
+const pass = ref<{ mode: "create" | "verify" | "unlock" | "title"; title: string } | null>(null);
 const passBusy = ref(false);
 const passError = ref("");
 const lockButton = computed(() =>
@@ -129,10 +129,6 @@ function askUnlock() {
   passError.value = "";
   pass.value = { mode: "unlock", title: "" };
 }
-function askUnlockServer() {
-  passError.value = "";
-  pass.value = { mode: "unlock", title: "", target: "server" };
-}
 function askListTitle() {
   passError.value = "";
   pass.value = { mode: "title", title: drafts.listTitle.value };
@@ -143,7 +139,7 @@ async function submitPass(passphrase: string, title: string) {
   passBusy.value = true;
   passError.value = "";
   try {
-    if (p.mode === "unlock") await (p.target === "server" ? conflict.unlockServer(passphrase) : drafts.unlock(passphrase));
+    if (p.mode === "unlock") await drafts.unlock(passphrase);
     else if (p.mode === "title") await drafts.setListTitle(title);
     else await drafts.protect(passphrase, title);
     pass.value = null;
@@ -633,8 +629,8 @@ onBeforeUnmount(() => {
       </Transition>
     </div>
     <!-- A note that was deleted on another device: a modal, so the person has to choose Keep or Remove. -->
-    <ConflictDialog v-if="conflict.model.value" :model="conflict.model.value" :busy="conflict.busy.value" :note="conflict.note.value" @choose="conflict.choose" @unlock="askUnlockServer" />
-    <PassphraseDialog v-if="pass" :mode="pass.mode" :title="pass.title" :target="pass.target" :busy="passBusy" :error="passError" @submit="submitPass" @cancel="pass = null" />
+    <ConflictDialog v-if="conflict.model.value" :model="conflict.model.value" :busy="conflict.busy.value" :note="conflict.note.value" @choose="conflict.choose" />
+    <PassphraseDialog v-if="pass" :mode="pass.mode" :title="pass.title" :busy="passBusy" :error="passError" @submit="submitPass" @cancel="pass = null" />
     <DeletedElsewhereDialog v-if="sync.gone.value && !conflict.model.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
     <StatusBar
       :state="state"

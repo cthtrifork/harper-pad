@@ -192,29 +192,12 @@ check("a Conflicted copy of a protected draft is protected, under its own id, an
   const t = setup({ [A]: { content: "# Plan\nsecret words" } });
   t.editor.value.text = t.open(A);
   await t.drafts.protect(PW, "Plan");
-  const theirs = await t.drafts.dialog.plain(String(t.store.get(A)?.content));
-  assert.equal(theirs, "# Plan\nsecret words"); // a version from the server opens with the key held
   const id = await t.drafts.dialog.saveCopy("# Plan\nthe server text", "server");
   const copy = String(t.store.get(id)?.content);
   assert.notEqual(id, A);
   assert.ok(isProtected(copy) && !copy.includes("server text"));
   assert.equal(t.store.get(id)?.title, "Plan");
   assert.equal((await unlockEnvelope(copy, id, PW)).content, "# Plan\nthe server text");
-});
-
-check("a locked draft has no dialog, and a version it cannot open is not compared", async () => {
-  const w = setup({ [A]: { content: "# Plan\nsecret words" } });
-  w.editor.value.text = w.open(A);
-  await w.drafts.protect(PW, "Plan");
-  const envelope = String(w.store.get(A)?.content);
-
-  const t = setup({ [A]: { content: envelope } });
-  t.open(A);
-  assert.equal(t.drafts.dialog.locked(), true);
-  assert.equal(await t.drafts.dialog.plain(envelope), null);
-  await t.drafts.unlock(PW);
-  assert.equal(t.drafts.dialog.locked(), false);
-  assert.equal(await t.drafts.dialog.plain("plain server text"), "plain server text");
 });
 
 check("a draft is not locked when its last save failed: the text stays on screen", async () => {

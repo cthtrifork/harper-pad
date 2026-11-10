@@ -1,13 +1,18 @@
 import { ref, watch } from "vue";
-import { type Choice, type ConflictModel, type ConflictOps, type Origin, resolveConflict, staleNote } from "./conflict.ts";
-import { clearTitle, isProtected, type Session } from "./protect.ts";
+import {
+  type Choice,
+  type ConflictModel,
+  type ConflictOps,
+  type Origin,
+  type ProtectedChoice,
+  resolveConflict,
+  staleNote,
+} from "./conflict.ts";
+import { isProtected } from "./protect.ts";
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
-type DraftsApi = Pick<
-  ReturnType<typeof useDrafts>,
-  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "protectedDraft" | "listTitle"
->;
+type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked">;
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
@@ -22,8 +27,6 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
   const note = ref(""); // a line under the buttons: "Something changed, look again"
   const result = ref<{ copies: { id: string; from: Origin }[]; fileError: string; pushed: boolean | null } | null>(null); // for the toast
   let building = 0;
-  let serverKey: { id: string; key: Session } | null = null; // from "Unlock server version"
-  const keyFor = (id: string) => (serverKey?.id === id ? serverKey.key : undefined);
 
   const syncOn = () => sync.enrolled.value;
 
@@ -33,8 +36,8 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     const f = drafts.fileConflict.value?.id === id ? drafts.fileConflict.value : null;
     let sv: { text: string; format: string; stamp: string; updatedAt: number } | null =
       sync.serverConflict.value?.id === id ? sync.serverConflict.value : null;
-    if ((!f && !sv) || drafts.locked.value) {
-      model.value = null; // nothing differs, or the draft is locked: it is looked at again when it is unlocked
+    if (!f && !sv) {
+      model.value = null;
       return;
     }
     // A conflict with the file alone: look at the server too, so a draft that conflicts with both gets one dialog covering both.
@@ -48,6 +51,24 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       if (mine !== building) return;
       if (latest === null) sv = null;
       else if (latest) sv = latest;
+    }
+    // A protected version is not compared or copied, with or without the key: the person keeps one side (docs/sync.md, "Protected drafts").
+    if (sv && isProtected(sv.text)) {
+      model.value = f
+        ? null // protected drafts have no file, so this is another draft's state: nothing to ask
+        : {
+            id,
+            protected: true,
+            file: null,
+            server: { text: "", stamp: sv.stamp, at: sv.updatedAt },
+            sync: true,
+            draftAt: drafts.dialog.current().updatedAt,
+          };
+      return;
+    }
+    if (drafts.locked.value) {
+      model.value = null; // a locked draft's text cannot be compared: it is looked at again when it is unlocked
+      return;
     }
     let file: ConflictModel["file"] = null;
     let server: ConflictModel["server"] = null;
@@ -65,55 +86,8 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       if (mine === building) model.value = null;
       return;
     }
-    if (sv) {
-      // Compared and copied as text: a protected draft's version is opened with the key held, or left alone when that is not possible.
-      const text = await drafts.dialog.plain(sv.text, keyFor(id));
-      if (mine !== building) return;
-      if (text === null && isProtected(sv.text) && !drafts.locked.value) {
-        // Protected with a key this device does not hold: the dialog is shown, but a choice waits until the person unlocks that version,
-        // because neither side could be compared and Keep could not copy it.
-        server = { text: "", stamp: sv.stamp, at: sv.updatedAt, sealed: sv.text };
-      } else if (text === null) {
-        model.value = null;
-        return;
-      } else server = { text, stamp: sv.stamp, at: sv.updatedAt };
-    }
+    if (sv) server = { text: sv.text, stamp: sv.stamp, at: sv.updatedAt };
     if (mine !== building) return;
-    // A protected draft's versions differ by their nonce even when the text is the same: nothing differs after all, so the server's version
-    // is taken as this device's and there is no dialog.
-    const compared = drafts.dialog.current();
-    const comparedProtected = drafts.protectedDraft.value;
-    if (
-      !f &&
-      server &&
-      !server.sealed &&
-      !keyFor(id) &&
-      server.text === compared.text &&
-      sv?.format === compared.format &&
-      compared.updatedAt !== undefined &&
-      (!comparedProtected || (!!sv && isProtected(sv.text) && clearTitle(sv.text) === drafts.listTitle.value))
-    ) {
-      model.value = null;
-      const stillCurrent = () => {
-        const now = drafts.dialog.current();
-        return (
-          now.id === compared.id &&
-          now.updatedAt === compared.updatedAt &&
-          now.text === compared.text &&
-          now.format === compared.format &&
-          now.revision === compared.revision &&
-          drafts.protectedDraft.value === comparedProtected &&
-          !drafts.locked.value
-        );
-      };
-      const stamp = sv?.stamp ?? "";
-      if (await sync.takeServer(id, { stamp, updatedAt: compared.updatedAt, stillCurrent })) sync.clearConflict();
-      else if (mine === building) {
-        const latest = await sync.inspectServer(id);
-        if (mine === building && (!stillCurrent() || latest === null || (latest && latest.stamp !== stamp))) await build();
-      }
-      return;
-    }
     const yours = f?.clean ? (file as { text: string }).text : drafts.dialog.current().text;
     // An unedited draft takes the file's text. If the server then holds nothing or the same text, nothing differs after all: no dialog.
     if (f?.clean && (!server || server.text === yours)) {
@@ -150,19 +124,49 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
       return { file: file?.stamp == null && m.file ? { stamp: "gone" } : (file as { stamp: string } | null), server };
     },
     applyFile: () => drafts.dialog.applyFile(),
-    saveCopy: (text: string, from: Origin) => drafts.dialog.saveCopy(text, from, keyFor(m.id as string)),
+    saveCopy: (text: string, from: Origin) => drafts.dialog.saveCopy(text, from),
     writeFile: drafts.current.value.filePath ? () => drafts.dialog.writeFile() : null,
     push: syncOn() ? () => sync.forcePush(m.id as string) : null,
   });
 
+  // A protected draft's two choices: "Overwrite theirs" sends this device's version on top of the server's, "Discard ours" takes the server's.
+  // The server is looked at again first, and the dialog is redrawn if it moved.
+  async function chooseProtected(choice: ProtectedChoice, m: ConflictModel) {
+    const id = m.id as string;
+    const seen = m.server?.stamp;
+    const now = await sync.inspectServer(id);
+    if (now && now.stamp !== seen) {
+      note.value = staleNote(m, ["server"]);
+      await build();
+      return;
+    }
+    if (choice === "overwrite") {
+      if (!(await sync.forcePush(id))) throw new Error("the server did not take it");
+    } else {
+      const at = drafts.dialog.current();
+      const stillCurrent = () => {
+        const here = drafts.dialog.current();
+        return here.id === at.id && here.updatedAt === at.updatedAt && here.revision === at.revision;
+      };
+      if (!(await sync.takeServer(id, { stamp: seen ?? "", updatedAt: at.updatedAt as number, stillCurrent }))) {
+        note.value = "This draft changed meanwhile. Check the rows and choose again.";
+        await build();
+        return;
+      }
+    }
+    sync.clearConflict();
+    model.value = null;
+  }
+
   // The person chose. Both sides are looked at again first; if either moved, the dialog is redrawn and nothing is written.
-  async function choose(choice: Choice) {
+  async function choose(choice: Choice | ProtectedChoice) {
     const m = model.value;
-    if (!m || busy.value || m.server?.sealed) return;
+    if (!m || busy.value) return;
     busy.value = true;
     note.value = "";
     try {
-      const r = await resolveConflict(choice, m, ops(m));
+      if (m.protected) return await chooseProtected(choice as ProtectedChoice, m);
+      const r = await resolveConflict(choice as Choice, m, ops(m));
       if (r.status === "stale") {
         note.value = staleNote(m, r.changed);
         await drafts.recheckFile();
@@ -181,13 +185,5 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
     }
   }
 
-  // Opens the server's protected version with its passphrase, then looks at both versions again. Rejects with WrongPassphrase.
-  async function unlockServer(passphrase: string) {
-    const m = model.value;
-    if (!m?.server?.sealed) return;
-    serverKey = { id: m.id as string, key: await drafts.dialog.unlockServer(m.server.sealed, passphrase) };
-    await build();
-  }
-
-  return { model, busy, note, result, choose, unlockServer };
+  return { model, busy, note, result, choose };
 }

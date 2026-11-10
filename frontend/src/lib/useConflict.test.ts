@@ -29,7 +29,6 @@ function setup({
   const drafts = {
     current: ref({ id: ID, filePath: "/home/me/plan.md" }),
     locked: ref(false),
-    protectedDraft: ref(false),
     fileConflict,
     clearFileConflict: () => {
       fileConflict.value = null;
@@ -46,11 +45,6 @@ function setup({
       writeFile: async () => log.push("write"),
       applyFile: async () => log.push("applyFile"),
       current: () => ({ id: ID, text: draftText, format: "markdown", updatedAt: 7, revision: 1 }),
-      plain: async (t, _key?) => t,
-      unlockServer: async (_sealed, pass) => {
-        if (pass !== "right") throw new Error("Wrong passphrase.");
-        return "key";
-      },
     },
   };
   const sync = {
@@ -182,109 +176,61 @@ test("the file's version stamp (its modified time in nanoseconds) becomes a time
   assert.equal(new Date(c.model.value.file.at).toISOString(), "2026-11-06T20:00:00.123Z");
 });
 
-test("a locked protected draft has no dialog until it is unlocked, and the server's version is compared as text", async () => {
-  const { c, drafts, sync } = setup({ server: { text: "envelope-from-server" } });
-  (drafts.dialog as { plain: (t: string) => Promise<string | null> }).plain = async (t) =>
-    t === "envelope-from-server" ? "server text" : t;
+const ENVELOPE = 'hp-protected:1:{"s":"AA","n":"AA","c":"AA"}';
+const protectedServer = { text: ENVELOPE, stamp: "2:5", updatedAt: 5 };
+
+test("a protected server version is one dialog with two choices, whatever the key and the text, even for a locked draft", async () => {
+  const { c, drafts } = setup({ server: protectedServer, serverNow: protectedServer });
+  await settle();
+  assert.equal(c.model.value?.protected, true);
+  assert.equal(c.model.value?.server?.text, "", "the encrypted text is never put in the dialog");
   drafts.locked.value = true;
   await settle();
-  assert.equal(c.model.value, null);
-  drafts.locked.value = false;
-  await settle();
-  assert.equal(c.model.value?.server?.text, "server text");
-  assert.ok(sync.serverConflict.value);
+  assert.equal(c.model.value?.protected, true);
 });
 
-test("a version that cannot be opened with the key held is not shown as a conflict", async () => {
-  const { c, drafts } = setup({ server: {} });
-  (drafts.dialog as { plain: (t: string) => Promise<string | null> }).plain = async () => null;
-  drafts.locked.value = true; // look again, as an unlock does
+test("Overwrite theirs sends this device's version and copies nothing", async () => {
+  const { c, log, sync } = setup({ server: protectedServer, serverNow: protectedServer });
   await settle();
-  drafts.locked.value = false;
-  await settle();
+  await c.choose("overwrite");
+  assert.ok(log.includes("push"));
+  assert.equal(
+    log.some((l) => Array.isArray(l) && (l[0] === "copy" || l[0] === "take")),
+    false,
+  );
   assert.equal(c.model.value, null);
+  assert.equal(sync.serverConflict.value, null);
 });
 
-test("a server version with the same text as yours is taken without a dialog (protected versions differ only by their nonce)", async () => {
-  const { c, log, drafts } = setup({
-    server: { text: "envelope-b" },
-    draftText: "same",
-    serverNow: { text: "envelope-b", stamp: "2:5", updatedAt: 5 },
-  });
-  drafts.dialog.plain = async () => "same";
-  drafts.locked.value = true;
+test("Discard ours takes the server's version, guarded by its stamp and this device's revision, and sends nothing", async () => {
+  const { c, log } = setup({ server: protectedServer, serverNow: protectedServer });
   await settle();
-  drafts.locked.value = false;
-  await settle();
-  assert.equal(c.model.value, null);
+  await c.choose("discard");
   const take = log.find((l) => Array.isArray(l) && l[0] === "take");
   assert.ok(take);
   assert.equal(take[1].stamp, "2:5");
   assert.equal(take[1].updatedAt, 7);
   assert.equal(take[1].stillCurrent(), true);
-  assert.ok(log.includes("clearServer"));
-});
-
-test("a protected draft never auto-adopts a matching plain server version", async () => {
-  const { c, log, drafts } = setup({
-    server: { text: "plain text" },
-    draftText: "plain text",
-    serverNow: { text: "plain text", stamp: "2:5", updatedAt: 5 },
-  });
-  drafts.protectedDraft.value = true;
-  await settle();
-  assert.ok(c.model.value, "the downgrade requires an explicit conflict choice");
-  assert.equal(
-    log.some((l) => Array.isArray(l) && l[0] === "take"),
-    false,
-  );
-});
-
-test("a failed same-version reconciliation does not retry indefinitely", async () => {
-  const { c, log, drafts } = setup({
-    server: { text: "same" },
-    draftText: "same",
-    serverNow: { text: "same", stamp: "2:5", updatedAt: 5 },
-    takeResult: false,
-  });
-  drafts.dialog.plain = async () => "same";
-  await settle();
-  assert.equal(log.filter((l) => Array.isArray(l) && l[0] === "take").length, 1);
+  assert.equal(log.includes("push"), false);
   assert.equal(c.model.value, null);
 });
 
-test("a stale same-text reconciliation rebuilds against the latest server version", async () => {
-  const { c, drafts } = setup({
-    server: { text: "envelope-b" },
-    draftText: "same",
-    serverNow: { text: "envelope-b", stamp: "2:5", updatedAt: 5 },
-    serverInspectNow: { text: "envelope-b", stamp: "2:5", updatedAt: 5 },
-    takeResult: (_guard, setServer) => {
-      setServer({ text: "new server text", stamp: "3:9", updatedAt: 9 });
-      return false;
-    },
-  });
-  drafts.dialog.plain = async (text) => (text === "envelope-b" ? "same" : text);
+test("if the server moved since a protected dialog was drawn, it is redrawn and nothing is written", async () => {
+  const { c, log, setServer } = setup({ server: protectedServer, serverNow: protectedServer });
   await settle();
-  assert.equal(c.model.value?.server?.text, "new server text");
+  setServer({ text: ENVELOPE, stamp: "3:9", updatedAt: 9 });
+  await c.choose("overwrite");
+  assert.equal(log.includes("push"), false);
+  assert.match(c.note.value, /changed again/);
   assert.equal(c.model.value?.server?.stamp, "3:9");
 });
 
-test("a server version this device cannot open is shown as sealed, and no choice is made until it is unlocked", async () => {
-  const { c, log, drafts } = setup({
-    server: { text: "hp-protected:1:{}" },
-    serverNow: { text: "hp-protected:1:{}", stamp: "2:5", updatedAt: 5 },
-  });
-  drafts.dialog.plain = async (t, key) => (key ? "server plain" : t.startsWith("hp-protected") ? null : t);
+test("Discard ours does nothing when this device's draft changed meanwhile", async () => {
+  const { c, drafts, log } = setup({ server: protectedServer, serverNow: protectedServer, takeResult: false });
   await settle();
-  assert.equal(c.model.value?.server?.sealed, "hp-protected:1:{}");
-  await c.choose("overwrite");
-  assert.equal(log.includes("push"), false, "nothing is sent while the server's version is unreadable");
-  await assert.rejects(c.unlockServer("wrong"));
-  assert.equal(c.model.value?.server?.sealed, "hp-protected:1:{}");
-  await c.unlockServer("right");
-  assert.equal(c.model.value?.server?.sealed, undefined);
-  assert.equal(c.model.value?.server?.text, "server plain");
-  await c.choose("keep");
-  assert.ok(log.some((l) => Array.isArray(l) && l[0] === "copy" && l[1] === "server plain"));
+  await c.choose("discard");
+  assert.ok(log.some((l) => Array.isArray(l) && l[0] === "take"));
+  assert.match(c.note.value, /changed meanwhile/);
+  assert.ok(c.model.value, "the dialog stays for another choice");
+  void drafts;
 });

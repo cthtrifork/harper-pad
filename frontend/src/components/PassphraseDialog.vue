@@ -9,7 +9,6 @@ const MIN_LENGTH = 10;
 const props = defineProps<{
   mode: "create" | "verify" | "unlock" | "title";
   title?: string; // the title the draft list shows now, if any
-  target?: "server"; // unlocking the server's version of a conflicted draft, not the open draft
   busy: boolean;
   error: string;
 }>();
@@ -26,7 +25,7 @@ const asksPassphrase = computed(() => props.mode !== "title");
 const asksTitle = computed(() => props.mode !== "unlock");
 const mismatch = ref("");
 
-const heading = computed(() => (props.mode === "unlock" ? (props.target === "server" ? "Unlock the server's version" : "Unlock this draft") : props.mode === "title" ? "Title in the draft list" : "Protect this draft"));
+const heading = computed(() => (props.mode === "unlock" ? "Unlock this draft" : props.mode === "title" ? "Title in the draft list" : "Protect this draft"));
 const text = computed(() =>
   props.mode === "create"
     ? "Choose a passphrase. It cannot be changed or recovered: lose it and the protected drafts are gone."

@@ -524,14 +524,12 @@ export function useDrafts(
       return st.state === "changed" ? st.stamp : null;
     },
     // A new, ordinary, unlinked draft; labelled "Conflicted copy" in memory only. Returns its id.
-    async saveCopy(text: string, from: string, serverKey?: Session) {
+    async saveCopy(text: string, from: string) {
       // A copy of a protected draft is protected too, sealed under its own id with the key already held.
       // Never as plain text: a protected draft that locked meanwhile has no key to seal with, so the copy is refused.
-      // The server's version, once unlocked with the passphrase, is sealed with its own key, whatever this draft is.
-      const key = from.includes("server") && serverKey ? serverKey : session;
-      if (protectedDraft.value && !key) throw new Error("the draft is locked. Unlock it and try again");
-      const id = protectedDraft.value || (from.includes("server") && serverKey) ? newDraftId() : undefined;
-      const content = id && key ? await seal(key, id, text, listTitle.value) : text;
+      if (protectedDraft.value && !session) throw new Error("the draft is locked. Unlock it and try again");
+      const id = protectedDraft.value ? newDraftId() : undefined;
+      const content = id && session ? await seal(session, id, text, listTitle.value) : text;
       const d = await be.saveDraft({ id, format: current.value.format, content });
       copies.value = { ...copies.value, [d.id]: from };
       refreshListSoon();
@@ -553,24 +551,6 @@ export function useDrafts(
       updatedAt: current.value.updatedAt,
       revision: edits,
     }),
-    // A locked draft has no dialog until it is unlocked: its versions cannot be compared or copied without the key.
-    locked: () => locked.value,
-    // The text of a version held elsewhere (the server). null when it is protected with a key this device does not hold.
-    // `extra` is a key from unlockServer, for a version sealed with a salt this device does not hold.
-    async plain(text: string, extra?: Session) {
-      if (!isProtected(text)) return text;
-      const key = extra ?? session;
-      const id = current.value.id;
-      const at = epoch;
-      if (!key || (!extra && locked.value)) return null;
-      const plain = await openWith(key, text, id);
-      return epoch === at && current.value.id === id && (extra || (session === key && !locked.value)) ? plain : null;
-    },
-    // Opens the server's protected version of the open draft with a passphrase. Rejects with WrongPassphrase. The key is only for comparing and
-    // copying that version: it does not become this draft's session.
-    async unlockServer(sealed: string, passphrase: string) {
-      return (await unlockEnvelope(sealed, current.value.id, passphrase)).session;
-    },
   };
 
   // "Reload from file" in the toast: the draft's text becomes the file's text, as one edit that Ctrl+Z takes back. Go reads the stored path and
