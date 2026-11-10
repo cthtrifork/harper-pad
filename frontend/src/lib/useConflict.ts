@@ -12,7 +12,10 @@ import { isProtected } from "./protect.ts";
 import type { useDrafts } from "./useDrafts.ts";
 import type { useSync } from "./useSync.ts";
 
-type DraftsApi = Pick<ReturnType<typeof useDrafts>, "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked">;
+type DraftsApi = Pick<
+  ReturnType<typeof useDrafts>,
+  "current" | "fileConflict" | "dialog" | "recheckFile" | "clearFileConflict" | "locked" | "flush" | "needsSave"
+>;
 
 type SyncApi = Pick<
   ReturnType<typeof useSync>,
@@ -130,9 +133,26 @@ export function useConflict({ drafts, sync }: { drafts: DraftsApi; sync: SyncApi
   });
 
   // A protected draft's two choices: "Overwrite theirs" sends this device's version on top of the server's, "Discard ours" takes the server's.
-  // The server is looked at again first, and the dialog is redrawn if it moved.
+  // Save first, and redraw if the dialog's draft or server version moved before the choice.
+  async function prepareProtectedChoice(m: ConflictModel) {
+    await drafts.flush();
+    if (drafts.needsSave.value) {
+      note.value = "This draft could not be saved. Check it and choose again.";
+      await build();
+      return false;
+    }
+    const current = drafts.dialog.current();
+    if (current.id !== m.id || current.updatedAt !== m.draftAt) {
+      note.value = "This draft changed meanwhile. Check the rows and choose again.";
+      await build();
+      return false;
+    }
+    return true;
+  }
+
   async function chooseProtected(choice: ProtectedChoice, m: ConflictModel) {
     const id = m.id as string;
+    if (!(await prepareProtectedChoice(m))) return;
     const seen = m.server?.stamp;
     const now = await sync.inspectServer(id);
     if (now && now.stamp !== seen) {

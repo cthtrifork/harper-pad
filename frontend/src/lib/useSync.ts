@@ -88,10 +88,6 @@ export function useSync({
       fetchFn,
       onGone: (id) => (gone.value = { id }),
       onRejected: noteRejected,
-      onStripped: (id) => {
-        if (isOpen(id))
-          notice.value = { id, kind: "updated", text: "The server's plain copy of this protected draft was replaced", at: Date.now() };
-      },
     });
 
   // The server refused a draft: the chip says which and why, with no dialog. The text stays local and goes again on the next push.

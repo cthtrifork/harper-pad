@@ -63,7 +63,7 @@ const key = await generateDeviceKey();
 const DEVICE = { server: "https://sync.example.com", token: "tok", ...key };
 
 // A device: its own IndexedDB, and `sync()` to run Sync all against the shared server.
-function device(server, stripped = []) {
+function device(server) {
   const factory = new IDBFactory();
   const open = () => {
     globalThis.indexedDB = factory;
@@ -77,7 +77,6 @@ function device(server, stripped = []) {
       drafts,
       fetchFn: server.fetchFn,
       onGone: (id) => gone.push(id),
-      onStripped: (id) => stripped.push(id),
     });
   // sync() is Sync all; one(id) is the push after a save. Both are the same engine.
   return {
@@ -493,11 +492,10 @@ test("a delete is pushed by one(id), the way the end of the Undo window does it"
   assert.deepEqual(server.calls, []);
 });
 
-test("a protected draft syncs as ciphertext, opens on the other device, and a plain copy from the server is replaced by the protected one", async () => {
+test("Sync all preserves a plain server version when another device has a protected copy", async () => {
   const server = fakeServer();
   const a = device(server);
-  const stripped = [];
-  const b = device(server, stripped);
+  const b = device(server);
   const cost = { memoryKiB: 64, passes: 1 };
   const d = await a.drafts.save({ content: "placeholder" });
   const envelope = await seal(await newSession("pw", cost), d.id, "the secret text", "Groceries");
@@ -515,17 +513,16 @@ test("a protected draft syncs as ciphertext, opens on the other device, and a pl
     ...row,
     version: row.version + 1,
     updatedAt: row.updatedAt + 1000,
-    data: JSON.stringify({ v: 1, format: "markdown", content: "forged plain text" }),
+    data: JSON.stringify({ v: 1, format: "markdown", content: "plain server text" }),
   });
-  // Protection is never removed, so this can only be the server (or an old build) stripping it: B keeps its text and puts it back on top.
-  assert.deepEqual(await b.sync(), sum({ uploaded: 0 }), "nothing is applied or counted");
+  // It may be an intentional removal on another device: keep both sides for the person to resolve.
+  assert.deepEqual(await b.sync(), none, "nothing is applied, counted, or uploaded");
   assert.equal((await b.drafts.get(d.id)).content, envelope, "the protected text is kept");
-  assert.deepEqual(stripped, [d.id]);
-  assert.ok(JSON.parse(server.rows.get(d.id).data).content.startsWith("hp-protected:1:"), "and the server's plain copy is replaced");
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "plain server text", "the plain server version is kept");
   assert.deepEqual(await b.sync(), none);
 });
 
-test("a failed compare-and-set while restoring a stripped protected draft is reported and never applied", async () => {
+test("opening a protected draft against a plain server version reports a conflict without uploading", async () => {
   const server = fakeServer();
   const a = device(server);
   const b = device(server);
@@ -542,19 +539,18 @@ test("a failed compare-and-set while restoring a stripped protected draft is rep
     ...row,
     version: row.version + 1,
     updatedAt: row.updatedAt + 1000,
-    data: JSON.stringify({ v: 1, format: "markdown", content: "stripped" }),
+    data: JSON.stringify({ v: 1, format: "markdown", content: "plain server version" }),
   });
-  const stripped = [];
-  const race = async (url, init) =>
-    init.method === "PUT" && url.includes(d.id)
-      ? { status: 409, json: async () => ({ current: server.rows.get(d.id) }) }
-      : server.fetchFn(url, init);
-  const engine = createSyncer({ device: DEVICE, drafts: b.drafts, fetchFn: race, onStripped: (id) => stripped.push(id) });
 
-  assert.deepEqual(await engine.all(), sum({ failed: 1 }));
+  server.calls.length = 0;
+  assert.equal(await b.open(d.id), "conflict");
   assert.equal((await b.drafts.get(d.id)).content, envelope);
-  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "stripped");
-  assert.deepEqual(stripped, []);
+  assert.equal((await b.inspect(d.id)).text, "plain server version");
+  assert.equal(JSON.parse(server.rows.get(d.id).data).content, "plain server version");
+  assert.equal(
+    server.calls.some((call) => call.startsWith("PUT ")),
+    false,
+  );
 });
 
 test("taking a compared server version refuses a changed server stamp or local revision", async () => {

@@ -20,15 +20,24 @@ function setup({
   serverInspectNow = serverNow,
   fileStampNow = undefined,
   takeResult = true as TakeResult,
+  flushDraft = undefined,
+  needsSave = false,
 }) {
   const log = [];
   const fileConflict = ref(file ? { id: ID, name: "plan.md", stamp: "10", clean: false, ...file } : null);
   const serverConflict = ref(server ? { id: ID, text: "server text", stamp: "2:5", ...server } : null);
+  const needsSaveRef = ref(needsSave);
+  const currentDraft = { id: ID, text: draftText, format: "markdown", updatedAt: 7, revision: 1 };
   let currentServer: Inspection | undefined;
   let inspected = 0;
   const drafts = {
     current: ref({ id: ID, filePath: "/home/me/plan.md" }),
     locked: ref(false),
+    needsSave: needsSaveRef,
+    flush: async () => {
+      log.push("flush");
+      flushDraft?.(currentDraft, needsSaveRef);
+    },
     fileConflict,
     clearFileConflict: () => {
       fileConflict.value = null;
@@ -44,7 +53,7 @@ function setup({
       },
       writeFile: async () => log.push("write"),
       applyFile: async () => log.push("applyFile"),
-      current: () => ({ id: ID, text: draftText, format: "markdown", updatedAt: 7, revision: 1 }),
+      current: () => ({ ...currentDraft }),
     },
   };
   const sync = {
@@ -84,6 +93,8 @@ function setup({
     drafts,
     sync,
     setServer: (v) => (currentServer = v),
+    currentDraft,
+    needsSaveRef,
   };
 }
 
@@ -233,4 +244,34 @@ test("Discard ours does nothing when this device's draft changed meanwhile", asy
   assert.match(c.note.value, /changed meanwhile/);
   assert.ok(c.model.value, "the dialog stays for another choice");
   void drafts;
+});
+
+test("protected choices flush first and redraw if the saved draft changed since the dialog opened", async () => {
+  const { c, log, currentDraft } = setup({
+    server: protectedServer,
+    serverNow: protectedServer,
+    flushDraft: (draft) => {
+      draft.updatedAt = 8;
+      draft.revision++;
+    },
+  });
+  await settle();
+  await c.choose("discard");
+  assert.ok(log.includes("flush"));
+  assert.equal(
+    log.some((entry) => Array.isArray(entry) && entry[0] === "take"),
+    false,
+  );
+  assert.match(c.note.value, /changed meanwhile/);
+  assert.equal(c.model.value?.draftAt, currentDraft.updatedAt);
+});
+
+test("protected choices stop when autosaving fails", async () => {
+  const { c, log } = setup({ server: protectedServer, serverNow: protectedServer, needsSave: true });
+  await settle();
+  await c.choose("overwrite");
+  assert.ok(log.includes("flush"));
+  assert.equal(log.includes("push"), false);
+  assert.match(c.note.value, /could not be saved/);
+  assert.ok(c.model.value);
 });
