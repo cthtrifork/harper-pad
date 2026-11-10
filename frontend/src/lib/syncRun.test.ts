@@ -4,10 +4,11 @@
 // devices A and B. The same table as docs/sync.md, "Conflicts", but through the real store and the real client calls.
 import assert from "node:assert/strict";
 import test from "node:test";
+import "../../test-support/base64.ts";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { generateDeviceKey } from "./dpop.ts";
-import { newSession, seal } from "./protect.ts";
+import { newSession, seal } from "./protectedDrafts.ts";
 import { listDocs } from "./syncClient.ts";
 import { createSyncer, summaryText } from "./syncRun.ts";
 import { createWebDrafts, openDatabase } from "./webDrafts.ts";

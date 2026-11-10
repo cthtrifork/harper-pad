@@ -3,7 +3,16 @@ import type { List } from "../../bindings/github.com/cthtrifork/harper-pad/inter
 import * as backend from "./backend.ts";
 import { createFileChange } from "./fileChange.ts";
 import { saveLastOpened } from "./lastOpened.ts";
-import { clearTitle, isProtected, newDraftId, newSession, openWith, type Session, seal, unlock as unlockEnvelope } from "./protect.ts";
+import {
+  clearTitle,
+  isProtected,
+  newDraftId,
+  newSession,
+  openWith,
+  type Session,
+  seal,
+  unlock as unlockEnvelope,
+} from "./protectedDrafts.ts";
 
 const { isWeb } = backend;
 
@@ -90,7 +99,7 @@ export function useDrafts(
   const toast = ref<{ message: string; undo: (() => unknown) | null } | null>(null); // while the "Draft deleted" bar is showing
   const available = ref(true); // false when the database cannot be opened: the editor still works, nothing is saved
 
-  // Protected drafts (docs/sync.md, "Protected drafts"). Their stored content is an envelope (lib/protect.ts); the key lives here, in memory,
+  // Protected drafts (docs/sync.md, "Protected drafts"). Their stored content is an envelope (lib/protectedDrafts.ts); the key lives here, in memory,
   // only while the draft is open and unlocked. The passphrase itself is never kept.
   const envelope = ref(""); // what the open protected draft holds in storage; "" for an ordinary draft
   const session = shallowRef<Session | null>(null);
@@ -247,7 +256,7 @@ export function useDrafts(
     editor.value?.load("", current.value.format); // also drops the undo history
   }
 
-  // Unlocks the open protected draft. Rejects with WrongPassphrase (lib/protect.ts) when the passphrase does not open it.
+  // Unlocks the open protected draft. Rejects with WrongPassphrase (lib/protectedDrafts.ts) when the passphrase does not open it.
   async function unlock(passphrase: string) {
     if (!locked.value) return;
     const id = current.value.id;

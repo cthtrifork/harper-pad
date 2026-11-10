@@ -19,7 +19,7 @@ import type { changesTo } from "./lib/settingsItems.ts";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.ts";
 import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.ts";
-import { WrongPassphrase } from "./lib/protect.ts";
+import { WrongPassphrase } from "./lib/protectedDrafts.ts";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
 import { useConflict } from "./lib/useConflict.ts";

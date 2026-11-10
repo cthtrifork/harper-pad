@@ -4,7 +4,7 @@ import { type IDBPDatabase, openDB } from "idb";
 import type { Draft, List, Summary, SyncState } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { withDb as sharedWithDb } from "./kv.ts";
 import { contentHash } from "./contentHash.ts";
-import { isProtected } from "./protect.ts";
+import { isProtected } from "./protectedDrafts.ts";
 import { summarize } from "./summarize.ts";
 
 export const DB_NAME = "harper-pad";

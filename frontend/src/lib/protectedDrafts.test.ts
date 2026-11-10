@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
-import { Buffer } from "node:buffer";
 import { test } from "node:test";
-import { clearTitle, isProtected, newSession, seal, unlock, WrongPassphrase } from "./protect.ts";
-
-if (typeof Uint8Array.prototype.toBase64 !== "function") {
-  Object.defineProperty(Uint8Array.prototype, "toBase64", {
-    value(this: Uint8Array) {
-      return Buffer.from(this).toString("base64");
-    },
-  });
-}
+import "../../test-support/base64.ts";
+import { clearTitle, isProtected, newSession, seal, unlock, WrongPassphrase } from "./protectedDrafts.ts";
 
 const cost = { memoryKiB: 64, passes: 1 }; // far below the real cost, to keep the tests fast
 const ID = "0123456789abcdef0123456789abcdef";
@@ -63,7 +55,7 @@ test("the draft list summary of a protected draft has the chosen title, no excer
 });
 
 test("a newer version opens with the key already held, but not with another salt", async () => {
-  const { openWith } = await import("./protect.ts");
+  const { openWith } = await import("./protectedDrafts.ts");
   const session = await newSession("pw", cost);
   const env = await seal(session, ID, body, title);
   assert.equal(await openWith(session, env, ID), body);

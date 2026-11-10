@@ -26,25 +26,27 @@ export interface Session {
 }
 
 interface Envelope {
+  // Compact keys are persisted in version 1: s=salt, n=nonce, c=ciphertext, t=clear title.
   s: string;
   n: string;
   c: string;
   t?: string;
 }
 
-const encodeBase64 = (bytes: Uint8Array): string => bytes.toBase64();
-const unb64 = (text: string) => Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0));
+const encodeBytesAsBase64 = (bytes: Uint8Array): string => bytes.toBase64();
+const decodeBase64 = (text: string) => Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
 // What the seal covers besides the text: the draft id, and the title that sits beside the ciphertext, so the server can neither move a copy to
 // another draft nor change or swap a title unnoticed. A draft without a title is covered by its id alone.
-const aad = (id: string, title: string) => new TextEncoder().encode(title ? `${id}\n${title}` : id);
+const additionalAuthenticatedData = (id: string, title: string) => new TextEncoder().encode(title ? `${id}\n${title}` : id);
 
 export const isProtected = (content: string) => content.startsWith(PREFIX);
 
-function parse(content: string): Envelope {
+function parseEnvelope(content: string): Envelope {
   if (!isProtected(content)) throw new Error("not a protected draft");
-  const env = JSON.parse(content.slice(PREFIX.length)) as Envelope;
-  if (typeof env.s !== "string" || typeof env.n !== "string" || typeof env.c !== "string") throw new Error("malformed protected draft");
-  return env;
+  const envelope = JSON.parse(content.slice(PREFIX.length)) as Envelope;
+  if (typeof envelope.s !== "string" || typeof envelope.n !== "string" || typeof envelope.c !== "string")
+    throw new Error("malformed protected draft");
+  return envelope;
 }
 
 /** The title the user gave a protected draft, stored unencrypted for the draft list; "" when none was given, which includes every draft
@@ -52,8 +54,8 @@ function parse(content: string): Envelope {
 export function clearTitle(content: string): string {
   if (!isProtected(content)) return "";
   try {
-    const t = parse(content).t;
-    return typeof t === "string" ? t : "";
+    const title = parseEnvelope(content).t;
+    return typeof title === "string" ? title : "";
   } catch {
     return "";
   }
@@ -83,27 +85,39 @@ export async function newSession(passphrase: string, cost = COST): Promise<Sessi
 /** The envelope for `content`, with `title` beside it in the clear unless it is empty. */
 export async function seal(session: Session, id: string, content: string, title: string): Promise<string> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const plain = new TextEncoder().encode(JSON.stringify({ v: 1, content }));
-  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(id, title) }, session.key, plain);
-  const env: Envelope = { s: encodeBase64(session.salt), n: encodeBase64(nonce), c: encodeBase64(new Uint8Array(cipher)) };
-  if (title) env.t = title;
-  return PREFIX + JSON.stringify(env);
+  const plaintext = new TextEncoder().encode(JSON.stringify({ v: 1, content }));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce, additionalData: additionalAuthenticatedData(id, title) },
+    session.key,
+    plaintext,
+  );
+  const envelope: Envelope = {
+    s: encodeBytesAsBase64(session.salt),
+    n: encodeBytesAsBase64(nonce),
+    c: encodeBytesAsBase64(new Uint8Array(ciphertext)),
+  };
+  if (title) envelope.t = title;
+  return PREFIX + JSON.stringify(envelope);
 }
 
 /** Unlocks a protected draft. Throws WrongPassphrase when the passphrase does not open it. */
 export async function unlock(content: string, id: string, passphrase: string, cost = COST): Promise<{ session: Session; content: string }> {
-  const env = parse(content);
-  const salt = unb64(env.s);
+  const envelope = parseEnvelope(content);
+  const salt = decodeBase64(envelope.s);
   const key = await deriveKey(passphrase, salt, cost);
-  let plain: ArrayBuffer;
+  let plaintext: ArrayBuffer;
   try {
-    plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id, env.t ?? "") }, key, unb64(env.c));
+    plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: decodeBase64(envelope.n), additionalData: additionalAuthenticatedData(id, envelope.t ?? "") },
+      key,
+      decodeBase64(envelope.c),
+    );
   } catch {
     throw new WrongPassphrase();
   }
-  const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown };
-  if (typeof body.content !== "string") throw new Error("malformed protected draft");
-  return { session: { key, salt }, content: body.content };
+  const decrypted = JSON.parse(new TextDecoder().decode(plaintext)) as { content?: unknown };
+  if (typeof decrypted.content !== "string") throw new Error("malformed protected draft");
+  return { session: { key, salt }, content: decrypted.content };
 }
 
 /** A new draft id: 32 lowercase hex digits, as the stores make them. A protected copy needs its id before it is sealed. */
@@ -114,17 +128,17 @@ export function newDraftId(): string {
 /** Opens a newer version of a draft that is already unlocked, with the same key (the salt must be the same). null: another salt, so it
  * needs the passphrase again. */
 export async function openWith(session: Session, content: string, id: string): Promise<string | null> {
-  const env = parse(content);
-  const salt = unb64(env.s);
+  const envelope = parseEnvelope(content);
+  const salt = decodeBase64(envelope.s);
   if (salt.length !== session.salt.length || salt.some((b, i) => b !== session.salt[i])) return null;
   try {
-    const plain = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: unb64(env.n), additionalData: aad(id, env.t ?? "") },
+    const plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: decodeBase64(envelope.n), additionalData: additionalAuthenticatedData(id, envelope.t ?? "") },
       session.key,
-      unb64(env.c),
+      decodeBase64(envelope.c),
     );
-    const body = JSON.parse(new TextDecoder().decode(plain)) as { content?: unknown };
-    return typeof body.content === "string" ? body.content : null;
+    const decrypted = JSON.parse(new TextDecoder().decode(plaintext)) as { content?: unknown };
+    return typeof decrypted.content === "string" ? decrypted.content : null;
   } catch {
     return null;
   }

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import "../../test-support/base64.ts";
 import { computed, ref } from "vue";
-import { isProtected, newSession, seal, unlock as unlockEnvelope, WrongPassphrase } from "./protect.ts";
+import { isProtected, newSession, seal, unlock as unlockEnvelope, WrongPassphrase } from "./protectedDrafts.ts";
 import { summarize } from "./summarize.ts";
 import { useConflict } from "./useConflict.ts";
 import { useDrafts } from "./useDrafts.ts";
