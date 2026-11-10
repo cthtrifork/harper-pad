@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import "../../test-support/base64.ts";
 import { clearTitle, isProtected, newSession, seal, unlock, WrongPassphrase } from "./protectedDrafts.ts";
 
 const cost = { memoryKiB: 64, passes: 1 }; // far below the real cost, to keep the tests fast
