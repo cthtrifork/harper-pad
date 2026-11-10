@@ -109,8 +109,6 @@ await page.waitForSelector("dialog.pass-dialog", { state: "detached", timeout: 6
 await page.locator(".cm-content").click();
 await page.keyboard.type("Bank details and the spare key code. None of this should be readable in the list.");
 await page.waitForFunction(() => document.querySelector("#draft-status")?.textContent.trim() === "Saved", null, { timeout: 15000 });
-await page.click("#lock-btn.unlocked");
-await page.waitForSelector("#lock-btn.locked", { timeout: 15000 });
 await page.keyboard.press("Control+j"); // New draft closed the scratch pad; open it for the list
 await page.waitForSelector("#drafts-drawer");
 await page.waitForFunction(() => document.querySelectorAll("#drafts-drawer .item").length === 2, null, { timeout: 15000 });

@@ -349,10 +349,10 @@ the deleted flag, sizes and the fact that a draft is protected. How the text is 
 - **Making one.** A draft is protected when it is created, never later: "New draft" in the drafts list has a small menu with "New secure draft".
   It asks for a new passphrase, typed twice, and an optional title for the draft list. Each secure draft has its own passphrase; it is not
   checked against other drafts. Nothing is stored until something is typed.
-- **The padlock.** Only an open protected draft shows a small padlock at the bottom. Click it to lock the draft, or to unlock a locked one.
-- **Opening a protected draft.** It opens locked. Click the padlock, enter the passphrase, and the text appears. The passphrase is asked
+- **The padlock.** The draft list marks a protected draft with a small padlock. There is no lock button: opening another draft locks it.
+- **Opening a protected draft.** It opens locked. Click Unlock draft, enter the passphrase, and the text appears. The passphrase is asked
   again each time the draft is opened.
-- **Locking.** The key is kept in memory only. It is dropped when the draft is closed, when the app goes to the background, and on locking it.
+- **Locking.** The key is kept in memory only. It is dropped when the draft is closed, when the app goes to the background, and when the app goes to the background.
   There is no idle timer. What is unsaved is saved first, and if that fails the draft stays unlocked so the text is not lost.
 - **The title.** A protected draft shows "Locked draft" in the draft list, or the title it was given when it was made. That title is not
   protected: the draft list and the server show it, it does not follow the text, and it cannot be changed. Drafts without one keep "Locked draft".

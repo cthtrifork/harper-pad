@@ -110,11 +110,10 @@ const drafts = useDrafts(editor, showDrawer, {
 });
 // Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
 const conflict = useConflict({ drafts, sync });
-// The padlock and its passphrase dialog (docs/sync.md, "Protected drafts").
+// The passphrase dialog (docs/sync.md, "Protected drafts").
 const pass = ref<{ mode: "create" | "unlock" } | null>(null);
 const passBusy = ref(false);
 const passError = ref("");
-const lockButton = computed(() => (drafts.protectedDraft.value ? { locked: drafts.locked.value } : null));
 function askSecure() {
   if (!drafts.available.value) return;
   passError.value = "";
@@ -647,9 +646,6 @@ onBeforeUnmount(() => {
       :autocorrect="autocorrect.on"
       @toggle-autocorrect="setAutocorrect({ ...autocorrect, on: !autocorrect.on })"
       :sync="sync"
-      :lock="lockButton"
-      @unlock="askUnlock"
-      @lock="drafts.lock"
       @start-fresh="drafts.startFresh"
       @format="chooseFormat"
     />

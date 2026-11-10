@@ -1,37 +1,5 @@
-/* The padlock in the status bar (PadlockButton.vue), the passphrase dialog (PassphraseDialog.vue) and the empty view of a locked draft
+/* The passphrase dialog (PassphraseDialog.vue) and the empty view of a locked draft
    (App.vue). Button, field and menu looks follow docs/design-cheatsheet.html. */
-
-/* Quiet icon button: transparent and muted at rest, border and fill on hover, 32 x 32. The negative margin keeps the bar's height. */
-.lock-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  margin: -6px 0;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--mute);
-  cursor: pointer;
-  transition:
-    background-color 0.15s var(--ease),
-    border-color 0.15s var(--ease),
-    color 0.15s var(--ease);
-}
-
-.lock-btn:hover {
-  border-color: var(--line);
-  background: var(--selected);
-  color: var(--text);
-}
-
-/* Protected: the accent colour, and the closed shackle, so the state is not colour alone. */
-.lock-btn.locked,
-.lock-btn.unlocked {
-  color: var(--accent);
-}
 
 /* Text field, as in the cheat sheet: --bg fill, hover border --mute, focus border and ring --accent, error border --bad. */
 .pass-dialog form {

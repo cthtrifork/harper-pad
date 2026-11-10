@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, type PropType, ref, watch } from "vue";
 import type { countDoc, cursorOf } from "../lib/editor/stats.ts";
 import type { useSync } from "../lib/useSync.ts";
-import PadlockButton from "./PadlockButton.vue";
 import SyncChip from "./SyncChip.vue";
 
 const props = defineProps({
@@ -22,10 +21,9 @@ const props = defineProps({
   isMarkdown: { type: Boolean, default: false },
   startup: { type: Boolean, default: true }, // show "Harper ready" and the start-up and check timings (false after the first edit is saved)
   sync: { type: Object as PropType<ReturnType<typeof useSync> | null>, default: null }, // useSync's result; the chip shows only when sync is set up in this build
-  lock: { type: Object as PropType<{ locked: boolean } | null>, default: null }, // the padlock; none unless the open draft is protected
   autocorrect: { type: Boolean, default: false }, // autocorrect is on (its switch is in the Problems panel, so it shows here too)
 });
-const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect", "unlock", "lock"]);
+const emit = defineEmits(["start-fresh", "format", "toggle-autocorrect"]);
 
 // "Harper ready" shows for a few seconds, then gives its place to the format switch.
 const READY_MS = 4000;
@@ -71,7 +69,6 @@ function fmt(ms: number) {
     <span class="spacer"></span>
     <span v-if="mode !== 'preview'" id="cursor-pos">Ln {{ cursor.line }}, Col {{ cursor.col }}</span>
     <span v-if="cursor.selected && mode !== 'preview'" id="selection">Selection: {{ cursor.selected }} {{ cursor.selected === 1 ? "character" : "characters" }}</span>
-    <PadlockButton v-if="lock" :locked="lock.locked" @toggle="emit(lock.locked ? 'unlock' : 'lock')" />
     <!-- Two choices, so one small button that shows the current format and switches to the other: no popup to run off the screen. It waits
          until "Harper ready" has gone. M\u2193 is Markdown, Aa is plain text. -->
     <button v-if="!showState" id="format-btn" type="button" class="fmt-btn" :aria-label="isMarkdown ? 'Format: Markdown. Switch to plain text' : 'Format: plain text. Switch to Markdown'" :title="isMarkdown ? 'Markdown (click for plain text)' : 'Plain text (click for Markdown)'" @click="emit('format', isMarkdown ? 'text' : 'markdown')">
