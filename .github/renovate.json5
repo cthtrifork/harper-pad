@@ -27,9 +27,11 @@
   platformCommit: "enabled",
 
   // The dependency dashboard issue (needs issues: write, which the real run has).
-  dependencyDashboard: true,
-  dependencyDashboardTitle: "Dependency Dashboard",
-  dependencyDashboardLabels: ["dependencies"],
+  dependencyDashboard: {
+    enabled: true,
+    title: "Dependency Dashboard",
+    labels: ["dependencies"],
+  },
 
   // Security advisories from OSV.dev as well as GitHub's own alerts (the GitHub App's Dependabot
   // alerts permission; without it Renovate logs "Cannot access vulnerability alerts").
