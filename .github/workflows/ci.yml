@@ -476,7 +476,7 @@ jobs:
           COMPOSE: docker compose
           E2E_BROWSER_CHANNEL: chrome
           # renovate: datasource=npm depName=playwright-core
-          PLAYWRIGHT_VERSION: 1.65.0
+          PLAYWRIGHT_VERSION: 1.65.1
         run: make -C backend e2e
 
   build:
