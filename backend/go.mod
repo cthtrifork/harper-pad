@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/AxisCommunications/go-dpop v1.1.2
 	github.com/danielgtaylor/huma/v2 v2.40.0
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/prometheus/client_golang v1.25.0
 )
