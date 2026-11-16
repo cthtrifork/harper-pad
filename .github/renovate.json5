@@ -1,5 +1,6 @@
-// Renovate config. Renovate runs self-hosted from .github/workflows/renovate.yml, which loads this
-// file as its global config, so a pull request that changes it is checked by a dry run (see docs/ci.md).
+// Renovate repo config. Renovate runs self-hosted from .github/workflows/renovate.yml (daily fallback, global options in
+// .github/workflows/renovate-config.js) and in the cluster (cthtrifork/talos-gitops), which both read this file as repo
+// config, so a pull request that changes it is checked by a dry run (see docs/ci.md).
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
@@ -21,8 +22,6 @@
   minimumReleaseAge: "2 days",
   internalChecksFilter: "strict",
   postUpdateOptions: ["gomodTidy"],
-  // The only command a post-upgrade task may run: the htmx vendoring script (packageRules below).
-  allowedCommands: ["^scripts/update-htmx\\.sh [0-9]+\\.[0-9]+\\.[0-9]+$"],
   // Commits go through GitHub's API as the GitHub App, so they are verified (signed) without a key.
   platformCommit: "enabled",
 
