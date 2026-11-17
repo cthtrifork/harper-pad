@@ -22,6 +22,7 @@ import { useDrafts } from "./lib/useDrafts.ts";
 import { WrongPassphrase } from "./lib/protectedDrafts.ts";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
+import { attachEdgeSwipe } from "./lib/edgeSwipe.ts";
 import { useConflict } from "./lib/useConflict.ts";
 import type { Start } from "./lib/useDrafts.ts";
 import { useSync } from "./lib/useSync.ts";
@@ -462,6 +463,7 @@ function enableHarper() {
   return startHarper();
 }
 
+let detachSwipe = () => {};
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
   // The linked file is looked at first and the server after it, so a clean draft is not changed by a pull before the file is seen.
@@ -472,6 +474,8 @@ onMounted(async () => {
     .then(() => drafts.current.value.id && checkOpened(drafts.current.value.id))
     .catch(() => {});
   window.addEventListener("keydown", onKeydown);
+  // A swipe from the left edge to the right opens the drafts drawer on a phone (the Drafts button does the same).
+  detachSwipe = attachEdgeSwipe(document, { enabled: () => narrow.matches && !showDrawer.value && !drafts.locked.value, open: toggleDrawer });
   pane.value?.addEventListener("pointerdown", notePress);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
@@ -510,6 +514,7 @@ watch(
 onBeforeUnmount(() => {
   narrow.removeEventListener("change", onNarrowChange);
   window.removeEventListener("keydown", onKeydown);
+  detachSwipe();
   drafts.detach();
 });
 </script>
