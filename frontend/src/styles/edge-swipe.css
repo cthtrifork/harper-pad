@@ -5,9 +5,12 @@
   display: none;
 }
 @media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .body {
+    position: relative; /* the strip is positioned in the area under the header, so it never covers the header's buttons */
+  }
   .edge-swipe {
     display: block;
-    position: fixed;
+    position: absolute;
     top: 0;
     bottom: 0;
     left: 0;

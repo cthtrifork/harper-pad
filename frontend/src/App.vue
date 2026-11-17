@@ -550,8 +550,8 @@ onBeforeUnmount(() => {
       @view="setView"
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
-    <div v-show="!showDrawer && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
     <div class="body" :class="{ 'has-panel': showProblems && mode !== 'preview' }">
+      <div v-show="!showDrawer && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
       <Transition name="slide-left">
       <DraftsDrawer
         v-if="showDrawer"
