@@ -23,6 +23,7 @@ import { WrongPassphrase } from "./lib/protectedDrafts.ts";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
 import { attachEdgeSwipe, shouldOpen } from "./lib/edgeSwipe.ts";
+import { attachPullToRefresh, THRESHOLD } from "./lib/pullToRefresh.ts";
 import { useConflict } from "./lib/useConflict.ts";
 import type { Start } from "./lib/useDrafts.ts";
 import { useSync } from "./lib/useSync.ts";
@@ -481,7 +482,18 @@ function edgeEnd(dx: number, cancelled: boolean) {
     peek.value = { on: false, x: 0, glide: false };
   }, GLIDE_MS);
 }
+// Pull the editor down at its top to sync, on a phone (the pill under the header follows the finger; see lib/pullToRefresh.ts).
+const pull = ref({ d: 0, armed: false, active: false, glide: false });
+const pullLabel = computed(() =>
+  sync.status.value === "syncing" && !pull.value.active ? "Syncing…" : pull.value.armed ? "Release to sync" : "Pull to sync",
+);
+function pullEnd(armed: boolean) {
+  pull.value = { d: armed ? THRESHOLD : 0, armed: false, active: false, glide: true };
+  if (armed) sync.syncAll();
+  setTimeout(() => (pull.value = { ...pull.value, glide: false }), 200);
+}
 let detachSwipe = () => {};
+let detachPull = () => {};
 const swipeStrip = ref<HTMLElement | null>(null);
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
@@ -505,6 +517,16 @@ onMounted(async () => {
     },
     end: edgeEnd,
   });
+  if (pane.value)
+    detachPull = attachPullToRefresh(pane.value, {
+      enabled: () => narrow.matches && sync.enrolled.value && sync.status.value !== "syncing" && !showDrawer.value && !peek.value.on && !drafts.locked.value && window.getSelection()?.isCollapsed !== false,
+      atTop: () => (pane.value?.scrollTop ?? 1) <= 0,
+      move: (d, armed) => {
+        if (armed && !pull.value.armed) navigator.vibrate?.(10);
+        pull.value = { d, armed, active: true, glide: false };
+      },
+      end: pullEnd,
+    });
   pane.value?.addEventListener("pointerdown", notePress);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
@@ -544,6 +566,7 @@ onBeforeUnmount(() => {
   narrow.removeEventListener("change", onNarrowChange);
   window.removeEventListener("keydown", onKeydown);
   detachSwipe();
+  detachPull();
   drafts.detach();
 });
 </script>
@@ -579,6 +602,15 @@ onBeforeUnmount(() => {
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
     <div class="body" :class="{ 'has-panel': showProblems && mode !== 'preview' }">
+      <div
+        class="pull-sync"
+        :class="{ pulling: pull.active, armed: pull.armed, glide: pull.glide, syncing: sync.status.value === 'syncing' && !pull.active }"
+        :style="{ '--pull': sync.status.value === 'syncing' && !pull.active ? 48 : pull.d, '--pull-p': pull.d / THRESHOLD }"
+        role="status"
+        aria-live="polite"
+      >
+        {{ pull.active || sync.status.value === "syncing" ? pullLabel : "" }}
+      </div>
       <div v-show="(!showDrawer || peek.on) && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
       <Transition :name="peek.on ? '' : 'slide-left'">
       <DraftsDrawer

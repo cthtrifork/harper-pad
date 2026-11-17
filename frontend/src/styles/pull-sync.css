@@ -1,0 +1,45 @@
+/* Pull the editor down to sync (lib/pullToRefresh.ts), on a phone only: a small pill slides down from the top of the page under the
+   finger, says what letting go does, and stays at rest while the sync runs. */
+.pull-sync {
+  display: none;
+}
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .pull-sync {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    z-index: 2;
+    padding: 6px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--raised);
+    color: var(--mute);
+    font-size: 13px;
+    pointer-events: none;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, calc(var(--pull, 0) * 1px - 40px));
+  }
+  .pull-sync.pulling,
+  .pull-sync.syncing {
+    opacity: calc(0.35 + var(--pull-p, 0) * 0.65);
+  }
+  .pull-sync.syncing {
+    opacity: 1;
+  }
+  .pull-sync.armed {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .pull-sync.glide {
+    transition:
+      transform 0.2s var(--ease),
+      opacity 0.2s var(--ease);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-sync.glide {
+    transition: none;
+  }
+}
