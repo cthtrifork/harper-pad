@@ -1,6 +1,5 @@
-/* Phone header: the main button is always Sync and never shows the Save tray. With sync off it keeps the Sync arrows and a small dot, and
-   pressing it says that the drafts stay on this device (App.vue). On a wide window the tray stays for Save. When the server cannot be
-   reached (offline, or signed out) the same dot is on the Sync icon; the label and the toast say why. */
+/* Phone header: the main button is always Sync and never shows the Save tray. With sync off it keeps the Sync arrows, and pressing it says
+   that the drafts stay on this device (App.vue; offline and signed out get a toast too). On a wide window the tray stays for Save. */
 .bar .save-icon.phone-icon {
   display: none;
 }
@@ -11,19 +10,4 @@
   .bar .save-icon.tray-icon {
     display: none;
   }
-}
-.bar .tool.main {
-  position: relative;
-}
-.bar .tool.main.unreachable::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  right: 4px; /* the corner the Sync arrows leave free (their heads are top left and bottom right) */
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--panel);
-  box-sizing: content-box;
 }

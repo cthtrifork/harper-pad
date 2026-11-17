@@ -102,7 +102,7 @@ function onMain() {
          server about it; Save (sync is off) does the first two and is disabled while there is nothing to save. What happened is said by
          the status line in the status bar, not here. The export button beside it chooses a file (or opens the share sheet on iPhone and iPad). -->
     <span class="actions">
-      <button type="button" class="tool main" :class="{ unreachable }" :aria-label="mainName" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
+      <button type="button" class="tool main" :aria-label="mainName" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
         <!-- Sync turns while it works; Save (no sync) is a tray with an arrow going in. Both show at every width: a phone shows only the icon. -->
         <svg v-if="syncOn" class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy }" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" @animationend="turning = false"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <!-- Sync off: the tray on a wide window, the Sync arrows on a phone (CSS picks, see phone-sync.css). -->
