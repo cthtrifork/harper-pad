@@ -5,6 +5,7 @@ import vue from "@vitejs/plugin-vue";
 import wails from "@wailsio/runtime/plugins/vite";
 import { defineConfig, type Plugin } from "vite";
 import { buildPolicy, syncOriginOf } from "./src/lib/csp.ts";
+import { IPHONE_SCREENS, SCHEMES, startupImageMedia, startupImageName } from "./src/lib/startupImages.ts";
 
 // Vite empties dist/ on every build. The Go side embeds it, so `go vet` and `go test` need the
 // directory to exist even when nobody has built the frontend; keep the committed placeholder.
@@ -75,6 +76,18 @@ const webApp = (): Plugin => {
       { tag: "meta", attrs: { name: "apple-mobile-web-app-title", content: "Harper Pad" }, injectTo: "head" },
       { tag: "meta", attrs: { name: "apple-mobile-web-app-status-bar-style", content: "default" }, injectTo: "head" },
       { tag: "link", attrs: { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }, injectTo: "head" },
+      // What an iPhone shows from the tap on the icon until the first paint, instead of a blank screen (docs/pages.md, "Launch screen").
+      ...IPHONE_SCREENS.flatMap((screen) =>
+        SCHEMES.map((scheme) => ({
+          tag: "link",
+          attrs: {
+            rel: "apple-touch-startup-image",
+            href: `${base}${startupImageName(screen, scheme)}`,
+            media: startupImageMedia(screen, scheme),
+          },
+          injectTo: "head" as const,
+        })),
+      ),
       { tag: "link", attrs: { rel: "manifest", href: `${base}manifest.webmanifest` }, injectTo: "head" },
     ],
   };

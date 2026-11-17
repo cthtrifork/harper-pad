@@ -98,6 +98,18 @@ not zoom on focus. iOS reads the `<head>` tags when the icon is **added**, so af
 On an iPhone with a Dynamic Island the installed app starts the page below the status bar, but iOS fades the first stretch of the page, about 24 pt, so header buttons that start right at the top look blurry; the header is padded
 by that much in the installed app (`--edge-fade` in `styles/safe-area.css`).
 
+### Launch screen
+
+From the tap on the icon until the page first paints, iOS shows a launch image, a blank screen if the app has none. That gap is before the
+page runs, so the start-up timings in the diagnostics report (which begin at the page request) do not include it. `frontend/web` holds one
+`startup-<width>x<height>-<ratio>x-<light|dark>.png` for each portrait iPhone size, in light and dark, drawn from the splash in `index.html` on
+the page colour. iOS picks one by an exact media query on the screen, so a size not listed in `src/lib/startupImages.ts` falls back to the blank
+screen (landscape too). `vite.config.ts` links them with `apple-touch-startup-image`.
+
+Add a phone size to `startupImages.ts`, then run `node scripts/startup-images.mjs` (Playwright, like `scripts/screenshots.mjs`) and commit
+the images; run it again after the splash or the colours in `tokens.css` change. iOS reads the launch image when the icon is **added**, so
+delete the icon and add it again to see a change.
+
 ## Keeping the data
 
 Browser data belongs to one site in one browser on one device.
