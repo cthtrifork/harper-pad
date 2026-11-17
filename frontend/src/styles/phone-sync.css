@@ -18,10 +18,10 @@
 .bar .tool.main.unreachable::after {
   content: "";
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
+  top: 4px;
+  right: 4px; /* the corner the Sync arrows leave free (their heads are top left and bottom right) */
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid var(--panel);
