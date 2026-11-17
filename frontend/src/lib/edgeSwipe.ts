@@ -1,8 +1,7 @@
 // A swipe from the left screen edge to the right opens the drafts drawer on a phone (touch only; the Drafts button still works).
-// The press has to start in a strip at the edge, so it never competes with selecting text or scrolling a wide code block, and the move
-// has to be mostly horizontal. The classifier is a pure function so the thresholds can be tested without a browser.
+// It listens on a strip at the left edge (styles/edge-swipe.css, `touch-action: pan-y`), so it never competes with selecting text or
+// scrolling a wide code block, and the move has to be mostly horizontal. The classifier is a pure function so the thresholds can be tested without a browser.
 
-export const EDGE = 28; // px from the left edge where a swipe may start
 export const OPEN_DISTANCE = 56; // px of rightward travel that opens the drawer
 export const SLOP = 10; // px before the move decides between a swipe and a vertical scroll
 
@@ -19,7 +18,7 @@ export function attachEdgeSwipe(target: EventTarget, opts: { enabled: () => bool
   let start: { id: number; x: number; y: number; decided: boolean } | null = null;
   const onDown = (e: Event) => {
     const p = e as PointerEvent;
-    if (p.pointerType !== "touch" || !p.isPrimary || !opts.enabled() || p.clientX > EDGE) return;
+    if (p.pointerType !== "touch" || !p.isPrimary || !opts.enabled()) return;
     start = { id: p.pointerId, x: p.clientX, y: p.clientY, decided: false };
   };
   const onMove = (e: Event) => {

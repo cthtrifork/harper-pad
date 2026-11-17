@@ -1,0 +1,18 @@
+/* The strip at the left edge that opens the drafts drawer by a swipe to the right (lib/edgeSwipe.ts), on a phone only. `pan-y` leaves vertical
+   scrolling to the page and hands horizontal moves to the swipe handler instead of letting the browser claim them. It sits just inside the
+   system back-gesture zone, which the page cannot opt out of. */
+.edge-swipe {
+  display: none;
+}
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .edge-swipe {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 44px;
+    z-index: 1;
+    touch-action: pan-y;
+  }
+}

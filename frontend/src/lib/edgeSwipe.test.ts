@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachEdgeSwipe, classifySwipe, EDGE, OPEN_DISTANCE } from "./edgeSwipe.ts";
+import { attachEdgeSwipe, classifySwipe, OPEN_DISTANCE } from "./edgeSwipe.ts";
 
 test("a small move waits, a vertical one is ignored, a rightward one swipes", () => {
   assert.equal(classifySwipe(3, 4), "wait");
@@ -29,12 +29,7 @@ test("a swipe from the edge opens once", () => {
   assert.equal(t.opened(), 1);
 });
 
-test("a press away from the edge, a vertical drag, a mouse or a disabled state do nothing", () => {
-  const away = fake();
-  away.fire("pointerdown", EDGE + 5, 200);
-  away.fire("pointermove", 200, 200);
-  assert.equal(away.opened(), 0);
-
+test("a vertical drag, a mouse or a disabled state do nothing", () => {
   const vertical = fake();
   vertical.fire("pointerdown", 5, 200);
   vertical.fire("pointermove", 10, 260);

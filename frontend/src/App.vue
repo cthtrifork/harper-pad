@@ -464,6 +464,7 @@ function enableHarper() {
 }
 
 let detachSwipe = () => {};
+const swipeStrip = ref<HTMLElement | null>(null);
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
   // The linked file is looked at first and the server after it, so a clean draft is not changed by a pull before the file is seen.
@@ -475,7 +476,7 @@ onMounted(async () => {
     .catch(() => {});
   window.addEventListener("keydown", onKeydown);
   // A swipe from the left edge to the right opens the drafts drawer on a phone (the Drafts button does the same).
-  detachSwipe = attachEdgeSwipe(document, { enabled: () => narrow.matches && !showDrawer.value && !drafts.locked.value, open: toggleDrawer });
+  detachSwipe = attachEdgeSwipe(swipeStrip.value as HTMLElement, { enabled: () => narrow.matches && !showDrawer.value && !drafts.locked.value, open: toggleDrawer });
   pane.value?.addEventListener("pointerdown", notePress);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
@@ -549,6 +550,7 @@ onBeforeUnmount(() => {
       @view="setView"
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
+    <div v-show="!showDrawer && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
     <div class="body" :class="{ 'has-panel': showProblems && mode !== 'preview' }">
       <Transition name="slide-left">
       <DraftsDrawer
