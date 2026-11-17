@@ -1,0 +1,13 @@
+/* Phone header: the main button is always Sync and never shows the Save tray. With sync off it keeps the Sync arrows, and pressing it says
+   that the drafts stay on this device (App.vue; offline and signed out get a toast too). On a wide window the tray stays for Save. */
+.bar .save-icon.phone-icon {
+  display: none;
+}
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
+  .bar .save-icon.phone-icon {
+    display: block;
+  }
+  .bar .save-icon.tray-icon {
+    display: none;
+  }
+}

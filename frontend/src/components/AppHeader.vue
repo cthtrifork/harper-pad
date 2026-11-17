@@ -13,6 +13,10 @@ const props = defineProps({
   // the button says Save and is disabled while `needsSave` is false.
   syncOn: { type: Boolean, default: false },
   syncBusy: { type: Boolean, default: false },
+  // The sync status ("synced", "offline", "signin", ...): the server cannot be reached while it is offline or signin, which the main button marks.
+  syncStatus: { type: String, default: "off" },
+  // A phone: the main button is always Sync (never Save). With sync off it stays enabled and says that drafts stay on the device.
+  phone: { type: Boolean, default: false },
   needsSave: { type: Boolean, default: false },
   // Save opens the system share sheet (iPhone, iPad): the button says Share and has the share icon.
   sharing: { type: Boolean, default: false },
@@ -46,12 +50,16 @@ const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view", "u
 
 const exportLabel = computed(() => (props.sharing ? "Share" : "Save to disk"));
 const mainLabel = computed(() => {
-  return props.syncOn ? "Sync" : "Save";
+  return props.syncOn || props.phone ? "Sync" : "Save";
 });
 // The visible label never changes while a sync runs: a longer "Syncing..." moved the buttons beside it on every sync. The turning icon
 // shows that it is busy, and the status line says "Syncing...".
-const mainName = computed(() => (props.syncBusy ? "Syncing..." : mainLabel.value));
-const mainDisabled = computed(() => !props.canSave || props.syncBusy || (!props.syncOn && !props.needsSave));
+const localOnly = computed(() => props.phone && !props.syncOn);
+const unreachable = computed(() => localOnly.value || (props.syncOn && (props.syncStatus === "offline" || props.syncStatus === "signin")));
+const mainName = computed(() =>
+  props.syncBusy ? "Syncing..." : localOnly.value ? "Sync (off)" : unreachable.value ? `${mainLabel.value} (${props.syncStatus === "offline" ? "offline" : "signed out"})` : mainLabel.value,
+);
+const mainDisabled = computed(() => !props.canSave || props.syncBusy || (!props.syncOn && !props.needsSave && !props.phone));
 // What the button also does when the draft has a file, since the label does not change for it.
 const controls = computed(() => fileControls({ filePath: props.filePath, fileProblem: props.fileProblem, canUnlink: props.canUnlink, fileState: props.fileState }));
 const dirtyText_ = computed(() => (controls.value.showDirty ? dirtyText(props.fileName) : ""));
@@ -96,8 +104,10 @@ function onMain() {
     <span class="actions">
       <button type="button" class="tool main" :aria-label="mainName" :title="mainTitle" :disabled="mainDisabled" :aria-busy="syncBusy" @click="onMain">
         <!-- Sync turns while it works; Save (no sync) is a tray with an arrow going in. Both show at every width: a phone shows only the icon. -->
-        <svg v-if="syncOn" class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy }" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" @animationend="turning = false"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        <svg v-else class="save-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7M5 6.8l3 3 3-3M2.5 10v2.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg v-if="syncOn" class="save-icon sync-icon" :class="{ turn: turning, busy: syncBusy }" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" @animationend="turning = false"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <!-- Sync off: the tray on a wide window, the Sync arrows on a phone (CSS picks, see phone-sync.css). -->
+        <svg v-if="!syncOn" class="save-icon sync-icon phone-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg v-if="!syncOn" class="save-icon tray-icon" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7M5 6.8l3 3 3-3M2.5 10v2.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <span class="label">{{ mainLabel }}</span> <span class="kbd">Ctrl+S</span>
       </button>
       <button v-if="controls.showSaveAs" type="button" class="tool export" :aria-label="exportLabel" :title="exportLabel" :disabled="!canSave" @click="emit('save', true)">

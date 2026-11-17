@@ -22,6 +22,9 @@ import { useDrafts } from "./lib/useDrafts.ts";
 import { WrongPassphrase } from "./lib/protectedDrafts.ts";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
+import { attachEdgeSwipe, shouldOpen } from "./lib/edgeSwipe.ts";
+import { attachPullToRefresh, THRESHOLD } from "./lib/pullToRefresh.ts";
+import { failureText, LOCAL_TEXT, OFFLINE_TEXT } from "./lib/syncOutcome.ts";
 import { useConflict } from "./lib/useConflict.ts";
 import type { Start } from "./lib/useDrafts.ts";
 import { useSync } from "./lib/useSync.ts";
@@ -176,6 +179,14 @@ function onSave(saveAs = false) {
     return Promise.resolve();
   }
   syncAsked.value = true;
+  if (!saveAs && narrow.matches) {
+    // On a phone the main button is always Sync: with no server to reach it says why instead of syncing (the draft is saved either way).
+    if (!sync.enrolled.value || navigator.onLine === false) tellSync(pullBlockedText());
+    else userSyncAt = Date.now();
+  } else if (!saveAs && sync.enrolled.value) {
+    userSyncAt = Date.now();
+    if (navigator.onLine === false) tellSync(OFFLINE_TEXT);
+  }
   return drafts.saveFile(saveAs);
 }
 watch(
@@ -272,6 +283,8 @@ function onPaneScroll() {
 function toggleDrawer() {
   showDrawer.value = !showDrawer.value;
   if (showDrawer.value) {
+    syncResult.value = null; // the toast would sit over the bottom of the sheet
+    if (narrow.matches) (document.activeElement as HTMLElement | null)?.blur(); // the sheet covers the editor: the keyboard has no use under it
     drafts.refreshList();
     if (narrow.matches) showProblems.value = false; // two sheets cannot share a phone screen
   }
@@ -462,6 +475,97 @@ function enableHarper() {
   return startHarper();
 }
 
+// While the edge swipe is under the finger the drawer is on screen and follows it (`peek.x` px in from the left edge); on release it glides
+// open or shut (`peek.glide`). Without the enter and leave animation then: the finger is the animation.
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)"); // no glide then: it just ends where it is going
+const peek = ref({ on: false, x: 0, glide: false });
+const peekStyle = computed(() =>
+  peek.value.on ? { transform: `translateX(calc(-100% + ${peek.value.x}px))`, transition: peek.value.glide && !reducedMotion.matches ? "transform 0.2s var(--ease)" : "none" } : undefined,
+);
+const GLIDE_MS = 200;
+function edgeEnd(dx: number, cancelled: boolean) {
+  const open = !cancelled && shouldOpen(dx, window.innerWidth);
+  peek.value = { on: true, x: open ? window.innerWidth : 0, glide: true };
+  setTimeout(async () => {
+    if (!open) {
+      toggleDrawer(); // back where it came from: taken off the screen while it is still out of sight, so no leave animation shows it
+      await nextTick();
+    }
+    peek.value = { on: false, x: 0, glide: false };
+  }, GLIDE_MS);
+}
+// Pull the editor down at its top to sync, on a phone (the pill under the header follows the finger; see lib/pullToRefresh.ts).
+const pull = ref({ d: 0, armed: false, active: false, glide: false, blocked: false });
+// Pulling is always offered. When there is no server to reach (sync is not set up, so the drafts are local, or the device is offline or
+// signed out) it does not arm: the pill says why while it is pulled, and letting go shows the hint in the toast at the bottom, the same
+// one the Sync button shows, instead of trying.
+const unreachableStatus = () => (sync.status.value === "offline" || sync.status.value === "signin" ? sync.status.value : "");
+const pullBlockedText = () => (!sync.enrolled.value ? LOCAL_TEXT : navigator.onLine === false ? OFFLINE_TEXT : failureText(unreachableStatus()));
+const pullBlockedLabel = () => (!sync.enrolled.value ? "Sync is off" : sync.status.value === "signin" ? "Signed out" : "Offline");
+const pullResult = ref(""); // what the pill rests on for a moment after a good sync: "Synced" (a failure is a toast)
+let pullResultTimer: ReturnType<typeof setTimeout> | undefined;
+const pullRunning = ref(false); // the sync a pull started is running (a sync from the button does not move the page)
+const pullResting = computed(() => !pull.value.active && (pullRunning.value || pullResult.value !== ""));
+// The page carries a transform only while it is moved, and for the length of its spring back (a transform removed early would make it snap).
+const pullOn = ref(false);
+let pullOnTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => pull.value.active || pullResting.value,
+  (moved) => {
+    clearTimeout(pullOnTimer);
+    if (moved) pullOn.value = true;
+    else pullOnTimer = setTimeout(() => (pullOn.value = false), 350);
+  },
+);
+const PULL_REST = 48; // px the page stays pushed down while it syncs and shows the result
+const pullShown = computed(() => (pull.value.active ? pull.value.d : pullResting.value ? PULL_REST : 0));
+const pullProgress = computed(() => (pullResting.value ? 1 : Math.min(1, pull.value.d / THRESHOLD)));
+const pullLabel = computed(() => {
+  if (pull.value.active) return pull.value.blocked ? pullBlockedLabel() : pull.value.armed ? "Release to sync" : "Pull to sync";
+  return pullResult.value || (pullRunning.value ? "Syncing…" : "");
+});
+function showPullResult(text: string) {
+  pullResult.value = text;
+  clearTimeout(pullResultTimer);
+  pullResultTimer = setTimeout(() => (pullResult.value = ""), 1800);
+}
+async function pullEnd(armed: boolean) {
+  const blocked = pull.value.blocked;
+  pull.value = { d: armed && !blocked ? THRESHOLD : 0, armed: false, active: false, glide: true, blocked: false };
+  setTimeout(() => (pull.value = { ...pull.value, glide: false }), 200);
+  if (!armed) return;
+  if (blocked) return tellSync(pullBlockedText()); // no request to make: say why, at the bottom
+  pullRunning.value = true;
+  try {
+    await sync.syncAll();
+  } finally {
+    pullRunning.value = false;
+  }
+  const text = failureText(sync.status.value, sync.error.value);
+  if (text) tellSync(text);
+  else showPullResult("Synced");
+}
+// What a sync the person asked for (the Sync button) tells them when it did not go through, in a toast: the dot on the button only says
+// that something is wrong. The status line already says when it worked.
+const syncResult = ref<{ text: string; tick: number } | null>(null);
+let userSyncAt = 0;
+function tellSync(text: string) {
+  syncResult.value = { text, tick: (syncResult.value?.tick ?? 0) + 1 };
+}
+watch(sync.status, (status) => {
+  if (!userSyncAt || Date.now() - userSyncAt > 15000) return;
+  const text = failureText(status, sync.error.value);
+  if (!text) return;
+  userSyncAt = 0;
+  tellSync(text);
+});
+// The connection came back: the sync that could not reach the server is tried again, so drafts do not wait for another press.
+const onOnline = () => {
+  if (sync.enrolled.value && sync.status.value === "offline") sync.syncAll();
+};
+let detachSwipe = () => {};
+let detachPull = () => {};
+const swipeStrip = ref<HTMLElement | null>(null);
 onMounted(async () => {
   // A device that cannot be read just shows "Sync off". The draft open at start is checked once the device is known.
   // The linked file is looked at first and the server after it, so a clean draft is not changed by a pull before the file is seen.
@@ -472,6 +576,31 @@ onMounted(async () => {
     .then(() => drafts.current.value.id && checkOpened(drafts.current.value.id))
     .catch(() => {});
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("online", onOnline);
+  // A swipe from the left edge to the right opens the drafts drawer on a phone (the Drafts button does the same).
+  detachSwipe = attachEdgeSwipe(swipeStrip.value as HTMLElement, {
+    enabled: () => narrow.matches && !showDrawer.value && !drafts.locked.value && !peek.value.on,
+    start: () => {
+      peek.value = { on: true, x: 0, glide: false };
+      toggleDrawer();
+    },
+    move: (dx) => {
+      peek.value = { on: true, x: Math.min(dx, window.innerWidth), glide: false };
+    },
+    end: edgeEnd,
+  });
+  if (pane.value)
+    detachPull = attachPullToRefresh(pane.value, {
+      enabled: () => narrow.matches && sync.status.value !== "syncing" && !showDrawer.value && !peek.value.on && !drafts.locked.value && window.getSelection()?.isCollapsed !== false,
+      atTop: () => (pane.value?.scrollTop ?? 1) <= 0,
+      move: (d, armed) => {
+        const blocked = pullBlockedText() !== "";
+        const arms = armed && !blocked;
+        if (arms && !pull.value.armed) navigator.vibrate?.(10);
+        pull.value = { d, armed: arms, active: true, glide: false, blocked };
+      },
+      end: pullEnd,
+    });
   pane.value?.addEventListener("pointerdown", notePress);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
@@ -510,6 +639,11 @@ watch(
 onBeforeUnmount(() => {
   narrow.removeEventListener("change", onNarrowChange);
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("online", onOnline);
+  clearTimeout(pullResultTimer);
+  clearTimeout(pullOnTimer);
+  detachSwipe();
+  detachPull();
   drafts.detach();
 });
 </script>
@@ -532,6 +666,8 @@ onBeforeUnmount(() => {
       :can-save="drafts.available.value"
       :sync-on="sync.enrolled.value"
       :sync-busy="syncBusy"
+      :sync-status="sync.status.value"
+      :phone="isNarrow"
       :needs-save="drafts.needsSave.value"
       :sharing="sharing"
       :is-markdown="isMarkdown"
@@ -544,10 +680,26 @@ onBeforeUnmount(() => {
       @view="setView"
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
-    <div class="body" :class="{ 'has-panel': showProblems && mode !== 'preview' }">
-      <Transition name="slide-left">
+    <div
+      class="body"
+      :class="{ 'has-panel': showProblems && mode !== 'preview', 'pull-on': pullOn, 'pull-glide': !pull.active }"
+      :style="{ '--pull': pullShown, '--pull-p': pullProgress }"
+    >
+      <div
+        class="pull-sync"
+        :class="{ armed: pull.armed, blocked: pull.active && pull.blocked, spin: pullRunning && !pull.active, done: pullResult !== '' && !pull.active }"
+        role="status"
+        aria-live="polite"
+      >
+        <svg class="pull-refresh" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg class="pull-check" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <span class="pull-label">{{ pullLabel }}</span>
+      </div>
+      <div v-show="(!showDrawer || peek.on) && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
+      <Transition :name="peek.on ? '' : 'slide-left'">
       <DraftsDrawer
         v-if="showDrawer"
+        :style="peekStyle"
         :drafts="drafts.list.value.drafts"
         :total="drafts.list.value.total"
         :current-id="drafts.current.value.id"
@@ -612,6 +764,7 @@ onBeforeUnmount(() => {
             <ToastBar v-if="drafts.linkMoved.value" :message="drafts.linkMoved.value.text" :tick="drafts.linkMoved.value.tick" :ms="9000" @close="drafts.linkMoved.value = null" />
           </Transition>
           <Transition name="toast-bar">
+            <ToastBar v-if="syncResult" :message="syncResult.text" :tick="syncResult.tick" :ms="5000" @close="syncResult = null" />
             <ToastBar v-if="syncToast" :message="syncToast.text" :action="syncToast.action" :tick="syncToast.at" :ms="syncToast.ms" @action="syncToastAction" @close="sync.clearNotice()" />
           </Transition>
         </div>
