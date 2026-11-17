@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatDiagnostics, noteOpen } from "./diagnostics.ts";
+import { formatDiagnostics, lintSummary, noteOpen, recordLint } from "./diagnostics.ts";
 
 const memory = () => {
   const data = new Map();
@@ -62,5 +62,23 @@ test("storage that cannot be read or written does not stop the app", () => {
     setItem: () => {
       throw new Error("full");
     },
+  });
+});
+
+test("the checks are summed up as their count, last, median and slowest time", () => {
+  assert.equal(lintSummary(), undefined);
+  for (const ms of [30, 10, 200, 20, 40]) recordLint(ms);
+  assert.deepEqual(lintSummary(), { count: 5, last: 40, median: 30, max: 200 });
+  const report = JSON.parse(
+    formatDiagnostics({ version: "", at: 1000, standalone: false, agent: "UA", lints: { count: 5, last: 40, median: 30, max: 200 } }),
+  );
+  assert.deepEqual(report, {
+    user_agent: "UA",
+    timestamp_seconds: 1,
+    standalone: 0,
+    lint_total: 5,
+    lint_last_duration_seconds: 0.04,
+    lint_median_duration_seconds: 0.03,
+    lint_max_duration_seconds: 0.2,
   });
 });

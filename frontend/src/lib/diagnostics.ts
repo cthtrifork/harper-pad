@@ -1,5 +1,5 @@
 // The report pressing the version copies, to paste into a bug report: one line of JSON. Nothing is sent anywhere and it holds no draft
-// text. main.ts and App.vue record the start-up timings.
+// text. main.ts and App.vue record the start-up timings, App.vue the time of each check.
 
 // The browser APIs below that lib.dom.d.ts does not declare.
 interface Connection {
@@ -22,6 +22,14 @@ interface Recorded {
   setupMs?: number;
 }
 
+/** How long the checks of this session took: how many ran, the last, and the median and slowest of the latest LINT_SAMPLES. */
+interface Lints {
+  count: number;
+  last: number;
+  median: number;
+  max: number;
+}
+
 interface Report {
   version: string;
   at: number;
@@ -34,6 +42,7 @@ interface Report {
   openMs?: number;
   dataMs?: number;
   setupMs?: number;
+  lints?: Lints;
   responseEnd?: number;
   load?: number;
   firstPaint?: number;
@@ -44,6 +53,24 @@ const recorded: Recorded = {};
 
 export const record = (key: "openMs" | "dataMs" | "setupMs", value: number) => {
   recorded[key] = value;
+};
+
+// A phone that feels slow while typing shows it here, not in the start-up timings. Only the latest checks are kept, so a long session
+// holds no more than this.
+const LINT_SAMPLES = 50;
+let lintCount = 0;
+let lintLast = 0;
+const lintRecent: number[] = [];
+export const recordLint = (ms: number) => {
+  lintCount++;
+  lintLast = ms;
+  lintRecent.push(ms);
+  if (lintRecent.length > LINT_SAMPLES) lintRecent.shift();
+};
+export const lintSummary = (): Lints | undefined => {
+  if (!lintCount) return undefined;
+  const sorted = [...lintRecent].sort((a, b) => a - b);
+  return { count: lintCount, last: lintLast, median: sorted[Math.floor(sorted.length / 2)], max: sorted[sorted.length - 1] };
 };
 
 // Counts the opens in this storage, so a report says whether it is the first (cold) one. iOS clearing a home-screen app's storage
@@ -82,6 +109,10 @@ export const formatDiagnostics = (info: Report) =>
     draft_read_duration_seconds: seconds(info.dataMs),
     harper_start_duration_seconds: seconds(info.setupMs),
     first_paint_duration_seconds: seconds(info.firstPaint),
+    lint_total: info.lints?.count,
+    lint_last_duration_seconds: seconds(info.lints?.last),
+    lint_median_duration_seconds: seconds(info.lints?.median),
+    lint_max_duration_seconds: seconds(info.lints?.max),
     page_response_duration_seconds: seconds(info.responseEnd),
     page_load_duration_seconds: seconds(info.load),
     service_worker_controlling: bit(info.worker),
@@ -121,6 +152,7 @@ async function collect(version?: string): Promise<Report> {
     openMs: recorded.openMs,
     dataMs: recorded.dataMs,
     setupMs: recorded.setupMs,
+    lints: lintSummary(),
     responseEnd: nav?.responseEnd,
     load: nav?.loadEventEnd || undefined,
     firstPaint: paint?.startTime,

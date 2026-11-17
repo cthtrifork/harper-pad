@@ -9,7 +9,7 @@ import PassphraseDialog from "./components/PassphraseDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, type Prefs, savePrefs } from "./lib/autocorrect.ts";
 import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.ts";
-import { record } from "./lib/diagnostics.ts";
+import { record, recordLint } from "./lib/diagnostics.ts";
 import { applySize, loadSize, saveSize, stepSize } from "./lib/fontSize.ts";
 import type { PersistNote } from "./lib/editor/lint.ts";
 import type { Problem } from "./lib/editor/problems.ts";
@@ -368,6 +368,7 @@ async function loadHarper() {
 
 function onResult({ ms }: { ms: number }) {
   lintMs.value = ms;
+  recordLint(ms);
 }
 
 // The editor only reports when the findings really changed, so the panel does not re-render per keystroke.
