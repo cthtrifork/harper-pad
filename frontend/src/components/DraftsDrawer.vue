@@ -91,12 +91,35 @@ function swipeEnd(e: PointerEvent) {
   const deleting = e.type !== "pointercancel" && armed.value; // only the full distance deletes, however fast the swipe
   dragX.value = deleting ? -(e.currentTarget as HTMLElement).offsetWidth : 0; // out of the way, or back where it was
   setTimeout(() => {
-    if (deleting) emit("remove", id);
-    dragId.value = "";
-    dragX.value = 0;
-    settling.value = false;
+    if (!deleting) return finishDrag();
+    // The card stays out of the way until the row has really left the list (the delete can take a moment): clearing the drag state now
+    // would show it snapping back for that moment. If the row is still there after a while the delete failed, and the card slides back.
+    removingId = id;
+    emit("remove", id);
+    removeTimer = setTimeout(() => {
+      if (!removingId) return;
+      settling.value = true;
+      dragX.value = 0;
+      setTimeout(finishDrag, 150);
+    }, 2500);
   }, 150);
 }
+let removingId = "";
+let removeTimer: ReturnType<typeof setTimeout> | undefined;
+function finishDrag() {
+  clearTimeout(removeTimer);
+  removingId = "";
+  dragId.value = "";
+  dragX.value = 0;
+  settling.value = false;
+}
+watch(
+  () => props.drafts,
+  (list) => {
+    if (removingId && !list.some((d) => d.id === removingId)) finishDrag();
+  },
+);
+onBeforeUnmount(() => clearTimeout(removeTimer));
 
 function open(id: string) {
   if (!swiped) emit("open", id);

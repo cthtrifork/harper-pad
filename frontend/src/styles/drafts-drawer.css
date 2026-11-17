@@ -461,10 +461,7 @@
 .drawer .item.dragging .swipe-bg {
   opacity: 1;
   /* The backdrop fills in with the distance (--p, 0 to 1) and turns solid once letting go would delete. */
-  background: color-mix(in srgb, var(--bad) calc(var(--p, 0) * 18%), transparent);
-  transition:
-    background-color 0.12s var(--ease),
-    color 0.12s var(--ease);
+  background: color-mix(in srgb, var(--bad) calc(var(--p, 0) * 18%), transparent); /* no transition: it follows the finger frame by frame */
 }
 
 .drawer .item.dragging.armed .swipe-bg {
