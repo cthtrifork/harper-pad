@@ -283,6 +283,8 @@ function onPaneScroll() {
 function toggleDrawer() {
   showDrawer.value = !showDrawer.value;
   if (showDrawer.value) {
+    syncResult.value = null; // the toast would sit over the bottom of the sheet
+    if (narrow.matches) (document.activeElement as HTMLElement | null)?.blur(); // the sheet covers the editor: the keyboard has no use under it
     drafts.refreshList();
     if (narrow.matches) showProblems.value = false; // two sheets cannot share a phone screen
   }
@@ -689,7 +691,7 @@ onBeforeUnmount(() => {
         role="status"
         aria-live="polite"
       >
-        <svg class="pull-refresh" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg class="pull-refresh" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <svg class="pull-check" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
         <span class="pull-label">{{ pullLabel }}</span>
       </div>
