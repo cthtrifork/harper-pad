@@ -502,10 +502,25 @@ const pullBlockedText = () => (!sync.enrolled.value ? LOCAL_TEXT : navigator.onL
 const pullBlockedLabel = () => (!sync.enrolled.value ? "Sync is off" : sync.status.value === "signin" ? "Signed out" : "Offline");
 const pullResult = ref(""); // what the pill rests on for a moment after a good sync: "Synced" (a failure is a toast)
 let pullResultTimer: ReturnType<typeof setTimeout> | undefined;
-const pullResting = computed(() => !pull.value.active && (sync.status.value === "syncing" || pullResult.value !== ""));
+const pullRunning = ref(false); // the sync a pull started is running (a sync from the button does not move the page)
+const pullResting = computed(() => !pull.value.active && (pullRunning.value || pullResult.value !== ""));
+// The page carries a transform only while it is moved, and for the length of its spring back (a transform removed early would make it snap).
+const pullOn = ref(false);
+let pullOnTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => pull.value.active || pullResting.value,
+  (moved) => {
+    clearTimeout(pullOnTimer);
+    if (moved) pullOn.value = true;
+    else pullOnTimer = setTimeout(() => (pullOn.value = false), 350);
+  },
+);
+const PULL_REST = 48; // px the page stays pushed down while it syncs and shows the result
+const pullShown = computed(() => (pull.value.active ? pull.value.d : pullResting.value ? PULL_REST : 0));
+const pullProgress = computed(() => (pullResting.value ? 1 : Math.min(1, pull.value.d / THRESHOLD)));
 const pullLabel = computed(() => {
   if (pull.value.active) return pull.value.blocked ? pullBlockedLabel() : pull.value.armed ? "Release to sync" : "Pull to sync";
-  return pullResult.value || (sync.status.value === "syncing" ? "Syncing…" : "");
+  return pullResult.value || (pullRunning.value ? "Syncing…" : "");
 });
 function showPullResult(text: string) {
   pullResult.value = text;
@@ -518,7 +533,12 @@ async function pullEnd(armed: boolean) {
   setTimeout(() => (pull.value = { ...pull.value, glide: false }), 200);
   if (!armed) return;
   if (blocked) return tellSync(pullBlockedText()); // no request to make: say why, at the bottom
-  await sync.syncAll();
+  pullRunning.value = true;
+  try {
+    await sync.syncAll();
+  } finally {
+    pullRunning.value = false;
+  }
   const text = failureText(sync.status.value, sync.error.value);
   if (text) tellSync(text);
   else showPullResult("Synced");
@@ -619,6 +639,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   window.removeEventListener("online", onOnline);
   clearTimeout(pullResultTimer);
+  clearTimeout(pullOnTimer);
   detachSwipe();
   detachPull();
   drafts.detach();
@@ -657,15 +678,20 @@ onBeforeUnmount(() => {
       @view="setView"
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
-    <div class="body" :class="{ 'has-panel': showProblems && mode !== 'preview' }">
+    <div
+      class="body"
+      :class="{ 'has-panel': showProblems && mode !== 'preview', 'pull-on': pullOn, 'pull-glide': !pull.active }"
+      :style="{ '--pull': pullShown, '--pull-p': pullProgress }"
+    >
       <div
         class="pull-sync"
-        :class="{ pulling: pull.active, armed: pull.armed, glide: pull.glide || pullResting, rest: pullResting }"
-        :style="{ '--pull': pullResting ? 48 : pull.d, '--pull-p': pull.d / THRESHOLD }"
+        :class="{ armed: pull.armed, blocked: pull.active && pull.blocked, spin: pullRunning && !pull.active, done: pullResult !== '' && !pull.active }"
         role="status"
         aria-live="polite"
       >
-        {{ pullLabel }}
+        <svg class="pull-refresh" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16M16 16h5v5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg class="pull-check" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <span class="pull-label">{{ pullLabel }}</span>
       </div>
       <div v-show="(!showDrawer || peek.on) && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
       <Transition :name="peek.on ? '' : 'slide-left'">
