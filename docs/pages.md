@@ -22,7 +22,7 @@ Harper itself already runs in the browser (WebAssembly in a Web Worker); what th
   `syncDrafts`, IndexedDB on the web and the Go `SyncService` on desktop (`desktopSync.ts`), and `syncDevice`, the device's record, which is in
   IndexedDB on both.
 - **Sync origin.** The build setting `SYNC_ORIGIN` (an https origin, no path) adds the sync server to the page's `connect-src` and turns the
-  chip on; `pages.yml` reads it from the repository variable of that name, and with it unset nothing changes. Previews do not set it. The
+  chip on; `pages.yml` reads it from the repository variable of that name, and with it unset nothing changes. Previews (`/preview/` and `/pr-<n>/`) read the same variable, so they can sync too: the enrollment is in the shared IndexedDB. The
   server must list the site's origin in its `CORS_ALLOWED_ORIGINS` ([sync](sync.md)).
 
 ## Deploying

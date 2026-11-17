@@ -49,6 +49,9 @@ jobs:
         working-directory: frontend
         env:
           BASE_PATH: /pr-${{ github.event.pull_request.number }}/
+          # The sync server's https origin, a repository variable, as in pages.yml: without it the preview has no Sync button or pull to
+          # refresh. The device's enrollment is in the shared IndexedDB, so a preview is enrolled when the real site is. Empty leaves it off.
+          SYNC_ORIGIN: ${{ vars.SYNC_ORIGIN }}
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm run build:web
