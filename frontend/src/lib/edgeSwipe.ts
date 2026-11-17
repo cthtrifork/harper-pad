@@ -1,9 +1,10 @@
-// A swipe from the left screen edge to the right opens the drafts drawer on a phone (touch only; the Drafts button still works).
-// It listens on a strip at the left edge (styles/edge-swipe.css, `touch-action: pan-y`), so it never competes with selecting text or
-// scrolling a wide code block, and the move has to be mostly horizontal. The classifier is a pure function so the thresholds can be tested without a browser.
+// A swipe from the left screen edge to the right opens the drafts drawer on a phone (touch only; the Drafts button still works). The
+// drawer follows the finger and settles open or closed on release. It listens on a strip at the left edge (styles/edge-swipe.css,
+// `touch-action: pan-y`), so it never competes with selecting text or scrolling a wide code block, and the move has to be mostly
+// horizontal. The classifier and the release rule are pure functions so the thresholds can be tested without a browser.
 
-export const OPEN_DISTANCE = 56; // px of rightward travel that opens the drawer
 export const SLOP = 10; // px before the move decides between a swipe and a vertical scroll
+export const COMMIT_FRACTION = 1 / 3; // of the screen width: letting go past it opens the drawer, before it closes it again
 
 export type Verdict = "wait" | "swipe" | "ignore";
 
@@ -13,41 +14,54 @@ export function classifySwipe(dx: number, dy: number): Verdict {
   return "swipe";
 }
 
-// Calls open() once when a touch that began at the left edge has travelled OPEN_DISTANCE to the right. Returns the cleanup function.
-export function attachEdgeSwipe(target: EventTarget, opts: { enabled: () => boolean; open: () => void }): () => void {
-  let start: { id: number; x: number; y: number; decided: boolean } | null = null;
+export function shouldOpen(dx: number, width: number): boolean {
+  return dx >= width * COMMIT_FRACTION;
+}
+
+type Handlers = {
+  enabled: () => boolean;
+  start: () => void; // the move turned out to be a swipe: the drawer is put on screen, closed
+  move: (dx: number) => void; // the finger's distance from where the swipe was recognised, never negative
+  end: (dx: number, cancelled: boolean) => void;
+};
+
+// Returns the cleanup function.
+export function attachEdgeSwipe(target: EventTarget, h: Handlers): () => void {
+  let s: { id: number; x: number; y: number; on: boolean; dx: number } | null = null;
   const onDown = (e: Event) => {
     const p = e as PointerEvent;
-    if (p.pointerType !== "touch" || !p.isPrimary || !opts.enabled()) return;
-    start = { id: p.pointerId, x: p.clientX, y: p.clientY, decided: false };
+    if (p.pointerType !== "touch" || !p.isPrimary || !h.enabled()) return;
+    s = { id: p.pointerId, x: p.clientX, y: p.clientY, on: false, dx: 0 };
   };
   const onMove = (e: Event) => {
     const p = e as PointerEvent;
-    if (!start || p.pointerId !== start.id) return;
-    const dx = p.clientX - start.x;
-    const dy = p.clientY - start.y;
-    if (!start.decided) {
-      const v = classifySwipe(dx, dy);
+    if (!s || p.pointerId !== s.id) return;
+    const dx = p.clientX - s.x;
+    if (!s.on) {
+      const v = classifySwipe(dx, p.clientY - s.y);
       if (v === "wait") return;
-      if (v === "ignore") return void (start = null);
-      start.decided = true;
+      if (v === "ignore") return void (s = null);
+      s.on = true;
+      h.start();
     }
-    if (dx >= OPEN_DISTANCE) {
-      start = null;
-      opts.open();
-    }
+    s.dx = Math.max(0, dx - SLOP); // the first SLOP px only decided it was a swipe
+    h.move(s.dx);
   };
-  const onEnd = () => {
-    start = null;
+  const finish = (cancelled: boolean) => {
+    const cur = s;
+    s = null;
+    if (cur?.on) h.end(cur.dx, cancelled);
   };
+  const onUp = () => finish(false);
+  const onCancel = () => finish(true);
   target.addEventListener("pointerdown", onDown, { passive: true });
   target.addEventListener("pointermove", onMove, { passive: true });
-  target.addEventListener("pointerup", onEnd);
-  target.addEventListener("pointercancel", onEnd);
+  target.addEventListener("pointerup", onUp);
+  target.addEventListener("pointercancel", onCancel);
   return () => {
     target.removeEventListener("pointerdown", onDown);
     target.removeEventListener("pointermove", onMove);
-    target.removeEventListener("pointerup", onEnd);
-    target.removeEventListener("pointercancel", onEnd);
+    target.removeEventListener("pointerup", onUp);
+    target.removeEventListener("pointercancel", onCancel);
   };
 }

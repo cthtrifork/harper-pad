@@ -22,7 +22,7 @@ import { useDrafts } from "./lib/useDrafts.ts";
 import { WrongPassphrase } from "./lib/protectedDrafts.ts";
 import { COPY_LABELS } from "./lib/conflict.ts";
 import { saveAsAction, UNLINK_FIRST } from "./lib/fileLink.ts";
-import { attachEdgeSwipe } from "./lib/edgeSwipe.ts";
+import { attachEdgeSwipe, shouldOpen } from "./lib/edgeSwipe.ts";
 import { useConflict } from "./lib/useConflict.ts";
 import type { Start } from "./lib/useDrafts.ts";
 import { useSync } from "./lib/useSync.ts";
@@ -463,6 +463,24 @@ function enableHarper() {
   return startHarper();
 }
 
+// While the edge swipe is under the finger the drawer is on screen and follows it (`peek.x` px in from the left edge); on release it glides
+// open or shut (`peek.glide`). Without the enter and leave animation then: the finger is the animation.
+const peek = ref({ on: false, x: 0, glide: false });
+const peekStyle = computed(() =>
+  peek.value.on ? { transform: `translateX(calc(-100% + ${peek.value.x}px))`, transition: peek.value.glide ? "transform 0.2s var(--ease)" : "none" } : undefined,
+);
+const GLIDE_MS = 200;
+function edgeEnd(dx: number, cancelled: boolean) {
+  const open = !cancelled && shouldOpen(dx, window.innerWidth);
+  peek.value = { on: true, x: open ? window.innerWidth : 0, glide: true };
+  setTimeout(async () => {
+    if (!open) {
+      toggleDrawer(); // back where it came from: taken off the screen while it is still out of sight, so no leave animation shows it
+      await nextTick();
+    }
+    peek.value = { on: false, x: 0, glide: false };
+  }, GLIDE_MS);
+}
 let detachSwipe = () => {};
 const swipeStrip = ref<HTMLElement | null>(null);
 onMounted(async () => {
@@ -476,7 +494,17 @@ onMounted(async () => {
     .catch(() => {});
   window.addEventListener("keydown", onKeydown);
   // A swipe from the left edge to the right opens the drafts drawer on a phone (the Drafts button does the same).
-  detachSwipe = attachEdgeSwipe(swipeStrip.value as HTMLElement, { enabled: () => narrow.matches && !showDrawer.value && !drafts.locked.value, open: toggleDrawer });
+  detachSwipe = attachEdgeSwipe(swipeStrip.value as HTMLElement, {
+    enabled: () => narrow.matches && !showDrawer.value && !drafts.locked.value && !peek.value.on,
+    start: () => {
+      peek.value = { on: true, x: 0, glide: false };
+      toggleDrawer();
+    },
+    move: (dx) => {
+      peek.value = { on: true, x: Math.min(dx, window.innerWidth), glide: false };
+    },
+    end: edgeEnd,
+  });
   pane.value?.addEventListener("pointerdown", notePress);
   pane.value?.addEventListener("click", focusFromClick);
   drafts.attach();
@@ -551,10 +579,11 @@ onBeforeUnmount(() => {
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
     <div class="body" :class="{ 'has-panel': showProblems && mode !== 'preview' }">
-      <div v-show="!showDrawer && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
-      <Transition name="slide-left">
+      <div v-show="(!showDrawer || peek.on) && !drafts.locked.value" ref="swipeStrip" class="edge-swipe" aria-hidden="true"></div>
+      <Transition :name="peek.on ? '' : 'slide-left'">
       <DraftsDrawer
         v-if="showDrawer"
+        :style="peekStyle"
         :drafts="drafts.list.value.drafts"
         :total="drafts.list.value.total"
         :current-id="drafts.current.value.id"

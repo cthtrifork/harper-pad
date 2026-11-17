@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attachEdgeSwipe, classifySwipe, OPEN_DISTANCE } from "./edgeSwipe.ts";
+import { attachEdgeSwipe, classifySwipe, shouldOpen, SLOP } from "./edgeSwipe.ts";
 
 test("a small move waits, a vertical one is ignored, a rightward one swipes", () => {
   assert.equal(classifySwipe(3, 4), "wait");
@@ -9,24 +9,45 @@ test("a small move waits, a vertical one is ignored, a rightward one swipes", ()
   assert.equal(classifySwipe(30, 8), "swipe");
 });
 
+test("letting go past a third of the width opens, before it closes", () => {
+  assert.equal(shouldOpen(130, 390), true);
+  assert.equal(shouldOpen(129, 390), false);
+  assert.equal(shouldOpen(0, 390), false);
+});
+
 function fake(enabled = true) {
   const target = new EventTarget();
-  let opened = 0;
-  attachEdgeSwipe(target, { enabled: () => enabled, open: () => opened++ });
+  const log: string[] = [];
+  attachEdgeSwipe(target, {
+    enabled: () => enabled,
+    start: () => log.push("start"),
+    move: (dx) => log.push(`move ${dx}`),
+    end: (dx, cancelled) => log.push(`end ${dx}${cancelled ? " cancelled" : ""}`),
+  });
   const fire = (type: string, x: number, y: number, extra = {}) => {
-    const e = Object.assign(new Event(type), { pointerType: "touch", isPrimary: true, pointerId: 1, clientX: x, clientY: y }, extra);
-    target.dispatchEvent(e);
+    target.dispatchEvent(
+      Object.assign(new Event(type), { pointerType: "touch", isPrimary: true, pointerId: 1, clientX: x, clientY: y }, extra),
+    );
   };
-  return { fire, opened: () => opened };
+  return { fire, log };
 }
 
-test("a swipe from the edge opens once", () => {
+test("the drawer follows the finger from the moment it is a swipe, and the release reports the distance", () => {
   const t = fake();
   t.fire("pointerdown", 5, 200);
-  t.fire("pointermove", 30, 205);
-  t.fire("pointermove", 5 + OPEN_DISTANCE, 206);
-  t.fire("pointermove", 120, 206);
-  assert.equal(t.opened(), 1);
+  t.fire("pointermove", 8, 201); // still waiting
+  t.fire("pointermove", 5 + SLOP + 40, 205);
+  t.fire("pointermove", 5 + SLOP + 90, 206);
+  t.fire("pointerup", 5 + SLOP + 90, 206);
+  assert.deepEqual(t.log, ["start", "move 40", "move 90", "end 90"]);
+});
+
+test("a cancelled touch reports it", () => {
+  const t = fake();
+  t.fire("pointerdown", 5, 200);
+  t.fire("pointermove", 60, 202);
+  t.fire("pointercancel", 60, 202);
+  assert.deepEqual(t.log, ["start", `move ${55 - SLOP}`, `end ${55 - SLOP} cancelled`]);
 });
 
 test("a vertical drag, a mouse or a disabled state do nothing", () => {
@@ -34,15 +55,16 @@ test("a vertical drag, a mouse or a disabled state do nothing", () => {
   vertical.fire("pointerdown", 5, 200);
   vertical.fire("pointermove", 10, 260);
   vertical.fire("pointermove", 100, 262);
-  assert.equal(vertical.opened(), 0);
+  vertical.fire("pointerup", 100, 262);
+  assert.deepEqual(vertical.log, []);
 
   const mouse = fake();
   mouse.fire("pointerdown", 5, 200, { pointerType: "mouse" });
   mouse.fire("pointermove", 100, 200, { pointerType: "mouse" });
-  assert.equal(mouse.opened(), 0);
+  assert.deepEqual(mouse.log, []);
 
   const off = fake(false);
   off.fire("pointerdown", 5, 200);
   off.fire("pointermove", 100, 200);
-  assert.equal(off.opened(), 0);
+  assert.deepEqual(off.log, []);
 });
