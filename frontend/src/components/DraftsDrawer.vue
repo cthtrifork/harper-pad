@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, type PropType, ref, watch } from "vue";
 import type { Summary } from "../../bindings/github.com/cthtrifork/harper-pad/internal/store";
 import { copyDiagnostics } from "../lib/diagnostics.ts";
 import { whenLabel } from "../lib/when.ts";
@@ -53,6 +53,11 @@ const SWIPE_DELETE = 96; // px of travel that deletes on release
 const dragId = ref("");
 const dragX = ref(0);
 const settling = ref(false); // after release: the card glides to its end position
+const armed = computed(() => dragX.value <= -SWIPE_DELETE); // far enough that letting go now deletes
+const progress = computed(() => Math.min(1, -dragX.value / SWIPE_DELETE)); // 0..1, drives the backdrop
+watch(armed, (on) => {
+  if (on && dragId.value) navigator.vibrate?.(10); // a tick when it becomes armed, on devices that have one
+});
 let start: { id: string; x: number; y: number; locked: boolean } | null = null;
 let swiped = false; // the click that follows a swipe is not a tap
 
@@ -83,7 +88,7 @@ function swipeEnd(e: PointerEvent) {
   if (!locked) return;
   swiped = true;
   settling.value = true;
-  const deleting = e.type !== "pointercancel" && dragX.value <= -SWIPE_DELETE;
+  const deleting = e.type !== "pointercancel" && armed.value; // only the full distance deletes, however fast the swipe
   dragX.value = deleting ? -(e.currentTarget as HTMLElement).offsetWidth : 0; // out of the way, or back where it was
   setTimeout(() => {
     if (deleting) emit("remove", id);
@@ -149,14 +154,14 @@ const baseName = (path: string) => path.split(/[\\/]/).pop();
         v-for="d in drafts"
         :key="d.id"
         class="item"
-        :class="{ active: d.id === currentId, dragging: d.id === dragId, settling: d.id === dragId && settling }"
-        :style="d.id === dragId ? { '--dx': `${dragX}px` } : undefined"
+        :class="{ active: d.id === currentId, dragging: d.id === dragId, settling: d.id === dragId && settling, armed: d.id === dragId && armed }"
+        :style="d.id === dragId ? { '--dx': `${dragX}px`, '--p': progress } : undefined"
         @pointerdown="swipeDown($event, d.id)"
         @pointermove="swipeMove"
         @pointerup="swipeEnd"
         @pointercancel="swipeEnd"
       >
-        <span class="swipe-bg" aria-hidden="true">Delete</span>
+        <span class="swipe-bg" aria-hidden="true">{{ d.id === dragId && armed ? "Release to delete" : "Delete" }}</span>
         <button type="button" class="card" :aria-current="d.id === currentId ? 'true' : undefined" @click="open(d.id)">
           <span class="top">
             <span class="title">
