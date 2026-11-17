@@ -1,3 +1,3 @@
-# Read by setup-go/setup-node and Renovate; go.mod and the Dockerfiles repeat these versions. Merge Renovate's PR once CI is green.
+# Read by setup-go/setup-node and Renovate; go.mod, the Dockerfiles and the `engines` field of frontend/package.json (a floor, so npm warns on an older Node) repeat these versions. Merge Renovate's PR once CI is green.
 golang 1.27.4
 nodejs 26
