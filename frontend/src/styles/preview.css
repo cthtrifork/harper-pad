@@ -263,3 +263,68 @@
   color: var(--mute);
   font-style: italic;
 }
+
+/* The copy button on a fenced code block: top right of the block, shown on hover or focus on a pointer device and always on touch,
+   where there is no hover (and the hit area grows to 44 px like every touch control, see touch.css). */
+.preview .md .code-block {
+  position: relative;
+  margin: 0 0 0.9em;
+}
+
+.preview .md .code-block pre {
+  margin: 0;
+}
+
+.preview .md .code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--mute);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+
+.preview .md .code-block:hover .code-copy,
+.preview .md .code-copy:focus-visible {
+  opacity: 1;
+}
+
+.preview .md .code-copy:hover {
+  background: var(--selected);
+  color: var(--text);
+}
+
+.preview .md .code-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+@media (pointer: coarse) {
+  .preview .md .code-copy {
+    top: 2px;
+    right: 2px;
+    width: 44px;
+    height: 44px;
+    border-color: transparent;
+    background: transparent;
+    opacity: 0.8;
+  }
+
+  /* Keep the first line of code clear of the button. */
+  .preview .md .code-block pre {
+    padding-right: 44px;
+  }
+}
