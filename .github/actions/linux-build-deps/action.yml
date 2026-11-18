@@ -26,20 +26,23 @@ runs:
         path: ~/apt-debs
         key: apt-debs-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ steps.image.outputs.packages }}
 
-    # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt.
+    # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt. The bound is `timeout` inside
+    # the command, not only the action's timeout_minutes: the action kills the process group as the runner user, which is not allowed
+    # to signal the root-owned sudo/apt processes (kill EPERM), crashes, and never gets to the next attempt. timeout ends apt itself,
+    # so the attempt fails normally and is retried; timeout_minutes stays as a backstop above the two timeouts combined.
     - name: Install
       uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       env:
         PACKAGES: ${{ inputs.packages }}
       with:
-        timeout_minutes: 3
+        timeout_minutes: 5
         max_attempts: 3
         command: |
           if [ '${{ steps.cache.outputs.cache-hit }}' = true ] && sudo dpkg -i ~/apt-debs/*.deb; then
             exit 0
           fi
-          sudo apt-get -o Acquire::Languages=none update -qq
-          sudo apt-get install -y --no-install-recommends $PACKAGES
+          sudo timeout -k 5 60 apt-get -o Acquire::Languages=none -o Acquire::Retries=2 update -qq
+          sudo timeout -k 5 150 apt-get -o Acquire::Retries=2 install -y --no-install-recommends $PACKAGES
           # The debs apt just downloaded are exactly what this image lacks; keep them for the cache.
           mkdir -p ~/apt-debs
           cp /var/cache/apt/archives/*.deb ~/apt-debs/ || true # nothing downloaded if the image already has them
