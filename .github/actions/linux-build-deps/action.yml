@@ -25,13 +25,9 @@ runs:
       with:
         path: ~/apt-debs
         key: apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-${{ steps.image.outputs.version }}
-        # A new runner image has no exact entry, but the previous image's debs are almost all still right: take the newest entry for
-        # the same packages. The run saves it under the new image's exact key.
         restore-keys: |
           apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-
 
-    # apt refuses a downgrade or a missing dependency and --no-download keeps it off the mirror, so debs that do not fit this image
-    # fail here and the next step installs from the mirror.
     - id: cached
       if: steps.cache.outputs.cache-matched-key != ''
       continue-on-error: true
