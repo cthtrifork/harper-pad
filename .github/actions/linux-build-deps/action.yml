@@ -25,34 +25,30 @@ runs:
       with:
         path: ~/apt-debs
         key: apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-${{ steps.image.outputs.version }}
-        # A new runner image has no exact entry, but the debs of the previous image are almost all still right. restore-keys takes
-        # the newest entry for the same packages (the image version is last in the key so this prefix can match it); the Install
-        # step below only uses it if apt accepts it, and the finished run saves the result under the new image's exact key.
+        # A new runner image has no exact entry, but the previous image's debs are almost all still right: take the newest entry for
+        # the same packages. The run saves it under the new image's exact key.
         restore-keys: |
           apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-
 
-    # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt. The bound is `timeout` inside
-    # the command, not only the action's timeout_minutes: the action kills the process group as the runner user, which is not allowed
-    # to signal the root-owned sudo/apt processes (kill EPERM), crashes, and never gets to the next attempt. timeout ends apt itself,
-    # so the attempt fails normally and is retried; timeout_minutes stays as a backstop above the two timeouts combined.
-    - name: Install
+    # apt refuses a downgrade or a missing dependency and --no-download keeps it off the mirror, so debs that do not fit this image
+    # fail here and the next step installs from the mirror.
+    - id: cached
+      if: steps.cache.outputs.cache-matched-key != ''
+      continue-on-error: true
+      shell: bash
+      run: sudo apt-get install -y --no-download --no-install-recommends ~/apt-debs/*.deb
+
+    # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt.
+    - if: steps.cached.outcome != 'success'
       uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       env:
         PACKAGES: ${{ inputs.packages }}
       with:
-        timeout_minutes: 5
+        timeout_minutes: 3
         max_attempts: 3
         command: |
-          if [ '${{ steps.cache.outputs.cache-hit }}' = true ] && sudo dpkg -i ~/apt-debs/*.deb; then
-            exit 0
-          fi
-          # Debs from an older image (restore-keys): apt refuses a downgrade or a missing dependency, and --no-download keeps it off the
-          # mirror, so anything the old debs cannot satisfy falls through to the normal install below.
-          if [ -n '${{ steps.cache.outputs.cache-matched-key }}' ] && sudo apt-get install -y --no-download --no-install-recommends ~/apt-debs/*.deb; then
-            exit 0
-          fi
-          sudo timeout -k 5 60 apt-get -o Acquire::Languages=none -o Acquire::Retries=2 update -qq
-          sudo timeout -k 5 150 apt-get -o Acquire::Retries=2 install -y --no-install-recommends $PACKAGES
+          sudo apt-get -o Acquire::Languages=none update -qq
+          sudo apt-get install -y --no-install-recommends $PACKAGES
           # The debs apt just downloaded are exactly what this image lacks; keep them for the cache.
           mkdir -p ~/apt-debs
           cp /var/cache/apt/archives/*.deb ~/apt-debs/ || true # nothing downloaded if the image already has them
