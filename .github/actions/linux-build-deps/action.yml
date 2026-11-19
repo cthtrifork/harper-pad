@@ -28,11 +28,14 @@ runs:
         restore-keys: |
           apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-
 
+    # actions/cache only outputs cache-hit (an exact match), not cache-matched-key, so test for restored files instead: a restore-key
+    # hit from an older runner image counts too. If the debs do not fit this image, the step fails and the apt step below runs.
     - id: cached
-      if: steps.cache.outputs.cache-matched-key != ''
       continue-on-error: true
       shell: bash
-      run: sudo apt-get install -y --no-download --no-install-recommends ~/apt-debs/*.deb
+      run: |
+        compgen -G "$HOME/apt-debs/*.deb" > /dev/null
+        sudo apt-get install -y --no-download --no-install-recommends ~/apt-debs/*.deb
 
     # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt.
     - if: steps.cached.outcome != 'success'
@@ -43,8 +46,12 @@ runs:
         timeout_minutes: 3
         max_attempts: 3
         command: |
-          # The runner's regional mirror (us-east-2.ec2.archive.ubuntu.com and the like) has been slow and stalling; use the main archive.
-          sudo sed -i -E 's#https?://[a-z0-9.-]*archive\.ubuntu\.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          # The runner's apt sources use mirror+file:/etc/apt/apt-mirrors.txt, and its regional mirror (us-east-2.ec2.archive.ubuntu.com)
+          # has been stalling. Try the main archive first; the listed mirrors stay behind it as a fallback.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            { echo "http://archive.ubuntu.com/ubuntu/"; cat /etc/apt/apt-mirrors.txt; } > "$RUNNER_TEMP/apt-mirrors.txt"
+            sudo cp "$RUNNER_TEMP/apt-mirrors.txt" /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get -o Acquire::Languages=none update -qq
           sudo apt-get install -y --no-install-recommends $PACKAGES
           # The debs apt just downloaded are exactly what this image lacks; keep them for the cache.
