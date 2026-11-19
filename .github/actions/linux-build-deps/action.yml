@@ -28,14 +28,12 @@ runs:
         restore-keys: |
           apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-
 
-    # actions/cache only outputs cache-hit (an exact match), not cache-matched-key, so test for restored files instead: a restore-key
-    # hit from an older runner image counts too. If the debs do not fit this image, the step fails and the apt step below runs.
+    # actions/cache outputs only cache-hit (an exact match), so do not gate on it: a restore-key hit from an older runner image is
+    # worth trying too. With no debs, or ones that do not fit this image, this fails and the apt step below runs.
     - id: cached
       continue-on-error: true
       shell: bash
-      run: |
-        compgen -G "$HOME/apt-debs/*.deb" > /dev/null
-        sudo apt-get install -y --no-download --no-install-recommends ~/apt-debs/*.deb
+      run: sudo apt-get install -y --no-download --no-install-recommends ~/apt-debs/*.deb
 
     # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt.
     - if: steps.cached.outcome != 'success'
