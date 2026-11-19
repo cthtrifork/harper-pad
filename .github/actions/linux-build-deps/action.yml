@@ -43,6 +43,8 @@ runs:
         timeout_minutes: 3
         max_attempts: 3
         command: |
+          # The runner's regional mirror (us-east-2.ec2.archive.ubuntu.com and the like) has been slow and stalling; use the main archive.
+          sudo sed -i -E 's#https?://[a-z0-9.-]*archive\.ubuntu\.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null || true
           sudo apt-get -o Acquire::Languages=none update -qq
           sudo apt-get install -y --no-install-recommends $PACKAGES
           # The debs apt just downloaded are exactly what this image lacks; keep them for the cache.
