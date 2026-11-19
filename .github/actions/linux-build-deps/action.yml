@@ -24,10 +24,18 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/apt-debs
-        key: apt-debs-${{ runner.os }}-${{ steps.image.outputs.version }}-${{ steps.image.outputs.packages }}
+        key: apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-${{ steps.image.outputs.version }}
+        restore-keys: |
+          apt-debs-${{ runner.os }}-${{ steps.image.outputs.packages }}-
+
+    - id: cached
+      if: steps.cache.outputs.cache-matched-key != ''
+      continue-on-error: true
+      shell: bash
+      run: sudo apt-get install -y --no-download --no-install-recommends ~/apt-debs/*.deb
 
     # A stalled mirror trickles data forever and apt's own timeout never fires, so bound each attempt.
-    - name: Install
+    - if: steps.cached.outcome != 'success'
       uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       env:
         PACKAGES: ${{ inputs.packages }}
@@ -35,9 +43,6 @@ runs:
         timeout_minutes: 3
         max_attempts: 3
         command: |
-          if [ '${{ steps.cache.outputs.cache-hit }}' = true ] && sudo dpkg -i ~/apt-debs/*.deb; then
-            exit 0
-          fi
           sudo apt-get -o Acquire::Languages=none update -qq
           sudo apt-get install -y --no-install-recommends $PACKAGES
           # The debs apt just downloaded are exactly what this image lacks; keep them for the cache.
