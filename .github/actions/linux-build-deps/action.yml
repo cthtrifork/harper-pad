@@ -45,13 +45,12 @@ runs:
         max_attempts: 3
         command: |
           # The runner's apt sources use mirror+file:/etc/apt/apt-mirrors.txt, and its regional mirror (us-east-2.ec2.archive.ubuntu.com)
-          # has been stalling. Try the main archive first; the listed mirrors stay behind it as a fallback.
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            { echo "http://archive.ubuntu.com/ubuntu/"; cat /etc/apt/apt-mirrors.txt; } > "$RUNNER_TEMP/apt-mirrors.txt"
-            sudo cp "$RUNNER_TEMP/apt-mirrors.txt" /etc/apt/apt-mirrors.txt
-          fi
+          # has been stalling. apt does not take the first entry, so leave only the main archive.
+          echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          # Debs restored from the cache (an older image's, or an incomplete set) are used where the version matches; only the rest is downloaded.
+          sudo cp ~/apt-debs/*.deb /var/cache/apt/archives/ || true
           sudo apt-get -o Acquire::Languages=none update -qq
           sudo apt-get install -y --no-install-recommends $PACKAGES
-          # The debs apt just downloaded are exactly what this image lacks; keep them for the cache.
+          # What apt used or downloaded is everything this image lacks; keep it for the cache.
           mkdir -p ~/apt-debs
           cp /var/cache/apt/archives/*.deb ~/apt-debs/ || true # nothing downloaded if the image already has them
