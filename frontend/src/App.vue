@@ -519,7 +519,8 @@ watch(
 );
 const PULL_REST = 48; // px the page stays pushed down while it syncs and shows the result
 const pullShown = computed(() => (pull.value.active ? pull.value.d : pullResting.value ? PULL_REST : 0));
-const pullProgress = computed(() => (pullResting.value ? 1 : Math.min(1, pull.value.d / THRESHOLD)));
+// Only while the finger is down does the distance count: pullEnd leaves `d` at THRESHOLD for the sync, and counting it afterwards kept the icon shown for good.
+const pullProgress = computed(() => (pullResting.value ? 1 : pull.value.active ? Math.min(1, pull.value.d / THRESHOLD) : 0));
 const pullLabel = computed(() => {
   if (pull.value.active) return pull.value.blocked ? pullBlockedLabel() : pull.value.armed ? "Release to sync" : "Pull to sync";
   return pullResult.value || (pullRunning.value ? "Syncing…" : "");
