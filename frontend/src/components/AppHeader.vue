@@ -46,7 +46,7 @@ const props = defineProps({
   // Autocorrect is on: a small check on the Problems button, so it shows while the panel (with its switch) is closed.
   autocorrect: { type: Boolean, default: false },
 });
-const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view", "unlink"]);
+const emit = defineEmits(["toggle-drawer", "toggle-problems", "save", "view", "unlink", "format"]);
 
 const exportLabel = computed(() => (props.sharing ? "Share" : "Save to disk"));
 const mainLabel = computed(() => {
@@ -138,7 +138,13 @@ function onMain() {
     <span v-if="copyBadge" class="badge copy" :title="copyBadge">{{ copyBadge }}</span>
     <span class="sr-only" role="status">{{ problemText || dirtyText_ }}</span>
     <span class="spacer"></span>
-    <span v-if="isMarkdown && !showDrawer" class="sep" aria-hidden="true"></span>
+    <span v-if="!isMarkdown || !showDrawer" class="sep" aria-hidden="true"></span>
+    <!-- A plain text draft has no preview, so the Edit / Preview switch gives its place to a pill that says so; a tap makes the draft Markdown
+         (the same as the format button in the status bar). -->
+    <button v-if="!isMarkdown" type="button" class="format-pill" aria-label="Plain text. There is no preview. Switch to Markdown" title="Plain text has no preview. Tap to use Markdown" @click="emit('format', 'markdown')">
+      <span class="name">Plain text</span>
+      <span class="hint">Use Markdown</span>
+    </button>
     <div v-if="isMarkdown && !showDrawer" class="views" :data-mode="mode" :style="{ '--i': VIEWS.findIndex((v) => v.id === mode) }">
       <span class="thumb" aria-hidden="true"></span>
       <button
@@ -154,7 +160,7 @@ function onMain() {
         {{ v.label }}
       </button>
     </div>
-    <span v-if="isMarkdown && !showDrawer && mode !== 'preview'" class="sep" aria-hidden="true"></span>
+    <span v-if="!isMarkdown || (!showDrawer && mode !== 'preview')" class="sep" aria-hidden="true"></span>
     <button v-if="mode !== 'preview'" type="button" class="toggle" :aria-label="harperOff ? 'Problems, turn on Harper' : `Problems, ${problemCount}`" :title="harperOff ? 'Turn on Harper to check the text' : 'Problems'" :aria-pressed="showProblems" :class="{ on: showProblems }" @click="emit('toggle-problems')">
       <svg class="icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" /><rect x="10" y="2.5" width="3.5" height="11" fill="currentColor" stroke="none" opacity="0.35" /><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.5" /></svg>
       <span class="label">Problems</span> <span class="count">{{ harperOff ? "?" : problemCount }}</span>

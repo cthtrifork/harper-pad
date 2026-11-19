@@ -309,6 +309,33 @@
   color: var(--mute);
 }
 
+/* Plain text draft: no preview, so the Edit / Preview switch gives its place to this pill. It names the format and says what a tap does. */
+.bar .format-pill {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1.5px solid var(--accent);
+  border-radius: 16px;
+  background: var(--selected);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bar .format-pill .hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--mute);
+}
+
+.bar .format-pill:hover {
+  filter: brightness(1.08);
+}
+
 @media (max-width: 1240px) {
   .bar .drawer-btn .kbd,
   .bar .tool .kbd {

@@ -89,6 +89,22 @@
     height: 40px;
   }
 
+  /* The plain text pill takes the switch's place and grows like it; its hint shrinks first. */
+  .bar .format-pill {
+    order: 2;
+    flex: 999 1 120px;
+    min-width: 120px;
+    height: 40px;
+    gap: 6px;
+    padding: 0 12px;
+    justify-content: space-between;
+    border-radius: 20px;
+  }
+
+  .bar .format-pill .hint {
+    font-size: 11.5px;
+  }
+
   .bar .spacer {
     display: none; /* the switcher grows instead, and a hidden spacer costs no gap */
   }
@@ -287,6 +303,11 @@
 
 /* The narrowest phones (320 px): tighter gaps and a smaller switcher, so Edit and Preview never run under a button. */
 @media (max-width: 360px) {
+  /* No room for the hint: the pill is its name, and its label and tooltip still say what a tap does. */
+  .bar .format-pill .hint {
+    display: none;
+  }
+
   .bar {
     gap: 4px;
     padding: 8px;
