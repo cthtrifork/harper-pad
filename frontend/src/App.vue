@@ -678,6 +678,7 @@ onBeforeUnmount(() => {
       @toggle-problems="toggleProblems"
       @save="onSave"
       @view="setView"
+      @format="chooseFormat"
     />
     <p v-if="demo" id="mode-banner" class="banner">{{ demo }}</p>
     <div
