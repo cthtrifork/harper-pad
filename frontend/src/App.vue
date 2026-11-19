@@ -17,6 +17,7 @@ import { createLinter, type HarperLinter } from "./lib/harper.ts";
 import { loadOptIn, saveOptIn } from "./lib/harperOptIn.ts";
 import type { changesTo } from "./lib/settingsItems.ts";
 import { applyIgnored, ignoredHashes, loadPersonal, noteIgnored, removeIgnored, savePersonal, withoutWord, withoutWords } from "./lib/personal.ts";
+import { useCalmStatus } from "./lib/calmStatus.ts";
 import { statusLine } from "./lib/statusLine.ts";
 import { useDrafts } from "./lib/useDrafts.ts";
 import { WrongPassphrase } from "./lib/protectedDrafts.ts";
@@ -159,6 +160,11 @@ const statusLineNow = computed(() =>
       rejected: sync.rejected.value?.id === drafts.current.value.id ? sync.rejected.value : null,
     },
   }),
+);
+// Typing and syncing churn the raw line, so the footer shows only what has settled (lib/calmStatus.ts).
+const statusCalm = useCalmStatus(
+  statusLineNow,
+  computed(() => ["dirty", "saving"].includes(drafts.state.value) || sync.status.value === "syncing"),
 );
 // The button only acts: Sync when sync is on, Save when it is off (disabled while there is nothing to save).
 const syncBusy = computed(() => sync.status.value === "syncing");
@@ -791,8 +797,8 @@ onBeforeUnmount(() => {
       :setup-ms="setupMs"
       :lint-ms="lintMs"
       :save-error="saveError"
-      :draft-status="saveAsHint || (typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' || sync.rejected.value?.id === drafts.current.value.id ? statusLineNow.text : '')"
-      :draft-tone="saveAsHint ? 'mute' : statusLineNow.tone"
+      :draft-status="saveAsHint || (typedRef || syncAsked || drafts.state.value === 'error' || sync.notice.value?.kind === 'newer' || sync.rejected.value?.id === drafts.current.value.id ? statusCalm.text : '')"
+      :draft-tone="saveAsHint ? 'mute' : statusCalm.tone"
       :draft-state="drafts.state.value"
       :can-start-fresh="drafts.canStartFresh.value"
       :mode="mode"
