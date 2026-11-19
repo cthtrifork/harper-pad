@@ -101,7 +101,17 @@ function scrollToTop(pos: number | null | undefined) {
   view.dispatch({ effects: EditorView.scrollIntoView(Math.min(pos, view.state.doc.length), { y: "start", yMargin: 0 }) });
 }
 
+// Puts the caret where a tap at these screen coordinates is, for a tap an overlay (the drawer's edge-swipe strip) took.
+function placeCaretAt(x: number, y: number) {
+  if (!view) return;
+  const pos = view.posAtCoords({ x, y }, false);
+  if (pos == null) return;
+  view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+  view.focus();
+}
+
 defineExpose({
+  placeCaretAt,
   topPosition,
   scrollToTop,
   focusEnd,

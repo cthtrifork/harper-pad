@@ -23,6 +23,7 @@ type Handlers = {
   start: () => void; // the move turned out to be a swipe: the drawer is put on screen, closed
   move: (dx: number) => void; // the finger's distance from where the swipe was recognised, never negative
   end: (dx: number, cancelled: boolean) => void;
+  tap?: (x: number, y: number) => void; // a touch that never became a swipe or a scroll: the strip covers the text, so the tap is handed on
 };
 
 // Returns the cleanup function.
@@ -52,7 +53,17 @@ export function attachEdgeSwipe(target: EventTarget, h: Handlers): () => void {
     s = null;
     if (cur?.on) h.end(cur.dx, cancelled);
   };
-  const onUp = () => finish(false);
+  const onUp = (e: Event) => {
+    const p = e as PointerEvent;
+    // The strip sits over the left edge of the editor, so a plain tap on it would never reach the text to place the caret.
+    if (s && !s.on && p.pointerId === s.id && Math.abs(p.clientX - s.x) < SLOP && Math.abs(p.clientY - s.y) < SLOP) {
+      const { clientX, clientY } = p;
+      s = null;
+      h.tap?.(clientX, clientY);
+      return;
+    }
+    finish(false);
+  };
   const onCancel = () => finish(true);
   target.addEventListener("pointerdown", onDown, { passive: true });
   target.addEventListener("pointermove", onMove, { passive: true });

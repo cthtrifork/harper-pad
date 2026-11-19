@@ -595,6 +595,7 @@ onMounted(async () => {
       peek.value = { on: true, x: Math.min(dx, window.innerWidth), glide: false };
     },
     end: edgeEnd,
+    tap: (x, y) => editor.value?.placeCaretAt(x, y), // the strip covers the text's left edge: a tap there still moves the caret
   });
   if (pane.value)
     detachPull = attachPullToRefresh(pane.value, {
