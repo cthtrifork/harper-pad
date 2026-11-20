@@ -76,6 +76,7 @@ const SAVE_DELAY_MS = 100;
 const SEARCH_DELAY_MS = 200;
 const PAGE = 50; // drafts shown at first, and added by "Show more"
 const TOAST_MS = 8000;
+const UNDO_TOAST_MS = 20000; // a toast with an Undo stays longer: a deleted draft is worth the time to notice it is gone
 
 const message = (err: unknown) => String((err as Error)?.message || err);
 
@@ -685,10 +686,13 @@ export function useDrafts(
     pendingDelete = deleted;
     toast.value = { message: text, undo };
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      toast.value = null;
-      commitDelete();
-    }, TOAST_MS);
+    toastTimer = setTimeout(
+      () => {
+        toast.value = null;
+        commitDelete();
+      },
+      undo ? UNDO_TOAST_MS : TOAST_MS,
+    );
   }
 
   function dismissToast() {
