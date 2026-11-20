@@ -98,7 +98,7 @@ jobs:
           packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
         timeout-minutes: 10
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true
@@ -108,7 +108,7 @@ jobs:
       - name: Run govulncheck
         env:
           # renovate: datasource=go depName=golang.org/x/vuln
-          GOVULNCHECK_VERSION: v1.9.0
+          GOVULNCHECK_VERSION: v1.10.0
         run: |
           go version
           go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
@@ -125,7 +125,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true
@@ -135,7 +135,7 @@ jobs:
         working-directory: backend
         env:
           # renovate: datasource=go depName=golang.org/x/vuln
-          GOVULNCHECK_VERSION: v1.9.0
+          GOVULNCHECK_VERSION: v1.10.0
         run: |
           go version
           go run golang.org/x/vuln/cmd/govulncheck@"${GOVULNCHECK_VERSION}" ./...

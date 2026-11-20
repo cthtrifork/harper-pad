@@ -32,7 +32,7 @@ format: fmt format-frontend ## Format the Go code and the Vue app
 # renovate: datasource=github-releases depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION := v2.15.0
 # renovate: datasource=go depName=golang.org/x/tools
-GOIMPORTS_VERSION := v0.52.0
+GOIMPORTS_VERSION := v0.53.0
 
 # The htmx vendored in backend/internal/admin/web/static. Renovate bumps this and runs `make htmx` (renovate.json5).
 # renovate: datasource=npm depName=htmx.org
