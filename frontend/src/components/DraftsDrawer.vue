@@ -46,8 +46,8 @@ watch(
   (v) => (q.value = v),
 );
 
-// Swipe a draft to the left to delete it (touch only; the delete button and the keyboard still work). It is deleted at once and the
-// toast offers Undo, like the button (design cheat sheet: no "Are you sure?"). A vertical move is left to the list's scrolling.
+// Swipe a draft to the left to delete it (touch only; the delete button and the keyboard still work). It asks first, like the button, and the
+// toast then offers Undo (ConfirmDeleteDialog in App.vue). A vertical move is left to the list's scrolling.
 const SWIPE_START = 10; // px before a move counts as a swipe
 const SWIPE_DELETE = 96; // px of travel that deletes on release
 const dragId = ref("");
