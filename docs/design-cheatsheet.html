@@ -246,7 +246,7 @@ th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
         <button class="hp danger" type="button">Delete draft</button>
         <button class="hp quiet icon" type="button" aria-label="Delete Meeting notes" style="color:var(--bad)"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"/></svg></button>
       </div>
-      <ul><li>Removes something. <code>--bad</code> text; border turns <code>--bad</code> on hover. Never filled red at rest.</li><li>Do not ask "Are you sure?". Delete at once and show a toast with <b>Undo</b>, as the drafts list does. Drafts are kept, so say so.</li></ul>
+      <ul><li>Removes something. <code>--bad</code> text; border turns <code>--bad</code> on hover. Never filled red at rest.</li><li>Deleting a draft from the drafts list asks first (<code>ConfirmDeleteDialog.vue</code>: Cancel is focused, Esc cancels) and then shows a toast with <b>Undo</b>. Elsewhere do not ask "Are you sure?": act at once and offer Undo.</li></ul>
     </div>
 
     <div class="card btype">

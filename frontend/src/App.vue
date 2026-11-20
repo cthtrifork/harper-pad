@@ -6,6 +6,7 @@ import ProblemsPanel from "./components/ProblemsPanel.vue";
 import StatusBar from "./components/StatusBar.vue";
 import ConflictDialog from "./components/ConflictDialog.vue";
 import PassphraseDialog from "./components/PassphraseDialog.vue";
+import ConfirmDeleteDialog from "./components/ConfirmDeleteDialog.vue";
 import ToastBar from "./components/ToastBar.vue";
 import { loadPrefs, type Prefs, savePrefs } from "./lib/autocorrect.ts";
 import { isWeb, keepData, settingsSync, sharing, syncDevice, syncDrafts } from "./lib/backend.ts";
@@ -115,6 +116,17 @@ const drafts = useDrafts(editor, showDrawer, {
 // Keep or Overwrite for the open draft, when it disagrees with its file, the server, or both.
 const conflict = useConflict({ drafts, sync });
 // The passphrase dialog (docs/sync.md, "Protected drafts").
+// A delete from the drafts list waits here for the person to confirm it.
+const deleting = ref<{ id: string; title: string } | null>(null);
+const askDelete = (id: string) => {
+  const d = drafts.list.value.drafts.find((x) => x.id === id);
+  deleting.value = { id, title: d?.title || "Untitled" };
+};
+const confirmDelete = () => {
+  const id = deleting.value?.id;
+  deleting.value = null;
+  if (id) drafts.remove(id);
+};
 const pass = ref<{ mode: "create" | "unlock" } | null>(null);
 const passBusy = ref(false);
 const passError = ref("");
@@ -719,7 +731,7 @@ onBeforeUnmount(() => {
         @open="(id) => pickDraft(drafts.open, id)"
         @create="pickDraft(drafts.create, undefined, { always: true })"
         @create-secure="askSecure"
-        @remove="drafts.remove"
+        @remove="askDelete"
         @search="drafts.setQuery"
         @more="drafts.showMore"
         @undo="drafts.undo"
@@ -787,6 +799,7 @@ onBeforeUnmount(() => {
     </div>
     <!-- A note that was deleted on another device: a modal, so the person has to choose Keep or Remove. -->
     <ConflictDialog v-if="conflict.model.value" :model="conflict.model.value" :busy="conflict.busy.value" :note="conflict.note.value" @choose="conflict.choose" />
+    <ConfirmDeleteDialog v-if="deleting" :title="deleting.title" @confirm="confirmDelete" @cancel="deleting = null" />
     <PassphraseDialog v-if="pass" :mode="pass.mode" :busy="passBusy" :error="passError" @submit="submitPass" @cancel="pass = null" />
     <DeletedElsewhereDialog v-if="sync.gone.value && !conflict.model.value" @keep="sync.keepGone()" @remove="sync.removeGone()" />
     <StatusBar
