@@ -823,7 +823,7 @@ export function useDrafts(
       }
     }
     showToast(
-      pendingDelete ? "Draft deleted. The one before can no longer be undone" : "Draft deleted",
+      "Draft deleted",
       async () => {
         try {
           await be.saveDraft(draft);
