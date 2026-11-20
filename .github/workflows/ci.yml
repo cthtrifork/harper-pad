@@ -160,7 +160,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true # newest patch release of the version in .tool-versions, so stdlib fixes are picked up
@@ -202,7 +202,7 @@ jobs:
           persist-credentials: false
 
       - id: go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true
@@ -271,7 +271,7 @@ jobs:
           persist-credentials: false
 
       # No cache yet: the module has no dependencies and so no go.sum to key it on. Turn it on with the first dependency.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true
@@ -359,7 +359,7 @@ jobs:
           packages: build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libwayland-dev
         timeout-minutes: 10
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true # newest patch release of the version in .tool-versions, so stdlib fixes are picked up
@@ -412,7 +412,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true
@@ -496,7 +496,7 @@ jobs:
         timeout-minutes: 10
 
       - id: go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true # newest patch release of the version in .tool-versions, so stdlib fixes are picked up
@@ -575,7 +575,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .tool-versions
           check-latest: true
