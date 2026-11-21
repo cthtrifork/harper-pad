@@ -55,6 +55,12 @@
       enabled: false,
     },
     {
+      // v3 is only a git tag; the repository has no GitHub release for it. The `pin actions` check (gh pin-actions
+      // --latest) follows releases and rewrites v3 back to v2, so it fails the PR. Lift this once v3 is released.
+      matchPackageNames: ["signpath/github-action-submit-signing-request"],
+      allowedVersions: "<3",
+    },
+    {
       // Patch and digest updates merge by themselves once CI is green. Only meaningful when CI runs
       // on Renovate's PRs, which the GitHub App token makes happen (see renovate.yml), and with branch
       // protection requiring the CI checks: without them nothing stands between a PR and the merge.
