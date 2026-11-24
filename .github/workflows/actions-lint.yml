@@ -41,7 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # renovate: datasource=pypi depName=zizmor
-          ZIZMOR_VERSION: 1.33.0
+          ZIZMOR_VERSION: 1.33.1
         run: |
           python3 -m pip install --user "zizmor==${ZIZMOR_VERSION}"
           "$HOME/.local/bin/zizmor" --persona pedantic --format plain .
